@@ -20,4 +20,9 @@ D:\Projekte\Softwareprojekte gross\SUTWinExplorer\obj\Debug\net8.0-windows\refin
 D:\Projekte\Softwareprojekte gross\SUTWinExplorer\obj\Debug\net8.0-windows\SUTWinExplorer.pdb
 D:\Projekte\Softwareprojekte gross\SUTWinExplorer\obj\Debug\net8.0-windows\SUTWinExplorer.genruntimeconfig.cache
 D:\Projekte\Softwareprojekte gross\SUTWinExplorer\obj\Debug\net8.0-windows\ref\SUTWinExplorer.dll
+D:\Projekte\Softwareprojekte gross\SUTWinExplorer\artifacts\space-layout-check\Debug\net8.0-windows\SUTWinExplorer.exe
+D:\Projekte\Softwareprojekte gross\SUTWinExplorer\artifacts\space-layout-check\Debug\net8.0-windows\SUTWinExplorer.deps.json
+D:\Projekte\Softwareprojekte gross\SUTWinExplorer\artifacts\space-layout-check\Debug\net8.0-windows\SUTWinExplorer.runtimeconfig.json
+D:\Projekte\Softwareprojekte gross\SUTWinExplorer\artifacts\space-layout-check\Debug\net8.0-windows\SUTWinExplorer.dll
+D:\Projekte\Softwareprojekte gross\SUTWinExplorer\artifacts\space-layout-check\Debug\net8.0-windows\SUTWinExplorer.pdb
 D:\Projekte\Softwareprojekte gross\SUTWinExplorer\bin\Debug\net8.0-windows\SUTWinExplorer.exe

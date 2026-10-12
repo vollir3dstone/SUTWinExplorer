@@ -136,6 +136,41 @@ public partial class ExplorerTabView : UserControl
 
     private void ShowDirectoriesCheckBox_StateChanged(object sender, RoutedEventArgs e) => RefreshFiles();
 
+    private void FileList_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (FileList.View is not GridView gridView || gridView.Columns.Count < 5)
+            return;
+
+        const double iconColumnWidth = 34;
+        const double typeColumnWidth = 130;
+        const double sizeColumnWidth = 110;
+        const double modifiedColumnWidth = 170;
+        const double minimumNameWidth = 80;
+
+        var scrollViewer = FindVisualChild<ScrollViewer>(FileList);
+        var scrollbarWidth = scrollViewer?.ComputedVerticalScrollBarVisibility == Visibility.Visible
+            ? SystemParameters.VerticalScrollBarWidth
+            : 0;
+        var fixedColumnWidths = iconColumnWidth + typeColumnWidth + sizeColumnWidth + modifiedColumnWidth;
+        var availableNameWidth = FileList.ActualWidth - fixedColumnWidths - scrollbarWidth - 8;
+        gridView.Columns[1].Width = Math.Max(minimumNameWidth, availableNameWidth);
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T match)
+                return match;
+
+            if (FindVisualChild<T>(child) is { } descendant)
+                return descendant;
+        }
+
+        return null;
+    }
+
     private void InitializeActivePathAndSiblingsTree()
     {
         var drives = new ObservableCollection<TreeEntry>();

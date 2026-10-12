@@ -76,13 +76,24 @@
             </TabItem>
         </TabControl>
         <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="#D8DDE3" />
-        <DockPanel Grid.Column="2" LastChildFill="True">
-            <TextBlock x:Name="LocationLabel" DockPanel.Dock="Top" Padding="12,10"
+        <Grid Grid.Column="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="LocationLabel" Grid.Row="0" Grid.ColumnSpan="2" Padding="12,10"
                        FontSize="14" FontWeight="SemiBold" Foreground="#263443" />
-            <CheckBox x:Name="ShowDirectoriesCheckBox" DockPanel.Dock="Top" Content="Show directories"
-                      IsChecked="False" Margin="10,0,10,8" Checked="ShowDirectoriesCheckBox_StateChanged"
+            <CheckBox x:Name="ShowDirectoriesCheckBox" Grid.Row="1" Grid.ColumnSpan="2"
+                      Content="Show directories" IsChecked="False" Margin="10,0,10,8"
+                      Checked="ShowDirectoriesCheckBox_StateChanged"
                       Unchecked="ShowDirectoriesCheckBox_StateChanged" />
-            <ListView x:Name="FileList" SelectionMode="Single"
+            <ListView x:Name="FileList" Grid.Row="2" Grid.Column="0" SelectionMode="Single"
+                      SizeChanged="FileList_SizeChanged"
                       MouseDoubleClick="FileList_MouseDoubleClick"
                       PreviewMouseRightButtonDown="FileList_PreviewMouseRightButtonDown">
                 <ListView.View>
@@ -101,8 +112,11 @@
                     </GridView>
                 </ListView.View>
             </ListView>
-            <TextBlock x:Name="StatusLabel" DockPanel.Dock="Bottom" Padding="10,6"
-                       Foreground="#596675" Background="#F6F7F8" />
-        </DockPanel>
+            <Border Grid.Row="2" Grid.Column="1" BorderBrush="#E0E4E8" BorderThickness="1,0,0,0"
+                    Background="#F6F7F8" VerticalAlignment="Stretch">
+                <TextBlock x:Name="StatusLabel" Padding="8,6" Foreground="#596675"
+                           VerticalAlignment="Top" HorizontalAlignment="Center" />
+            </Border>
+        </Grid>
     </Grid>
 </UserControl>
