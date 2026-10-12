@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -13,6 +14,13 @@ namespace SUTWinExplorer;
 
 public partial class ExplorerTabView : UserControl
 {
+    private enum TreeNavigationMode
+    {
+        DoubleClick,
+        SingleClick
+    }
+
+    private const TreeNavigationMode ActiveTreeNavigationMode = TreeNavigationMode.SingleClick;
     private readonly Stack<string> _backHistory = new();
     private readonly Stack<string> _forwardHistory = new();
 
@@ -157,7 +165,14 @@ public partial class ExplorerTabView : UserControl
     private void TreeItem_Expanded(object sender, RoutedEventArgs e)
     {
         if (e.OriginalSource is TreeViewItem { DataContext: TreeEntry entry } && !entry.IsPlaceholder)
+        {
             LoadChildren(entry);
+            if (ActiveTreeNavigationMode == TreeNavigationMode.SingleClick)
+            {
+                // Clicking the opener triangle expands the folder and shows its contents in the right pane.
+                NavigateFromTree(entry);
+            }
+        }
     }
 
     private static void LoadChildren(TreeEntry entry)
@@ -222,18 +237,42 @@ public partial class ExplorerTabView : UserControl
         e.Handled = true;
     }
 
+    private void Tree_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (ActiveTreeNavigationMode != TreeNavigationMode.SingleClick ||
+            FindAncestor<ToggleButton>(e.OriginalSource as DependencyObject) is not null ||
+            FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { DataContext: TreeEntry entry } item ||
+            entry.IsPlaceholder)
+        {
+            return;
+        }
+
+        // Clicking a folder name selects and expands it; expansion shows its contents in the right pane.
+        var wasExpanded = item.IsExpanded;
+        item.IsSelected = true;
+        item.IsExpanded = true;
+        if (wasExpanded)
+            NavigateFromTree(entry);
+    }
+
     private void Tree_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (sender is TreeView tree && tree.SelectedItem is TreeEntry { IsPlaceholder: false } entry)
+        if (ActiveTreeNavigationMode == TreeNavigationMode.DoubleClick &&
+            sender is TreeView tree && tree.SelectedItem is TreeEntry { IsPlaceholder: false } entry)
         {
-            try
-            {
-                Navigate(entry.Path);
-            }
-            catch (Exception exception)
-            {
-                MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot open folder", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
+            NavigateFromTree(entry);
+        }
+    }
+
+    private void NavigateFromTree(TreeEntry entry)
+    {
+        try
+        {
+            Navigate(entry.Path);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot open folder", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 

@@ -22,11 +22,13 @@
             <TabItem Header="Classic Tree">
                 <TreeView x:Name="ClassicTree" ItemContainerStyle="{StaticResource DirectoryTreeItemStyle}"
                           PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown"
+                          PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
                           MouseDoubleClick="Tree_MouseDoubleClick" />
             </TabItem>
             <TabItem Header="Current Path Only">
                 <TreeView x:Name="CurrentPathTree" ItemContainerStyle="{StaticResource DirectoryTreeItemStyle}"
                           PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown"
+                          PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
                           MouseDoubleClick="Tree_MouseDoubleClick" />
             </TabItem>
         </TabControl>
