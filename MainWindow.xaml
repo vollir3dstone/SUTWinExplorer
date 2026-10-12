@@ -1,0 +1,22 @@
+﻿<Window x:Class="SUTWinExplorer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SUT Win Explorer" Height="760" Width="1180"
+        MinHeight="520" MinWidth="820" Background="#F3F5F7">
+    <DockPanel>
+        <ToolBarTray DockPanel.Dock="Top" Background="#F3F5F7">
+            <ToolBar Band="0" Background="#F3F5F7">
+                <Button Content="Back" Click="Back_Click" Padding="10,4" />
+                <Button Content="Forward" Click="Forward_Click" Padding="10,4" />
+                <Button Content="Up" Click="Up_Click" Padding="10,4" />
+                <Separator />
+                <TextBox x:Name="AddressBox" Width="590" VerticalContentAlignment="Center"
+                         KeyDown="AddressBox_KeyDown" />
+                <Button Content="Go" Click="Go_Click" Padding="12,4" />
+                <Separator />
+                <Button Content="New tab" Click="NewTab_Click" Padding="12,4" />
+            </ToolBar>
+        </ToolBarTray>
+        <TabControl x:Name="ExplorerTabs" SelectionChanged="ExplorerTabs_SelectionChanged" />
+    </DockPanel>
+</Window>
