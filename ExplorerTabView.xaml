@@ -62,14 +62,14 @@
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
         <TabControl Grid.Column="0" x:Name="SidebarTabs" Background="White">
-            <TabItem Header="Classic Tree">
-                <TreeView x:Name="ClassicTree" ItemContainerStyle="{StaticResource DirectoryTreeItemStyle}"
+            <TabItem Header="Active path">
+                <TreeView x:Name="ActivePathTree" ItemContainerStyle="{StaticResource DirectoryTreeItemStyle}"
                           PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown"
                           PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
                           MouseDoubleClick="Tree_MouseDoubleClick" />
             </TabItem>
-            <TabItem Header="Current Path Only">
-                <TreeView x:Name="CurrentPathTree" ItemContainerStyle="{StaticResource DirectoryTreeItemStyle}"
+            <TabItem Header="Active path and siblings">
+                <TreeView x:Name="ActivePathAndSiblingsTree" ItemContainerStyle="{StaticResource DirectoryTreeItemStyle}"
                           PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown"
                           PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
                           MouseDoubleClick="Tree_MouseDoubleClick" />

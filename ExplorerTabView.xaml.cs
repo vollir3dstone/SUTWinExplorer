@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -9,6 +10,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 
 namespace SUTWinExplorer;
 
@@ -27,7 +29,7 @@ public partial class ExplorerTabView : UserControl
     public ExplorerTabView(string initialPath)
     {
         InitializeComponent();
-        InitializeClassicTree();
+        InitializeActivePathAndSiblingsTree();
         Navigate(initialPath, recordHistory: false);
     }
 
@@ -77,7 +79,8 @@ public partial class ExplorerTabView : UserControl
         CurrentPath = fullPath;
         LocationLabel.Text = fullPath;
         RefreshFiles();
-        RefreshCurrentPathTree();
+        RefreshActivePathAndSiblingsTree();
+        RefreshActivePathTree();
         LocationChanged?.Invoke(this, CurrentPath);
     }
 
@@ -133,7 +136,7 @@ public partial class ExplorerTabView : UserControl
 
     private void ShowDirectoriesCheckBox_StateChanged(object sender, RoutedEventArgs e) => RefreshFiles();
 
-    private void InitializeClassicTree()
+    private void InitializeActivePathAndSiblingsTree()
     {
         var drives = new ObservableCollection<TreeEntry>();
         foreach (var drive in DriveInfo.GetDrives())
@@ -143,16 +146,17 @@ public partial class ExplorerTabView : UserControl
             drives.Add(root);
         }
 
-        ClassicTree.ItemsSource = drives;
+        ActivePathAndSiblingsTree.ItemsSource = drives;
     }
 
-    private void RefreshCurrentPathTree()
+    private void RefreshActivePathTree()
     {
         var rootPath = Path.GetPathRoot(CurrentPath);
         if (string.IsNullOrEmpty(rootPath))
             return;
 
         var root = new TreeEntry(rootPath, rootPath);
+        root.IsLoaded = true;
         var segments = Path.GetRelativePath(rootPath, CurrentPath)
             .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
         var parent = root;
@@ -161,30 +165,64 @@ public partial class ExplorerTabView : UserControl
         foreach (var segment in segments)
         {
             currentPath = Path.Combine(currentPath, segment);
-            var child = new TreeEntry(segment, currentPath);
+            parent.IsExpanded = true;
+            var child = new TreeEntry(segment, currentPath) { IsLoaded = true };
             parent.Children.Add(child);
             parent = child;
         }
 
         parent.IsSelected = true;
-        parent.IsExpanded = true;
-        LoadChildren(parent);
-        for (var ancestor = root; ancestor.Children.Count > 0; ancestor = ancestor.Children[0])
-            ancestor.IsExpanded = true;
+        ActivePathTree.ItemsSource = new[] { root };
+    }
 
-        CurrentPathTree.ItemsSource = new[] { root };
+    private void RefreshActivePathAndSiblingsTree()
+    {
+        if (ActivePathAndSiblingsTree.ItemsSource is not ObservableCollection<TreeEntry> roots)
+            return;
+
+        foreach (var root in roots)
+            CollapseLoadedNodes(root);
+
+        var rootPath = Path.GetPathRoot(CurrentPath);
+        var active = roots.FirstOrDefault(root => string.Equals(root.Path, rootPath, StringComparison.OrdinalIgnoreCase));
+        if (active is null)
+            return;
+
+        var segments = Path.GetRelativePath(rootPath!, CurrentPath)
+            .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var segment in segments)
+        {
+            LoadChildren(active);
+            active.IsExpanded = true;
+            var childPath = Path.Combine(active.Path, segment);
+            var child = active.Children.FirstOrDefault(candidate =>
+                !candidate.IsPlaceholder && string.Equals(candidate.Path, childPath, StringComparison.OrdinalIgnoreCase));
+            if (child is null)
+                return;
+            active = child;
+        }
+
+        LoadChildren(active);
+        active.IsExpanded = true;
+        active.IsSelected = true;
+    }
+
+    private static void CollapseLoadedNodes(TreeEntry entry)
+    {
+        entry.IsExpanded = false;
+        entry.IsSelected = false;
+        foreach (var child in entry.Children)
+            CollapseLoadedNodes(child);
     }
 
     private void TreeItem_Expanded(object sender, RoutedEventArgs e)
     {
         if (e.OriginalSource is TreeViewItem { DataContext: TreeEntry entry } && !entry.IsPlaceholder)
         {
-            LoadChildren(entry);
-            if (ActiveTreeNavigationMode == TreeNavigationMode.SingleClick)
-            {
-                // Clicking the opener triangle expands the folder and shows its contents in the right pane.
-                NavigateFromTree(entry);
-            }
+            var tree = FindAncestor<TreeView>(sender as DependencyObject);
+            if (!ReferenceEquals(tree, ActivePathTree))
+                LoadChildren(entry);
         }
     }
 
@@ -253,19 +291,28 @@ public partial class ExplorerTabView : UserControl
     private void Tree_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (ActiveTreeNavigationMode != TreeNavigationMode.SingleClick ||
-            FindAncestor<ToggleButton>(e.OriginalSource as DependencyObject) is not null ||
             FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { DataContext: TreeEntry entry } item ||
             entry.IsPlaceholder)
         {
             return;
         }
 
+        if (FindAncestor<ToggleButton>(e.OriginalSource as DependencyObject) is not null)
+        {
+            if (ReferenceEquals(sender, ActivePathTree))
+            {
+                item.IsSelected = true;
+                item.IsExpanded = true;
+                e.Handled = true;
+            }
+            QueueTreeNavigation(entry);
+            return;
+        }
+
         // Clicking a folder name selects and expands it; expansion shows its contents in the right pane.
-        var wasExpanded = item.IsExpanded;
         item.IsSelected = true;
         item.IsExpanded = true;
-        if (wasExpanded)
-            NavigateFromTree(entry);
+        QueueTreeNavigation(entry);
     }
 
     private void Tree_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -287,6 +334,14 @@ public partial class ExplorerTabView : UserControl
         {
             MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot open folder", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private void QueueTreeNavigation(TreeEntry entry)
+    {
+        if (string.Equals(CurrentPath, entry.Path, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => NavigateFromTree(entry)));
     }
 
     private void ShowNativeMenu(string path)
@@ -329,8 +384,11 @@ public partial class ExplorerTabView : UserControl
     }
 }
 
-public sealed class TreeEntry
+public sealed class TreeEntry : INotifyPropertyChanged
 {
+    private bool _isExpanded;
+    private bool _isSelected;
+
     private TreeEntry(string name, string path, bool isPlaceholder)
     {
         Name = name;
@@ -346,12 +404,30 @@ public sealed class TreeEntry
     public string Path { get; }
     public bool IsPlaceholder { get; }
     public bool IsLoaded { get; set; }
-    public bool IsExpanded { get; set; }
-    public bool IsSelected { get; set; }
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set => SetField(ref _isExpanded, value);
+    }
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetField(ref _isSelected, value);
+    }
     public ShellIconSet? Icons { get; }
     public ObservableCollection<TreeEntry> Children { get; } = new();
+    public event PropertyChangedEventHandler? PropertyChanged;
 
     public static TreeEntry Placeholder() => new("Loading", string.Empty, true);
+
+    private void SetField(ref bool field, bool value, [System.Runtime.CompilerServices.CallerMemberName] string? propertyName = null)
+    {
+        if (field == value)
+            return;
+
+        field = value;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
 }
 
 public sealed class FileEntry
