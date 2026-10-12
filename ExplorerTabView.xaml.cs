@@ -1,11 +1,13 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace SUTWinExplorer;
 
@@ -298,7 +300,70 @@ public sealed class TreeEntry
     public static TreeEntry Placeholder() => new("Loading", string.Empty, true);
 }
 
-public sealed record FileEntry(string Name, string FullPath, bool IsDirectory, string Type, string SizeText, DateTime Modified)
+public sealed class FileEntry
 {
+    public FileEntry(string name, string fullPath, bool isDirectory, string type, string sizeText, DateTime modified)
+    {
+        Name = name;
+        FullPath = fullPath;
+        IsDirectory = isDirectory;
+        Type = type;
+        SizeText = sizeText;
+        Modified = modified;
+        Icon = ShellIconProvider.GetSmallIcon(fullPath);
+    }
+
+    public string Name { get; }
+    public string FullPath { get; }
+    public bool IsDirectory { get; }
+    public string Type { get; }
+    public string SizeText { get; }
+    public DateTime Modified { get; }
+    public ImageSource? Icon { get; }
     public string ModifiedText => Modified.ToString("g");
+}
+
+internal static class ShellIconProvider
+{
+    private const uint Icon = 0x00000100;
+    private const uint SmallIcon = 0x00000001;
+    private const uint AddOverlays = 0x00000020;
+
+    public static ImageSource? GetSmallIcon(string path)
+    {
+        var info = new ShellFileInfo();
+        var result = SHGetFileInfo(path, 0, ref info, (uint)Marshal.SizeOf<ShellFileInfo>(), Icon | SmallIcon | AddOverlays);
+        if (result == IntPtr.Zero || info.IconHandle == IntPtr.Zero)
+            return null;
+
+        try
+        {
+            var bitmap = Imaging.CreateBitmapSourceFromHIcon(
+                info.IconHandle,
+                Int32Rect.Empty,
+                BitmapSizeOptions.FromWidthAndHeight(16, 16));
+            bitmap.Freeze();
+            return bitmap;
+        }
+        finally
+        {
+            _ = DestroyIcon(info.IconHandle);
+        }
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr SHGetFileInfo(string path, uint fileAttributes, ref ShellFileInfo fileInfo, uint fileInfoSize, uint flags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool DestroyIcon(IntPtr iconHandle);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct ShellFileInfo
+    {
+        public IntPtr IconHandle;
+        public int IconIndex;
+        public uint Attributes;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string DisplayName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)] public string TypeName;
+    }
 }

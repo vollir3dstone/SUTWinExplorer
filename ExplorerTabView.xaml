@@ -39,6 +39,13 @@
                       PreviewMouseRightButtonDown="FileList_PreviewMouseRightButtonDown">
                 <ListView.View>
                     <GridView>
+                        <GridViewColumn Header="" Width="34">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Image Width="16" Height="16" Source="{Binding Icon}" Stretch="None" />
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
                         <GridViewColumn Header="Name" Width="330" DisplayMemberBinding="{Binding Name}" />
                         <GridViewColumn Header="Type" Width="130" DisplayMemberBinding="{Binding Type}" />
                         <GridViewColumn Header="Size" Width="110" DisplayMemberBinding="{Binding SizeText}" />
