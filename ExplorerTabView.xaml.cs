@@ -84,17 +84,21 @@ public partial class ExplorerTabView : UserControl
     private void RefreshFiles()
     {
         var entries = new List<FileEntry>();
+        var showDirectories = ShowDirectoriesCheckBox.IsChecked == true;
         try
         {
-            foreach (var directory in Directory.EnumerateDirectories(CurrentPath))
+            if (showDirectories)
             {
-                try
+                foreach (var directory in Directory.EnumerateDirectories(CurrentPath))
                 {
-                    var info = new DirectoryInfo(directory);
-                    entries.Add(new FileEntry(info.Name, directory, true, "Folder", "", info.LastWriteTime));
-                }
-                catch (UnauthorizedAccessException)
-                {
+                    try
+                    {
+                        var info = new DirectoryInfo(directory);
+                        entries.Add(new FileEntry(info.Name, directory, true, "Folder", "", info.LastWriteTime));
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                    }
                 }
             }
 
@@ -103,6 +107,13 @@ public partial class ExplorerTabView : UserControl
                 try
                 {
                     var info = new FileInfo(file);
+                    if ((info.Attributes & FileAttributes.Directory) != 0)
+                    {
+                        if (showDirectories)
+                            entries.Add(new FileEntry(info.Name, file, true, "Folder", "", info.LastWriteTime));
+                        continue;
+                    }
+
                     entries.Add(new FileEntry(info.Name, file, false, info.Extension, FormatSize(info.Length), info.LastWriteTime));
                 }
                 catch (UnauthorizedAccessException)
@@ -119,6 +130,8 @@ public partial class ExplorerTabView : UserControl
             .ThenBy(entry => entry.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
         StatusLabel.Text = $"{entries.Count} items";
     }
+
+    private void ShowDirectoriesCheckBox_StateChanged(object sender, RoutedEventArgs e) => RefreshFiles();
 
     private void InitializeClassicTree()
     {

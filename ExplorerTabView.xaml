@@ -79,6 +79,9 @@
         <DockPanel Grid.Column="2" LastChildFill="True">
             <TextBlock x:Name="LocationLabel" DockPanel.Dock="Top" Padding="12,10"
                        FontSize="14" FontWeight="SemiBold" Foreground="#263443" />
+            <CheckBox x:Name="ShowDirectoriesCheckBox" DockPanel.Dock="Top" Content="Show directories"
+                      IsChecked="False" Margin="10,0,10,8" Checked="ShowDirectoriesCheckBox_StateChanged"
+                      Unchecked="ShowDirectoriesCheckBox_StateChanged" />
             <ListView x:Name="FileList" SelectionMode="Single"
                       MouseDoubleClick="FileList_MouseDoubleClick"
                       PreviewMouseRightButtonDown="FileList_PreviewMouseRightButtonDown">
