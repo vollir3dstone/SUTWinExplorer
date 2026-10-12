@@ -324,6 +324,7 @@ public sealed class TreeEntry
         Path = path;
         IsPlaceholder = isPlaceholder;
         IsLoaded = isPlaceholder;
+        Icons = isPlaceholder ? null : ShellIconProvider.GetSmallIcons(path);
     }
 
     public TreeEntry(string name, string path) : this(name, path, false) { }
@@ -334,6 +335,7 @@ public sealed class TreeEntry
     public bool IsLoaded { get; set; }
     public bool IsExpanded { get; set; }
     public bool IsSelected { get; set; }
+    public ShellIconSet? Icons { get; }
     public ObservableCollection<TreeEntry> Children { get; } = new();
 
     public static TreeEntry Placeholder() => new("Loading", string.Empty, true);
@@ -349,7 +351,7 @@ public sealed class FileEntry
         Type = type;
         SizeText = sizeText;
         Modified = modified;
-        Icon = ShellIconProvider.GetSmallIcon(fullPath);
+        Icons = ShellIconProvider.GetSmallIcons(fullPath);
     }
 
     public string Name { get; }
@@ -358,35 +360,69 @@ public sealed class FileEntry
     public string Type { get; }
     public string SizeText { get; }
     public DateTime Modified { get; }
-    public ImageSource? Icon { get; }
+    public ShellIconSet? Icons { get; }
     public string ModifiedText => Modified.ToString("g");
 }
+
+public sealed record ShellIconSet(ImageSource? BaseIcon, ImageSource? OverlayIcon);
 
 internal static class ShellIconProvider
 {
     private const uint Icon = 0x00000100;
     private const uint SmallIcon = 0x00000001;
+    private const uint SystemImageList = 0x00004000;
+    private const uint OverlayIndex = 0x00000040;
     private const uint AddOverlays = 0x00000020;
+    private const uint DrawTransparent = 0x00000001;
+    private const int SmallShellImageList = 1;
 
-    public static ImageSource? GetSmallIcon(string path)
+    public static ShellIconSet? GetSmallIcons(string path)
     {
-        var info = new ShellFileInfo();
-        var result = SHGetFileInfo(path, 0, ref info, (uint)Marshal.SizeOf<ShellFileInfo>(), Icon | SmallIcon | AddOverlays);
-        if (result == IntPtr.Zero || info.IconHandle == IntPtr.Zero)
+        var baseInfo = new ShellFileInfo();
+        if (SHGetFileInfo(path, 0, ref baseInfo, (uint)Marshal.SizeOf<ShellFileInfo>(), SystemImageList | SmallIcon) == IntPtr.Zero)
+            return null;
+
+        var overlayInfo = new ShellFileInfo();
+        _ = SHGetFileInfo(path, 0, ref overlayInfo, (uint)Marshal.SizeOf<ShellFileInfo>(), Icon | SmallIcon | OverlayIndex | AddOverlays);
+        var overlaySlot = (int)(unchecked((uint)overlayInfo.IconIndex) >> 24);
+        if (overlayInfo.IconHandle != IntPtr.Zero)
+            _ = DestroyIcon(overlayInfo.IconHandle);
+
+        IImageList? imageList = null;
+        try
+        {
+            var interfaceId = typeof(IImageList).GUID;
+            Marshal.ThrowExceptionForHR(SHGetImageList(SmallShellImageList, ref interfaceId, out imageList));
+            var baseIcon = GetImage(imageList, baseInfo.IconIndex);
+            ImageSource? overlayIcon = null;
+            if (overlaySlot > 0 && imageList.GetOverlayImage(overlaySlot, out var overlayImageIndex) >= 0)
+                overlayIcon = GetImage(imageList, overlayImageIndex);
+
+            return new ShellIconSet(baseIcon, overlayIcon);
+        }
+        finally
+        {
+            if (imageList is not null && Marshal.IsComObject(imageList))
+                _ = Marshal.FinalReleaseComObject(imageList);
+        }
+    }
+
+    private static ImageSource? GetImage(IImageList imageList, int imageIndex)
+    {
+        if (imageList.GetIcon(imageIndex, DrawTransparent, out var iconHandle) < 0)
+            return null;
+        if (iconHandle == IntPtr.Zero)
             return null;
 
         try
         {
-            var bitmap = Imaging.CreateBitmapSourceFromHIcon(
-                info.IconHandle,
-                Int32Rect.Empty,
-                BitmapSizeOptions.FromWidthAndHeight(16, 16));
+            var bitmap = Imaging.CreateBitmapSourceFromHIcon(iconHandle, Int32Rect.Empty, BitmapSizeOptions.FromWidthAndHeight(16, 16));
             bitmap.Freeze();
             return bitmap;
         }
         finally
         {
-            _ = DestroyIcon(info.IconHandle);
+            _ = DestroyIcon(iconHandle);
         }
     }
 
@@ -395,6 +431,9 @@ internal static class ShellIconProvider
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool DestroyIcon(IntPtr iconHandle);
+
+    [DllImport("shell32.dll", PreserveSig = true)]
+    private static extern int SHGetImageList(int imageList, ref Guid interfaceId, out IImageList result);
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct ShellFileInfo
@@ -405,4 +444,40 @@ internal static class ShellIconProvider
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string DisplayName;
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)] public string TypeName;
     }
+}
+
+[ComImport]
+[Guid("46EB5926-582E-4017-9FDF-E8998DAA0950")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IImageList
+{
+    [PreserveSig] int Add(IntPtr image, IntPtr mask, out int index);
+    [PreserveSig] int ReplaceIcon(int index, IntPtr icon, out int newIndex);
+    [PreserveSig] int SetOverlayImage(int imageIndex, int overlayIndex);
+    [PreserveSig] int Replace(int index, IntPtr image, IntPtr mask);
+    [PreserveSig] int AddMasked(IntPtr image, uint maskColor, out int index);
+    [PreserveSig] int Draw(IntPtr drawParameters);
+    [PreserveSig] int Remove(int index);
+    [PreserveSig] int GetIcon(int index, uint flags, out IntPtr icon);
+    [PreserveSig] int GetImageInfo(int index, IntPtr imageInfo);
+    [PreserveSig] int Copy(int destinationIndex, IntPtr source, int sourceIndex, uint flags);
+    [PreserveSig] int Merge(int firstIndex, IntPtr secondList, int secondIndex, int x, int y, ref Guid interfaceId, out IntPtr result);
+    [PreserveSig] int Clone(ref Guid interfaceId, out IntPtr result);
+    [PreserveSig] int GetImageRect(int index, IntPtr rectangle);
+    [PreserveSig] int GetIconSize(out int width, out int height);
+    [PreserveSig] int SetIconSize(int width, int height);
+    [PreserveSig] int GetImageCount(out int count);
+    [PreserveSig] int SetImageCount(uint count);
+    [PreserveSig] int SetBkColor(uint color, out uint previousColor);
+    [PreserveSig] int GetBkColor(out uint color);
+    [PreserveSig] int BeginDrag(int trackIndex, int hotSpotX, int hotSpotY);
+    [PreserveSig] int EndDrag();
+    [PreserveSig] int DragEnter(IntPtr window, int x, int y);
+    [PreserveSig] int DragLeave(IntPtr window);
+    [PreserveSig] int DragMove(int x, int y);
+    [PreserveSig] int SetDragCursorImage(IntPtr imageList, int dragIndex, int hotSpotX, int hotSpotY);
+    [PreserveSig] int DragShowNoLock([MarshalAs(UnmanagedType.Bool)] bool show);
+    [PreserveSig] int GetDragImage(IntPtr point, IntPtr hotSpot, ref Guid interfaceId, out IntPtr result);
+    [PreserveSig] int GetItemFlags(int index, out uint flags);
+    [PreserveSig] int GetOverlayImage(int overlayIndex, out int imageIndex);
 }

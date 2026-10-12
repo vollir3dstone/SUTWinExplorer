@@ -3,12 +3,55 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SUTWinExplorer">
     <UserControl.Resources>
+        <DataTemplate x:Key="ShellIconTemplate">
+            <Grid Width="16" Height="16" ClipToBounds="False">
+                <Image Width="16" Height="16" Source="{Binding Icons.BaseIcon}" Stretch="None" />
+                  <Image Width="9" Height="9" Source="{Binding Icons.OverlayIcon}" Stretch="Uniform"
+                       HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+            </Grid>
+        </DataTemplate>
         <HierarchicalDataTemplate DataType="{x:Type local:TreeEntry}" ItemsSource="{Binding Children}">
             <TextBlock Text="{Binding Name}" />
         </HierarchicalDataTemplate>
         <Style x:Key="DirectoryTreeItemStyle" TargetType="TreeViewItem">
             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
             <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TreeViewItem">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="20" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <ToggleButton x:Name="Expander" Grid.Row="0" Grid.Column="0"
+                                          Width="18" Height="18" Padding="0" BorderThickness="0"
+                                          Background="Transparent" Focusable="False"
+                                          IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                          Content="{Binding}" ContentTemplate="{StaticResource ShellIconTemplate}" />
+                            <Border x:Name="HeaderBorder" Grid.Row="0" Grid.Column="1" Padding="1,0">
+                                <ContentPresenter x:Name="PART_Header" ContentSource="Header" />
+                            </Border>
+                            <ItemsPresenter x:Name="ItemsHost" Grid.Row="1" Grid.Column="1" Visibility="Collapsed" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsExpanded" Value="True">
+                                <Setter TargetName="ItemsHost" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <DataTrigger Binding="{Binding IsPlaceholder}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="HeaderBorder" Property="Background" Value="#DCEBFA" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
             <EventSetter Event="Expanded" Handler="TreeItem_Expanded" />
         </Style>
     </UserControl.Resources>
@@ -44,7 +87,7 @@
                         <GridViewColumn Header="" Width="34">
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
-                                    <Image Width="16" Height="16" Source="{Binding Icon}" Stretch="None" />
+                                    <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource ShellIconTemplate}" />
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
                         </GridViewColumn>
