@@ -10,8 +10,10 @@
                 <Button Content="Forward" Click="Forward_Click" Padding="10,4" />
                 <Button Content="Up" Click="Up_Click" Padding="10,4" />
                 <Separator />
-                <TextBox x:Name="AddressBox" Width="590" VerticalContentAlignment="Center"
-                         KeyDown="AddressBox_KeyDown" />
+                <ComboBox x:Name="AddressBox" Width="590" IsEditable="True" IsTextSearchEnabled="False"
+                          StaysOpenOnEdit="True" DisplayMemberPath="Path" SelectedValuePath="TabIndex"
+                          VerticalContentAlignment="Center" KeyDown="AddressBox_KeyDown"
+                          SelectionChanged="AddressBox_SelectionChanged" />
                 <Button Content="Go" Click="Go_Click" Padding="12,4" />
                 <Separator />
                 <Button Content="New tab" Click="NewTab_Click" Padding="12,4" />

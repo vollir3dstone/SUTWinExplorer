@@ -7,6 +7,8 @@ namespace SUTWinExplorer;
 
 public partial class MainWindow : Window
 {
+    private bool _updatingPathChoices;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -24,8 +26,7 @@ public partial class MainWindow : Window
         view.LocationChanged += (_, currentPath) =>
         {
             title.Text = GetTabTitle(currentPath);
-            if (ReferenceEquals(CurrentTab, view))
-                AddressBox.Text = currentPath;
+            RefreshPathChoices();
         };
 
         var close = new Button
@@ -45,7 +46,7 @@ public partial class MainWindow : Window
         var tab = new TabItem { Header = header, Content = view };
         ExplorerTabs.Items.Add(tab);
         ExplorerTabs.SelectedItem = tab;
-        AddressBox.Text = view.CurrentPath;
+        RefreshPathChoices();
     }
 
     private void CloseTab_Click(object sender, RoutedEventArgs e)
@@ -55,13 +56,57 @@ public partial class MainWindow : Window
 
         var tab = ExplorerTabs.Items.Cast<TabItem>().FirstOrDefault(item => ReferenceEquals(item.Content, view));
         if (tab is not null)
+        {
             ExplorerTabs.Items.Remove(tab);
+            RefreshPathChoices();
+        }
     }
 
     private void ExplorerTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (CurrentTab is { } tab)
-            AddressBox.Text = tab.CurrentPath;
+        RefreshPathChoices();
+    }
+
+    private void AddressBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingPathChoices || AddressBox.SelectedItem is not TabPathChoice choice)
+            return;
+
+        if (choice.TabIndex < 0)
+        {
+            AddressBox.IsDropDownOpen = false;
+            RefreshPathChoices();
+            return;
+        }
+
+        if (choice.TabIndex < ExplorerTabs.Items.Count)
+            ExplorerTabs.SelectedIndex = choice.TabIndex;
+
+        AddressBox.IsDropDownOpen = false;
+        RefreshPathChoices();
+    }
+
+    private void RefreshPathChoices()
+    {
+        if (AddressBox is null)
+            return;
+
+        var choices = new List<TabPathChoice> { new(-1, string.Empty) };
+        choices.AddRange(ExplorerTabs.Items.Cast<TabItem>()
+            .Select((item, index) => new TabPathChoice(index, ((ExplorerTabView)item.Content).CurrentPath))
+            .OrderBy(choice => choice.Path, StringComparer.CurrentCultureIgnoreCase));
+
+        _updatingPathChoices = true;
+        try
+        {
+            AddressBox.ItemsSource = choices;
+            AddressBox.SelectedValue = ExplorerTabs.SelectedIndex;
+            AddressBox.Text = CurrentTab?.CurrentPath ?? string.Empty;
+        }
+        finally
+        {
+            _updatingPathChoices = false;
+        }
     }
 
     private void Back_Click(object sender, RoutedEventArgs e) => CurrentTab?.GoBack();
@@ -98,4 +143,6 @@ public partial class MainWindow : Window
         var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
         return string.IsNullOrEmpty(name) ? path : name;
     }
+
+    private sealed record TabPathChoice(int TabIndex, string Path);
 }
