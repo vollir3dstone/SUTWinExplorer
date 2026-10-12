@@ -1,6 +1,7 @@
 ﻿using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 
 namespace SUTWinExplorer;
@@ -23,11 +24,7 @@ public partial class MainWindow : Window
     {
         var view = new ExplorerTabView(path);
         var title = new TextBlock { Text = GetTabTitle(view.CurrentPath), VerticalAlignment = VerticalAlignment.Center };
-        view.LocationChanged += (_, currentPath) =>
-        {
-            title.Text = GetTabTitle(currentPath);
-            RefreshPathChoices();
-        };
+        var tooltipText = new TextBlock { Text = view.CurrentPath, TextWrapping = TextWrapping.NoWrap };
 
         var close = new Button
         {
@@ -44,9 +41,53 @@ public partial class MainWindow : Window
         header.Children.Add(close);
 
         var tab = new TabItem { Header = header, Content = view };
+        var pathToolTip = new ToolTip
+        {
+            Content = tooltipText,
+            Placement = PlacementMode.Custom,
+            PlacementTarget = tab,
+            Padding = new Thickness(8, 5, 8, 5),
+            BorderThickness = new Thickness(1)
+        };
+        pathToolTip.CustomPopupPlacementCallback = (popupSize, targetSize, offset) =>
+        {
+            var targetOrigin = tab.TranslatePoint(new Point(0, 0), this);
+            var margin = 8d;
+            var rightEdge = Math.Max(margin, ActualWidth - margin);
+            var left = Math.Clamp(targetOrigin.X, margin, Math.Max(margin, rightEdge - popupSize.Width));
+            return [new CustomPopupPlacement(
+                new Point(left - targetOrigin.X, targetSize.Height + 2),
+                PopupPrimaryAxis.Vertical)];
+        };
+        tab.ToolTip = pathToolTip;
+        tab.ToolTipOpening += (_, _) => ConfigurePathToolTip(pathToolTip, tooltipText);
+        view.LocationChanged += (_, currentPath) =>
+        {
+            title.Text = GetTabTitle(currentPath);
+            tooltipText.Text = currentPath;
+            RefreshPathChoices();
+        };
+
         ExplorerTabs.Items.Add(tab);
         ExplorerTabs.SelectedItem = tab;
         RefreshPathChoices();
+    }
+
+    private void ConfigurePathToolTip(ToolTip toolTip, TextBlock pathText)
+    {
+        var margin = 8d;
+        var maxWidth = Math.Max(1, ActualWidth - margin * 2);
+        var horizontalChrome = toolTip.Padding.Left + toolTip.Padding.Right +
+                              toolTip.BorderThickness.Left + toolTip.BorderThickness.Right;
+
+        pathText.TextWrapping = TextWrapping.NoWrap;
+        pathText.MaxWidth = double.PositiveInfinity;
+        pathText.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var needsWrapping = pathText.DesiredSize.Width + horizontalChrome > maxWidth;
+
+        toolTip.MaxWidth = maxWidth;
+        pathText.TextWrapping = needsWrapping ? TextWrapping.Wrap : TextWrapping.NoWrap;
+        pathText.MaxWidth = needsWrapping ? Math.Max(1, maxWidth - horizontalChrome) : double.PositiveInfinity;
     }
 
     private void CloseTab_Click(object sender, RoutedEventArgs e)
