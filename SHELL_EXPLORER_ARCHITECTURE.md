@@ -89,7 +89,9 @@ The WPF content pane occupies the remaining width after the sidebar. The hosted
 ExplorerBrowser view must follow that pane on both window resize and sidebar
 splitter movement. In Details mode, the visible non-Name columns retain their
 Shell-provided widths and Name uses the remaining width. The resulting view
-must have no horizontal scroll range at the tested layout sizes.
+must have no horizontal scroll range at the tested layout sizes. Enabling
+**Show directories** can create or remove a vertical Shell scrollbar without
+changing the WPF pane size, so that refresh also requires a width recalculation.
 
 `ExplorerTabView.ShellBrowserSlot_SizeChanged` converts the WPF size to physical
 pixels and calls `ShellExplorerBrowserHost.SetViewSize`. The host applies those
@@ -99,12 +101,17 @@ queries the current view for `IColumnManager`, enumerates visible columns, and
 uses `PKEY_ItemNameDisplay` (`{B725F130-47EF-101A-A5F1-02608C9EEBAC}`, PID 10)
 to identify Name. The target width is:
 
-`max(80, ShellViewClientWidth - OtherVisibleColumnWidths - 11)`
+`UsableShellViewWidth = ShellViewClientWidth - VisibleVerticalScrollBarWidth`
+
+`NameWidth = max(80, UsableShellViewWidth - OtherVisibleColumnWidths - 11)`
 
 The other widths are read with `GetColumnInfo`; the Name width is applied with
 `SetColumnInfo`. The width is recalculated after Shell navigation because the
-Shell may replace the current view. `IColumnManager` widths are physical pixels.
-Its COM method declarations must follow the SDK vtable order (`SetColumnInfo`,
+Shell may replace the current view. After **Show directories** refreshes the
+view, a one-shot 250ms dispatcher timer allows Shell's scrollbar child windows
+to settle before measuring the visible vertical scrollbar and recalculating
+Name. `IColumnManager` widths are physical pixels. Its COM method declarations
+must follow the SDK vtable order (`SetColumnInfo`,
 `GetColumnInfo`, `GetColumnCount`, `GetColumns`, `SetColumns`); a different
 declaration order dispatches calls to the wrong native methods.
 
@@ -126,6 +133,14 @@ and hid the Shell scrollbar at both the 880px startup view and the 1200px
 resized view. The host widths in those checks were 882px and 1202px
 respectively. A window-width increase also produced a matching `SetRect` and
 Name-width update.
+
+Enabling **Show directories** in a folder with enough entries to show the
+vertical bar left the Shell view 880px wide, but its visible vertical scrollbar
+was 17px wide, reducing usable width to 863px. The delayed recalculation
+reduced Name from 525px to 508px; Size stayed at its Shell-provided 80px, and
+UI Automation reported `HorizontallyScrollable = false`. The horizontal bar
+had appeared because the Shell's vertical bar consumed width without raising a
+WPF resize event.
 
 The 11px value is therefore an empirically derived Shell-specific allowance,
 not a documented Windows border metric. It was verified on this Windows build

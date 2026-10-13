@@ -53,6 +53,17 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         _showDirectories = showDirectories;
         _site?.SetShowDirectories(showDirectories);
         RefreshCurrentView();
+        var refreshTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+        {
+            Interval = TimeSpan.FromMilliseconds(250)
+        };
+        refreshTimer.Tick += (_, _) =>
+        {
+            refreshTimer.Stop();
+            TraceColumnSizing($"Show directories refresh settled: {showDirectories}");
+            ApplyViewBounds();
+        };
+        refreshTimer.Start();
     }
 
     protected override HandleRef BuildWindowCore(HandleRef hwndParent)
@@ -297,8 +308,12 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
                 return fallbackWidth;
 
             var viewWidth = viewBounds.Right - viewBounds.Left;
-            TraceColumnSizing($"Shell view client width={viewWidth}, host width={fallbackWidth}");
-            return viewWidth > 0 ? viewWidth : fallbackWidth;
+            var viewClassName = new System.Text.StringBuilder(64);
+            _ = GetClassName(viewWindow, viewClassName, viewClassName.Capacity);
+            var verticalScrollBarWidth = GetVisibleVerticalScrollBarWidth(viewWindow);
+            var usableWidth = viewWidth - verticalScrollBarWidth;
+            TraceColumnSizing($"Shell view HWND=0x{viewWindow.ToInt64():X} class={viewClassName} client width={viewWidth}, vertical scrollbar={verticalScrollBarWidth}, usable width={usableWidth}, host width={fallbackWidth}");
+            return usableWidth > 0 ? usableWidth : fallbackWidth;
         }
         catch (Exception exception) when (exception is COMException or InvalidCastException)
         {
@@ -312,6 +327,36 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             if (viewPointer != IntPtr.Zero)
                 _ = Marshal.Release(viewPointer);
         }
+    }
+
+    private static int GetVisibleVerticalScrollBarWidth(IntPtr viewWindow)
+    {
+        var scrollbarWidth = 0;
+        var scrollbarCount = 0;
+        EnumChildWindows(viewWindow, (childWindow, _) =>
+        {
+            var className = new System.Text.StringBuilder(64);
+            if (GetClassName(childWindow, className, className.Capacity) == 0 || className.ToString() != "ScrollBar")
+                return true;
+
+            if (!GetClientRect(childWindow, out var bounds))
+                return true;
+
+            var width = bounds.Right - bounds.Left;
+            var height = bounds.Bottom - bounds.Top;
+            var visible = IsWindowVisible(childWindow);
+            TraceColumnSizing($"Shell child scrollbar HWND=0x{childWindow.ToInt64():X} visible={visible} size={width}x{height}");
+            if (visible)
+            {
+                scrollbarCount++;
+                if (width > 0 && height > width)
+                    scrollbarWidth += width;
+            }
+
+            return true;
+        }, IntPtr.Zero);
+        TraceColumnSizing($"Visible scrollbar scan found {scrollbarCount} bars, vertical width={scrollbarWidth}");
+        return scrollbarWidth;
     }
 
     private static void TraceColumnSizing(string message)
@@ -402,6 +447,17 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool GetClientRect(IntPtr window, out NativeRect rectangle);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr window, System.Text.StringBuilder className, int maximum);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumChildWindows(IntPtr parent, EnumWindowsProc callback, IntPtr parameter);
+
+    private delegate bool EnumWindowsProc(IntPtr window, IntPtr parameter);
 }
 
 [ComImport]
