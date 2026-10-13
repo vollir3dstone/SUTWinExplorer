@@ -384,7 +384,7 @@ public sealed class ShellBrowserSite(Func<bool> showDirectories, Func<string?> c
         return E_NOINTERFACE;
     }
 
-    public int OnDefaultCommand(IShellView shellView) => S_OK;
+    public int OnDefaultCommand(IShellView shellView) => S_FALSE;
     public int OnStateChange(IShellView shellView, uint change) => S_OK;
 
     public void Dispose()
