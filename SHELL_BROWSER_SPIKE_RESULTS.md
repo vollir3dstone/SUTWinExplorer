@@ -1,5 +1,7 @@
 # IExplorerBrowser Spike Results
 
+> **Document scope:** This is the historical report from the isolated Shell-browser spike. Its observations describe that test build, not necessarily the current production state. See [SHELL_EXPLORER_ARCHITECTURE.md](SHELL_EXPLORER_ARCHITECTURE.md) for the current decision and implementation, and [SHELL_EXPLORER_BEHAVIOR_SPEC.md](SHELL_EXPLORER_BEHAVIOR_SPEC.md) for user-facing behavior.
+
 ## Scope and build
 
 The spike is launched only with `SUTWinExplorer.exe --shell-browser-spike`. It

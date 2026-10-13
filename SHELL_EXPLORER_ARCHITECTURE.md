@@ -1,0 +1,193 @@
+# Shell Explorer Architecture and Decisions
+
+> **Document scope:** This file records architecture, implementation details, API ownership, technical findings, decisions, and unresolved engineering work. It is not the user-facing behavior specification; see [SHELL_EXPLORER_BEHAVIOR_SPEC.md](SHELL_EXPLORER_BEHAVIOR_SPEC.md) for observable requirements and acceptance criteria.
+
+## Decision Record
+
+### 2026-10-13: Use the Shell IExplorerBrowser view in production
+
+**Decision owner:** Volker.
+
+**Decision:** Use the Windows Shell `IExplorerBrowser` COM API as the content
+view. Keep the WPF application window, application tabs, address field, status
+area, and custom directory trees.
+
+**Rationale from Volker:** The priority is not to forget common Windows
+Explorer behavior. Recreating Shell operations in a custom list would mean
+implementing and maintaining many details ourselves. Volker accepted the
+remaining drawbacks because column sizing can be handled separately and
+directory visibility can be filtered.
+
+**Evidence:** The spike verified Shell item/background menus, Properties, New
+Text Document, context-menu Copy/Paste, Paste shortcut, cross-Explorer
+clipboard operations, drag/drop, custom-tree navigation, separate tab
+locations, localized type descriptions, and icon overlays. The spike did not
+pass Ctrl+C/Ctrl+V keyboard routing or Name-column fill resizing. The directory
+filter was implemented and runtime-tested after the decision.
+
+**Scope:** This embeds a Shell folder view, not the complete Windows Explorer
+application or its chrome. WPF remains responsible for the app-level navigation
+and layout.
+
+## Current Composition
+
+- `MainWindow` owns the WPF application toolbar and `TabControl`.
+- Each `ExplorerTabView` owns its active path, back/forward history, two custom
+  directory trees, **Show directories**, status count, and one content view.
+- Production creates one `ShellExplorerBrowserHost` per tab. It derives from
+  `HwndHost` and hosts one Shell `IExplorerBrowser` COM instance.
+- `ActivePathTree` shows only the current ancestor route.
+- `ActivePathAndSiblingsTree` additionally shows immediate child directories
+  along the route. Both continue to navigate the Shell view through the common
+  `ExplorerTabView.Navigate` method.
+- The legacy WPF `ListView`, its filtering, icon binding, sizing, and menus are
+  retained. `UseLegacyWpfFileList` in `ExplorerTabView.xaml.cs` is the explicit
+  rollback switch: `false` selects the Shell view (production default); `true`
+  makes the WPF list active again.
+
+## Shell View Host
+
+`ShellExplorerBrowserHost` creates a child host window with `CreateWindowExW`,
+activates the Shell's `CLSID_ExplorerBrowser` through `CoCreateInstance`, and
+hosts it on the WPF UI's STA thread.
+
+Initialization sequence:
+
+1. Create the child HWND in `HwndHost.BuildWindowCore`.
+2. Create the `IExplorerBrowser` COM object.
+3. Create and attach `ShellBrowserSite` with `IObjectWithSite.SetSite`.
+4. Initialize in Details mode with `FOLDERSETTINGS`; do not enable
+   `EBO_SHOWFRAMES`, so the Shell navigation pane/frame is not shown.
+5. Subscribe to `IExplorerBrowserEvents` using `Advise`.
+6. Defer the first `BrowseToIDList` until `DispatcherPriority.Loaded`.
+7. Update the Shell view's bounds with `SetRect` when the WPF host is resized.
+8. On teardown, `Unadvise`, call `Destroy`, clear the site, release COM
+   references, and destroy the child HWND.
+
+Navigation uses `SHParseDisplayName` to obtain an absolute PIDL and
+`IExplorerBrowser.BrowseToIDList`; the allocated PIDL is freed after the call.
+`IExplorerBrowserEvents.OnNavigationPending` updates the filter's current path
+before item enumeration. `OnNavigationComplete` converts the PIDL with
+`SHGetNameFromIDList(SIGDN_FILESYSPATH)`, then dispatches the path update to WPF
+so the active path, trees, tab title, status, and address choices synchronize.
+Non-filesystem namespace locations do not become filesystem paths and are not
+fully integrated with the custom trees yet.
+
+The initial browse must not run synchronously inside `BuildWindowCore`.
+`BrowseToIDList` can pump Windows messages; doing so during WPF's initial layout
+caused a dispatcher exception and prevented startup. Deferring the browse
+avoids that reentrancy.
+
+## Show Directories Filter
+
+The checkbox is WPF-owned and defaults to unchecked. The filter is implemented
+at the Shell view boundary, so the Shell still owns enumeration, icons, menus,
+and file operations.
+
+### Service registration
+
+`ShellBrowserSite` is a managed COM-visible object implementing `IServiceProvider`
+and `ICommDlgBrowser`. `IExplorerBrowser` is given this site through
+`IObjectWithSite.SetSite`.
+
+`IServiceProvider.QueryService` recognizes `SID_SExplorerBrowserFrame` with
+`IID_ICommDlgBrowser` and returns the site's COM interface pointer. The Shell
+then calls `ICommDlgBrowser.IncludeObject` for candidate child items.
+
+The callback interfaces must be managed COM-callable interfaces (`ComVisible`),
+not `[ComImport]` interfaces. Initially the callback was never useful because
+the site did not expose the service correctly; runtime tracing confirmed that
+service requests and `IncludeObject` calls were occurring after the COM
+visibility correction.
+
+### Folder classification
+
+When **Show directories** is checked, `IncludeObject` returns `S_OK` for all
+items. When unchecked, it:
+
+1. Reads the current folder path supplied by the `ShellExplorerBrowserHost`.
+   `OnNavigationPending` updates this path before the destination view
+   enumerates items.
+2. Binds that path to an `IShellFolder`: `SHParseDisplayName` creates the
+   absolute PIDL, `SHBindToParent` provides the parent and relative child PIDL,
+   and `IShellFolder.BindToObject` obtains the current folder. The bound folder
+   interface is cached by path and released when the path changes or the view
+   is destroyed.
+3. Places the callback's borrowed child PIDL into a one-element pointer array
+   and calls `IShellFolder.GetAttributesOf` with `SFGAO_FOLDER`.
+4. Returns `S_FALSE` when `SFGAO_FOLDER` is present, hiding the entry; otherwise
+   returns `S_OK` so it is displayed.
+
+The child PIDL passed to `IncludeObject` is borrowed and is not freed. The child
+PIDL returned by `SHBindToParent` points into the absolute PIDL allocation and
+is also not freed separately. Only the pointer array allocated for
+`GetAttributesOf` and the absolute PIDL allocation are freed by this code.
+Folder-query failures fail open (`S_OK`) rather than accidentally hiding
+ordinary files.
+
+Directory reparse points are expected to follow the same behavior when the
+Shell reports `SFGAO_FOLDER`. Runtime testing verified ordinary directories;
+junction/reparse-point coverage remains a dedicated acceptance test.
+
+When the checkbox changes, `ShellExplorerBrowserHost.SetShowDirectories`
+updates the site state, obtains the current `IShellView` through
+`IExplorerBrowser.GetCurrentView`, and calls `IShellView.Refresh` to re-enumerate
+the active folder without navigation.
+
+### Filter debugging findings
+
+- `IShellFolder.GetUIObjectOf` does not support `cidl == 0`; use
+  `IShellView.GetItemObject(SVGIO_BACKGROUND, ...)` for folder-background
+  menus. That is separate from the directory-filter callback.
+- Trying to obtain the current folder with
+  `IShellView.GetItemObject(SVGIO_BACKGROUND, IID_IShellFolder)` returned
+  `E_NOINTERFACE`. The working filter instead binds the current path through
+  `SHParseDisplayName`, `SHBindToParent`, and `BindToObject`.
+- A temporary trace confirmed that `QueryService` and `IncludeObject` were
+  reached. The trace was removed after fixing folder binding.
+- Runtime UI Automation on the default profile observed 23 file rows with the
+  checkbox off, 28 rows with it on, and 23 again when turned off. This proves
+  live checkbox refresh in that folder; it is not a complete reparse-point
+  test.
+
+## Native Context Menus and Operations
+
+The hosted Shell content view supplies its own item and background menus,
+clipboard context-menu verbs, and drag/drop. The app still uses
+`ShellContextMenu` for context menus requested from the custom WPF directory
+trees. That helper queries native Shell context menus and forwards required
+`IContextMenu2`/`IContextMenu3` menu messages.
+
+The ExplorerBrowser spike verified context-menu New, context-menu Copy/Paste,
+Paste shortcut, clipboard interoperability with Windows Explorer, and
+right-button drag/drop. Ctrl+C/Ctrl+V keyboard routing failed in the spike and
+remains outstanding. The Shell-hosted view is expected to own the common file
+operations; avoid duplicating them as custom file-copy code unless a specific
+behavior cannot be provided by the Shell view.
+
+## Build and Output
+
+The project targets `net8.0-windows` and `net10.0-windows`. Build normally to
+the standard folders:
+
+- `D:\Projekte\Softwareprojekte gross\SUTWinExplorer\bin\Debug\net8.0-windows`
+- `D:\Projekte\Softwareprojekte gross\SUTWinExplorer\bin\Debug\net10.0-windows`
+
+Do not use an alternate artifact output folder unless the user explicitly asks
+for it or the standard output is locked by a running app. If an isolated build
+is necessary, clearly identify its output location.
+
+## Known Gaps and Follow-up
+
+- Ctrl+C/Ctrl+V keyboard accelerator routing into the hosted Shell view.
+- Name-column fill sizing and other column-width policy through the current
+  Shell view's `IColumnManager`.
+- Synchronize Shell-originated folder opening and selection with all custom
+  navigation/history states; current location completion is wired, but all
+  history and selection cases need tests.
+- Test directory filtering with normal directories, junctions, and other
+  directory reparse points.
+- Verify navigation to non-filesystem Shell namespace locations and decide
+  whether custom trees/address paths should support them.
+- Add robust user feedback for Shell navigation failures, unavailable paths,
+  and host teardown/recreation.
