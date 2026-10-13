@@ -232,17 +232,19 @@ trees. That helper queries native Shell context menus and forwards required
 
 The ExplorerBrowser spike verified context-menu New, context-menu Copy/Paste,
 Paste shortcut, clipboard interoperability with Windows Explorer, and
-right-button drag/drop. Ctrl+C/Ctrl+V keyboard routing failed in the spike and
-remains outstanding. The Shell-hosted view is expected to own the common file
-operations; avoid duplicating them as custom file-copy code unless a specific
-behavior cannot be provided by the Shell view.
+right-button drag/drop. Its initial Ctrl+C/Ctrl+V keyboard test failed. The
+host now overrides `HwndHost.TranslateAcceleratorCore` and forwards messages to
+the current view's `IInputObject.TranslateAcceleratorIO`; if that returns
+`S_FALSE`, it falls back to `IShellView.TranslateAccelerator`. Runtime tests
+with disposable files verified Ctrl+A selection, Ctrl+C copy, Ctrl+V paste,
+Ctrl+X cut, and Ctrl+Z undo. The Shell-hosted view remains responsible for
+common file operations; do not duplicate these as custom file-copy code.
 
 ## Build and Output
 
-The project targets `net8.0-windows` and `net10.0-windows`. Build normally to
-the standard repo-relative folders:
+The project currently targets `net10.0-windows`. Build normally to the standard
+repo-relative folder:
 
-- `bin/Debug/net8.0-windows`
 - `bin/Debug/net10.0-windows`
 
 Do not use an alternate artifact output folder unless the user explicitly asks
@@ -251,7 +253,6 @@ is necessary, clearly identify its output location.
 
 ## Known Gaps and Follow-up
 
-- Ctrl+C/Ctrl+V keyboard accelerator routing into the hosted Shell view.
 - Explicit width policies for non-Name columns through the current Shell view's
   `IColumnManager`; their current Shell-provided widths are preserved.
 - Synchronize Shell-originated folder opening and selection with all custom

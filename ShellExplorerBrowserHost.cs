@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
 
@@ -26,6 +27,8 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     };
     private static readonly string ColumnSizingTracePath = Path.Combine(
         Path.GetTempPath(), $"SUTWinExplorer-column-sizing-{Environment.ProcessId}.log");
+    private static readonly string KeyboardTracePath = Path.Combine(
+        Path.GetTempPath(), $"SUTWinExplorer-keyboard-{Environment.ProcessId}.log");
 
     private IExplorerBrowserNative? _browser;
     private IObjectWithSiteNative? _browserSite;
@@ -140,6 +143,77 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
         TraceColumnSizing($"HwndHost position changed: client={bounds.Right - bounds.Left}x{bounds.Bottom - bounds.Top}");
         SetViewSize(bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
+    }
+
+    protected override bool TranslateAcceleratorCore(ref MSG msg, ModifierKeys modifiers)
+    {
+        var isKeyMessage = msg.message is 0x0100 or 0x0101 or 0x0102 or 0x0104 or 0x0105 or 0x0106;
+        if (isKeyMessage)
+            TraceKeyboard($"WPF accelerator msg=0x{msg.message:X4}, key=0x{msg.wParam.ToInt64():X}, modifiers={modifiers}");
+
+        if (TryTranslateShellViewMessage(ref msg, isKeyMessage))
+            return true;
+
+        return base.TranslateAcceleratorCore(ref msg, modifiers);
+    }
+
+    private bool TryTranslateShellViewMessage(ref MSG msg, bool trace)
+    {
+        if (_browser is null || !_initialized)
+            return false;
+
+        IntPtr viewPointer = IntPtr.Zero;
+        IShellView? view = null;
+        IInputObjectNative? inputObject = null;
+        IntPtr messagePointer = IntPtr.Zero;
+        try
+        {
+            var interfaceId = typeof(IShellView).GUID;
+            var viewResult = _browser.GetCurrentView(ref interfaceId, out viewPointer);
+            if (trace)
+                TraceKeyboard($"GetCurrentView=0x{viewResult:X8}, pointer=0x{viewPointer.ToInt64():X}");
+            if (viewResult < 0 || viewPointer == IntPtr.Zero)
+                return false;
+
+            view = (IShellView)Marshal.GetObjectForIUnknown(viewPointer);
+            messagePointer = Marshal.AllocHGlobal(Marshal.SizeOf<MSG>());
+            Marshal.StructureToPtr(msg, messagePointer, false);
+
+            try
+            {
+                inputObject = (IInputObjectNative)view;
+                var inputResult = inputObject.TranslateAcceleratorIO(messagePointer);
+                if (trace)
+                    TraceKeyboard($"IInputObject.TranslateAcceleratorIO=0x{inputResult:X8}");
+                if (inputResult == 0)
+                    return true;
+            }
+            catch (InvalidCastException)
+            {
+                if (trace)
+                    TraceKeyboard("Current Shell view does not expose IInputObject.");
+            }
+
+            var result = view.TranslateAccelerator(messagePointer);
+            if (trace)
+                TraceKeyboard($"IShellView.TranslateAccelerator=0x{result:X8}");
+            return result == 0;
+        }
+        catch (COMException exception)
+        {
+            if (trace)
+                TraceKeyboard($"Accelerator COM exception: 0x{exception.HResult:X8} {exception.Message}");
+            return false;
+        }
+        finally
+        {
+            if (messagePointer != IntPtr.Zero)
+                Marshal.FreeHGlobal(messagePointer);
+            if (view is not null && Marshal.IsComObject(view))
+                _ = Marshal.ReleaseComObject(view);
+            if (viewPointer != IntPtr.Zero)
+                _ = Marshal.Release(viewPointer);
+        }
     }
 
     public void SetViewSize(int width, int height)
@@ -367,6 +441,20 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         try
         {
             File.AppendAllText(ColumnSizingTracePath, $"{DateTimeOffset.Now:O} {message}{Environment.NewLine}");
+        }
+        catch (IOException)
+        {
+        }
+    }
+
+    private static void TraceKeyboard(string message)
+    {
+        if (Environment.GetEnvironmentVariable("SUTWINEXPLORER_TRACE_KEYS") != "1")
+            return;
+
+        try
+        {
+            File.AppendAllText(KeyboardTracePath, $"{DateTimeOffset.Now:O} {message}{Environment.NewLine}");
         }
         catch (IOException)
         {
@@ -753,4 +841,14 @@ internal struct NativeRect
     public int Top;
     public int Right;
     public int Bottom;
+}
+
+[ComImport]
+[Guid("68284FAA-6A48-11D0-8C78-00C04FD918B4")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IInputObjectNative
+{
+    [PreserveSig] int UIActivateIO([MarshalAs(UnmanagedType.Bool)] bool activate, IntPtr message);
+    [PreserveSig] int HasFocusIO();
+    [PreserveSig] int TranslateAcceleratorIO(IntPtr message);
 }

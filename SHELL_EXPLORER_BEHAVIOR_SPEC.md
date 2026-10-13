@@ -71,8 +71,8 @@ Checkboxes record implementation status, not changes to the expected behavior.
   the folder background in the Shell-hosted content view.
 - [x] The Shell view supports context-menu clipboard operations and drag/drop
   to and from Windows Explorer, as verified in the spike.
-- [ ] Ctrl+C, Ctrl+X, Ctrl+V, and Ctrl+Z work when expected. Ctrl+C/Ctrl+V did
-  not work in the spike and remain an explicit follow-up.
+- [x] Ctrl+C, Ctrl+X, Ctrl+V, Ctrl+Z, and Ctrl+A work in the Shell-hosted
+  content view. Copy, paste, cut, and undo were verified with disposable files.
 
 ### Refresh and failure handling
 

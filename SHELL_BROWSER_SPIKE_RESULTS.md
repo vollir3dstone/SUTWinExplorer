@@ -108,8 +108,9 @@ The measured Shell-specific trailing allowance and its portability caveat are
 documented in [SHELL_EXPLORER_ARCHITECTURE.md](SHELL_EXPLORER_ARCHITECTURE.md).
 
 Remaining production follow-up includes focused handling of Shell-originated
-selection and navigation/history and keyboard shortcut routing. Keyboard
-focus/routing for Ctrl+C/Ctrl+V also needs investigation.
+selection and navigation/history. The spike's keyboard-routing failure was
+fixed later in the production host; see
+[SHELL_EXPLORER_ARCHITECTURE.md](SHELL_EXPLORER_ARCHITECTURE.md).
 
 ### Implementation suggestions
 
@@ -117,10 +118,10 @@ focus/routing for Ctrl+C/Ctrl+V also needs investigation.
   added after this spike. If future work changes visible columns with
   `SetColumns`, reapply per-column state afterward because `SetColumns` clears
   it.
-- For Ctrl+C/Ctrl+V, verify the Shell view receives keyboard focus after item
-  selection and that the WPF host does not consume the accelerator. Let the
-  native view process clipboard commands where possible; keep its working
-  context-menu commands as a control test.
+- The keyboard-routing suggestion above was the spike follow-up. Production
+  now forwards accelerators through `IInputObject.TranslateAcceleratorIO`
+  with `IShellView.TranslateAccelerator` fallback and has runtime coverage for
+  Ctrl+A/C/X/V/Z.
 - If files-only content is required, expose `ICommDlgBrowser` through the
   host's `IServiceProvider` for `SID_SExplorerBrowserFrame`. Implement
   `IncludeObject` to return `S_FALSE` for folder items and `S_OK` for files,
@@ -139,7 +140,8 @@ The application has switched production content panes to the Shell-hosted view
 while retaining WPF tabs, address navigation, and custom directory trees. The
 legacy WPF content view remains behind `UseLegacyWpfFileList` for rollback.
 
-The checkbox filter and Name-column fill sizing have been implemented and
-runtime-verified. The remaining known spike gap is Ctrl+C/Ctrl+V keyboard
-routing; the user chose the Shell view because native common file behaviors
-take priority over recreating them in WPF.
+The checkbox filter, Name-column fill sizing, and Ctrl+A/C/X/V/Z keyboard
+shortcuts have been implemented and runtime-verified. Remaining known work is
+focused testing of Shell-originated selection and navigation/history; the user
+chose the Shell view because native common file behaviors take priority over
+recreating them in WPF.
