@@ -114,6 +114,7 @@
                     </GridView>
                 </ListView.View>
             </ListView>
+            <ContentControl x:Name="ShellBrowserSlot" Grid.Row="2" Grid.Column="0" Visibility="Collapsed" />
             <Border Grid.Row="2" Grid.Column="1" BorderBrush="#E0E4E8" BorderThickness="1,0,0,0"
                     Background="#F6F7F8" VerticalAlignment="Stretch">
                 <TextBlock x:Name="StatusLabel" Padding="8,6" Foreground="#596675"

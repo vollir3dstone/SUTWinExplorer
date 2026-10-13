@@ -43,7 +43,9 @@ internal static class ShellContextMenu
                 Marshal.ThrowExceptionForHR(desktopFolder.BindToObject(absolutePidl, IntPtr.Zero, ref shellFolderId, out targetFolder));
                 var shellViewId = typeof(IShellView).GUID;
                 Marshal.ThrowExceptionForHR(targetFolder.CreateViewObject(owner, ref shellViewId, out shellView));
-                Marshal.ThrowExceptionForHR(shellView.GetItemObject(ShellViewBackground, ref contextMenuId, out contextMenu));
+                Marshal.ThrowExceptionForHR(shellView.GetItemObject(ShellViewBackground, ref contextMenuId, out var contextMenuPointer));
+                contextMenu = (IContextMenu)Marshal.GetObjectForIUnknown(contextMenuPointer);
+                _ = Marshal.Release(contextMenuPointer);
             }
             else
             {
@@ -234,7 +236,7 @@ internal interface IShellFolder
 [ComImport]
 [Guid("000214E3-0000-0000-C000-000000000046")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-internal interface IShellView
+public interface IShellView
 {
     [PreserveSig] int GetWindow(out IntPtr window);
     [PreserveSig] int ContextSensitiveHelp([MarshalAs(UnmanagedType.Bool)] bool enterMode);
@@ -248,7 +250,7 @@ internal interface IShellView
     [PreserveSig] int AddPropertySheetPages(uint reserved, IntPtr addPage, IntPtr parameter);
     [PreserveSig] int SaveViewState();
     [PreserveSig] int SelectItem(IntPtr itemIdList, uint flags);
-    [PreserveSig] int GetItemObject(uint item, ref Guid interfaceId, out IContextMenu result);
+    [PreserveSig] int GetItemObject(uint item, ref Guid interfaceId, out IntPtr result);
 }
 
 [ComImport]

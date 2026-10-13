@@ -34,6 +34,13 @@ expects.
 
 Current integration notes
 -------------------------
+- Production now hosts one IExplorerBrowser per tab. The former WPF ListView is
+  retained behind the `UseLegacyWpfFileList` constant in ExplorerTabView.xaml.cs;
+  false selects the Shell view and true reactivates the legacy view.
+- The Show directories checkbox is implemented through the Shell site's
+  IServiceProvider/ICommDlgBrowser.IncludeObject callback. It checks the
+  SFGAO_FOLDER attribute, defaults off, and refreshes the active view when
+  toggled. Runtime UI Automation verified both states.
 - Selected-item menus come from the parent IShellFolder and selected child
   PIDLs. Folder-background menus come from IShellView.GetItemObject with
   SVGIO_BACKGROUND; IShellFolder.GetUIObjectOf does not allow cidl == 0.
@@ -41,13 +48,12 @@ Current integration notes
   command offset expected by IContextMenu.InvokeCommand. Keep the owner HWND,
   STA thread, IContextMenu2/3 menu-message forwarding, PIDLs, menus, and COM
   references correct for both display and invocation.
-- The current UI is a WPF ListView. It is not itself a Shell view, does not
-  implement an Explorer folder's IDropTarget, and does not automatically expose
-  the complete Shell clipboard data object to the destination folder.
-- A native Copy verb should normally place an IDataObject on the Windows
-  clipboard. A later Paste menu item is supplied by the destination's Shell
-  background menu only when the Shell can see compatible clipboard data and a
-  valid destination view/drop target.
+- The production content area is now a Shell view. The legacy WPF ListView
+  remains only as the flag-controlled fallback; its clipboard/drop limitations
+  do not apply to the active Shell-hosted content view.
+- Context-menu clipboard operations and drag/drop between the hosted view and
+  Windows Explorer passed the spike tests. Ctrl+C/Ctrl+V keyboard routing
+  remains a known follow-up.
 
 Common behavior checklist
 -------------------------

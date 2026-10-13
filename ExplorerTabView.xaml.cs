@@ -16,6 +16,10 @@ namespace SUTWinExplorer;
 
 public partial class ExplorerTabView : UserControl
 {
+    // Set true to reactivate the retained WPF ListView; false selects the Shell-hosted production view.
+    private const bool UseLegacyWpfFileList = false;
+    private static bool IsLegacyWpfFileList => UseLegacyWpfFileList;
+
     private enum TreeNavigationMode
     {
         DoubleClick,
@@ -25,11 +29,22 @@ public partial class ExplorerTabView : UserControl
     private const TreeNavigationMode ActiveTreeNavigationMode = TreeNavigationMode.SingleClick;
     private readonly Stack<string> _backHistory = new();
     private readonly Stack<string> _forwardHistory = new();
+    private ShellExplorerBrowserHost? _shellBrowserHost;
 
     public ExplorerTabView(string initialPath)
     {
         InitializeComponent();
+        FileList.Visibility = IsLegacyWpfFileList ? Visibility.Visible : Visibility.Collapsed;
+        ShellBrowserSlot.Visibility = IsLegacyWpfFileList ? Visibility.Collapsed : Visibility.Visible;
+        StatusLabel.Visibility = IsLegacyWpfFileList ? Visibility.Visible : Visibility.Collapsed;
         InitializeActivePathAndSiblingsTree();
+        if (!IsLegacyWpfFileList)
+        {
+            _shellBrowserHost = new ShellExplorerBrowserHost();
+            _shellBrowserHost.NavigationCompleted += ShellBrowserHost_NavigationCompleted;
+            _shellBrowserHost.SetShowDirectories(ShowDirectoriesCheckBox.IsChecked == true);
+            ShellBrowserSlot.Content = _shellBrowserHost;
+        }
         Navigate(initialPath, recordHistory: false);
     }
 
@@ -78,7 +93,15 @@ public partial class ExplorerTabView : UserControl
 
         CurrentPath = fullPath;
         LocationLabel.Text = fullPath;
-        RefreshFiles();
+        if (IsLegacyWpfFileList)
+        {
+            RefreshFiles();
+        }
+        else
+        {
+            _shellBrowserHost?.NavigateTo(fullPath);
+            RefreshShellStatusCount();
+        }
         RefreshActivePathAndSiblingsTree();
         RefreshActivePathTree();
         LocationChanged?.Invoke(this, CurrentPath);
@@ -134,7 +157,53 @@ public partial class ExplorerTabView : UserControl
         StatusLabel.Text = $"{entries.Count} items";
     }
 
-    private void ShowDirectoriesCheckBox_StateChanged(object sender, RoutedEventArgs e) => RefreshFiles();
+    private void ShowDirectoriesCheckBox_StateChanged(object sender, RoutedEventArgs e)
+    {
+        if (IsLegacyWpfFileList)
+        {
+            RefreshFiles();
+            return;
+        }
+
+        _shellBrowserHost?.SetShowDirectories(ShowDirectoriesCheckBox.IsChecked == true);
+        RefreshShellStatusCount();
+    }
+
+    private void RefreshShellStatusCount()
+    {
+        try
+        {
+            var count = Directory.EnumerateFiles(CurrentPath)
+                .Count(path => (File.GetAttributes(path) & FileAttributes.Directory) == 0);
+            if (ShowDirectoriesCheckBox.IsChecked == true)
+                count += Directory.EnumerateDirectories(CurrentPath).Count();
+            StatusLabel.Text = $"{count} items";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            StatusLabel.Text = exception.Message;
+        }
+    }
+
+    private void ShellBrowserHost_NavigationCompleted(object? sender, string path)
+    {
+        if (!Directory.Exists(path))
+            return;
+
+        var fullPath = Path.GetFullPath(path);
+        if (string.Equals(CurrentPath, fullPath, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (!string.IsNullOrEmpty(CurrentPath))
+            _backHistory.Push(CurrentPath);
+        _forwardHistory.Clear();
+        CurrentPath = fullPath;
+        LocationLabel.Text = fullPath;
+        RefreshActivePathAndSiblingsTree();
+        RefreshActivePathTree();
+        RefreshShellStatusCount();
+        LocationChanged?.Invoke(this, CurrentPath);
+    }
 
     private void FileList_SizeChanged(object sender, SizeChangedEventArgs e)
     {
