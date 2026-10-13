@@ -169,6 +169,14 @@ public partial class ExplorerTabView : UserControl
         RefreshShellStatusCount();
     }
 
+    private void ShellBrowserSlot_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var dpi = VisualTreeHelper.GetDpi(ShellBrowserSlot);
+        _shellBrowserHost?.SetViewSize(
+            (int)Math.Round(e.NewSize.Width * dpi.DpiScaleX),
+            (int)Math.Round(e.NewSize.Height * dpi.DpiScaleY));
+    }
+
     private void RefreshShellStatusCount()
     {
         try

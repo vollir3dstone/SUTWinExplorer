@@ -15,6 +15,17 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     private const uint FolderViewDetails = 4;
     private const uint FolderFlagAutoArrange = 1;
     private const uint ShellDisplayNameFileSystemPath = 0x80058000;
+    private const uint ColumnEnumVisible = 2;
+    private const uint ColumnMaskWidth = 1;
+    private const int MinimumNameColumnWidth = 80;
+    private const int ShellColumnTrailingInset = 11;
+    private static readonly ShellPropertyKey ItemNameDisplayPropertyKey = new()
+    {
+        FormatId = new Guid("B725F130-47EF-101A-A5F1-02608C9EEBAC"),
+        PropertyId = 10
+    };
+    private static readonly string ColumnSizingTracePath = Path.Combine(
+        Path.GetTempPath(), $"SUTWinExplorer-column-sizing-{Environment.ProcessId}.log");
 
     private IExplorerBrowserNative? _browser;
     private IObjectWithSiteNative? _browserSite;
@@ -24,6 +35,8 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     private IntPtr _hostWindow;
     private bool _initialized;
     private bool _showDirectories;
+    private NativeRect _viewBounds;
+    private bool _hasViewBounds;
     private string? _pendingPath;
 
     public event EventHandler<string>? NavigationCompleted;
@@ -81,6 +94,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             };
             Marshal.ThrowExceptionForHR(_browser.Initialize(_hostWindow, ref bounds, ref settings));
             _initialized = true;
+            ApplyViewBounds();
 
             _eventsSink = new ExplorerBrowserEventsSink(HandleNavigationPending, HandleNavigationCompleted);
             Marshal.ThrowExceptionForHR(_browser.Advise(_eventsSink, out _eventsCookie));
@@ -110,10 +124,33 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     protected override void OnWindowPositionChanged(Rect rcBoundingBox)
     {
         base.OnWindowPositionChanged(rcBoundingBox);
-        if (_browser is null || !_initialized || _hostWindow == IntPtr.Zero || !GetClientRect(_hostWindow, out var bounds))
+        if (_hostWindow == IntPtr.Zero || !GetClientRect(_hostWindow, out var bounds))
             return;
 
-        _ = _browser.SetRect(IntPtr.Zero, bounds);
+        TraceColumnSizing($"HwndHost position changed: client={bounds.Right - bounds.Left}x{bounds.Bottom - bounds.Top}");
+        SetViewSize(bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
+    }
+
+    public void SetViewSize(int width, int height)
+    {
+        TraceColumnSizing($"WPF view size: {width}x{height}");
+        if (width <= 0 || height <= 0)
+            return;
+
+        _viewBounds = new NativeRect { Right = width, Bottom = height };
+        _hasViewBounds = true;
+        ApplyViewBounds();
+    }
+
+    private void ApplyViewBounds()
+    {
+        if (_browser is null || !_initialized || !_hasViewBounds)
+            return;
+
+        var result = _browser.SetRect(IntPtr.Zero, _viewBounds);
+        TraceColumnSizing($"SetRect({_viewBounds.Right}x{_viewBounds.Bottom})=0x{result:X8}");
+        if (result >= 0)
+            UpdateNameColumnWidth(_viewBounds.Right - _viewBounds.Left);
     }
 
     private void BrowseToPendingPath()
@@ -139,17 +176,23 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         if (_browser is null || !_initialized)
             return;
 
+        IntPtr viewPointer = IntPtr.Zero;
         IShellView? view = null;
         try
         {
             var interfaceId = typeof(IShellView).GUID;
-            if (_browser.GetCurrentView(ref interfaceId, out view) >= 0)
+            if (_browser.GetCurrentView(ref interfaceId, out viewPointer) >= 0 && viewPointer != IntPtr.Zero)
+            {
+                view = (IShellView)Marshal.GetObjectForIUnknown(viewPointer);
                 _ = view.Refresh();
+            }
         }
         finally
         {
             if (view is not null && Marshal.IsComObject(view))
                 _ = Marshal.ReleaseComObject(view);
+            if (viewPointer != IntPtr.Zero)
+                _ = Marshal.Release(viewPointer);
         }
     }
 
@@ -160,7 +203,129 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             return;
 
         _pendingPath = path;
-        _ = Dispatcher.BeginInvoke(DispatcherPriority.DataBind, new Action(() => NavigationCompleted?.Invoke(this, path)));
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.DataBind, new Action(() =>
+        {
+            NavigationCompleted?.Invoke(this, path);
+            ApplyViewBounds();
+        }));
+    }
+
+    private void UpdateNameColumnWidth(int availableWidth)
+    {
+        if (_browser is null || !_initialized || availableWidth <= 0)
+            return;
+
+        availableWidth = GetShellViewClientWidth(availableWidth);
+
+        IntPtr columnManagerPointer = IntPtr.Zero;
+        IColumnManagerNative? columnManager = null;
+        try
+        {
+            var interfaceId = typeof(IColumnManagerNative).GUID;
+            var viewResult = _browser.GetCurrentView(ref interfaceId, out columnManagerPointer);
+            TraceColumnSizing($"GetCurrentView(IColumnManager) result=0x{viewResult:X8}, pointer=0x{columnManagerPointer.ToInt64():X}");
+            if (viewResult < 0 || columnManagerPointer == IntPtr.Zero)
+                return;
+            columnManager = (IColumnManagerNative)Marshal.GetObjectForIUnknown(columnManagerPointer);
+
+            var countResult = columnManager.GetColumnCount(ColumnEnumVisible, out var columnCount);
+            TraceColumnSizing($"GetColumnCount result=0x{countResult:X8}, count={columnCount}");
+            if (countResult < 0 || columnCount == 0)
+                return;
+
+            var columns = new ShellPropertyKey[columnCount];
+            var columnsResult = columnManager.GetColumns(ColumnEnumVisible, columns, columnCount);
+            TraceColumnSizing($"GetColumns result=0x{columnsResult:X8}");
+            if (columnsResult < 0)
+                return;
+
+            var nameColumnIndex = Array.FindIndex(columns, column =>
+                column.FormatId == ItemNameDisplayPropertyKey.FormatId &&
+                column.PropertyId == ItemNameDisplayPropertyKey.PropertyId);
+            if (nameColumnIndex < 0)
+            {
+                TraceColumnSizing("Visible columns do not include PKEY_ItemNameDisplay.");
+                return;
+            }
+
+            var otherColumnWidth = 0;
+            for (var index = 0; index < columns.Length; index++)
+            {
+                if (index == nameColumnIndex)
+                    continue;
+
+                var columnInfo = ShellColumnInfo.Create(ColumnMaskWidth);
+                var infoResult = columnManager.GetColumnInfo(ref columns[index], ref columnInfo);
+                TraceColumnSizing($"GetColumnInfo {columns[index].FormatId:B}/{columns[index].PropertyId} result=0x{infoResult:X8}, width={columnInfo.Width}");
+                if (infoResult < 0)
+                    return;
+
+                otherColumnWidth += (int)columnInfo.Width;
+            }
+
+            var nameColumnInfo = ShellColumnInfo.Create(ColumnMaskWidth);
+            nameColumnInfo.Width = (uint)Math.Max(MinimumNameColumnWidth, availableWidth - otherColumnWidth - ShellColumnTrailingInset);
+            var setResult = columnManager.SetColumnInfo(ref columns[nameColumnIndex], ref nameColumnInfo);
+            TraceColumnSizing($"Set Name width={nameColumnInfo.Width} (view={availableWidth}, other={otherColumnWidth}) result=0x{setResult:X8}");
+        }
+        catch (Exception exception) when (exception is COMException or InvalidCastException)
+        {
+            TraceColumnSizing($"Column sizing exception: {exception.GetType().Name}: {exception.Message}");
+        }
+        finally
+        {
+            if (columnManager is not null && Marshal.IsComObject(columnManager))
+                _ = Marshal.ReleaseComObject(columnManager);
+            if (columnManagerPointer != IntPtr.Zero)
+                _ = Marshal.Release(columnManagerPointer);
+        }
+    }
+
+    private int GetShellViewClientWidth(int fallbackWidth)
+    {
+        IntPtr viewPointer = IntPtr.Zero;
+        IShellView? shellView = null;
+        try
+        {
+            var interfaceId = typeof(IShellView).GUID;
+            var result = _browser!.GetCurrentView(ref interfaceId, out viewPointer);
+            if (result < 0 || viewPointer == IntPtr.Zero)
+                return fallbackWidth;
+
+            shellView = (IShellView)Marshal.GetObjectForIUnknown(viewPointer);
+            if (shellView.GetWindow(out var viewWindow) < 0 || viewWindow == IntPtr.Zero || !GetClientRect(viewWindow, out var viewBounds))
+                return fallbackWidth;
+
+            var viewWidth = viewBounds.Right - viewBounds.Left;
+            TraceColumnSizing($"Shell view client width={viewWidth}, host width={fallbackWidth}");
+            return viewWidth > 0 ? viewWidth : fallbackWidth;
+        }
+        catch (Exception exception) when (exception is COMException or InvalidCastException)
+        {
+            TraceColumnSizing($"Could not read Shell view client width: {exception.GetType().Name}: {exception.Message}");
+            return fallbackWidth;
+        }
+        finally
+        {
+            if (shellView is not null && Marshal.IsComObject(shellView))
+                _ = Marshal.ReleaseComObject(shellView);
+            if (viewPointer != IntPtr.Zero)
+                _ = Marshal.Release(viewPointer);
+        }
+    }
+
+    private static void TraceColumnSizing(string message)
+    {
+        if (Environment.GetEnvironmentVariable("SUTWINEXPLORER_TRACE_COLUMNS") != "1")
+            return;
+
+        try
+        {
+            File.AppendAllText(ColumnSizingTracePath, $"{DateTimeOffset.Now:O} {message}{Environment.NewLine}");
+        }
+        catch (IOException)
+        {
+        }
     }
 
     private void HandleNavigationPending(IntPtr itemIdList)
@@ -258,7 +423,45 @@ internal interface IExplorerBrowserNative
     [PreserveSig] int BrowseToObject(IntPtr unknown, uint flags);
     [PreserveSig] int FillFromObject(IntPtr unknown, uint flags);
     [PreserveSig] int RemoveAll();
-    [PreserveSig] int GetCurrentView(ref Guid interfaceId, out IShellView view);
+    [PreserveSig] int GetCurrentView(ref Guid interfaceId, out IntPtr view);
+}
+
+[ComImport]
+[Guid("D8EC27BB-3F3B-4042-B10A-4ACFD924D453")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IColumnManagerNative
+{
+    [PreserveSig] int SetColumnInfo(ref ShellPropertyKey propertyKey, ref ShellColumnInfo columnInfo);
+    [PreserveSig] int GetColumnInfo(ref ShellPropertyKey propertyKey, ref ShellColumnInfo columnInfo);
+    [PreserveSig] int GetColumnCount(uint flags, out uint columnCount);
+    [PreserveSig] int GetColumns(uint flags, [Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 2)] ShellPropertyKey[] columns, uint columnCount);
+    [PreserveSig] int SetColumns([In, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] ShellPropertyKey[] columns, uint columnCount);
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct ShellPropertyKey
+{
+    public Guid FormatId;
+    public uint PropertyId;
+}
+
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+internal struct ShellColumnInfo
+{
+    public uint Size;
+    public uint Mask;
+    public uint State;
+    public uint Width;
+    public uint DefaultWidth;
+    public uint IdealWidth;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)] public string Name;
+
+    public static ShellColumnInfo Create(uint mask) => new()
+    {
+        Size = (uint)Marshal.SizeOf<ShellColumnInfo>(),
+        Mask = mask,
+        Name = string.Empty
+    };
 }
 
 [ComVisible(true)]

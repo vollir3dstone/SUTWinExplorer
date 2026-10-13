@@ -100,25 +100,23 @@ and returns `S_FALSE` for directories when unchecked. Runtime UI Automation
 verified that the row count changes from files-only to files-plus-directories
 and back when toggled.
 
-Outstanding production follow-up includes focused handling of Shell-originated
-selection and navigation/history, keyboard shortcut routing, and column
-customization. `IExplorerBrowser` does not expose column widths directly, but
-`GetCurrentView` provides the current Shell view, which can be queried for
-`IColumnManager`. That interface enumerates columns by `PROPERTYKEY` and gets or
-sets each column's width and state. A Name-fills-remaining-width policy can be
-implemented by recalculating Name's width on host resize and applying
-`SetColumnInfo`; the current view must be queried again after navigation. This
-is documented API capability, not yet prototyped in this spike. Keyboard
+The spike's Name-column fill failure was later fixed in the production host.
+The implementation uses `IColumnManager` to preserve other visible column
+widths and size Name from the current Shell view client width. Runtime checks
+verified no horizontal scroll range at startup and after widening the window.
+The measured Shell-specific trailing allowance and its portability caveat are
+documented in [SHELL_EXPLORER_ARCHITECTURE.md](SHELL_EXPLORER_ARCHITECTURE.md).
+
+Remaining production follow-up includes focused handling of Shell-originated
+selection and navigation/history and keyboard shortcut routing. Keyboard
 focus/routing for Ctrl+C/Ctrl+V also needs investigation.
 
 ### Implementation suggestions
 
-- For columns, call `GetCurrentView` after navigation and query the current
-  Shell view for `IColumnManager`. Enumerate columns by property key, set
-  Type/Size/Date to fixed widths, and recalculate Name's width from the view's
-  available client width on each resize. Reacquire the interface after
-  navigation. If `SetColumns` is used to choose visible columns, apply
-  per-column state afterward because `SetColumns` clears it.
+- The column-sizing suggestion above describes the production implementation
+  added after this spike. If future work changes visible columns with
+  `SetColumns`, reapply per-column state afterward because `SetColumns` clears
+  it.
 - For Ctrl+C/Ctrl+V, verify the Shell view receives keyboard focus after item
   selection and that the WPF host does not consume the accelerator. Let the
   native view process clipboard commands where possible; keep its working
@@ -141,7 +139,7 @@ The application has switched production content panes to the Shell-hosted view
 while retaining WPF tabs, address navigation, and custom directory trees. The
 legacy WPF content view remains behind `UseLegacyWpfFileList` for rollback.
 
-The checkbox filter has been implemented and verified. The known spike gaps
-remain: Ctrl+C/Ctrl+V keyboard routing and Name-column fill sizing. These are
-follow-up improvements; the user chose the Shell view because native common
-file behaviors take priority over recreating them in WPF.
+The checkbox filter and Name-column fill sizing have been implemented and
+runtime-verified. The remaining known spike gap is Ctrl+C/Ctrl+V keyboard
+routing; the user chose the Shell view because native common file behaviors
+take priority over recreating them in WPF.

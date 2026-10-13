@@ -93,7 +93,7 @@ Checkboxes record implementation status, not changes to the expected behavior.
   Windows behavior.
 - [ ] Hidden/system visibility and filename-extension display are consistent
   with the application's documented settings.
-- [ ] Column widths meet the application layout requirement: Name uses the
+- [x] Column widths meet the application layout requirement: Name uses the
   remaining width; other selected columns stay at their configured widths.
 - [ ] Common keyboard navigation and action shortcuts behave consistently.
 - [ ] Folder junctions/reparse points can be navigated without unintended

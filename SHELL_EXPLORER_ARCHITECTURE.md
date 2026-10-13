@@ -60,7 +60,10 @@ Initialization sequence:
    `EBO_SHOWFRAMES`, so the Shell navigation pane/frame is not shown.
 5. Subscribe to `IExplorerBrowserEvents` using `Advise`.
 6. Defer the first `BrowseToIDList` until `DispatcherPriority.Loaded`.
-7. Update the Shell view's bounds with `SetRect` when the WPF host is resized.
+7. Update the Shell view's bounds with `SetRect` when the WPF host is resized,
+   then use `IColumnManager` to size the visible Name column to the remaining
+   width. Reapply the width after navigation because the Shell may replace the
+   current view.
 8. On teardown, `Unadvise`, call `Destroy`, clear the site, release COM
    references, and destroy the child HWND.
 
@@ -77,6 +80,60 @@ The initial browse must not run synchronously inside `BuildWindowCore`.
 `BrowseToIDList` can pump Windows messages; doing so during WPF's initial layout
 caused a dispatcher exception and prevented startup. Deferring the browse
 avoids that reentrancy.
+
+## Shell Details Column Sizing
+
+### Expected behavior
+
+The WPF content pane occupies the remaining width after the sidebar. The hosted
+ExplorerBrowser view must follow that pane on both window resize and sidebar
+splitter movement. In Details mode, the visible non-Name columns retain their
+Shell-provided widths and Name uses the remaining width. The resulting view
+must have no horizontal scroll range at the tested layout sizes.
+
+`ExplorerTabView.ShellBrowserSlot_SizeChanged` converts the WPF size to physical
+pixels and calls `ShellExplorerBrowserHost.SetViewSize`. The host applies those
+bounds through `IExplorerBrowser.SetRect`. `OnWindowPositionChanged` is also
+retained as a native-host fallback. After a successful `SetRect`, the host
+queries the current view for `IColumnManager`, enumerates visible columns, and
+uses `PKEY_ItemNameDisplay` (`{B725F130-47EF-101A-A5F1-02608C9EEBAC}`, PID 10)
+to identify Name. The target width is:
+
+`max(80, ShellViewClientWidth - OtherVisibleColumnWidths - 11)`
+
+The other widths are read with `GetColumnInfo`; the Name width is applied with
+`SetColumnInfo`. The width is recalculated after Shell navigation because the
+Shell may replace the current view. `IColumnManager` widths are physical pixels.
+Its COM method declarations must follow the SDK vtable order (`SetColumnInfo`,
+`GetColumnInfo`, `GetColumnCount`, `GetColumns`, `SetColumns`); a different
+declaration order dispatches calls to the wrong native methods.
+
+### Measured behavior
+
+The first implementation sized columns using the outer host width. HWND
+inspection showed the host was 1202px wide while the ExplorerBrowser child and
+Shell view were 1200px wide, a 2px difference at the tested window size. The
+code now gets the current `IShellView` window and uses its `GetClientRect`
+width, rather than assuming the HwndHost width is the Shell's usable width.
+
+Using the Shell client width alone still left a small horizontal scroll range.
+The Shell's `IColumnManager` reports column widths, but does not expose the
+view's complete horizontal content extent or a documented trailing-inset
+value. Runtime UI Automation on the Shell `DirectUIHWND` showed that an 8px
+allowance still left a small range (the view reported about 99.886% visible at
+an 880px client width). An 11px allowance made `HorizontallyScrollable` false
+and hid the Shell scrollbar at both the 880px startup view and the 1200px
+resized view. The host widths in those checks were 882px and 1202px
+respectively. A window-width increase also produced a matching `SetRect` and
+Name-width update.
+
+The 11px value is therefore an empirically derived Shell-specific allowance,
+not a documented Windows border metric. It was verified on this Windows build
+and at these two widths; different Windows versions, DPI settings, or column
+sets may require revalidation. `SUTWINEXPLORER_TRACE_COLUMNS=1` enables an
+opt-in per-process trace in `%TEMP%` named
+`SUTWinExplorer-column-sizing-<pid>.log`; it records WPF/native sizes, COM
+results, and computed widths.
 
 ## Show Directories Filter
 
@@ -180,8 +237,8 @@ is necessary, clearly identify its output location.
 ## Known Gaps and Follow-up
 
 - Ctrl+C/Ctrl+V keyboard accelerator routing into the hosted Shell view.
-- Name-column fill sizing and other column-width policy through the current
-  Shell view's `IColumnManager`.
+- Explicit width policies for non-Name columns through the current Shell view's
+  `IColumnManager`; their current Shell-provided widths are preserved.
 - Synchronize Shell-originated folder opening and selection with all custom
   navigation/history states; current location completion is wired, but all
   history and selection cases need tests.
