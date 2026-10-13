@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer.csproj": {}
+    "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\SUTWinExplorer.csproj": {}
   },
   "projects": {
-    "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer.csproj": {
+    "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\SUTWinExplorer.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer.csproj",
+        "projectUniqueName": "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\SUTWinExplorer.csproj",
         "projectName": "SUTWinExplorer",
-        "projectPath": "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer.csproj",
+        "projectPath": "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\SUTWinExplorer.csproj",
         "packagesPath": "C:\\Users\\Volker\\.nuget\\packages\\",
-        "outputPath": "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\obj\\",
+        "outputPath": "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\obj\\",
         "projectStyle": "PackageReference",
         "crossTargeting": true,
         "fallbackFolders": [

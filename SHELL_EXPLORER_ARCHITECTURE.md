@@ -168,10 +168,10 @@ behavior cannot be provided by the Shell view.
 ## Build and Output
 
 The project targets `net8.0-windows` and `net10.0-windows`. Build normally to
-the standard folders:
+the standard repo-relative folders:
 
-- `D:\Projekte\Softwareprojekte gross\SUTWinExplorer\bin\Debug\net8.0-windows`
-- `D:\Projekte\Softwareprojekte gross\SUTWinExplorer\bin\Debug\net10.0-windows`
+- `bin/Debug/net8.0-windows`
+- `bin/Debug/net10.0-windows`
 
 Do not use an alternate artifact output folder unless the user explicitly asks
 for it or the standard output is locked by a running app. If an isolated build

@@ -1,20 +1,20 @@
 ﻿SUTWinExplorer
-
+1.0.0.0
 
 winexe
 C#
 .cs
-D:\Projekte\Softwareprojekte gross\SUTWinExplorer\obj\Debug\net10.0-windows\
+D:\Projekte\Softwareprojekte gross\SUTWinExplorer\SUTWinExplorer-Project\obj\Debug\net10.0-windows\
 SUTWinExplorer
 none
 false
 TRACE;DEBUG;NET;NET10_0;NETCOREAPP;WINDOWS;WINDOWS7_0;NET5_0_OR_GREATER;NET6_0_OR_GREATER;NET7_0_OR_GREATER;NET8_0_OR_GREATER;NET9_0_OR_GREATER;NET10_0_OR_GREATER;NETCOREAPP1_0_OR_GREATER;NETCOREAPP1_1_OR_GREATER;NETCOREAPP2_0_OR_GREATER;NETCOREAPP2_1_OR_GREATER;NETCOREAPP2_2_OR_GREATER;NETCOREAPP3_0_OR_GREATER;NETCOREAPP3_1_OR_GREATER;WINDOWS7_0_OR_GREATER
-D:\Projekte\Softwareprojekte gross\SUTWinExplorer\App.xaml
+D:\Projekte\Softwareprojekte gross\SUTWinExplorer\SUTWinExplorer-Project\App.xaml
 21550719558
 
-7524466613
+9-1163953166
 206-381443163
 ExplorerTabView.xaml;MainWindow.xaml;
 
-False
+True
 
