@@ -9,8 +9,13 @@ internal static class ShellContextMenu
     private const uint PopupFlags = 0x0100 | 0x0002;
     private const uint MenuFlags = 0;
     private const uint InvokeUnicode = 0x00004000;
+    private const uint ShellViewBackground = 0;
 
-    public static void Show(string path, IntPtr owner)
+    public static void Show(string path, IntPtr owner) => ShowCore(path, owner, background: false);
+
+    public static void ShowBackground(string folderPath, IntPtr owner) => ShowCore(folderPath, owner, background: true);
+
+    private static void ShowCore(string path, IntPtr owner, bool background)
     {
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
             throw new InvalidOperationException("The Windows Shell context menu must be opened from an STA thread.");
@@ -20,6 +25,8 @@ internal static class ShellContextMenu
         IntPtr menu = IntPtr.Zero;
         IShellFolder? desktopFolder = null;
         IShellFolder? parentFolder = null;
+        IShellFolder? targetFolder = null;
+        IShellView? shellView = null;
         IContextMenu? contextMenu = null;
         SubclassProc? subclassProc = null;
         var subclassInstalled = false;
@@ -29,13 +36,24 @@ internal static class ShellContextMenu
             Marshal.ThrowExceptionForHR(SHGetDesktopFolder(out desktopFolder));
             uint attributes = 0;
             Marshal.ThrowExceptionForHR(desktopFolder.ParseDisplayName(owner, IntPtr.Zero, path, out _, out absolutePidl, ref attributes));
-            var shellFolderId = typeof(IShellFolder).GUID;
-            Marshal.ThrowExceptionForHR(SHBindToParent(absolutePidl, ref shellFolderId, out parentFolder, out var childPidl));
-
-            childPidlArray = Marshal.AllocCoTaskMem(IntPtr.Size);
-            Marshal.WriteIntPtr(childPidlArray, childPidl);
             var contextMenuId = typeof(IContextMenu).GUID;
-            Marshal.ThrowExceptionForHR(parentFolder.GetUIObjectOf(owner, 1, childPidlArray, ref contextMenuId, IntPtr.Zero, out contextMenu));
+            if (background)
+            {
+                var shellFolderId = typeof(IShellFolder).GUID;
+                Marshal.ThrowExceptionForHR(desktopFolder.BindToObject(absolutePidl, IntPtr.Zero, ref shellFolderId, out targetFolder));
+                var shellViewId = typeof(IShellView).GUID;
+                Marshal.ThrowExceptionForHR(targetFolder.CreateViewObject(owner, ref shellViewId, out shellView));
+                Marshal.ThrowExceptionForHR(shellView.GetItemObject(ShellViewBackground, ref contextMenuId, out contextMenu));
+            }
+            else
+            {
+                var shellFolderId = typeof(IShellFolder).GUID;
+                Marshal.ThrowExceptionForHR(SHBindToParent(absolutePidl, ref shellFolderId, out parentFolder, out var childPidl));
+
+                childPidlArray = Marshal.AllocCoTaskMem(IntPtr.Size);
+                Marshal.WriteIntPtr(childPidlArray, childPidl);
+                Marshal.ThrowExceptionForHR(parentFolder.GetUIObjectOf(owner, 1, childPidlArray, ref contextMenuId, IntPtr.Zero, out contextMenu));
+            }
 
             menu = CreatePopupMenu();
             if (menu == IntPtr.Zero)
@@ -74,6 +92,10 @@ internal static class ShellContextMenu
                 _ = Marshal.FinalReleaseComObject(contextMenu);
             if (parentFolder is not null && Marshal.IsComObject(parentFolder))
                 _ = Marshal.FinalReleaseComObject(parentFolder);
+            if (targetFolder is not null && Marshal.IsComObject(targetFolder))
+                _ = Marshal.FinalReleaseComObject(targetFolder);
+            if (shellView is not null && Marshal.IsComObject(shellView))
+                _ = Marshal.FinalReleaseComObject(shellView);
             if (desktopFolder is not null && Marshal.IsComObject(desktopFolder))
                 _ = Marshal.FinalReleaseComObject(desktopFolder);
             if (childPidlArray != IntPtr.Zero)
@@ -199,14 +221,34 @@ internal interface IShellFolder
 {
     [PreserveSig] int ParseDisplayName(IntPtr owner, IntPtr bindContext, [MarshalAs(UnmanagedType.LPWStr)] string displayName, out uint eaten, out IntPtr itemIdList, ref uint attributes);
     [PreserveSig] int EnumObjects(IntPtr owner, uint flags, IntPtr enumerator);
-    [PreserveSig] int BindToObject(IntPtr itemIdList, IntPtr bindContext, ref Guid interfaceId, out IntPtr result);
+    [PreserveSig] int BindToObject(IntPtr itemIdList, IntPtr bindContext, ref Guid interfaceId, out IShellFolder result);
     [PreserveSig] int BindToStorage(IntPtr itemIdList, IntPtr bindContext, ref Guid interfaceId, out IntPtr result);
     [PreserveSig] int CompareIDs(IntPtr parameter, IntPtr itemIdList1, IntPtr itemIdList2);
-    [PreserveSig] int CreateViewObject(IntPtr owner, ref Guid interfaceId, out IntPtr result);
+    [PreserveSig] int CreateViewObject(IntPtr owner, ref Guid interfaceId, out IShellView result);
     [PreserveSig] int GetAttributesOf(uint count, IntPtr itemIdLists, ref uint attributes);
     [PreserveSig] int GetUIObjectOf(IntPtr owner, uint count, IntPtr itemIdLists, ref Guid interfaceId, IntPtr reserved, out IContextMenu result);
     [PreserveSig] int GetDisplayNameOf(IntPtr itemIdList, uint flags, IntPtr name);
     [PreserveSig] int SetNameOf(IntPtr owner, IntPtr itemIdList, IntPtr name, uint flags, out IntPtr renamedItemIdList);
+}
+
+[ComImport]
+[Guid("000214E3-0000-0000-C000-000000000046")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IShellView
+{
+    [PreserveSig] int GetWindow(out IntPtr window);
+    [PreserveSig] int ContextSensitiveHelp([MarshalAs(UnmanagedType.Bool)] bool enterMode);
+    [PreserveSig] int TranslateAccelerator(IntPtr message);
+    [PreserveSig] int EnableModeless([MarshalAs(UnmanagedType.Bool)] bool enable);
+    [PreserveSig] int UIActivate(uint state);
+    [PreserveSig] int Refresh();
+    [PreserveSig] int CreateViewWindow(IntPtr previousView, IntPtr folderSettings, IntPtr shellBrowser, IntPtr rectangle, out IntPtr viewWindow);
+    [PreserveSig] int DestroyViewWindow();
+    [PreserveSig] int GetCurrentInfo(IntPtr folderSettings);
+    [PreserveSig] int AddPropertySheetPages(uint reserved, IntPtr addPage, IntPtr parameter);
+    [PreserveSig] int SaveViewState();
+    [PreserveSig] int SelectItem(IntPtr itemIdList, uint flags);
+    [PreserveSig] int GetItemObject(uint item, ref Guid interfaceId, out IContextMenu result);
 }
 
 [ComImport]

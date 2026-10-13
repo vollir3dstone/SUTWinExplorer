@@ -305,13 +305,45 @@ public partial class ExplorerTabView : UserControl
 
     private void FileList_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (FindAncestor<ListViewItem>(e.OriginalSource as DependencyObject) is not { DataContext: FileEntry entry })
+        var source = e.OriginalSource as DependencyObject;
+        if (FindAncestor<ListViewItem>(source) is { DataContext: FileEntry entry })
+        {
+            FileList.SelectedItem = entry;
+            ShowNativeMenu(entry.FullPath);
+            e.Handled = true;
+            return;
+        }
+
+        if (IsListChrome(source))
             return;
 
-        FileList.SelectedItem = entry;
-        ShowNativeMenu(entry.FullPath);
+        FileList.SelectedItem = null;
+        ShowNativeBackgroundMenu();
         e.Handled = true;
     }
+
+    private void FileList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var source = e.OriginalSource as DependencyObject;
+        if (FindAncestor<ListViewItem>(source) is null && !IsListChrome(source))
+            FileList.SelectedItem = null;
+    }
+
+    private void FileList_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Apps && !(e.Key == Key.F10 && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)))
+            return;
+
+        if (FileList.SelectedItem is FileEntry entry)
+            ShowNativeMenu(entry.FullPath);
+        else
+            ShowNativeBackgroundMenu();
+
+        e.Handled = true;
+    }
+
+    private static bool IsListChrome(DependencyObject? source) =>
+        FindAncestor<GridViewColumnHeader>(source) is not null || FindAncestor<ScrollBar>(source) is not null;
 
     private void Tree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -385,6 +417,19 @@ public partial class ExplorerTabView : UserControl
         {
             var owner = new WindowInteropHelper(Window.GetWindow(this)!).Handle;
             ShellContextMenu.Show(path, owner);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "Shell context menu failed", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void ShowNativeBackgroundMenu()
+    {
+        try
+        {
+            var owner = new WindowInteropHelper(Window.GetWindow(this)!).Handle;
+            ShellContextMenu.ShowBackground(CurrentPath, owner);
         }
         catch (Exception exception)
         {

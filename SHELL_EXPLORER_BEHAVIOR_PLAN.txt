@@ -1,0 +1,187 @@
+SUT WIN EXPLORER - BEHAVIOR CHECKLIST AND ARCHITECTURE
+======================================================
+
+Purpose
+-------
+This document records the common Windows Explorer behaviors this application
+should support and the Windows APIs that should own them. It is a checklist,
+not a promise to reproduce every Windows version or third-party extension.
+
+Architecture recommendation
+---------------------------
+Prefer hosting the Windows Shell view through the public IExplorerBrowser COM
+API for the main file view, while keeping the WPF window, application tabs,
+address bar, and custom navigation trees. IExplorerBrowser hosts the system
+Shell view rather than a hand-built file list. That gives the Shell a real view
+and its normal selection, background, context-menu, clipboard, drag/drop, and
+view-command integration. Navigate the hosted view with BrowseToObject and
+observe navigation through IExplorerBrowserEvents. Host the COM view on the UI
+STA thread, for example through an HwndHost or WindowsFormsHost.
+
+IExplorerBrowser is the closest supported public API to reusing Explorer's
+file-view behavior; it is not a complete embeddable copy of the Explorer
+application or its taskbar/window chrome. Prototype it before committing to
+replacing the WPF ListView, and verify that it supports the desired columns,
+selection synchronization, and WPF layout.
+
+If the WPF ListView is retained, native IContextMenu display is only the menu
+surface. The host still has to provide the correct Shell view, owner window,
+message forwarding, command invocation, clipboard, and drop-target behavior.
+Do not assume a visible menu means every verb has enough host context to work.
+Do not intercept native verbs merely to imitate their labels. First establish
+whether the Shell command was invoked and whether the host has the services it
+expects.
+
+Current integration notes
+-------------------------
+- Selected-item menus come from the parent IShellFolder and selected child
+  PIDLs. Folder-background menus come from IShellView.GetItemObject with
+  SVGIO_BACKGROUND; IShellFolder.GetUIObjectOf does not allow cidl == 0.
+- The command returned by TrackPopupMenuEx must be translated to the zero-based
+  command offset expected by IContextMenu.InvokeCommand. Keep the owner HWND,
+  STA thread, IContextMenu2/3 menu-message forwarding, PIDLs, menus, and COM
+  references correct for both display and invocation.
+- The current UI is a WPF ListView. It is not itself a Shell view, does not
+  implement an Explorer folder's IDropTarget, and does not automatically expose
+  the complete Shell clipboard data object to the destination folder.
+- A native Copy verb should normally place an IDataObject on the Windows
+  clipboard. A later Paste menu item is supplied by the destination's Shell
+  background menu only when the Shell can see compatible clipboard data and a
+  valid destination view/drop target.
+
+Common behavior checklist
+-------------------------
+
+P0 - Core navigation and file operations
+
+[ ] Navigation and tabs
+    Each tab retains its own active folder and back/forward history. Switching
+    tabs restores that tab's location. The address editor accepts typed paths
+    and its dropdown selects the tab represented by the choice.
+
+[ ] Directory tree synchronization
+    Both tree modes follow the active folder and highlight it. The active-path
+    mode shows only the route. The active-path-and-siblings mode additionally
+    shows immediate child directories along that route. Tree expansion must not
+    cause navigation during initial WPF layout.
+
+[ ] Open and activate
+    Double-click or Enter opens a folder in the active tab. Files open through
+    their registered Shell handler. A single-click tree mode navigates on a
+    deliberate name/opener click without duplicate navigation.
+
+[ ] Selection and focus
+    Support single and multiple row selection, focused-row indication, select
+    all, and clearing selection by clicking the background. Keyboard focus and
+    selection must be distinct enough for context-menu commands to target the
+    intended item.
+
+[ ] Context menus
+    Provide the native selected-item menu for one or multiple selected items,
+    the folder menu for tree items, and the current-folder background menu for
+    empty table space. Support right-click, the Apps key, and Shift+F10. Invoke
+    the selected Shell command exactly once and report failures without
+    terminating the UI thread.
+
+[ ] Copy, cut, paste, and paste shortcut
+    Copy/Cut place Shell-compatible IDataObject data on the system clipboard.
+    The destination background menu reflects clipboard contents and offers
+    Paste or Paste shortcut when valid. Paste targets the active directory;
+    Paste shortcut creates a link rather than a duplicate file. Clipboard data
+    must work with other applications and Explorer, not only within this app.
+
+[ ] New items
+    The background New submenu creates the selected registered item type in
+    the active directory. Preserve Windows ShellNew templates and naming rules
+    where possible. If the app offers its own New command, use
+    IFileOperation.NewItem and clearly define which template types it supports.
+
+[ ] Rename and delete
+    Rename preserves extension behavior and reports collisions/errors. Delete
+    uses the Recycle Bin by default, supports permanent delete only when
+    explicitly chosen, and confirms destructive operations. Provide undo where
+    the chosen Shell/file-operation path supports it.
+
+[ ] Copy/move progress and errors
+    Large or multiple operations show progress, allow cancellation, handle
+    access denied and unavailable drives, and report per-item failures. Name
+    collisions offer the expected replace, skip, or keep-both choices.
+
+[ ] Drag and drop
+    Drag selected items to folders or other applications. Respect modifier keys
+    and source/destination volumes for copy, move, and link semantics. Support
+    dropping files from external applications into the current folder.
+
+[ ] Refresh and external changes
+    Refresh updates directory contents and active overlays. External changes
+    from Explorer or another application eventually appear without restarting.
+
+P1 - Expected Explorer conveniences
+
+[ ] Properties, Open with, sharing, and security prompts use Shell-owned
+    dialogs/verbs when available.
+[ ] Hidden/system items follow an explicit visibility setting; file extensions
+    and known-folder display names follow Shell conventions where practical.
+[ ] Details columns show consistent type, size, modified date, and attributes;
+    sorting and selection remain stable after refresh.
+[ ] Show directory junctions and other directory reparse points consistently
+    with normal directories while avoiding accidental recursive traversal.
+[ ] Keyboard shortcuts: Ctrl+C, Ctrl+X, Ctrl+V, Ctrl+Z where supported,
+    Ctrl+A, F2 rename, Delete, Alt+Up, Backspace, and Enter.
+[ ] Empty folders, slow/network locations, permission failures, disconnected
+    devices, and long paths have useful loading and error states.
+
+P2 - Optional Shell namespace features
+
+[ ] Thumbnails, previews, and custom details supplied by Shell providers.
+[ ] Virtual Shell namespace locations such as Recycle Bin, libraries, and
+    providers that are not ordinary file-system directories.
+[ ] Third-party cloud/version-control overlays and extension-specific actions.
+[ ] Tabs, view modes, grouping, and column settings persisted per user.
+
+API ownership guide
+-------------------
+- IExplorerBrowser / IShellView: prefer for the actual Shell-backed file view,
+  selection, background context, and view integration.
+- IContextMenu / IContextMenu2 / IContextMenu3: query and invoke native menu
+  verbs; forward required menu messages. Menu UI alone does not implement
+  clipboard, drag/drop, or file operations in a custom view.
+- IDataObject, OleSetClipboard/OleGetClipboard, IDropTarget: Shell-compatible
+  clipboard and paste/drop interoperability. CF_HDROP alone only covers a
+  subset of Shell data, such as ordinary file-system paths; it does not cover
+  virtual files and all Shell formats.
+- IFileOperation: app-owned copy, move, rename, delete, and new-item workflows
+  with Shell progress/UI semantics. Prefer it over raw File.Copy/Delete for
+  user-facing operations. It is not a substitute for implementing clipboard
+  ownership and destination paste/drop behavior.
+- IShellItem / IShellItem2: represent Shell items where file-system paths are
+  insufficient or virtual namespace support is desired.
+
+Recommended implementation order
+--------------------------------
+1. Instrument context-menu query and invocation: log source kind, HRESULTs,
+   command offset, and invocation result. Verify New and Copy on a real
+   folder-background view and on selected items.
+2. Prototype IExplorerBrowser in a separate view and test background New,
+   Copy/Paste between this app and Explorer, drag/drop, selection, and tab
+   navigation. Choose this route if behavior parity is the priority.
+3. If keeping ListView, implement Shell IDataObject clipboard ownership and
+   folder IDropTarget integration, or define a deliberately limited file-only
+   clipboard contract. Use IFileOperation for app-owned operations.
+4. Add P0 checklist tests using temporary directories and verify each action
+   both within the app and between the app and Windows Explorer.
+5. Only then add P1/P2 behaviors; document intentional differences.
+
+Acceptance test examples
+------------------------
+- In an empty writable folder, background > New > Text Document creates a
+  file there and allows the standard rename step.
+- Copy a file in this app, switch folders, and Paste creates the file at the
+  destination. Repeat copy in Explorer and paste here, then the reverse.
+- Paste shortcut creates a Shell shortcut and does not copy file contents.
+- Cut then paste moves the item, including across volumes with the Shell's
+  expected copy/delete behavior.
+- Background menu differs appropriately from selected-item menu and is
+  available by right-click, Apps, and Shift+F10.
+- Rename/delete/copy operations handle collisions, cancellation, denied
+  access, and disconnected destinations without crashing the application.

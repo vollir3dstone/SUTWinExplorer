@@ -26,3 +26,13 @@ D:\Projekte\Softwareprojekte gross\SUTWinExplorer\artifacts\space-layout-check\D
 D:\Projekte\Softwareprojekte gross\SUTWinExplorer\artifacts\space-layout-check\Debug\net8.0-windows\SUTWinExplorer.dll
 D:\Projekte\Softwareprojekte gross\SUTWinExplorer\artifacts\space-layout-check\Debug\net8.0-windows\SUTWinExplorer.pdb
 D:\Projekte\Softwareprojekte gross\SUTWinExplorer\bin\Debug\net8.0-windows\SUTWinExplorer.exe
+D:\Projekte\Softwareprojekte gross\SUTWinExplorer\artifacts\empty-context-check\Debug\net8.0-windows\SUTWinExplorer.exe
+D:\Projekte\Softwareprojekte gross\SUTWinExplorer\artifacts\empty-context-check\Debug\net8.0-windows\SUTWinExplorer.deps.json
+D:\Projekte\Softwareprojekte gross\SUTWinExplorer\artifacts\empty-context-check\Debug\net8.0-windows\SUTWinExplorer.runtimeconfig.json
+D:\Projekte\Softwareprojekte gross\SUTWinExplorer\artifacts\empty-context-check\Debug\net8.0-windows\SUTWinExplorer.dll
+D:\Projekte\Softwareprojekte gross\SUTWinExplorer\artifacts\empty-context-check\Debug\net8.0-windows\SUTWinExplorer.pdb
+D:\Projekte\Softwareprojekte gross\SUTWinExplorer\artifacts\background-menu-check\Debug\net8.0-windows\SUTWinExplorer.exe
+D:\Projekte\Softwareprojekte gross\SUTWinExplorer\artifacts\background-menu-check\Debug\net8.0-windows\SUTWinExplorer.deps.json
+D:\Projekte\Softwareprojekte gross\SUTWinExplorer\artifacts\background-menu-check\Debug\net8.0-windows\SUTWinExplorer.runtimeconfig.json
+D:\Projekte\Softwareprojekte gross\SUTWinExplorer\artifacts\background-menu-check\Debug\net8.0-windows\SUTWinExplorer.dll
+D:\Projekte\Softwareprojekte gross\SUTWinExplorer\artifacts\background-menu-check\Debug\net8.0-windows\SUTWinExplorer.pdb

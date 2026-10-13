@@ -94,8 +94,10 @@
                       Unchecked="ShowDirectoriesCheckBox_StateChanged" />
             <ListView x:Name="FileList" Grid.Row="2" Grid.Column="0" SelectionMode="Single"
                       SizeChanged="FileList_SizeChanged"
+                      PreviewMouseLeftButtonDown="FileList_PreviewMouseLeftButtonDown"
                       MouseDoubleClick="FileList_MouseDoubleClick"
-                      PreviewMouseRightButtonDown="FileList_PreviewMouseRightButtonDown">
+                      PreviewMouseRightButtonDown="FileList_PreviewMouseRightButtonDown"
+                      PreviewKeyDown="FileList_PreviewKeyDown">
                 <ListView.View>
                     <GridView>
                         <GridViewColumn Header="" Width="34">
