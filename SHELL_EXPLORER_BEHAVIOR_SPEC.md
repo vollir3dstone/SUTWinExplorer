@@ -46,6 +46,10 @@ Checkboxes record implementation status, not changes to the expected behavior.
   folders.
 - [x] The content view provides a Details layout with Shell-provided names,
   types, sizes, dates, icons, and available overlays.
+- [x] Every folder uses the same ungrouped Details layout and Name, Type, Size,
+  Date modified columns in that order. Size is shown in KB. The active sort
+  column and direction come from the folder's configured view; other
+  folder-specific view settings are ignored.
 - [x] The WPF application chrome keeps the app's custom tabs, address field,
   directory trees, and item-count status area.
 
@@ -106,7 +110,7 @@ Checkboxes record implementation status, not changes to the expected behavior.
   namespaces that are not ordinary filesystem directories.
 - [ ] Third-party cloud/version-control overlays and extension-specific
   commands.
-- [ ] User-persisted view mode, sorting, grouping, and column choices.
+- [ ] Persist the user's selected sort across application sessions.
 
 ## Acceptance Checks
 
@@ -121,3 +125,7 @@ Checkboxes record implementation status, not changes to the expected behavior.
    Copy/Paste, Paste shortcut, and drag/drop with Windows Explorer.
 5. Verify cancellation, name collisions, access denied, and disconnected
    destinations do not crash the application.
+6. Navigate between folders with different saved view modes, groups, columns,
+  and sort choices. Verify the content view always uses the standard ungrouped
+  Details layout and column order, while retaining each folder's selected
+  sort column and direction.

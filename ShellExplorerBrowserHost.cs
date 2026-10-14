@@ -15,9 +15,13 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     private const uint WindowStyle = 0x40000000 | 0x10000000 | 0x02000000 | 0x04000000;
     private const uint FolderViewDetails = 4;
     private const uint FolderFlagAutoArrange = 1;
+    private const uint FolderFlagNoGrouping = 0x00100000;
+    private const uint FolderViewOptionCustomPosition = 2;
     private const uint ShellDisplayNameFileSystemPath = 0x80058000;
     private const uint ColumnEnumVisible = 2;
     private const uint ColumnMaskWidth = 1;
+    private const uint ColumnMaskState = 0x10;
+    private const uint ColumnStateVisible = 1;
     private const int MinimumNameColumnWidth = 80;
     private const int ShellColumnTrailingInset = 11;
     private const int ShellChangeNotifyMessage = 0x8000 + 0x271;
@@ -28,6 +32,13 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         FormatId = new Guid("B725F130-47EF-101A-A5F1-02608C9EEBAC"),
         PropertyId = 10
     };
+    private static readonly ShellPropertyKey[] StandardColumns =
+    [
+        ItemNameDisplayPropertyKey,
+        new() { FormatId = new Guid("B725F130-47EF-101A-A5F1-02608C9EEBAC"), PropertyId = 4 },
+        new() { FormatId = new Guid("B725F130-47EF-101A-A5F1-02608C9EEBAC"), PropertyId = 12 },
+        new() { FormatId = new Guid("B725F130-47EF-101A-A5F1-02608C9EEBAC"), PropertyId = 14 }
+    ];
     private static readonly string ColumnSizingTracePath = Path.Combine(
         Path.GetTempPath(), $"SUTWinExplorer-column-sizing-{Environment.ProcessId}.log");
     private static readonly string KeyboardTracePath = Path.Combine(
@@ -385,11 +396,125 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             return;
 
         _pendingPath = path;
+        ApplyStandardFolderView();
         _ = Dispatcher.BeginInvoke(DispatcherPriority.DataBind, new Action(() =>
         {
             NavigationCompleted?.Invoke(this, path);
             ApplyViewBounds();
         }));
+    }
+
+    private void ApplyStandardFolderView()
+    {
+        if (_browser is null || !_initialized)
+            return;
+
+        IntPtr folderViewPointer = IntPtr.Zero;
+        IntPtr columnManagerPointer = IntPtr.Zero;
+        IFolderView2Native? folderView = null;
+        IColumnManagerNative? columnManager = null;
+        try
+        {
+            var folderViewInterfaceId = typeof(IFolderView2Native).GUID;
+            var folderViewResult = _browser.GetCurrentView(ref folderViewInterfaceId, out folderViewPointer);
+            if (folderViewResult < 0 || folderViewPointer == IntPtr.Zero)
+            {
+                TraceColumnSizing($"Could not get IFolderView2 for view normalization: 0x{folderViewResult:X8}");
+                return;
+            }
+
+            folderView = (IFolderView2Native)Marshal.GetObjectForIUnknown(folderViewPointer);
+            ShellSortColumn[]? sortColumns = null;
+            var sortCountResult = folderView.GetSortColumnCount(out var sortColumnCount);
+            if (sortCountResult >= 0 && sortColumnCount > 0 && sortColumnCount <= 16)
+            {
+                sortColumns = new ShellSortColumn[sortColumnCount];
+                var getSortResult = folderView.GetSortColumns(sortColumns, sortColumns.Length);
+                if (getSortResult < 0)
+                {
+                    TraceColumnSizing($"GetSortColumns failed: 0x{getSortResult:X8}");
+                    sortColumns = null;
+                }
+            }
+
+            IntPtr viewOptionsPointer = IntPtr.Zero;
+            IFolderViewOptionsNative? viewOptions = null;
+            try
+            {
+                var viewOptionsInterfaceId = typeof(IFolderViewOptionsNative).GUID;
+                var viewOptionsResult = _browser.GetCurrentView(ref viewOptionsInterfaceId, out viewOptionsPointer);
+                if (viewOptionsResult >= 0 && viewOptionsPointer != IntPtr.Zero)
+                {
+                    viewOptions = (IFolderViewOptionsNative)Marshal.GetObjectForIUnknown(viewOptionsPointer);
+                    var customPositionResult = viewOptions.SetFolderViewOptions(
+                        FolderViewOptionCustomPosition,
+                        FolderViewOptionCustomPosition);
+                    TraceColumnSizing($"Enable required custom-position option=0x{customPositionResult:X8}");
+                }
+                else
+                {
+                    TraceColumnSizing($"Could not get IFolderViewOptions: 0x{viewOptionsResult:X8}");
+                }
+            }
+            finally
+            {
+                if (viewOptions is not null && Marshal.IsComObject(viewOptions))
+                    _ = Marshal.ReleaseComObject(viewOptions);
+                if (viewOptionsPointer != IntPtr.Zero)
+                    _ = Marshal.Release(viewOptionsPointer);
+            }
+
+            var groupingResult = folderView.SetCurrentFolderFlags(FolderFlagNoGrouping, FolderFlagNoGrouping);
+            TraceColumnSizing($"Disable grouping=0x{groupingResult:X8}");
+
+            var viewModeResult = folderView.SetCurrentViewMode(FolderViewDetails);
+            TraceColumnSizing($"Set Details view=0x{viewModeResult:X8}");
+
+            var columnManagerInterfaceId = typeof(IColumnManagerNative).GUID;
+            var columnManagerResult = _browser.GetCurrentView(ref columnManagerInterfaceId, out columnManagerPointer);
+            if (columnManagerResult >= 0 && columnManagerPointer != IntPtr.Zero)
+            {
+                columnManager = (IColumnManagerNative)Marshal.GetObjectForIUnknown(columnManagerPointer);
+                var setColumnsResult = columnManager.SetColumns(StandardColumns, (uint)StandardColumns.Length);
+                TraceColumnSizing($"Set standard columns=0x{setColumnsResult:X8}");
+                if (setColumnsResult >= 0)
+                {
+                    foreach (var column in StandardColumns)
+                    {
+                        var columnInfo = ShellColumnInfo.Create(ColumnMaskState);
+                        columnInfo.State = ColumnStateVisible;
+                        var columnKey = column;
+                        var columnStateResult = columnManager.SetColumnInfo(ref columnKey, ref columnInfo);
+                        TraceColumnSizing($"Set visible column {column.PropertyId}=0x{columnStateResult:X8}");
+                    }
+                }
+            }
+            else
+            {
+                TraceColumnSizing($"Could not get IColumnManager for view normalization: 0x{columnManagerResult:X8}");
+            }
+
+            if (sortColumns is not null)
+            {
+                var restoreSortResult = folderView.SetSortColumns(sortColumns, sortColumns.Length);
+                TraceColumnSizing($"Restore {sortColumns.Length} sort column(s)=0x{restoreSortResult:X8}");
+            }
+        }
+        catch (Exception exception) when (exception is COMException or InvalidCastException)
+        {
+            TraceColumnSizing($"View normalization exception: {exception.GetType().Name}: {exception.Message}");
+        }
+        finally
+        {
+            if (columnManager is not null && Marshal.IsComObject(columnManager))
+                _ = Marshal.ReleaseComObject(columnManager);
+            if (columnManagerPointer != IntPtr.Zero)
+                _ = Marshal.Release(columnManagerPointer);
+            if (folderView is not null && Marshal.IsComObject(folderView))
+                _ = Marshal.ReleaseComObject(folderView);
+            if (folderViewPointer != IntPtr.Zero)
+                _ = Marshal.Release(folderViewPointer);
+        }
     }
 
     private void UpdateNameColumnWidth(int availableWidth)
@@ -699,6 +824,55 @@ internal interface IColumnManagerNative
     [PreserveSig] int GetColumnCount(uint flags, out uint columnCount);
     [PreserveSig] int GetColumns(uint flags, [Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 2)] ShellPropertyKey[] columns, uint columnCount);
     [PreserveSig] int SetColumns([In, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] ShellPropertyKey[] columns, uint columnCount);
+}
+
+[ComImport]
+[Guid("1AF3A467-214F-4298-908E-06B03E0B39F9")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IFolderView2Native
+{
+    [PreserveSig] int GetCurrentViewMode();
+    [PreserveSig] int SetCurrentViewMode(uint viewMode);
+    [PreserveSig] int UnusedSlot02();
+    [PreserveSig] int UnusedSlot03();
+    [PreserveSig] int UnusedSlot04();
+    [PreserveSig] int UnusedSlot05();
+    [PreserveSig] int UnusedSlot06();
+    [PreserveSig] int UnusedSlot07();
+    [PreserveSig] int UnusedSlot08();
+    [PreserveSig] int UnusedSlot09();
+    [PreserveSig] int UnusedSlot10();
+    [PreserveSig] int UnusedSlot11();
+    [PreserveSig] int UnusedSlot12();
+    [PreserveSig] int UnusedSlot13();
+    [PreserveSig] int UnusedSlot14();
+    [PreserveSig] int UnusedSlot15();
+    [PreserveSig] int UnusedSlot16();
+    [PreserveSig] int UnusedSlot17();
+    [PreserveSig] int UnusedSlot18();
+    [PreserveSig] int UnusedSlot19();
+    [PreserveSig] int UnusedSlot20();
+    [PreserveSig] int SetCurrentFolderFlags(uint mask, uint flags);
+    [PreserveSig] int UnusedSlot22();
+    [PreserveSig] int GetSortColumnCount(out int columnCount);
+    [PreserveSig] int SetSortColumns([In, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] ShellSortColumn[] columns, int columnCount);
+    [PreserveSig] int GetSortColumns([Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] ShellSortColumn[] columns, int columnCount);
+}
+
+[ComImport]
+[Guid("3CC974D2-B302-4D36-AD3E-06D93F695D3F")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IFolderViewOptionsNative
+{
+    [PreserveSig] int SetFolderViewOptions(uint mask, uint options);
+    [PreserveSig] int GetFolderViewOptions(out uint options);
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct ShellSortColumn
+{
+    public ShellPropertyKey PropertyKey;
+    public int Direction;
 }
 
 [StructLayout(LayoutKind.Sequential)]

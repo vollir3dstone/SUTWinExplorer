@@ -60,11 +60,15 @@ Initialization sequence:
    `EBO_SHOWFRAMES`, so the Shell navigation pane/frame is not shown.
 5. Subscribe to `IExplorerBrowserEvents` using `Advise`.
 6. Defer the first `BrowseToIDList` until `DispatcherPriority.Loaded`.
-7. Update the Shell view's bounds with `SetRect` when the WPF host is resized,
+7. On navigation completion, capture the active `IFolderView2` sort columns,
+   set Details mode and `FWF_NOGROUPING`, replace the visible columns with
+   Name, Type, Size, and Date modified in that order, then restore the captured
+   sort. Folder-specific grouping, view mode, and columns are not used; then
+   recalculate the Name width for the new view.
+8. Update the Shell view's bounds with `SetRect` when the WPF host is resized,
    then use `IColumnManager` to size the visible Name column to the remaining
-   width. Reapply the width after navigation because the Shell may replace the
-   current view.
-8. On teardown, `Unadvise`, call `Destroy`, clear the site, release COM
+   width.
+9. On teardown, `Unadvise`, call `Destroy`, clear the site, release COM
    references, and destroy the child HWND.
 
 Navigation uses `SHParseDisplayName` to obtain an absolute PIDL and
@@ -121,7 +125,9 @@ created while its tab was hidden appeared in the tree after switching back.
 The WPF content pane occupies the remaining width after the sidebar. The hosted
 ExplorerBrowser view must follow that pane on both window resize and sidebar
 splitter movement. In Details mode, the visible non-Name columns retain their
-Shell-provided widths and Name uses the remaining width. The resulting view
+Shell-provided widths and Name uses the remaining width. The standard column
+order is Name, Type, Size, and Date modified; the Shell's Size column provides
+the KB-formatted value. The resulting view
 must have no horizontal scroll range at the tested layout sizes. Enabling
 **Show directories** can create or remove a vertical Shell scrollbar without
 changing the WPF pane size, so that refresh also requires a width recalculation.
