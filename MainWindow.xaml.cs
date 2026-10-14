@@ -28,7 +28,7 @@ public partial class MainWindow : Window
     {
         var view = new ExplorerTabView(path);
         var title = new TextBlock { Text = GetTabLabelFromPath(view.CurrentPath), VerticalAlignment = VerticalAlignment.Center };
-        var tooltipText = new TextBlock { Text = view.CurrentPath, TextWrapping = TextWrapping.NoWrap };
+        var tooltipText = new TextBlock { Text = ShellDisplayNameProvider.GetDisplayPath(view.CurrentPath), TextWrapping = TextWrapping.NoWrap };
 
         var close = new Button
         {
@@ -68,7 +68,7 @@ public partial class MainWindow : Window
         view.LocationChanged += (_, currentPath) =>
         {
             title.Text = GetTabLabelFromPath(currentPath);
-            tooltipText.Text = currentPath;
+            tooltipText.Text = ShellDisplayNameProvider.GetDisplayPath(currentPath);
             RefreshPathChoices();
         };
 
@@ -222,6 +222,8 @@ public partial class MainWindow : Window
         var currentDirUsedLength = currentDir.Length;
         var displayedCurrentDir = currentDir;
 
+        // Shorten the parent first; only shorten the current name in five-character steps if needed.
+        // Keep at least ten characters of the current name, even if that leaves the title over the limit.
         while (true)
         {
             var idealTitle = $"{prefix}{parentDir}{DisplayPathSeparator}{displayedCurrentDir}";
