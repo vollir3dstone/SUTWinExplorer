@@ -8,6 +8,10 @@ namespace SUTWinExplorer;
 
 public partial class MainWindow : Window
 {
+    private const int MaxDisplayedPathLength = 40;
+    private const string DisplayEllipsis = "…";
+    private static readonly string DisplayPathSeparator = Path.DirectorySeparatorChar.ToString();
+    private static readonly string DefaultTabLabelPrefix = DisplayEllipsis + DisplayPathSeparator;
     private bool _updatingPathChoices;
 
     public MainWindow()
@@ -23,7 +27,7 @@ public partial class MainWindow : Window
     private void AddTab(string path)
     {
         var view = new ExplorerTabView(path);
-        var title = new TextBlock { Text = GetTabTitle(view.CurrentPath), VerticalAlignment = VerticalAlignment.Center };
+        var title = new TextBlock { Text = GetTabLabelFromPath(view.CurrentPath), VerticalAlignment = VerticalAlignment.Center };
         var tooltipText = new TextBlock { Text = view.CurrentPath, TextWrapping = TextWrapping.NoWrap };
 
         var close = new Button
@@ -63,7 +67,7 @@ public partial class MainWindow : Window
         tab.ToolTipOpening += (_, _) => ConfigurePathToolTip(pathToolTip, tooltipText);
         view.LocationChanged += (_, currentPath) =>
         {
-            title.Text = GetTabTitle(currentPath);
+            title.Text = GetTabLabelFromPath(currentPath);
             tooltipText.Text = currentPath;
             RefreshPathChoices();
         };
@@ -181,14 +185,64 @@ public partial class MainWindow : Window
         }
     }
 
-    private static string GetTabTitle(string path)
+    private static string GetTabLabelFromPath(string path)
     {
-        var displayName = ShellDisplayNameProvider.GetDisplayName(path);
-        if (!string.IsNullOrWhiteSpace(displayName))
-            return displayName;
+        var normalizedPath = Path.TrimEndingDirectorySeparator(path);
+        var currentDir = ShellDisplayNameProvider.GetDisplayName(path);
+        if (string.IsNullOrWhiteSpace(currentDir))
+            currentDir = Path.GetFileName(normalizedPath);
+        if (string.IsNullOrWhiteSpace(currentDir))
+            currentDir = path;
 
-        var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
-        return string.IsNullOrEmpty(name) ? path : name;
+        var rootPath = Path.GetPathRoot(path);
+        var rootTerm = string.IsNullOrEmpty(rootPath)
+            ? string.Empty
+            : ShellDisplayNameProvider.GetDisplayName(rootPath) ?? rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (!string.IsNullOrEmpty(rootPath) &&
+            string.Equals(Path.GetFullPath(normalizedPath), Path.GetFullPath(rootPath), StringComparison.OrdinalIgnoreCase))
+            return rootTerm;
+
+        var parent = Directory.GetParent(normalizedPath);
+        var parentIsRoot = parent is not null && !string.IsNullOrEmpty(rootPath) &&
+            string.Equals(Path.GetFullPath(parent.FullName), Path.GetFullPath(rootPath), StringComparison.OrdinalIgnoreCase);
+        var parentDir = parent is null || parentIsRoot
+            ? null
+            : ShellDisplayNameProvider.GetDisplayName(parent.FullName) ?? parent.Name;
+        var prefix = DefaultTabLabelPrefix;
+        if (parentDir is null)
+        {
+            parentDir = rootTerm;
+            prefix = string.Empty;
+        }
+
+        var currentOnlyTitle = prefix + currentDir;
+        if (currentOnlyTitle.Length >= MaxDisplayedPathLength)
+            return currentOnlyTitle[..MaxDisplayedPathLength];
+
+        var currentDirUsedLength = currentDir.Length;
+        var displayedCurrentDir = currentDir;
+
+        while (true)
+        {
+            var idealTitle = $"{prefix}{parentDir}{DisplayPathSeparator}{displayedCurrentDir}";
+            if (idealTitle.Length <= MaxDisplayedPathLength)
+                return idealTitle;
+
+            var lengthToSubtract = idealTitle.Length - MaxDisplayedPathLength;
+            if (parentDir.Length - 1 >= lengthToSubtract)
+            {
+                var parentDirUsedLength = parentDir.Length - 1 - lengthToSubtract;
+                var displayedParentDir = parentDir[..parentDirUsedLength] + DisplayEllipsis;
+                return $"{prefix}{displayedParentDir}{DisplayPathSeparator}{displayedCurrentDir}";
+            }
+
+            var newCurrentDirUsedLength = Math.Max(0, currentDirUsedLength - 5);
+            if (newCurrentDirUsedLength < 10)
+                return idealTitle;
+
+            currentDirUsedLength = newCurrentDirUsedLength;
+            displayedCurrentDir = currentDir[..currentDirUsedLength] + DisplayEllipsis;
+        }
     }
 
     private sealed record TabPathChoice(int TabIndex, string Path)
