@@ -11,7 +11,7 @@
                 <Button Content="Up" Click="Up_Click" Padding="10,4" />
                 <Separator />
                 <ComboBox x:Name="AddressBox" Width="590" IsEditable="True" IsTextSearchEnabled="False"
-                          StaysOpenOnEdit="True" DisplayMemberPath="Path" SelectedValuePath="TabIndex"
+                          StaysOpenOnEdit="True" DisplayMemberPath="DisplayPath" SelectedValuePath="TabIndex"
                           VerticalContentAlignment="Center" KeyDown="AddressBox_KeyDown"
                           SelectionChanged="AddressBox_SelectionChanged" />
                 <Button Content="Go" Click="Go_Click" Padding="12,4" />

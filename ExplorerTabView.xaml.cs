@@ -104,7 +104,7 @@ public partial class ExplorerTabView : UserControl
         }
 
         CurrentPath = fullPath;
-        LocationLabel.Text = fullPath;
+        LocationLabel.Text = ShellDisplayNameProvider.GetDisplayPath(fullPath);
         if (IsLegacyWpfFileList)
         {
             RefreshFiles();
@@ -363,7 +363,7 @@ public partial class ExplorerTabView : UserControl
             _backHistory.Push(CurrentPath);
         _forwardHistory.Clear();
         CurrentPath = fullPath;
-        LocationLabel.Text = fullPath;
+        LocationLabel.Text = ShellDisplayNameProvider.GetDisplayPath(fullPath);
         RefreshActivePathAndSiblingsTree();
         RefreshActivePathTree();
         SynchronizeShellChangeNotifications();
@@ -528,6 +528,10 @@ public partial class ExplorerTabView : UserControl
                 {
                     child = new TreeEntry(Path.GetFileName(Path.TrimEndingDirectorySeparator(directory)), directory);
                     AddPlaceholder(child);
+                }
+                else
+                {
+                    child.RefreshDisplayName();
                 }
 
                 refreshedChildren.Add(child);
@@ -741,7 +745,7 @@ public sealed class TreeEntry : INotifyPropertyChanged
 
     private TreeEntry(string name, string path, bool isPlaceholder)
     {
-        Name = name;
+        Name = isPlaceholder ? name : ShellDisplayNameProvider.GetDisplayName(path) ?? name;
         Path = path;
         IsPlaceholder = isPlaceholder;
         IsLoaded = isPlaceholder;
@@ -750,7 +754,7 @@ public sealed class TreeEntry : INotifyPropertyChanged
 
     public TreeEntry(string name, string path) : this(name, path, false) { }
 
-    public string Name { get; }
+    public string Name { get; private set; }
     public string Path { get; }
     public bool IsPlaceholder { get; }
     public bool IsLoaded { get; set; }
@@ -777,6 +781,19 @@ public sealed class TreeEntry : INotifyPropertyChanged
 
         Icons = ShellIconProvider.GetSmallIcons(Path);
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Icons)));
+    }
+
+    public void RefreshDisplayName()
+    {
+        if (IsPlaceholder)
+            return;
+
+        var displayName = ShellDisplayNameProvider.GetDisplayName(Path);
+        if (displayName is null || string.Equals(Name, displayName, StringComparison.Ordinal))
+            return;
+
+        Name = displayName;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
     }
 
     private void SetField(ref bool field, bool value, [System.Runtime.CompilerServices.CallerMemberName] string? propertyName = null)
@@ -813,6 +830,100 @@ public sealed class FileEntry
 }
 
 public sealed record ShellIconSet(ImageSource? BaseIcon, ImageSource? OverlayIcon);
+
+internal static class ShellDisplayNameProvider
+{
+    private const uint ShellDisplayNameNormal = 0;
+
+    public static string GetDisplayPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return path;
+
+        var fullPath = Path.GetFullPath(path);
+        var rootPath = Path.GetPathRoot(fullPath);
+        if (string.IsNullOrEmpty(rootPath))
+            return path;
+
+        var displayPath = rootPath;
+        var currentPath = rootPath;
+        var relativePath = Path.GetRelativePath(rootPath, fullPath);
+        foreach (var segment in relativePath.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        {
+            currentPath = Path.Combine(currentPath, segment);
+            displayPath = Path.Combine(displayPath, GetDisplayName(currentPath) ?? segment);
+        }
+
+        return displayPath;
+    }
+
+    public static string ResolvePath(string input)
+    {
+        var fullPath = Path.GetFullPath(Environment.ExpandEnvironmentVariables(input.Trim().Trim('\"')));
+        if (Directory.Exists(fullPath))
+            return fullPath;
+
+        var rootPath = Path.GetPathRoot(fullPath);
+        if (string.IsNullOrEmpty(rootPath))
+            return fullPath;
+
+        var currentPath = rootPath;
+        var relativePath = Path.GetRelativePath(rootPath, fullPath);
+        foreach (var segment in relativePath.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var childPath = Path.Combine(currentPath, segment);
+            if (Directory.Exists(childPath))
+            {
+                currentPath = childPath;
+                continue;
+            }
+
+            try
+            {
+                currentPath = Directory.EnumerateDirectories(currentPath)
+                    .FirstOrDefault(directory => string.Equals(GetDisplayName(directory), segment, StringComparison.OrdinalIgnoreCase))
+                    ?? childPath;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                currentPath = childPath;
+            }
+        }
+
+        return Path.GetFullPath(currentPath);
+    }
+
+    public static string? GetDisplayName(string path)
+    {
+        if (string.IsNullOrEmpty(path) || SHParseDisplayName(path, IntPtr.Zero, out var itemIdList, 0, out _) < 0 || itemIdList == IntPtr.Zero)
+            return null;
+
+        try
+        {
+            if (SHGetNameFromIDList(itemIdList, ShellDisplayNameNormal, out var name) < 0 || name == IntPtr.Zero)
+                return null;
+
+            try
+            {
+                return Marshal.PtrToStringUni(name);
+            }
+            finally
+            {
+                Marshal.FreeCoTaskMem(name);
+            }
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(itemIdList);
+        }
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
+    private static extern int SHParseDisplayName(string name, IntPtr bindContext, out IntPtr itemIdList, uint attributesIn, out uint attributesOut);
+
+    [DllImport("shell32.dll", PreserveSig = true)]
+    private static extern int SHGetNameFromIDList(IntPtr itemIdList, uint sigdnName, out IntPtr name);
+}
 
 internal static class ShellIconProvider
 {

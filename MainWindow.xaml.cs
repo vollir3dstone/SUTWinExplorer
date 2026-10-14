@@ -142,7 +142,9 @@ public partial class MainWindow : Window
         {
             AddressBox.ItemsSource = choices;
             AddressBox.SelectedValue = ExplorerTabs.SelectedIndex;
-            AddressBox.Text = CurrentTab?.CurrentPath ?? string.Empty;
+            AddressBox.Text = CurrentTab is null
+                ? string.Empty
+                : ShellDisplayNameProvider.GetDisplayPath(CurrentTab.CurrentPath);
         }
         finally
         {
@@ -171,7 +173,7 @@ public partial class MainWindow : Window
 
         try
         {
-            CurrentTab.Navigate(AddressBox.Text);
+            CurrentTab.Navigate(ShellDisplayNameProvider.ResolvePath(AddressBox.Text));
         }
         catch (Exception exception)
         {
@@ -181,9 +183,18 @@ public partial class MainWindow : Window
 
     private static string GetTabTitle(string path)
     {
+        var displayName = ShellDisplayNameProvider.GetDisplayName(path);
+        if (!string.IsNullOrWhiteSpace(displayName))
+            return displayName;
+
         var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
         return string.IsNullOrEmpty(name) ? path : name;
     }
 
-    private sealed record TabPathChoice(int TabIndex, string Path);
+    private sealed record TabPathChoice(int TabIndex, string Path)
+    {
+        public string DisplayPath => string.IsNullOrEmpty(Path)
+            ? string.Empty
+            : ShellDisplayNameProvider.GetDisplayPath(Path);
+    }
 }

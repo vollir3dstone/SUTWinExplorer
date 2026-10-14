@@ -29,6 +29,26 @@ filter was implemented and runtime-tested after the decision.
 application or its chrome. WPF remains responsible for the app-level navigation
 and layout.
 
+### 2026-10-14: Keep filesystem paths canonical; localize display names
+
+**Decision owner:** Volker.
+
+**Decision:** Keep actual Windows filesystem paths as the app's internal
+navigation and identity values. Use Windows Shell normal display names only
+when presenting folders in the UI; never replace stored paths with translated
+labels.
+
+**Application:** Custom tree labels, the address field and its open-tab
+dropdown, the content-pane heading, and tab headers use Shell-provided display
+names. The address field resolves typed localized path components back to
+filesystem paths before navigation. The Shell-hosted content view continues to
+render its own localized names.
+
+**Rationale:** Localized display names are presentation values and may not be
+valid filesystem path components. Canonical paths remain suitable for
+navigation, history, tab state, and filesystem operations across Windows
+languages.
+
 ## Current Composition
 
 - `MainWindow` owns the WPF application toolbar and `TabControl`.
