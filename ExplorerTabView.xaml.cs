@@ -226,10 +226,39 @@ public partial class ExplorerTabView : UserControl
 
         RefreshShellStatusCount();
         RefreshActivePathTree();
-        if (ActivePathAndSiblingsTree.ItemsSource is ObservableCollection<TreeEntry> roots)
+        RefreshCurrentRouteTree();
+    }
+
+    private void RefreshCurrentRouteTree()
+    {
+        if (ActivePathAndSiblingsTree.ItemsSource is not ObservableCollection<TreeEntry> roots)
+            return;
+
+        var rootPath = Path.GetPathRoot(CurrentPath);
+        var active = roots.FirstOrDefault(root => string.Equals(root.Path, rootPath, StringComparison.OrdinalIgnoreCase));
+        if (active is null)
+            return;
+
+        RefreshTreeChildren(active);
+        var segments = Path.GetRelativePath(rootPath!, CurrentPath)
+            .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var segment in segments)
         {
-            foreach (var root in roots)
-                RefreshLoadedTreeChildren(root);
+            var childPath = Path.Combine(active.Path, segment);
+            var child = active.Children.FirstOrDefault(candidate =>
+                !candidate.IsPlaceholder && string.Equals(candidate.Path, childPath, StringComparison.OrdinalIgnoreCase));
+            if (child is null)
+            {
+                RefreshTreeChildren(active);
+                child = active.Children.FirstOrDefault(candidate =>
+                    !candidate.IsPlaceholder && string.Equals(candidate.Path, childPath, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (child is null)
+                return;
+
+            active = child;
+            RefreshTreeChildren(active);
         }
     }
 
@@ -239,14 +268,26 @@ public partial class ExplorerTabView : UserControl
             return;
 
         var desiredPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        AddNotificationPath(desiredPaths, CurrentPath);
-        if (ActivePathAndSiblingsTree.ItemsSource is ObservableCollection<TreeEntry> roots)
-        {
-            foreach (var root in roots)
-                AddLoadedTreeNotificationPaths(root, desiredPaths);
-        }
+        AddCurrentPathNotificationPaths(desiredPaths);
 
         _shellBrowserHost?.SynchronizeChangeNotifications(desiredPaths);
+    }
+
+    private void AddCurrentPathNotificationPaths(HashSet<string> paths)
+    {
+        var rootPath = Path.GetPathRoot(CurrentPath);
+        if (string.IsNullOrEmpty(rootPath))
+            return;
+
+        var currentPath = rootPath;
+        AddNotificationPath(paths, currentPath);
+        var segments = Path.GetRelativePath(rootPath, CurrentPath)
+            .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var segment in segments)
+        {
+            currentPath = Path.Combine(currentPath, segment);
+            AddNotificationPath(paths, currentPath);
+        }
     }
 
     private static void AddNotificationPath(HashSet<string> paths, string path)
@@ -261,18 +302,6 @@ public partial class ExplorerTabView : UserControl
         catch (Exception exception) when (exception is ArgumentException or IOException or NotSupportedException)
         {
         }
-    }
-
-    private static void AddLoadedTreeNotificationPaths(TreeEntry entry, HashSet<string> paths)
-    {
-        if (entry.IsPlaceholder)
-            return;
-
-        if (entry.IsLoaded)
-            AddNotificationPath(paths, entry.Path);
-
-        foreach (var child in entry.Children)
-            AddLoadedTreeNotificationPaths(child, paths);
     }
 
     private void ShellBrowserHost_FileSystemChanged(object? sender, EventArgs e)
@@ -303,19 +332,6 @@ public partial class ExplorerTabView : UserControl
         _shellViewNeedsRefresh = false;
         RefreshCurrentFileSystemState(refreshShellView);
         SynchronizeShellChangeNotifications();
-    }
-
-    private static void RefreshLoadedTreeChildren(TreeEntry entry)
-    {
-        if (entry.IsPlaceholder)
-            return;
-
-        entry.RefreshIcons();
-        if (entry.IsLoaded)
-            RefreshTreeChildren(entry);
-
-        foreach (var child in entry.Children)
-            RefreshLoadedTreeChildren(child);
     }
 
     private void RefreshShellStatusCount()

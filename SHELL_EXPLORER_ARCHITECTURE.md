@@ -83,30 +83,36 @@ avoids that reentrancy.
 
 ## Shell Change Notifications
 
-Filesystem synchronization uses the Shell's `SHChangeNotifyRegister` rather
-than one `FileSystemWatcher` per folder/property. Each tab registers its active
-folder and the directories represented by loaded nodes in **Active path and
-siblings**. Registrations use `SHCNE_DISKEVENTS` with interrupt, Shell-level,
-and new-delivery sources; the latter payload is read with
+Filesystem synchronization uses the Shell's `SHChangeNotifyRegister`, not
+per-property `FileSystemWatcher`s. Each tab registers only the directory route
+from the drive root through `CurrentPath`, one non-recursive registration per
+route directory. A route directory's registration reports changes to its
+immediate children, which is sufficient to update the current listing and the
+route nodes' sibling lists. Sibling directories' own contents are not shown in
+the tree, so their subtrees are deliberately not registered. Registration
+count therefore scales with route depth, not the number of loaded or sibling
+directories.
+
+Registrations use `SHCNE_DISKEVENTS` with interrupt, Shell-level, and
+new-delivery sources; the latter payload is read with
 `SHChangeNotification_Lock` and released with `SHChangeNotification_Unlock`.
 The host deregisters all notification IDs when the tab unloads or its native
-window is destroyed, and synchronizes registrations after navigation/tree
-expansion.
+window is destroyed, and updates route registrations after navigation.
 
-Notifications are coalesced by a 200ms tab-level dispatcher timer. When the tab
-is visible, the timer refreshes the Shell content view, item count, active-path
-tree, and already-loaded sibling-tree nodes while retaining existing tree node
-instances. Newly visible directories are added to the registration set after
-reconciliation. When the tab is unloaded or hidden, it is marked dirty; updates
-are deferred until it becomes visible, when one rescan refreshes the content
-and trees. This avoids work on invisible tabs while recovering changes missed
-after they were deregistered.
+Notifications are coalesced by a 200ms tab-level dispatcher timer. The Shell
+owns and refreshes its content view from its own change notifications. When a
+notification reaches a visible tab, the app refreshes the item count and
+reconciles only the active route's loaded tree nodes, preserving existing
+nodes and their expansion/selection state. A hidden tab is marked dirty and
+does not update its custom trees immediately; on becoming visible it performs
+one rescan and explicitly refreshes the content view in case notifications
+were missed while unloaded.
 
 Runtime-verified with external create, rename, and delete in a disposable test
 directory: the Shell list and **Active path and siblings** tree updated without
-restarting the app. A directory created while its tab was hidden appeared in
-the tree after switching back. The Shell view can update its own content list
-from notifications; the tab rescan keeps app-owned trees and status in sync.
+restarting the app. Creating a sibling under an ancestor on the current route
+updated the tree without registering that sibling's subtree. A directory
+created while its tab was hidden appeared in the tree after switching back.
 
 ## Shell Details Column Sizing
 
