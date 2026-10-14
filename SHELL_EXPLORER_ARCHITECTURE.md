@@ -137,6 +137,10 @@ Navigation uses `SHParseDisplayName` to obtain an absolute PIDL and
 before item enumeration. `OnNavigationComplete` converts the PIDL with
 `SHGetNameFromIDList(SIGDN_FILESYSPATH)`, then dispatches the path update to WPF
 so the active path, trees, tab title, status, and address choices synchronize.
+Shell-backed navigation does not commit `CurrentPath` or history when the
+browse is requested; those values and displays change only after
+`OnNavigationComplete`. `OnNavigationFailed` restores the filter to the last
+completed path, leaving the active location and history unchanged.
 Non-filesystem namespace locations do not become filesystem paths and are not
 fully integrated with the custom trees yet.
 

@@ -22,13 +22,28 @@ public partial class MainWindow : Window
 
     private ExplorerTabView? CurrentTab => (ExplorerTabs.SelectedItem as TabItem)?.Content as ExplorerTabView;
 
-    private void NewTab_Click(object sender, RoutedEventArgs e) => AddTab(CurrentTab?.CurrentPath ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+    private void NewTab_Click(object sender, RoutedEventArgs e)
+    {
+        var currentPath = CurrentTab?.CurrentPath;
+        AddTab(string.IsNullOrWhiteSpace(currentPath)
+            ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+            : currentPath);
+    }
 
     private void AddTab(string path)
     {
         var view = new ExplorerTabView(path);
-        var title = new TextBlock { Text = GetTabLabelFromPath(view.CurrentPath), VerticalAlignment = VerticalAlignment.Center };
-        var tooltipText = new TextBlock { Text = ShellDisplayNameProvider.GetDisplayPath(view.CurrentPath), TextWrapping = TextWrapping.NoWrap };
+        var hasCurrentPath = !string.IsNullOrWhiteSpace(view.CurrentPath);
+        var title = new TextBlock
+        {
+            Text = hasCurrentPath ? GetTabLabelFromPath(view.CurrentPath) : "Loading...",
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        var tooltipText = new TextBlock
+        {
+            Text = hasCurrentPath ? ShellDisplayNameProvider.GetDisplayPath(view.CurrentPath) : string.Empty,
+            TextWrapping = TextWrapping.NoWrap
+        };
 
         var close = new Button
         {

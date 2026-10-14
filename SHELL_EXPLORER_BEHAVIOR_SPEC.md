@@ -124,7 +124,9 @@ Checkboxes record implementation status, not changes to the expected behavior.
 4. Use item and folder-background menus for Properties, New Text Document,
    Copy/Paste, Paste shortcut, and drag/drop with Windows Explorer.
 5. Verify cancellation, name collisions, access denied, and disconnected
-   destinations do not crash the application.
+  destinations do not crash the application. If folder navigation fails, the
+  active path, address, tab title, trees, and history remain on the last
+  successfully displayed folder.
 6. Navigate between folders with different saved view modes, groups, columns,
   and sort choices. Verify the content view always uses the standard ungrouped
   Details layout and column order, while retaining each folder's selected

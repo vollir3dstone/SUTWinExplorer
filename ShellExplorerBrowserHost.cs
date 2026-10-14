@@ -54,18 +54,30 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     private bool _showDirectories;
     private NativeRect _viewBounds;
     private bool _hasViewBounds;
+    private string? _currentPath;
     private readonly HashSet<string> _desiredChangeNotificationPaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, uint> _changeNotificationRegistrations = new(StringComparer.OrdinalIgnoreCase);
     private string? _pendingPath;
 
     public event EventHandler<string>? NavigationCompleted;
+    public event EventHandler<string>? NavigationFailed;
     public event EventHandler? FileSystemChanged;
 
     public void NavigateTo(string path)
     {
         _pendingPath = Path.GetFullPath(path);
         if (_initialized)
-            BrowseToPendingPath();
+        {
+            try
+            {
+                BrowseToPendingPath();
+            }
+            catch
+            {
+                _pendingPath = _currentPath;
+                throw;
+            }
+        }
     }
 
     public void SetShowDirectories(bool showDirectories)
@@ -217,7 +229,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             _initialized = true;
             ApplyViewBounds();
 
-            _eventsSink = new ExplorerBrowserEventsSink(HandleNavigationPending, HandleNavigationCompleted);
+            _eventsSink = new ExplorerBrowserEventsSink(HandleNavigationPending, HandleNavigationCompleted, HandleNavigationFailed);
             Marshal.ThrowExceptionForHR(_browser.Advise(_eventsSink, out _eventsCookie));
             UpdateChangeNotificationRegistrations();
 
@@ -355,7 +367,13 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         try
         {
             Marshal.ThrowExceptionForHR(SHParseDisplayName(_pendingPath, IntPtr.Zero, out itemIdList, 0, out _));
-            Marshal.ThrowExceptionForHR(_browser.BrowseToIDList(itemIdList, 0));
+            var result = _browser.BrowseToIDList(itemIdList, 0);
+            if (result < 0)
+            {
+                var failedPath = _pendingPath;
+                _pendingPath = _currentPath;
+                NavigationFailed?.Invoke(this, failedPath);
+            }
         }
         finally
         {
@@ -395,6 +413,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         if (path is null)
             return;
 
+        _currentPath = path;
         _pendingPath = path;
         ApplyStandardFolderView();
         _ = Dispatcher.BeginInvoke(DispatcherPriority.DataBind, new Action(() =>
@@ -402,6 +421,17 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             NavigationCompleted?.Invoke(this, path);
             ApplyViewBounds();
         }));
+    }
+
+    private void HandleNavigationFailed(IntPtr itemIdList)
+    {
+        var path = TryGetFileSystemPath(itemIdList);
+        if (path is null || string.Equals(_pendingPath, path, StringComparison.OrdinalIgnoreCase))
+            _pendingPath = _currentPath;
+
+        var failedPath = path ?? string.Empty;
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.DataBind, new Action(() =>
+            NavigationFailed?.Invoke(this, failedPath)));
     }
 
     private void ApplyStandardFolderView()
@@ -914,7 +944,10 @@ internal interface IExplorerBrowserEventsNative
 
 [ComVisible(true)]
 [ClassInterface(ClassInterfaceType.None)]
-internal sealed class ExplorerBrowserEventsSink(Action<IntPtr> navigationPending, Action<IntPtr> navigationCompleted) : IExplorerBrowserEventsNative
+internal sealed class ExplorerBrowserEventsSink(
+    Action<IntPtr> navigationPending,
+    Action<IntPtr> navigationCompleted,
+    Action<IntPtr> navigationFailed) : IExplorerBrowserEventsNative
 {
     public int OnNavigationPending(IntPtr itemIdList)
     {
@@ -943,7 +976,18 @@ internal sealed class ExplorerBrowserEventsSink(Action<IntPtr> navigationPending
         }
     }
 
-    public int OnNavigationFailed(IntPtr itemIdList) => 0;
+    public int OnNavigationFailed(IntPtr itemIdList)
+    {
+        try
+        {
+            navigationFailed(itemIdList);
+            return 0;
+        }
+        catch
+        {
+            return unchecked((int)0x80004005);
+        }
+    }
 }
 
 [ComVisible(true)]

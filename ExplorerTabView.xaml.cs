@@ -28,11 +28,21 @@ public partial class ExplorerTabView : UserControl
         SingleClick
     }
 
+    private enum NavigationHistoryAction
+    {
+        Normal,
+        Back,
+        Forward,
+        None
+    }
+
     private const TreeNavigationMode ActiveTreeNavigationMode = TreeNavigationMode.SingleClick;
     private readonly Stack<string> _backHistory = new();
     private readonly Stack<string> _forwardHistory = new();
     private readonly DispatcherTimer _fileSystemRefreshTimer;
     private ShellExplorerBrowserHost? _shellBrowserHost;
+    private string? _pendingNavigationPath;
+    private NavigationHistoryAction _pendingNavigationHistoryAction;
     private bool _fileSystemStateDirty = true;
     private bool _shellViewNeedsRefresh = true;
 
@@ -55,25 +65,25 @@ public partial class ExplorerTabView : UserControl
         {
             _shellBrowserHost = new ShellExplorerBrowserHost();
             _shellBrowserHost.NavigationCompleted += ShellBrowserHost_NavigationCompleted;
+            _shellBrowserHost.NavigationFailed += ShellBrowserHost_NavigationFailed;
             _shellBrowserHost.FileSystemChanged += ShellBrowserHost_FileSystemChanged;
             _shellBrowserHost.SetShowDirectories(ShowDirectoriesCheckBox.IsChecked == true);
             ShellBrowserSlot.Content = _shellBrowserHost;
         }
-        Navigate(initialPath, recordHistory: false);
+        Navigate(initialPath, NavigationHistoryAction.None);
     }
 
     public string CurrentPath { get; private set; } = string.Empty;
     public event EventHandler<string>? LocationChanged;
 
-    public void Navigate(string path) => Navigate(path, recordHistory: true);
+    public void Navigate(string path) => Navigate(path, NavigationHistoryAction.Normal);
 
     public void GoBack()
     {
         if (_backHistory.Count == 0)
             return;
 
-        _forwardHistory.Push(CurrentPath);
-        Navigate(_backHistory.Pop(), recordHistory: false);
+        Navigate(_backHistory.Peek(), NavigationHistoryAction.Back);
     }
 
     public void GoForward()
@@ -81,8 +91,7 @@ public partial class ExplorerTabView : UserControl
         if (_forwardHistory.Count == 0)
             return;
 
-        _backHistory.Push(CurrentPath);
-        Navigate(_forwardHistory.Pop(), recordHistory: false);
+        Navigate(_forwardHistory.Peek(), NavigationHistoryAction.Forward);
     }
 
     public void GoUp()
@@ -92,34 +101,66 @@ public partial class ExplorerTabView : UserControl
             Navigate(parent);
     }
 
-    private void Navigate(string path, bool recordHistory)
+    private void Navigate(string path, NavigationHistoryAction historyAction)
     {
         var fullPath = Path.GetFullPath(Environment.ExpandEnvironmentVariables(path.Trim().Trim('"')));
-        if (!Directory.Exists(fullPath))
+        if (IsLegacyWpfFileList && !Directory.Exists(fullPath))
             throw new DirectoryNotFoundException($"The directory does not exist or is not accessible: {fullPath}");
 
-        if (recordHistory && !string.Equals(CurrentPath, fullPath, StringComparison.OrdinalIgnoreCase))
-        {
-            if (!string.IsNullOrEmpty(CurrentPath))
-                _backHistory.Push(CurrentPath);
-            _forwardHistory.Clear();
-        }
+        if (string.Equals(CurrentPath, fullPath, StringComparison.OrdinalIgnoreCase))
+            return;
 
-        CurrentPath = fullPath;
-        LocationLabel.Text = ShellDisplayNameProvider.GetDisplayPath(fullPath);
         if (IsLegacyWpfFileList)
         {
+            CommitNavigation(fullPath, historyAction);
             RefreshFiles();
+            return;
         }
-        else
+
+        _pendingNavigationPath = fullPath;
+        _pendingNavigationHistoryAction = historyAction;
+        try
         {
             _shellBrowserHost?.NavigateTo(fullPath);
-            RefreshShellStatusCount();
         }
+        catch
+        {
+            _pendingNavigationPath = null;
+            throw;
+        }
+    }
+
+    private void CommitNavigation(string path, NavigationHistoryAction historyAction)
+    {
+        switch (historyAction)
+        {
+            case NavigationHistoryAction.Normal:
+                if (!string.IsNullOrEmpty(CurrentPath))
+                    _backHistory.Push(CurrentPath);
+                _forwardHistory.Clear();
+                break;
+            case NavigationHistoryAction.Back:
+                if (_backHistory.Count > 0 && string.Equals(_backHistory.Peek(), path, StringComparison.OrdinalIgnoreCase))
+                    _backHistory.Pop();
+                if (!string.IsNullOrEmpty(CurrentPath))
+                    _forwardHistory.Push(CurrentPath);
+                break;
+            case NavigationHistoryAction.Forward:
+                if (_forwardHistory.Count > 0 && string.Equals(_forwardHistory.Peek(), path, StringComparison.OrdinalIgnoreCase))
+                    _forwardHistory.Pop();
+                if (!string.IsNullOrEmpty(CurrentPath))
+                    _backHistory.Push(CurrentPath);
+                break;
+        }
+
+        CurrentPath = path;
+        LocationLabel.Text = ShellDisplayNameProvider.GetDisplayPath(path);
         RefreshActivePathAndSiblingsTree();
         RefreshActivePathTree();
         SynchronizeShellChangeNotifications();
         LocationChanged?.Invoke(this, CurrentPath);
+        if (!IsLegacyWpfFileList)
+            RefreshShellStatusCount();
     }
 
     private void RefreshFiles()
@@ -354,23 +395,25 @@ public partial class ExplorerTabView : UserControl
 
     private void ShellBrowserHost_NavigationCompleted(object? sender, string path)
     {
-        if (!Directory.Exists(path))
-            return;
-
         var fullPath = Path.GetFullPath(path);
+        var isPendingNavigation = string.Equals(_pendingNavigationPath, fullPath, StringComparison.OrdinalIgnoreCase);
+        var historyAction = isPendingNavigation ? _pendingNavigationHistoryAction : NavigationHistoryAction.Normal;
+        if (isPendingNavigation)
+            _pendingNavigationPath = null;
+
         if (string.Equals(CurrentPath, fullPath, StringComparison.OrdinalIgnoreCase))
             return;
 
-        if (!string.IsNullOrEmpty(CurrentPath))
-            _backHistory.Push(CurrentPath);
-        _forwardHistory.Clear();
-        CurrentPath = fullPath;
-        LocationLabel.Text = ShellDisplayNameProvider.GetDisplayPath(fullPath);
+        CommitNavigation(fullPath, historyAction);
+    }
+
+    private void ShellBrowserHost_NavigationFailed(object? sender, string path)
+    {
+        if (string.IsNullOrEmpty(path) || string.Equals(_pendingNavigationPath, path, StringComparison.OrdinalIgnoreCase))
+            _pendingNavigationPath = null;
+
         RefreshActivePathAndSiblingsTree();
         RefreshActivePathTree();
-        SynchronizeShellChangeNotifications();
-        RefreshShellStatusCount();
-        LocationChanged?.Invoke(this, CurrentPath);
     }
 
     private void FileList_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -684,7 +727,20 @@ public partial class ExplorerTabView : UserControl
         if (string.Equals(CurrentPath, entry.Path, StringComparison.OrdinalIgnoreCase))
             return;
 
+        if (ActivePathAndSiblingsTree.ItemsSource is ObservableCollection<TreeEntry> roots)
+        {
+            foreach (var root in roots)
+                RestoreTreeSelection(root);
+        }
+        RefreshActivePathTree();
         Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => NavigateFromTree(entry)));
+    }
+
+    private void RestoreTreeSelection(TreeEntry entry)
+    {
+        entry.IsSelected = string.Equals(entry.Path, CurrentPath, StringComparison.OrdinalIgnoreCase);
+        foreach (var child in entry.Children)
+            RestoreTreeSelection(child);
     }
 
     private void ShowNativeMenu(string path)
