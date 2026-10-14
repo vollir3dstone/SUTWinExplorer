@@ -33,8 +33,10 @@
                                           Background="Transparent" Focusable="False"
                                           IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
                                           Content="{Binding}" ContentTemplate="{StaticResource ShellIconTemplate}" />
-                            <Border x:Name="HeaderBorder" Grid.Row="0" Grid.Column="1" Padding="1,0">
-                                <ContentPresenter x:Name="PART_Header" ContentSource="Header" />
+                            <Border x:Name="HeaderBorder" Grid.Row="0" Grid.Column="1" Padding="1,0"
+                                    MinHeight="{x:Static local:ExplorerTabView.DirectoryTreeRowHeight}">
+                                <ContentPresenter x:Name="PART_Header" ContentSource="Header"
+                                                  VerticalAlignment="Center" />
                             </Border>
                             <ItemsPresenter x:Name="ItemsHost" Grid.Row="1" Grid.Column="1" Visibility="Collapsed" />
                         </Grid>

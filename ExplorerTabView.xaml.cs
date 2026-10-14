@@ -16,6 +16,8 @@ namespace SUTWinExplorer;
 
 public partial class ExplorerTabView : UserControl
 {
+    public const double DirectoryTreeRowHeight = 24;
+
     // Set true to reactivate the retained WPF ListView; false selects the Shell-hosted production view.
     private const bool UseLegacyWpfFileList = false;
     private static bool IsLegacyWpfFileList => UseLegacyWpfFileList;

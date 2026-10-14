@@ -83,6 +83,28 @@ ellipsis prefix is omitted.
   rollback switch: `false` selects the Shell view (production default); `true`
   makes the WPF list active again.
 
+### Custom Tree Templates
+
+Both directory trees in `ExplorerTabView.xaml` share
+`DirectoryTreeItemStyle`. Its templates provide the following behavior:
+
+- `ShellIconTemplate` displays each `TreeEntry`'s base shell icon and overlay.
+- `HierarchicalDataTemplate` displays the entry's `Name` and uses `Children`
+  for nested tree items.
+- `DirectoryTreeItemStyle` binds each item's expanded and selected states to
+  the `TreeEntry`, and supplies the custom `TreeViewItem` control template.
+- The `TreeViewItem` control template puts the shell icon/toggle in the first
+  column, the entry header in the second, and expanded children below the
+  header. It hides placeholder entries and applies a light-blue selected-row
+  background.
+
+`ExplorerTabView.DirectoryTreeRowHeight` in `ExplorerTabView.xaml.cs` sets the
+header border's minimum height to **24 WPF device-independent units (DIPs)**.
+The header content is vertically centered, so this value controls the minimum
+distance between rows in both directory trees. Adjust this constant to change
+their row spacing; it does not affect the Shell content view or the retained
+WPF file list.
+
 ## Shell View Host
 
 `ShellExplorerBrowserHost` creates a child host window with `CreateWindowExW`,
