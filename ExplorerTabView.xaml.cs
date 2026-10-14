@@ -75,6 +75,7 @@ public partial class ExplorerTabView : UserControl
 
     public string CurrentPath { get; private set; } = string.Empty;
     public event EventHandler<string>? LocationChanged;
+    public event EventHandler? NavigationFailed;
 
     public void Navigate(string path) => Navigate(path, NavigationHistoryAction.Normal);
 
@@ -409,11 +410,15 @@ public partial class ExplorerTabView : UserControl
 
     private void ShellBrowserHost_NavigationFailed(object? sender, string path)
     {
-        if (string.IsNullOrEmpty(path) || string.Equals(_pendingNavigationPath, path, StringComparison.OrdinalIgnoreCase))
+        var isCurrentFailure = string.IsNullOrEmpty(path) ||
+            string.Equals(_pendingNavigationPath, path, StringComparison.OrdinalIgnoreCase);
+        if (isCurrentFailure)
             _pendingNavigationPath = null;
 
         RefreshActivePathAndSiblingsTree();
         RefreshActivePathTree();
+        if (isCurrentFailure)
+            NavigationFailed?.Invoke(this, EventArgs.Empty);
     }
 
     private void FileList_SizeChanged(object sender, SizeChangedEventArgs e)

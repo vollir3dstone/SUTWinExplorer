@@ -86,6 +86,11 @@ public partial class MainWindow : Window
             tooltipText.Text = ShellDisplayNameProvider.GetDisplayPath(currentPath);
             RefreshPathChoices();
         };
+        view.NavigationFailed += (_, _) =>
+        {
+            if (ReferenceEquals(CurrentTab, view))
+                RefreshPathChoices();
+        };
 
         ExplorerTabs.Items.Add(tab);
         ExplorerTabs.SelectedItem = tab;
@@ -196,6 +201,7 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
+            RefreshPathChoices();
             MessageBox.Show(this, exception.Message, "Cannot open location", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
