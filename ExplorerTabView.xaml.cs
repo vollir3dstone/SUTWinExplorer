@@ -29,11 +29,22 @@ public partial class ExplorerTabView : UserControl
     private const TreeNavigationMode ActiveTreeNavigationMode = TreeNavigationMode.SingleClick;
     private readonly Stack<string> _backHistory = new();
     private readonly Stack<string> _forwardHistory = new();
+    private readonly DispatcherTimer _fileSystemRefreshTimer;
     private ShellExplorerBrowserHost? _shellBrowserHost;
+    private bool _fileSystemStateDirty = true;
+    private bool _shellViewNeedsRefresh = true;
 
     public ExplorerTabView(string initialPath)
     {
         InitializeComponent();
+        _fileSystemRefreshTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+        {
+            Interval = TimeSpan.FromMilliseconds(200)
+        };
+        _fileSystemRefreshTimer.Tick += FileSystemRefreshTimer_Tick;
+        Loaded += ExplorerTabView_Loaded;
+        Unloaded += ExplorerTabView_Unloaded;
+        IsVisibleChanged += ExplorerTabView_IsVisibleChanged;
         FileList.Visibility = IsLegacyWpfFileList ? Visibility.Visible : Visibility.Collapsed;
         ShellBrowserSlot.Visibility = IsLegacyWpfFileList ? Visibility.Collapsed : Visibility.Visible;
         StatusLabel.Visibility = IsLegacyWpfFileList ? Visibility.Visible : Visibility.Collapsed;
@@ -42,6 +53,7 @@ public partial class ExplorerTabView : UserControl
         {
             _shellBrowserHost = new ShellExplorerBrowserHost();
             _shellBrowserHost.NavigationCompleted += ShellBrowserHost_NavigationCompleted;
+            _shellBrowserHost.FileSystemChanged += ShellBrowserHost_FileSystemChanged;
             _shellBrowserHost.SetShowDirectories(ShowDirectoriesCheckBox.IsChecked == true);
             ShellBrowserSlot.Content = _shellBrowserHost;
         }
@@ -104,6 +116,7 @@ public partial class ExplorerTabView : UserControl
         }
         RefreshActivePathAndSiblingsTree();
         RefreshActivePathTree();
+        SynchronizeShellChangeNotifications();
         LocationChanged?.Invoke(this, CurrentPath);
     }
 
@@ -177,6 +190,134 @@ public partial class ExplorerTabView : UserControl
             (int)Math.Round(e.NewSize.Height * dpi.DpiScaleY));
     }
 
+    private void ExplorerTabView_Loaded(object sender, RoutedEventArgs e)
+    {
+        _fileSystemStateDirty = true;
+        _shellViewNeedsRefresh = true;
+        SynchronizeShellChangeNotifications();
+        ScheduleFileSystemRefreshIfVisible();
+    }
+
+    private void ExplorerTabView_Unloaded(object sender, RoutedEventArgs e)
+    {
+        _fileSystemRefreshTimer.Stop();
+        _fileSystemStateDirty = true;
+        _shellViewNeedsRefresh = true;
+        _shellBrowserHost?.ClearChangeNotifications();
+    }
+
+    private void ExplorerTabView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (IsVisible)
+        {
+            _fileSystemStateDirty = true;
+            _shellViewNeedsRefresh = true;
+            SynchronizeShellChangeNotifications();
+            ScheduleFileSystemRefreshIfVisible();
+        }
+    }
+
+    private void RefreshCurrentFileSystemState(bool refreshShellView)
+    {
+        if (IsLegacyWpfFileList)
+            RefreshFiles();
+        else if (refreshShellView)
+            _shellBrowserHost?.RefreshContents();
+
+        RefreshShellStatusCount();
+        RefreshActivePathTree();
+        if (ActivePathAndSiblingsTree.ItemsSource is ObservableCollection<TreeEntry> roots)
+        {
+            foreach (var root in roots)
+                RefreshLoadedTreeChildren(root);
+        }
+    }
+
+    private void SynchronizeShellChangeNotifications()
+    {
+        if (!IsLoaded)
+            return;
+
+        var desiredPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddNotificationPath(desiredPaths, CurrentPath);
+        if (ActivePathAndSiblingsTree.ItemsSource is ObservableCollection<TreeEntry> roots)
+        {
+            foreach (var root in roots)
+                AddLoadedTreeNotificationPaths(root, desiredPaths);
+        }
+
+        _shellBrowserHost?.SynchronizeChangeNotifications(desiredPaths);
+    }
+
+    private static void AddNotificationPath(HashSet<string> paths, string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        try
+        {
+            paths.Add(Path.GetFullPath(path));
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or NotSupportedException)
+        {
+        }
+    }
+
+    private static void AddLoadedTreeNotificationPaths(TreeEntry entry, HashSet<string> paths)
+    {
+        if (entry.IsPlaceholder)
+            return;
+
+        if (entry.IsLoaded)
+            AddNotificationPath(paths, entry.Path);
+
+        foreach (var child in entry.Children)
+            AddLoadedTreeNotificationPaths(child, paths);
+    }
+
+    private void ShellBrowserHost_FileSystemChanged(object? sender, EventArgs e)
+    {
+        _fileSystemStateDirty = true;
+        _shellViewNeedsRefresh = false;
+        ScheduleFileSystemRefreshIfVisible();
+    }
+
+    private void ScheduleFileSystemRefreshIfVisible()
+    {
+        if (!_fileSystemStateDirty || !IsLoaded || !IsVisible ||
+            Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+            return;
+
+        _fileSystemRefreshTimer.Stop();
+        _fileSystemRefreshTimer.Start();
+    }
+
+    private void FileSystemRefreshTimer_Tick(object? sender, EventArgs e)
+    {
+        _fileSystemRefreshTimer.Stop();
+        if (!IsLoaded || !IsVisible)
+            return;
+
+        var refreshShellView = _shellViewNeedsRefresh;
+        _fileSystemStateDirty = false;
+        _shellViewNeedsRefresh = false;
+        RefreshCurrentFileSystemState(refreshShellView);
+        SynchronizeShellChangeNotifications();
+    }
+
+    private static void RefreshLoadedTreeChildren(TreeEntry entry)
+    {
+        if (entry.IsPlaceholder)
+            return;
+
+        entry.RefreshIcons();
+        if (entry.IsLoaded)
+            RefreshTreeChildren(entry);
+
+        foreach (var child in entry.Children)
+            RefreshLoadedTreeChildren(child);
+    }
+
     private void RefreshShellStatusCount()
     {
         try
@@ -209,6 +350,7 @@ public partial class ExplorerTabView : UserControl
         LocationLabel.Text = fullPath;
         RefreshActivePathAndSiblingsTree();
         RefreshActivePathTree();
+        SynchronizeShellChangeNotifications();
         RefreshShellStatusCount();
         LocationChanged?.Invoke(this, CurrentPath);
     }
@@ -334,7 +476,10 @@ public partial class ExplorerTabView : UserControl
         {
             var tree = FindAncestor<TreeView>(sender as DependencyObject);
             if (!ReferenceEquals(tree, ActivePathTree))
+            {
                 LoadChildren(entry);
+                SynchronizeShellChangeNotifications();
+            }
         }
     }
 
@@ -343,17 +488,49 @@ public partial class ExplorerTabView : UserControl
         if (entry.IsLoaded || entry.IsPlaceholder)
             return;
 
-        entry.IsLoaded = true;
-        entry.Children.Clear();
+        RefreshTreeChildren(entry);
+    }
+
+    private static void RefreshTreeChildren(TreeEntry entry)
+    {
+        if (entry.IsPlaceholder)
+            return;
+
         try
         {
-            foreach (var directory in Directory.EnumerateDirectories(entry.Path)
-                         .OrderBy(path => path, StringComparer.CurrentCultureIgnoreCase))
+            var directories = Directory.EnumerateDirectories(entry.Path)
+                .OrderBy(path => path, StringComparer.CurrentCultureIgnoreCase)
+                .ToArray();
+            var existingChildren = entry.Children
+                .Where(child => !child.IsPlaceholder)
+                .ToDictionary(child => child.Path, StringComparer.OrdinalIgnoreCase);
+            var refreshedChildren = new List<TreeEntry>(directories.Length);
+
+            foreach (var directory in directories)
             {
-                var child = new TreeEntry(Path.GetFileName(Path.TrimEndingDirectorySeparator(directory)), directory);
-                AddPlaceholder(child);
-                entry.Children.Add(child);
+                if (!existingChildren.TryGetValue(directory, out var child))
+                {
+                    child = new TreeEntry(Path.GetFileName(Path.TrimEndingDirectorySeparator(directory)), directory);
+                    AddPlaceholder(child);
+                }
+
+                refreshedChildren.Add(child);
             }
+
+            for (var index = 0; index < refreshedChildren.Count; index++)
+            {
+                var child = refreshedChildren[index];
+                var currentIndex = entry.Children.IndexOf(child);
+                if (currentIndex < 0)
+                    entry.Children.Insert(index, child);
+                else if (currentIndex != index)
+                    entry.Children.Move(currentIndex, index);
+            }
+
+            while (entry.Children.Count > refreshedChildren.Count)
+                entry.Children.RemoveAt(entry.Children.Count - 1);
+
+            entry.IsLoaded = true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -571,11 +748,20 @@ public sealed class TreeEntry : INotifyPropertyChanged
         get => _isSelected;
         set => SetField(ref _isSelected, value);
     }
-    public ShellIconSet? Icons { get; }
+    public ShellIconSet? Icons { get; private set; }
     public ObservableCollection<TreeEntry> Children { get; } = new();
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public static TreeEntry Placeholder() => new("Loading", string.Empty, true);
+
+    public void RefreshIcons()
+    {
+        if (IsPlaceholder)
+            return;
+
+        Icons = ShellIconProvider.GetSmallIcons(Path);
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Icons)));
+    }
 
     private void SetField(ref bool field, bool value, [System.Runtime.CompilerServices.CallerMemberName] string? propertyName = null)
     {

@@ -81,6 +81,33 @@ The initial browse must not run synchronously inside `BuildWindowCore`.
 caused a dispatcher exception and prevented startup. Deferring the browse
 avoids that reentrancy.
 
+## Shell Change Notifications
+
+Filesystem synchronization uses the Shell's `SHChangeNotifyRegister` rather
+than one `FileSystemWatcher` per folder/property. Each tab registers its active
+folder and the directories represented by loaded nodes in **Active path and
+siblings**. Registrations use `SHCNE_DISKEVENTS` with interrupt, Shell-level,
+and new-delivery sources; the latter payload is read with
+`SHChangeNotification_Lock` and released with `SHChangeNotification_Unlock`.
+The host deregisters all notification IDs when the tab unloads or its native
+window is destroyed, and synchronizes registrations after navigation/tree
+expansion.
+
+Notifications are coalesced by a 200ms tab-level dispatcher timer. When the tab
+is visible, the timer refreshes the Shell content view, item count, active-path
+tree, and already-loaded sibling-tree nodes while retaining existing tree node
+instances. Newly visible directories are added to the registration set after
+reconciliation. When the tab is unloaded or hidden, it is marked dirty; updates
+are deferred until it becomes visible, when one rescan refreshes the content
+and trees. This avoids work on invisible tabs while recovering changes missed
+after they were deregistered.
+
+Runtime-verified with external create, rename, and delete in a disposable test
+directory: the Shell list and **Active path and siblings** tree updated without
+restarting the app. A directory created while its tab was hidden appeared in
+the tree after switching back. The Shell view can update its own content list
+from notifications; the tab rescan keeps app-owned trees and status in sync.
+
 ## Shell Details Column Sizing
 
 ### Expected behavior

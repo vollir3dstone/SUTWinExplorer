@@ -77,7 +77,7 @@ Checkboxes record implementation status, not changes to the expected behavior.
 ### Refresh and failure handling
 
 - [x] Changing **Show directories** refreshes the current content view.
-- [ ] External changes made by Explorer or another application appear without
+- [x] External changes made by Explorer or another application appear without
   restarting the application.
 - [ ] Empty folders, unavailable drives, access failures, and long paths have
   clear and non-crashing user feedback.

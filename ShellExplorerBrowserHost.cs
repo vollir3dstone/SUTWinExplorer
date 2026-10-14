@@ -20,6 +20,9 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     private const uint ColumnMaskWidth = 1;
     private const int MinimumNameColumnWidth = 80;
     private const int ShellColumnTrailingInset = 11;
+    private const int ShellChangeNotifyMessage = 0x8000 + 0x271;
+    private const int ShellChangeNotifySources = 0x0001 | 0x0002 | 0x8000;
+    private const int ShellChangeDiskEvents = 0x0002381F;
     private static readonly ShellPropertyKey ItemNameDisplayPropertyKey = new()
     {
         FormatId = new Guid("B725F130-47EF-101A-A5F1-02608C9EEBAC"),
@@ -40,9 +43,12 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     private bool _showDirectories;
     private NativeRect _viewBounds;
     private bool _hasViewBounds;
+    private readonly HashSet<string> _desiredChangeNotificationPaths = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, uint> _changeNotificationRegistrations = new(StringComparer.OrdinalIgnoreCase);
     private string? _pendingPath;
 
     public event EventHandler<string>? NavigationCompleted;
+    public event EventHandler? FileSystemChanged;
 
     public void NavigateTo(string path)
     {
@@ -67,6 +73,96 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             ApplyViewBounds();
         };
         refreshTimer.Start();
+    }
+
+    public void RefreshContents() => RefreshCurrentView();
+
+    public void SynchronizeChangeNotifications(IEnumerable<string> directories)
+    {
+        _desiredChangeNotificationPaths.Clear();
+        foreach (var directory in directories)
+        {
+            if (!string.IsNullOrWhiteSpace(directory))
+                _desiredChangeNotificationPaths.Add(Path.GetFullPath(directory));
+        }
+
+        UpdateChangeNotificationRegistrations();
+    }
+
+    public void ClearChangeNotifications()
+    {
+        foreach (var registrationId in _changeNotificationRegistrations.Values)
+            _ = SHChangeNotifyDeregister(registrationId);
+
+        _changeNotificationRegistrations.Clear();
+        _desiredChangeNotificationPaths.Clear();
+    }
+
+    private void UpdateChangeNotificationRegistrations()
+    {
+        if (_hostWindow == IntPtr.Zero)
+            return;
+
+        foreach (var path in _changeNotificationRegistrations.Keys
+                     .Where(path => !_desiredChangeNotificationPaths.Contains(path)).ToArray())
+        {
+            _ = SHChangeNotifyDeregister(_changeNotificationRegistrations[path]);
+            _changeNotificationRegistrations.Remove(path);
+        }
+
+        foreach (var path in _desiredChangeNotificationPaths)
+        {
+            if (_changeNotificationRegistrations.ContainsKey(path) || !Directory.Exists(path))
+                continue;
+
+            IntPtr itemIdList = IntPtr.Zero;
+            try
+            {
+                if (SHParseDisplayName(path, IntPtr.Zero, out itemIdList, 0, out _) < 0 || itemIdList == IntPtr.Zero)
+                    continue;
+
+                var entry = new ShellChangeNotifyEntry { ItemIdList = itemIdList, Recursive = false };
+                var registrationId = SHChangeNotifyRegister(
+                    _hostWindow,
+                    ShellChangeNotifySources,
+                    ShellChangeDiskEvents,
+                    ShellChangeNotifyMessage,
+                    1,
+                    ref entry);
+                if (registrationId != 0)
+                    _changeNotificationRegistrations.Add(path, registrationId);
+            }
+            finally
+            {
+                if (itemIdList != IntPtr.Zero)
+                    Marshal.FreeCoTaskMem(itemIdList);
+            }
+        }
+    }
+
+    private void HandleShellChangeNotification(IntPtr changeHandle, IntPtr processId)
+    {
+        var notificationLock = SHChangeNotificationLock(
+            changeHandle,
+            unchecked((uint)processId.ToInt64()),
+            out _,
+            out _);
+        if (notificationLock != IntPtr.Zero)
+            _ = SHChangeNotificationUnlock(notificationLock);
+
+        FileSystemChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    protected override IntPtr WndProc(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (message == ShellChangeNotifyMessage)
+        {
+            HandleShellChangeNotification(wParam, lParam);
+            handled = true;
+            return IntPtr.Zero;
+        }
+
+        return base.WndProc(hwnd, message, wParam, lParam, ref handled);
     }
 
     protected override HandleRef BuildWindowCore(HandleRef hwndParent)
@@ -112,6 +208,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
             _eventsSink = new ExplorerBrowserEventsSink(HandleNavigationPending, HandleNavigationCompleted);
             Marshal.ThrowExceptionForHR(_browser.Advise(_eventsSink, out _eventsCookie));
+            UpdateChangeNotificationRegistrations();
 
             if (!string.IsNullOrEmpty(_pendingPath))
                 _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(BrowseToPendingPath));
@@ -485,6 +582,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
     private void ReleaseBrowser()
     {
+        ClearChangeNotifications();
         if (_browser is not null)
         {
             if (_eventsCookie != 0)
@@ -535,6 +633,27 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool GetClientRect(IntPtr window, out NativeRect rectangle);
+
+    [DllImport("shell32.dll", PreserveSig = true)]
+    private static extern uint SHChangeNotifyRegister(IntPtr window, int sources, int events, uint message, int entryCount, ref ShellChangeNotifyEntry entry);
+
+    [DllImport("shell32.dll", PreserveSig = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SHChangeNotifyDeregister(uint registrationId);
+
+    [DllImport("shell32.dll", EntryPoint = "SHChangeNotification_Lock", PreserveSig = true)]
+    private static extern IntPtr SHChangeNotificationLock(IntPtr changeHandle, uint processId, out IntPtr itemIdLists, out int eventId);
+
+    [DllImport("shell32.dll", EntryPoint = "SHChangeNotification_Unlock", PreserveSig = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SHChangeNotificationUnlock(IntPtr notificationLock);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ShellChangeNotifyEntry
+    {
+        public IntPtr ItemIdList;
+        [MarshalAs(UnmanagedType.Bool)] public bool Recursive;
+    }
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetClassName(IntPtr window, System.Text.StringBuilder className, int maximum);
