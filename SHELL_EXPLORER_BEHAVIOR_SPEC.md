@@ -107,9 +107,10 @@ when it is created and cannot be changed by the user.
   folder-specific view settings are ignored.
 - [x] The WPF application chrome keeps the app's custom tabs, address field,
   directory trees, and item-count status area.
-- [x] Below the two visibility checkboxes, the content pane provides three separated
-  action groups: **Copy get** and **Copy paste**; **Path get**; and **Move get**,
-  **Move abort**, and **Move paste**. The toolbar's different Copy labels map
+- [x] Below the two visibility checkboxes, the content pane provides four
+  separated action groups: **Copy get** and **Copy paste**; **Path get**;
+  **Move get**, **Move abort**, and **Move paste**; and **Delete**. The
+  toolbar's different Copy labels map
   directly to the Shell commands: **Copy get** is Copy for selected items, and
   **Copy paste** is Paste into the active folder. **Path get** copies the first
   selected item's filesystem path as text. The toolbar Move workflow is
@@ -118,7 +119,9 @@ when it is created and cannot be changed by the user.
   state. Move paste invokes a native Shell move into the active folder only
   after a dialog lists the item names and the user confirms. Cancel leaves the
   source items in place and discards the staged paths. Move abort also discards
-  the staged paths, and starting another toolbar action aborts them.
+  the staged paths, and starting another toolbar action aborts them. **Delete**
+  invokes the selected items' native Shell Delete command, including its normal
+  verification dialogs.
 
 ### Selection and opening
 

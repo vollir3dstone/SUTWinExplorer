@@ -184,6 +184,8 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="1" Orientation="Horizontal">
                         <Button Content="Copy get" Tag="CopyGet" Width="92" Margin="0,0,4,0"
@@ -201,6 +203,10 @@
                         <Button Content="Move abort" Tag="MoveAbort" Width="92" Margin="0,0,4,0"
                                 Click="ContentOperationButton_Click" />
                         <Button Content="Move paste" Tag="MovePaste" Width="92"
+                                Click="ContentOperationButton_Click" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="7" Orientation="Horizontal">
+                        <Button Content="Delete" Tag="Delete" Width="92"
                                 Click="ContentOperationButton_Click" />
                     </StackPanel>
                 </Grid>

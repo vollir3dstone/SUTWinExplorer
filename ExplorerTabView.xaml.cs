@@ -301,6 +301,9 @@ public partial class Pathview : UserControl
                 case "MovePaste":
                     ConfirmAndPasteMove();
                     break;
+                case "Delete":
+                    _shellBrowserHost?.DeleteSelection();
+                    break;
             }
         }
         catch (Exception exception)

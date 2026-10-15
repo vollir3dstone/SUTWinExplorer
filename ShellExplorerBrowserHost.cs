@@ -136,6 +136,12 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         InvokeCurrentViewCommand(ShellContextMenu.ShellViewBackground, "paste");
     }
 
+    public void DeleteSelection()
+    {
+        CancelPreparedMove();
+        InvokeCurrentViewCommand(ShellContextMenu.ShellViewSelection, "delete");
+    }
+
     public void PrepareMove()
     {
         CancelPreparedMove();

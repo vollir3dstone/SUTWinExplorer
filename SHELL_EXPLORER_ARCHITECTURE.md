@@ -120,7 +120,7 @@ leading ellipsis prefix is omitted.
   followed by **Pin**, with no badge. **Hide directories** and content
   **Hide internal** appear beside each other below this row. The left pane uses
   the role-specific tree tab described above.
-- Below the two visibility checkboxes, each Pathview has the three-group content
+- Below the two visibility checkboxes, each Pathview has the four-group content
   operations toolbar. The toolbar labels **Copy get** and **Copy paste** differ
   from the Shell labels but map directly to the same commands: Copy on the
   active view's selected items and Paste into the active folder. They use the
@@ -134,6 +134,8 @@ leading ellipsis prefix is omitted.
   Cancel, **Move abort**, or any other toolbar action discards the staged
   paths. The Shell view's own context-menu Cut and Ctrl+X continue to use the
   Windows clipboard normally and do not create or update toolbar Move state.
+  The final **Delete** group invokes the selected-item Shell `delete` verb so
+  Shell confirmation and deletion behavior remain in effect.
 - The browsable **Active path and siblings** tree has a default-unchecked
   **Hide internal** checkbox. When enabled, child directories whose filesystem
   names begin with `.` or `$` are omitted; a directory with the Windows System
