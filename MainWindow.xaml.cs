@@ -107,7 +107,7 @@ public partial class MainWindow : Window
             if (ReferenceEquals(CurrentPathview, view))
                 RefreshPathChoices();
         };
-        view.FixRequested += Pathview_FixRequested;
+        view.PinRequested += Pathview_PinRequested;
         view.BrowseRequested += Pathview_BrowseRequested;
 
         if (view.IsBrowsable)
@@ -125,7 +125,7 @@ public partial class MainWindow : Window
         RefreshPathChoices();
     }
 
-    private void Pathview_FixRequested(object? sender, EventArgs e)
+    private void Pathview_PinRequested(object? sender, EventArgs e)
     {
         if (sender is not Pathview { IsBrowsable: true } view || string.IsNullOrWhiteSpace(view.CurrentPath))
             return;

@@ -27,10 +27,10 @@ when it is created and cannot be changed by the user.
   tab. Its tab title is **BROWSE**, independent of its current location, and it
   cannot be closed.
 - [x] Every other tab contains a non-browsable Pathview. The **New tab** toolbar
-  command is absent; a fixed Pathview is created with **Fix**.
-- [x] **Fix** creates a non-browsable Pathview at the browsable Pathview's
+  command is absent; a fixed Pathview is created with **Pin**.
+- [x] **Pin** creates a non-browsable Pathview at the browsable Pathview's
   current location. If that location already has an open non-browsable
-  Pathview, **Fix** selects that tab instead of creating a duplicate.
+  Pathview, **Pin** selects that tab instead of creating a duplicate.
 - [x] **Browse** on a non-browsable Pathview selects the first tab and navigates
   the browsable Pathview to the fixed Pathview's location.
 - [x] Non-browsable Pathviews can be closed; the browsable Pathview remains
@@ -39,7 +39,7 @@ when it is created and cannot be changed by the user.
   tab. Each non-browsable Pathview shows only the **Active path** tree tab.
 - [x] A non-browsable Pathview shows a bold **FIXED** badge before its path and
   a **Browse** button immediately after it. The browsable Pathview shows its
-  path followed by **Fix**, with no badge. **Show directories** is below this
+  path followed by **Pin**, with no badge. **Show directories** is below this
   title row.
 - [x] Each Pathview retains its own location and **Show directories** setting
   when the user switches tabs. Sort parameters continue to follow the active
@@ -63,6 +63,12 @@ when it is created and cannot be changed by the user.
   immediate child directories. Off-route branches remain collapsed.
 - [x] The active directory is highlighted, and the visible tree follows
   navigation initiated elsewhere in the application.
+- [x] The browsable Pathview's default-off **Hide internal** checkbox filters
+  its directory tree: names beginning with `.` or `$` are hidden, as are directories that
+  have the Windows System attribute and deny directory listing access. Normal
+  directories and junctions remain visible. The active route stays visible
+  even when a route directory matches a filter rule; the setting does not
+  affect the content view.
 - [x] In the browsable Pathview, single-click navigation opens the clicked
   directory in the content view. A non-browsable Pathview's tree does not
   navigate its location.
@@ -155,7 +161,7 @@ when it is created and cannot be changed by the user.
   view, and toolbar history. Verify its address, title, tree, and content stay
   synchronized. Verify folder navigation attempts from a non-browsable tree or
   Shell content view do not change that Pathview's location.
-3. Use **Fix** repeatedly at one location and type that location into the
+3. Use **Pin** repeatedly at one location and type that location into the
   address field. Verify the existing non-browsable tab is selected instead of
   creating a duplicate. Use a dropdown entry to select its associated tab.
 4. Open fixed Pathviews at different locations and verify switching tabs
@@ -170,3 +176,8 @@ when it is created and cannot be changed by the user.
   and sort choices. Verify the content view always uses the standard ungrouped
   Details layout and column order, while retaining each folder's selected
   sort column and direction.
+8. In the browsable Pathview, toggle **Hide internal** and verify dot-prefixed
+  and dollar-prefixed directories disappear and reappear, and a System
+  directory is hidden only when listing its contents is denied. Verify normal
+  junctions remain visible, the active route remains visible, and the content
+  view is unchanged.

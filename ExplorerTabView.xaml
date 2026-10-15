@@ -72,11 +72,22 @@
                           MouseDoubleClick="Tree_MouseDoubleClick" />
             </TabItem>
             <TabItem x:Name="ActivePathAndSiblingsTab" Header="Active path and siblings">
-                <TreeView x:Name="ActivePathAndSiblingsTree" ItemContainerStyle="{StaticResource DirectoryTreeItemStyle}"
-                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                          PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown"
-                          PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
-                          MouseDoubleClick="Tree_MouseDoubleClick" />
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <CheckBox x:Name="HideInternalCheckBox" Grid.Row="0" Content="Hide internal"
+                              IsChecked="False" Margin="8,6,8,4"
+                              Checked="HideInternalCheckBox_StateChanged"
+                              Unchecked="HideInternalCheckBox_StateChanged" />
+                    <TreeView x:Name="ActivePathAndSiblingsTree" Grid.Row="1"
+                              ItemContainerStyle="{StaticResource DirectoryTreeItemStyle}"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown"
+                              PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
+                              MouseDoubleClick="Tree_MouseDoubleClick" />
+                </Grid>
             </TabItem>
         </TabControl>
         <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="#D8DDE3" />
@@ -102,7 +113,7 @@
                 <Button x:Name="BrowsePathviewButton" Content="Browse" Padding="10,1"
                         Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed"
                         IsEnabled="False" Click="PathviewActionButton_Click" />
-                <Button x:Name="FixPathviewButton" Content="Fix" Padding="10,1"
+                <Button x:Name="PinPathviewButton" Content="Pin" Padding="10,1"
                     Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed"
                     IsEnabled="False" Click="PathviewActionButton_Click" />
             </StackPanel>

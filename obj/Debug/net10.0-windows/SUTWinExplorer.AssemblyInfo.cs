@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SUTWinExplorer")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f3acb5156499de4c7c25fdebcdd3ccb1b0ff2320")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ac295312783465abdd702fb657802b2fc4058bc4")]
 [assembly: System.Reflection.AssemblyProductAttribute("SUTWinExplorer")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SUTWinExplorer")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

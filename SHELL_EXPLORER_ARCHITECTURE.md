@@ -82,7 +82,7 @@ ellipsis prefix is omitted.
   creates exactly one browsable Pathview as the `TabControl`'s first item; all
   subsequent Pathviews are non-browsable. The browsable tab is titled **BROWSE**
   regardless of location, has no close button, and is never inserted into the
-  fixed-path map. The **New tab** toolbar control was removed; **Fix** is the
+  fixed-path map. The **New tab** toolbar control was removed; **Pin** is the
   operation for opening a fixed Pathview.
 - `MainWindow._fixedPathviewsByPath` is a case-insensitive dictionary keyed by
   normalized full filesystem paths (`Path.GetFullPath`, with a trailing
@@ -93,7 +93,7 @@ ellipsis prefix is omitted.
   first registered with its requested initial path, then its key is reconciled
   after each successful location commit. Entries are removed when a fixed tab
   closes or its initial navigation fails.
-- **Fix** looks up the browsable Pathview's current path in the fixed-path map.
+- **Pin** looks up the browsable Pathview's current path in the fixed-path map.
   It selects the mapped tab when present, otherwise it creates a fixed
   Pathview, registers it, adds the tab after the first item, and selects it.
   This prevents duplicate fixed Pathviews at the same normalized path. **Browse**
@@ -115,8 +115,17 @@ ellipsis prefix is omitted.
   commands and file operations.
 - The content header presents non-browsable Pathviews as **FIXED** badge, path,
   then **Browse** button on one row. The browsable Pathview presents its path
-  followed by **Fix**, with no badge. **Show directories** remains on the row
+  followed by **Pin**, with no badge. **Show directories** remains on the row
   below. The left pane uses the role-specific tree tab described above.
+- The browsable **Active path and siblings** tree has a default-unchecked
+  **Hide internal** checkbox. When enabled, child directories whose filesystem
+  names begin with `.` or `$` are omitted; a directory with the Windows System
+  attribute is omitted only when enumerating its contents returns
+  access-denied. Hidden-only directories, accessible System directories, and
+  junctions are not excluded by those classifications alone. Active-path
+  ancestors remain visible. The filter is applied by the shared tree-child
+  refresh path, including filesystem-change reconciliation, and does not
+  affect the Shell content view.
 - The right content pane is a separate content view. Production creates one
   `ShellExplorerBrowserHost` per `Pathview`; it derives from
   `HwndHost` and hosts one Shell `IExplorerBrowser` COM instance.

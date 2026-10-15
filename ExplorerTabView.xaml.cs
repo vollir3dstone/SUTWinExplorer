@@ -55,9 +55,9 @@ public partial class Pathview : UserControl
         SidebarTabs.SelectedItem = IsBrowsable ? ActivePathAndSiblingsTab : ActivePathTab;
         FixedPathBadge.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
         BrowsePathviewButton.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
-        FixPathviewButton.Visibility = IsBrowsable ? Visibility.Visible : Visibility.Collapsed;
+        PinPathviewButton.Visibility = IsBrowsable ? Visibility.Visible : Visibility.Collapsed;
         BrowsePathviewButton.ToolTip = "Open this location in the browsable Pathview";
-        FixPathviewButton.ToolTip = "Create a non-browsable Pathview at this location";
+        PinPathviewButton.ToolTip = "Keep this location open in a non-browsable Pathview";
         _fileSystemRefreshTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
         {
             Interval = TimeSpan.FromMilliseconds(200)
@@ -86,7 +86,7 @@ public partial class Pathview : UserControl
     public string CurrentPath { get; private set; } = string.Empty;
     public event EventHandler<string>? LocationChanged;
     public event EventHandler? NavigationFailed;
-    public event EventHandler? FixRequested;
+    public event EventHandler? PinRequested;
     public event EventHandler? BrowseRequested;
 
     public void Navigate(string path) => Navigate(path, NavigationHistoryAction.Normal);
@@ -170,7 +170,7 @@ public partial class Pathview : UserControl
         }
 
         CurrentPath = path;
-        FixPathviewButton.IsEnabled = true;
+        PinPathviewButton.IsEnabled = true;
         BrowsePathviewButton.IsEnabled = true;
         LocationLabel.Text = ShellDisplayNameProvider.GetDisplayPath(path);
         RefreshActivePathAndSiblingsTree();
@@ -249,7 +249,7 @@ public partial class Pathview : UserControl
             return;
 
         if (IsBrowsable)
-            FixRequested?.Invoke(this, EventArgs.Empty);
+            PinRequested?.Invoke(this, EventArgs.Empty);
         else
             BrowseRequested?.Invoke(this, EventArgs.Empty);
     }
@@ -259,7 +259,7 @@ public partial class Pathview : UserControl
         var fixedBadgeWidth = FixedPathBadge.Visibility == Visibility.Visible
             ? FixedPathBadge.ActualWidth + FixedPathBadge.Margin.Left + FixedPathBadge.Margin.Right
             : 0;
-        var actionButton = IsBrowsable ? FixPathviewButton : BrowsePathviewButton;
+        var actionButton = IsBrowsable ? PinPathviewButton : BrowsePathviewButton;
         var actionButtonWidth = actionButton.Visibility == Visibility.Visible
             ? actionButton.ActualWidth + actionButton.Margin.Left + actionButton.Margin.Right
             : 0;
@@ -346,6 +346,25 @@ public partial class Pathview : UserControl
             active = child;
             RefreshTreeChildren(active);
         }
+    }
+
+    private void HideInternalCheckBox_StateChanged(object sender, RoutedEventArgs e)
+    {
+        if (ActivePathAndSiblingsTree.ItemsSource is not ObservableCollection<TreeEntry> roots)
+            return;
+
+        foreach (var root in roots)
+            RefreshLoadedTree(root);
+    }
+
+    private void RefreshLoadedTree(TreeEntry entry)
+    {
+        if (entry.IsPlaceholder || !entry.IsLoaded)
+            return;
+
+        RefreshTreeChildren(entry);
+        foreach (var child in entry.Children.Where(child => !child.IsPlaceholder).ToArray())
+            RefreshLoadedTree(child);
     }
 
     private void SynchronizeShellChangeNotifications()
@@ -591,7 +610,7 @@ public partial class Pathview : UserControl
         }
     }
 
-    private static void LoadChildren(TreeEntry entry)
+    private void LoadChildren(TreeEntry entry)
     {
         if (entry.IsLoaded || entry.IsPlaceholder)
             return;
@@ -599,7 +618,7 @@ public partial class Pathview : UserControl
         RefreshTreeChildren(entry);
     }
 
-    private static void RefreshTreeChildren(TreeEntry entry)
+    private void RefreshTreeChildren(TreeEntry entry)
     {
         if (entry.IsPlaceholder)
             return;
@@ -607,6 +626,7 @@ public partial class Pathview : UserControl
         try
         {
             var directories = Directory.EnumerateDirectories(entry.Path)
+                .Where(directory => !ShouldHideTreeDirectory(directory))
                 .OrderBy(path => path, StringComparer.CurrentCultureIgnoreCase)
                 .ToArray();
             var existingChildren = entry.Children
@@ -646,6 +666,60 @@ public partial class Pathview : UserControl
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
+        }
+    }
+
+    private bool ShouldHideTreeDirectory(string directoryPath)
+    {
+        if (HideInternalCheckBox.IsChecked != true)
+            return false;
+
+        var directoryName = Path.GetFileName(Path.TrimEndingDirectorySeparator(directoryPath));
+        if (directoryName.StartsWith(".", StringComparison.Ordinal) ||
+            directoryName.StartsWith("$", StringComparison.Ordinal))
+            return !IsOnCurrentPath(directoryPath);
+
+        FileAttributes attributes;
+        try
+        {
+            attributes = File.GetAttributes(directoryPath);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+
+        if ((attributes & FileAttributes.System) == 0 || IsOnCurrentPath(directoryPath))
+            return false;
+
+        try
+        {
+            using var entries = Directory.EnumerateFileSystemEntries(directoryPath).GetEnumerator();
+            _ = entries.MoveNext();
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return true;
+        }
+        catch (IOException exception) when ((exception.HResult & 0xFFFF) == 5)
+        {
+            return true;
+        }
+    }
+
+    private bool IsOnCurrentPath(string directoryPath)
+    {
+        try
+        {
+            var relativePath = Path.GetRelativePath(directoryPath, CurrentPath);
+            return relativePath == "." ||
+                   (!Path.IsPathRooted(relativePath) && relativePath != ".." &&
+                    !relativePath.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal));
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or NotSupportedException)
+        {
+            return false;
         }
     }
 
