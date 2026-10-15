@@ -140,9 +140,12 @@ when it is created and cannot be changed by the user.
   its permissions may change before or during the operation. Such a late
   failure is reported, but a multi-item operation may already have transferred
   some items; Copy and Move are not atomic and do not roll back completed work.
-  **Rename**, **Path
-  get**, and **Delete** retain their existing behavior; other
-  selection-dependent actions are disabled when nothing is selected.
+  **Rename** is enabled only for a single selected item and starts the Shell
+  view's inline rename editor. Enter commits and Escape cancels; name
+  validation, extension handling, and collision behavior remain Shell-owned.
+  **Path get** is enabled only for a single selected item and copies that
+  item's filesystem path to the clipboard. **Delete** remains selection-aware;
+  other selection-dependent actions are disabled when nothing is selected.
 
 ### Selection and opening
 
@@ -183,7 +186,8 @@ when it is created and cannot be changed by the user.
 
 ## P1: Expected Conveniences
 
-- [ ] Rename follows Shell extension and name-collision behavior.
+- [x] Rename starts the native Shell inline editor for one selected item;
+  commit, cancel, validation, and name-collision behavior remain Shell-owned.
 - [ ] Delete uses the Recycle Bin by default and supports confirmation and
   recovery behavior where available.
 - [ ] Properties, Open with, sharing, and security prompts use their normal
@@ -254,12 +258,17 @@ when it is created and cannot be changed by the user.
   one source before Paste, and verify preflight reports an error,
   starts no transfer, and preserves the staged workflow. Confirm staging does
   not prevent another process from changing a source path.
-11. Use **Move get** and verify the Copy group becomes disabled while Move
+12. Use **Move get** and verify the Copy group becomes disabled while Move
   paste/abort become enabled. Use Move paste and verify the sources move into
   the active folder without changing Shell clipboard state. Repeat and use
-  Move abort; verify the source items remain in place. Verify **Path get**
-  copies the first selected item's filesystem path. Also stage a Move, remove
+  Move abort; verify the source items remain in place. Select one item and
+  verify **Path get** copies its filesystem path; verify the button is disabled
+  for no selection or multiple selected items. Also stage a Move, remove
   or rename one source before Paste, and verify preflight reports an
   error, starts no transfer, and preserves the staged workflow. A change after
   preflight may still cause a late failure; multi-item Paste is not atomic and
   may leave already-transferred items in place.
+13. Select exactly one item and click **Rename**. Verify the Shell inline editor
+  opens, Enter commits a valid name, Escape cancels without changing it, and
+  an existing-name collision is handled by the Shell. Verify Rename is disabled
+  with no selection or multiple selected items.

@@ -145,9 +145,24 @@ leading ellipsis prefix is omitted.
   removable `ShellCopyIntegration` side path: toolbar Copy get invokes the
   Shell Copy verb, while clipboard updates marked with the Shell Copy drop
   effect stage copied file paths through the internal Copy state transition.
-  Shell clipboard state does not otherwise influence either workflow. Rename,
-  Path get, and Delete remain active and selection-aware. The Shell
-  view's native context-menu Copy and Cut commands continue to work normally.
+  Shell clipboard state does not otherwise influence either workflow. Rename
+  is available only for a single selected item and starts the hosted view's
+  native inline editor. Do not invoke the selection `IContextMenu` with the
+  canonical `rename` verb: that context-menu implementation returns
+  `E_NOTIMPL` even though other verbs may work. Instead, obtain the selected
+  item's `IDataObject` with `IShellView.GetItemObject(SVGIO_SELECTION)`, request
+  the registered `Shell IDList Array` format as `TYMED_HGLOBAL`, and read its
+  CIDA structure. The selected child PIDL is relative to the parent PIDL in
+  that structure. The implementation requires exactly one child, then calls
+  `IShellView.SelectItem` with that child PIDL and `SVSI_EDIT` (`0x0003`) to
+  begin Shell inline editing. Keep the medium locked through that call, then
+  unlock it, release the `STGMEDIUM`, and release both managed and raw COM
+  references in `finally`. Selection-state refresh exposes whether exactly
+  one filesystem item is selected so the toolbar can gate Rename before
+  dispatch. The Shell owns edit validation, commit/cancel, and name-collision
+  behavior. Path get is enabled only for one selected item and copies that
+  item's filesystem path; Delete remains selection-aware. The Shell view's
+  native context-menu Copy and Cut commands continue to work normally.
 - The browsable **Active path and siblings** tree has a default-unchecked
   **Hide internal** checkbox. When enabled, child directories whose filesystem
   names begin with `.` or `$` are omitted; a directory with the Windows System

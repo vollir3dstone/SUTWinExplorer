@@ -352,14 +352,17 @@ public partial class Pathview : UserControl
                     MoveWorkflowState.Shared.Abort();
                     break;
                 case "Rename":
-                    _shellBrowserHost?.RenameSelection();
+                    if (_shellBrowserHost is null)
+                        throw new InvalidOperationException("Rename requires the Shell content view.");
+
+                    _shellBrowserHost.RenameSelection();
                     break;
                 case "PathGet":
                     var selectedPaths = IsLegacyWpfFileList
                         ? FileList.SelectedItems.OfType<FileEntry>().Select(entry => entry.FullPath).ToList()
                         : _shellBrowserHost?.GetSelectedFileSystemPaths() ?? [];
-                    if (selectedPaths.Count == 0)
-                        throw new InvalidOperationException("Select an item before using Path get.");
+                    if (selectedPaths.Count != 1)
+                        throw new InvalidOperationException("Select exactly one item before using Path get.");
 
                     Clipboard.SetText(selectedPaths[0]);
                     break;
@@ -449,8 +452,11 @@ public partial class Pathview : UserControl
         var hasSelection = IsLegacyWpfFileList
             ? FileList.SelectedItems.Count > 0
             : _shellBrowserHost?.HasSelection == true;
-        RenameButton.IsEnabled = hasSelection;
-        PathGetButton.IsEnabled = hasSelection;
+        var hasSingleSelection = IsLegacyWpfFileList
+            ? FileList.SelectedItems.Count == 1
+            : _shellBrowserHost?.HasSingleSelection == true;
+        RenameButton.IsEnabled = hasSingleSelection;
+        PathGetButton.IsEnabled = hasSingleSelection;
         DeleteButton.IsEnabled = hasSelection;
         var copyPrepared = CopyWorkflowState.Shared.IsPrepared;
         var movePrepared = MoveWorkflowState.Shared.IsPrepared;

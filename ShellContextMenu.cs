@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
 
 namespace SUTWinExplorer;
 
@@ -9,6 +10,8 @@ internal static class ShellContextMenu
     private const uint PopupFlags = 0x0100 | 0x0002;
     private const uint MenuFlags = 0;
     private const uint InvokeUnicode = 0x00004000;
+    private const uint ShellViewSelectEdit = 0x0003;
+    private const string ShellIdListArrayFormat = "Shell IDList Array";
     internal const uint ShellViewBackground = 0;
     internal const uint ShellViewSelection = 1;
 
@@ -19,6 +22,7 @@ internal static class ShellContextMenu
         IntPtr ansiVerbPointer = IntPtr.Zero;
         IntPtr verbPointer = IntPtr.Zero;
         IContextMenu? contextMenu = null;
+        var operationStage = "getting the selection context menu";
         try
         {
             var interfaceId = typeof(IContextMenu).GUID;
@@ -27,10 +31,12 @@ internal static class ShellContextMenu
                 throw new InvalidOperationException("The Shell did not provide a context menu for this command.");
 
             contextMenu = (IContextMenu)Marshal.GetObjectForIUnknown(contextMenuPointer);
+            operationStage = "creating the context menu";
             menu = CreatePopupMenu();
             if (menu == IntPtr.Zero)
                 throw new InvalidOperationException("CreatePopupMenu failed.");
 
+            operationStage = "querying the context menu";
             Marshal.ThrowExceptionForHR(contextMenu.QueryContextMenu(menu, 0, FirstCommandId, LastCommandId, MenuFlags));
             ansiVerbPointer = Marshal.StringToHGlobalAnsi(verb);
             verbPointer = Marshal.StringToHGlobalUni(verb);
@@ -43,7 +49,14 @@ internal static class ShellContextMenu
                 VerbW = verbPointer,
                 Show = (int)ShowWindowCommand.Normal
             };
+            operationStage = $"invoking the '{verb}' verb";
             Marshal.ThrowExceptionForHR(contextMenu.InvokeCommand(ref commandInfo));
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException(
+                $"The Shell failed while {operationStage} ({exception.GetType().Name}, HRESULT 0x{exception.HResult:X8}): {exception.Message}",
+                exception);
         }
         finally
         {
@@ -57,6 +70,66 @@ internal static class ShellContextMenu
                 _ = Marshal.ReleaseComObject(contextMenu);
             if (contextMenuPointer != IntPtr.Zero)
                 _ = Marshal.Release(contextMenuPointer);
+        }
+    }
+
+    internal static void RenameSelection(IShellView shellView)
+    {
+        IntPtr dataObjectPointer = IntPtr.Zero;
+        IDataObject? dataObject = null;
+        STGMEDIUM storageMedium = default;
+        var hasStorageMedium = false;
+        IntPtr lockedData = IntPtr.Zero;
+        try
+        {
+            var interfaceId = typeof(IDataObject).GUID;
+            Marshal.ThrowExceptionForHR(shellView.GetItemObject(
+                ShellViewSelection, ref interfaceId, out dataObjectPointer));
+            if (dataObjectPointer == IntPtr.Zero)
+                throw new InvalidOperationException("The Shell did not provide the selected items for Rename.");
+
+            dataObject = (IDataObject)Marshal.GetObjectForIUnknown(dataObjectPointer);
+            var formatId = RegisterClipboardFormat(ShellIdListArrayFormat);
+            if (formatId == 0)
+                throw new InvalidOperationException("Could not register the Shell item list format.");
+
+            var format = new FORMATETC
+            {
+                cfFormat = unchecked((short)formatId),
+                ptd = IntPtr.Zero,
+                dwAspect = DVASPECT.DVASPECT_CONTENT,
+                lindex = -1,
+                tymed = TYMED.TYMED_HGLOBAL
+            };
+            dataObject.GetData(ref format, out storageMedium);
+            hasStorageMedium = true;
+
+            lockedData = GlobalLock(storageMedium.unionmember);
+            if (lockedData == IntPtr.Zero)
+                throw new InvalidOperationException("Could not access the selected Shell item list.");
+
+            var itemCount = Marshal.ReadInt32(lockedData);
+            if (itemCount != 1)
+                throw new InvalidOperationException("Select exactly one item to rename it.");
+
+            var childOffset = Marshal.ReadInt32(lockedData, sizeof(int) * 2);
+            var headerSize = sizeof(int) * (itemCount + 2);
+            if (childOffset < headerSize)
+                throw new InvalidOperationException("The Shell returned an invalid selected item list.");
+
+            Marshal.ThrowExceptionForHR(shellView.SelectItem(
+                IntPtr.Add(lockedData, childOffset), ShellViewSelectEdit));
+        }
+        finally
+        {
+            if (lockedData != IntPtr.Zero)
+                _ = GlobalUnlock(storageMedium.unionmember);
+            if (hasStorageMedium)
+                ReleaseStgMedium(ref storageMedium);
+            if (dataObject is not null && Marshal.IsComObject(dataObject))
+                _ = Marshal.ReleaseComObject(dataObject);
+            if (dataObjectPointer != IntPtr.Zero)
+                _ = Marshal.Release(dataObjectPointer);
         }
     }
 
@@ -219,6 +292,19 @@ internal static class ShellContextMenu
 
     [DllImport("user32.dll")]
     private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint RegisterClipboardFormat(string format);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr GlobalLock(IntPtr memory);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GlobalUnlock(IntPtr memory);
+
+    [DllImport("ole32.dll")]
+    private static extern void ReleaseStgMedium(ref STGMEDIUM medium);
 
     [DllImport("comctl32.dll", SetLastError = true)]
     private static extern bool SetWindowSubclass(IntPtr window, SubclassProc callback, UIntPtr subclassId, UIntPtr referenceData);

@@ -69,6 +69,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     public static event EventHandler? ToolbarOperationStateChanged;
 
     public bool HasSelection { get; private set; }
+    public bool HasSingleSelection { get; private set; }
 
     public ShellExplorerBrowserHost(bool isBrowsable)
     {
@@ -140,7 +141,8 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
     public void RenameSelection()
     {
-        InvokeCurrentViewCommand(ShellContextMenu.ShellViewSelection, "rename");
+        _ = Focus();
+        InvokeCurrentView(ShellContextMenu.RenameSelection);
     }
 
     public void InvokeShellCopyCommand() =>
@@ -174,31 +176,35 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
     public void RefreshSelectionState()
     {
-        bool hasSelection;
+        var selectedCount = 0;
         try
         {
-            hasSelection = GetSelectedFileSystemPaths().Count > 0;
+            selectedCount = GetSelectedFileSystemPaths().Count;
         }
         catch (COMException)
         {
-            hasSelection = false;
         }
         catch (InvalidOperationException)
         {
-            hasSelection = false;
         }
 
-        if (HasSelection == hasSelection)
+        var hasSelection = selectedCount > 0;
+        var hasSingleSelection = selectedCount == 1;
+        if (HasSelection == hasSelection && HasSingleSelection == hasSingleSelection)
             return;
 
         HasSelection = hasSelection;
+        HasSingleSelection = hasSingleSelection;
         ToolbarOperationStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void ScheduleSelectionStateRefresh() =>
         _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(RefreshSelectionState));
 
-    private void InvokeCurrentViewCommand(uint selectionKind, string verb)
+    private void InvokeCurrentViewCommand(uint selectionKind, string verb) =>
+        InvokeCurrentView(view => ShellContextMenu.InvokeViewCommand(view, selectionKind, _hostWindow, verb));
+
+    private void InvokeCurrentView(Action<IShellView> command)
     {
         if (_browser is null || !_initialized)
             throw new InvalidOperationException("The Shell content view is not ready.");
@@ -213,7 +219,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
                 throw new InvalidOperationException("The Shell content view is unavailable.");
 
             view = (IShellView)Marshal.GetObjectForIUnknown(viewPointer);
-            ShellContextMenu.InvokeViewCommand(view, selectionKind, _hostWindow, verb);
+            command(view);
         }
         finally
         {
