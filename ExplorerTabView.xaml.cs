@@ -46,9 +46,15 @@ public partial class Pathview : UserControl
     private bool _fileSystemStateDirty = true;
     private bool _shellViewNeedsRefresh = true;
 
-    public Pathview(string initialPath)
+    public Pathview(string initialPath, bool isBrowsable)
     {
         InitializeComponent();
+        IsBrowsable = isBrowsable;
+        PathviewActionButton.Content = IsBrowsable ? "Fix" : "Browse";
+        PathviewActionButton.ToolTip = IsBrowsable
+            ? "Create a non-browsable Pathview at this location"
+            : "Open this location in the browsable Pathview";
+        PathviewActionButton.IsEnabled = false;
         _fileSystemRefreshTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
         {
             Interval = TimeSpan.FromMilliseconds(200)
@@ -63,7 +69,7 @@ public partial class Pathview : UserControl
         InitializeActivePathAndSiblingsTree();
         if (!IsLegacyWpfFileList)
         {
-            _shellBrowserHost = new ShellExplorerBrowserHost();
+            _shellBrowserHost = new ShellExplorerBrowserHost(IsBrowsable);
             _shellBrowserHost.NavigationCompleted += ShellBrowserHost_NavigationCompleted;
             _shellBrowserHost.NavigationFailed += ShellBrowserHost_NavigationFailed;
             _shellBrowserHost.FileSystemChanged += ShellBrowserHost_FileSystemChanged;
@@ -73,9 +79,12 @@ public partial class Pathview : UserControl
         Navigate(initialPath, NavigationHistoryAction.None);
     }
 
+    public bool IsBrowsable { get; }
     public string CurrentPath { get; private set; } = string.Empty;
     public event EventHandler<string>? LocationChanged;
     public event EventHandler? NavigationFailed;
+    public event EventHandler? FixRequested;
+    public event EventHandler? BrowseRequested;
 
     public void Navigate(string path) => Navigate(path, NavigationHistoryAction.Normal);
 
@@ -104,6 +113,9 @@ public partial class Pathview : UserControl
 
     private void Navigate(string path, NavigationHistoryAction historyAction)
     {
+        if (!IsBrowsable && historyAction != NavigationHistoryAction.None)
+            return;
+
         var fullPath = Path.GetFullPath(Environment.ExpandEnvironmentVariables(path.Trim().Trim('"')));
         if (IsLegacyWpfFileList && !Directory.Exists(fullPath))
             throw new DirectoryNotFoundException($"The directory does not exist or is not accessible: {fullPath}");
@@ -155,6 +167,7 @@ public partial class Pathview : UserControl
         }
 
         CurrentPath = path;
+        PathviewActionButton.IsEnabled = true;
         LocationLabel.Text = ShellDisplayNameProvider.GetDisplayPath(path);
         RefreshActivePathAndSiblingsTree();
         RefreshActivePathTree();
@@ -224,6 +237,17 @@ public partial class Pathview : UserControl
 
         _shellBrowserHost?.SetShowDirectories(ShowDirectoriesCheckBox.IsChecked == true);
         RefreshShellStatusCount();
+    }
+
+    private void PathviewActionButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(CurrentPath))
+            return;
+
+        if (IsBrowsable)
+            FixRequested?.Invoke(this, EventArgs.Empty);
+        else
+            BrowseRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void ShellBrowserSlot_SizeChanged(object sender, SizeChangedEventArgs e)

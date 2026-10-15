@@ -24,6 +24,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     private const uint ColumnStateVisible = 1;
     private const int MinimumNameColumnWidth = 80;
     private const int ShellColumnTrailingInset = 11;
+    private const int HResultAbort = unchecked((int)0x80004004);
     private const int ShellChangeNotifyMessage = 0x8000 + 0x271;
     private const int ShellChangeNotifySources = 0x0001 | 0x0002 | 0x8000;
     private const int ShellChangeDiskEvents = 0x0002381F;
@@ -57,15 +58,23 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     private string? _currentPath;
     private readonly HashSet<string> _desiredChangeNotificationPaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, uint> _changeNotificationRegistrations = new(StringComparer.OrdinalIgnoreCase);
+    private readonly bool _isBrowsable;
+    private string? _programmaticNavigationPath;
     private string? _pendingPath;
 
     public event EventHandler<string>? NavigationCompleted;
     public event EventHandler<string>? NavigationFailed;
     public event EventHandler? FileSystemChanged;
 
+    public ShellExplorerBrowserHost(bool isBrowsable)
+    {
+        _isBrowsable = isBrowsable;
+    }
+
     public void NavigateTo(string path)
     {
-        _pendingPath = Path.GetFullPath(path);
+        _programmaticNavigationPath = Path.GetFullPath(path);
+        _pendingPath = _programmaticNavigationPath;
         if (_initialized)
         {
             try
@@ -74,6 +83,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             }
             catch
             {
+                _programmaticNavigationPath = null;
                 _pendingPath = _currentPath;
                 throw;
             }
@@ -415,6 +425,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
         _currentPath = path;
         _pendingPath = path;
+        _programmaticNavigationPath = null;
         ApplyStandardFolderView();
         _ = Dispatcher.BeginInvoke(DispatcherPriority.DataBind, new Action(() =>
         {
@@ -426,6 +437,8 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     private void HandleNavigationFailed(IntPtr itemIdList)
     {
         var path = TryGetFileSystemPath(itemIdList);
+        if (path is null || string.Equals(_programmaticNavigationPath, path, StringComparison.OrdinalIgnoreCase))
+            _programmaticNavigationPath = null;
         if (path is null || string.Equals(_pendingPath, path, StringComparison.OrdinalIgnoreCase))
             _pendingPath = _currentPath;
 
@@ -713,11 +726,19 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         }
     }
 
-    private void HandleNavigationPending(IntPtr itemIdList)
+    private int HandleNavigationPending(IntPtr itemIdList)
     {
         var path = TryGetFileSystemPath(itemIdList);
+        if (!_isBrowsable &&
+            (path is null || !string.Equals(_programmaticNavigationPath, path, StringComparison.OrdinalIgnoreCase)))
+            return HResultAbort;
+
+        if (!_isBrowsable)
+            _programmaticNavigationPath = null;
         if (path is not null)
             _pendingPath = path;
+
+        return 0;
     }
 
     private static string? TryGetFileSystemPath(IntPtr itemIdList)
@@ -945,7 +966,7 @@ internal interface IExplorerBrowserEventsNative
 [ComVisible(true)]
 [ClassInterface(ClassInterfaceType.None)]
 internal sealed class ExplorerBrowserEventsSink(
-    Action<IntPtr> navigationPending,
+    Func<IntPtr, int> navigationPending,
     Action<IntPtr> navigationCompleted,
     Action<IntPtr> navigationFailed) : IExplorerBrowserEventsNative
 {
@@ -953,8 +974,7 @@ internal sealed class ExplorerBrowserEventsSink(
     {
         try
         {
-            navigationPending(itemIdList);
-            return 0;
+            return navigationPending(itemIdList);
         }
         catch
         {

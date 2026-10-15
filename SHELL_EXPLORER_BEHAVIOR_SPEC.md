@@ -24,6 +24,17 @@ view.
 ### Navigation and tabs
 - [x] Each application tab retains its own active folder.
 - [x] Switching tabs restores that tab's location.
+- [x] Exactly one tab contains a browsable Pathview; it is always first. Every
+  other tab contains a non-browsable Pathview.
+- [x] **Fix** on the browsable Pathview creates and selects a non-browsable
+  Pathview at the same location.
+- [x] **Browse** on a non-browsable Pathview navigates the browsable Pathview to
+  that location and selects the first tab.
+- [x] A non-browsable Pathview does not change location from its tree or from
+  folder activation in its Shell content pane. This blocks folder navigation
+  only; other native Shell commands and operations remain available.
+- [x] Typed address navigation and Back, Forward, and Up target the browsable
+  Pathview; choosing a path from the address dropdown selects that path's tab.
 - [x] The address field accepts typed filesystem paths and offers the paths
   currently open in tabs.
 - [x] Back, Forward, and Up navigate within the active tab.

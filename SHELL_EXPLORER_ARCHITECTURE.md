@@ -77,6 +77,20 @@ ellipsis prefix is omitted.
   switches between two custom tree modes. **Show directories** is currently
   the tab-local setting; sort parameters are captured from the Shell folder
   view rather than stored independently by the `Pathview`.
+- `Pathview.IsBrowsable` is immutable for the lifetime of a Pathview. `MainWindow`
+  creates exactly one browsable Pathview at tab index 0; all subsequent tabs are
+  non-browsable. The browsable tab cannot be closed. **Fix** creates a new
+  non-browsable Pathview at the browsable location; **Browse** navigates the
+  browsable Pathview to a non-browsable Pathview's location and selects tab 0.
+- App-owned navigation is ignored by non-browsable Pathviews. For navigation
+  initiated inside the hosted Shell view, its `IExplorerBrowserEvents.OnNavigationPending`
+  callback returns `E_ABORT` for unapproved navigation on non-browsable
+  Pathviews. Explicit app-requested navigation, including initial loading, is
+  allowed. This cancels only folder navigation while leaving other Shell
+  commands and operations intact.
+- Typed address submissions and Back, Forward, and Up target the browsable
+  Pathview. Selecting an address dropdown entry still selects its associated
+  Pathview directly.
 - The right content pane is a separate content view. Production creates one
   `ShellExplorerBrowserHost` per `Pathview`; it derives from
   `HwndHost` and hosts one Shell `IExplorerBrowser` COM instance.
