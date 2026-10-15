@@ -97,6 +97,18 @@ when it is created and cannot be changed by the user.
   folder-specific view settings are ignored.
 - [x] The WPF application chrome keeps the app's custom tabs, address field,
   directory trees, and item-count status area.
+- [x] Below **Show directories**, the content pane provides three separated
+  action groups: **Copy get** and **Copy paste**; **Path get**; and **Move get**,
+  **Move abort**, and **Move paste**. The toolbar's different Copy labels map
+  directly to the Shell commands: **Copy get** is Copy for selected items, and
+  **Copy paste** is Paste into the active folder. **Path get** copies the first
+  selected item's filesystem path as text. The toolbar Move workflow is
+  separate from Shell Cut/Paste: Move get stages selected filesystem paths
+  inside the app and does not change or synchronize with Shell clipboard/Cut
+  state. Move paste invokes a native Shell move into the active folder only
+  after a dialog lists the item names and the user confirms. Cancel leaves the
+  source items in place and discards the staged paths. Move abort also discards
+  the staged paths, and starting another toolbar action aborts them.
 
 ### Selection and opening
 
@@ -187,3 +199,13 @@ when it is created and cannot be changed by the user.
   directory is hidden only when listing its contents is denied. Verify normal
   junctions remain visible, the active route remains visible, and the content
   view is unchanged.
+9. Select multiple Shell items and use **Copy get**, then **Copy paste** in
+  another folder. Verify **Path get** places the first selected item's
+  filesystem path on the clipboard. Use **Move get** followed by ordinary
+  Shell Paste and verify it does not complete the staged move. Use **Move
+  paste**, verify the dialog lists the selected names, then cancel and verify
+  the source items remain. Repeat and confirm; verify the items move. Verify
+  **Move abort** leaves the source items in place and does not change the
+  clipboard. Complete one move,
+  then prepare and complete another move; verify the second operation uses its
+  new selection rather than stale data from the first move.

@@ -9,7 +9,56 @@ internal static class ShellContextMenu
     private const uint PopupFlags = 0x0100 | 0x0002;
     private const uint MenuFlags = 0;
     private const uint InvokeUnicode = 0x00004000;
-    private const uint ShellViewBackground = 0;
+    internal const uint ShellViewBackground = 0;
+    internal const uint ShellViewSelection = 1;
+
+    internal static void InvokeViewCommand(IShellView shellView, uint selectionKind, IntPtr owner, string verb)
+    {
+        IntPtr contextMenuPointer = IntPtr.Zero;
+        IntPtr menu = IntPtr.Zero;
+        IntPtr ansiVerbPointer = IntPtr.Zero;
+        IntPtr verbPointer = IntPtr.Zero;
+        IContextMenu? contextMenu = null;
+        try
+        {
+            var interfaceId = typeof(IContextMenu).GUID;
+            Marshal.ThrowExceptionForHR(shellView.GetItemObject(selectionKind, ref interfaceId, out contextMenuPointer));
+            if (contextMenuPointer == IntPtr.Zero)
+                throw new InvalidOperationException("The Shell did not provide a context menu for this command.");
+
+            contextMenu = (IContextMenu)Marshal.GetObjectForIUnknown(contextMenuPointer);
+            menu = CreatePopupMenu();
+            if (menu == IntPtr.Zero)
+                throw new InvalidOperationException("CreatePopupMenu failed.");
+
+            Marshal.ThrowExceptionForHR(contextMenu.QueryContextMenu(menu, 0, FirstCommandId, LastCommandId, MenuFlags));
+            ansiVerbPointer = Marshal.StringToHGlobalAnsi(verb);
+            verbPointer = Marshal.StringToHGlobalUni(verb);
+            var commandInfo = new CMINVOKECOMMANDINFOEX
+            {
+                Size = (uint)Marshal.SizeOf<CMINVOKECOMMANDINFOEX>(),
+                Mask = InvokeUnicode,
+                Owner = owner,
+                Verb = ansiVerbPointer,
+                VerbW = verbPointer,
+                Show = (int)ShowWindowCommand.Normal
+            };
+            Marshal.ThrowExceptionForHR(contextMenu.InvokeCommand(ref commandInfo));
+        }
+        finally
+        {
+            if (verbPointer != IntPtr.Zero)
+                Marshal.FreeHGlobal(verbPointer);
+            if (ansiVerbPointer != IntPtr.Zero)
+                Marshal.FreeHGlobal(ansiVerbPointer);
+            if (menu != IntPtr.Zero)
+                _ = DestroyMenu(menu);
+            if (contextMenu is not null && Marshal.IsComObject(contextMenu))
+                _ = Marshal.ReleaseComObject(contextMenu);
+            if (contextMenuPointer != IntPtr.Zero)
+                _ = Marshal.Release(contextMenuPointer);
+        }
+    }
 
     public static void Show(string path, IntPtr owner) => ShowCore(path, owner, background: false);
 

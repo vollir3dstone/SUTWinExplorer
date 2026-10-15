@@ -243,6 +243,74 @@ public partial class Pathview : UserControl
         RefreshShellStatusCount();
     }
 
+    private void ContentOperationButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string action })
+            return;
+
+        try
+        {
+            switch (action)
+            {
+                case "CopyGet":
+                    _shellBrowserHost?.CopySelection();
+                    break;
+                case "CopyPaste":
+                    _shellBrowserHost?.PasteCopy();
+                    break;
+                case "PathGet":
+                    ShellExplorerBrowserHost.CancelPreparedMove();
+                    var selectedPaths = IsLegacyWpfFileList
+                        ? FileList.SelectedItems.OfType<FileEntry>().Select(entry => entry.FullPath).ToList()
+                        : _shellBrowserHost?.GetSelectedFileSystemPaths() ?? [];
+                    if (selectedPaths.Count == 0)
+                        throw new InvalidOperationException("Select an item before using Path get.");
+
+                    Clipboard.SetText(selectedPaths[0]);
+                    break;
+                case "MoveGet":
+                    _shellBrowserHost?.PrepareMove();
+                    break;
+                case "MoveAbort":
+                    ShellExplorerBrowserHost.CancelPreparedMove();
+                    break;
+                case "MovePaste":
+                    ConfirmAndPasteMove();
+                    break;
+            }
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "Shell operation failed",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void ConfirmAndPasteMove()
+    {
+        if (_shellBrowserHost is null)
+            throw new InvalidOperationException("The Shell content view is not ready.");
+
+        var itemNames = _shellBrowserHost.GetPreparedMoveNames();
+        if (itemNames.Count == 0)
+            throw new InvalidOperationException("There is no prepared move to paste.");
+
+        var dialog = new MoveConfirmationDialog(itemNames);
+        if (Window.GetWindow(this) is { } owner)
+        {
+            dialog.Owner = owner;
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        }
+
+        if (dialog.ShowDialog() != true)
+        {
+            ShellExplorerBrowserHost.CancelPreparedMove();
+            return;
+        }
+
+        _shellBrowserHost.PasteMove();
+    }
+
     private void PathviewActionButton_Click(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(CurrentPath))

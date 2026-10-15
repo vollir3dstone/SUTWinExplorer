@@ -44,6 +44,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         Path.GetTempPath(), $"SUTWinExplorer-column-sizing-{Environment.ProcessId}.log");
     private static readonly string KeyboardTracePath = Path.Combine(
         Path.GetTempPath(), $"SUTWinExplorer-keyboard-{Environment.ProcessId}.log");
+    private static List<string>? _preparedMovePaths;
 
     private IExplorerBrowserNative? _browser;
     private IObjectWithSiteNative? _browserSite;
@@ -109,6 +110,103 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     }
 
     public void RefreshContents() => RefreshCurrentView();
+
+    public void CopySelection()
+    {
+        CancelPreparedMove();
+        InvokeCurrentViewCommand(ShellContextMenu.ShellViewSelection, "copy");
+    }
+
+    public void PasteCopy()
+    {
+        CancelPreparedMove();
+        InvokeCurrentViewCommand(ShellContextMenu.ShellViewBackground, "paste");
+    }
+
+    public void PrepareMove()
+    {
+        CancelPreparedMove();
+        _preparedMovePaths = GetSelectedFileSystemPaths();
+        if (_preparedMovePaths.Count == 0)
+            throw new InvalidOperationException("Select one or more items before using Move get.");
+    }
+
+    public void PasteMove()
+    {
+        if (_preparedMovePaths is not { Count: > 0 } paths)
+            throw new InvalidOperationException("There is no prepared move to paste.");
+        if (string.IsNullOrWhiteSpace(_currentPath))
+            throw new InvalidOperationException("The destination folder is not ready.");
+
+        _preparedMovePaths = null;
+        try
+        {
+            ShellFileOperations.Move(paths, _currentPath, _hostWindow);
+            RefreshCurrentView();
+        }
+        finally
+        {
+            _preparedMovePaths = null;
+        }
+    }
+
+    public IReadOnlyList<string> GetPreparedMoveNames() => (_preparedMovePaths ?? [])
+        .Select(path => ShellDisplayNameProvider.GetDisplayName(path) ?? Path.GetFileName(path))
+        .ToArray();
+
+    public static void CancelPreparedMove() => _preparedMovePaths = null;
+
+    public List<string> GetSelectedFileSystemPaths()
+    {
+        if (_browser is null || !_initialized)
+            throw new InvalidOperationException("The Shell content view is not ready.");
+
+        IntPtr viewPointer = IntPtr.Zero;
+        IShellView? view = null;
+        try
+        {
+            var interfaceId = typeof(IShellView).GUID;
+            Marshal.ThrowExceptionForHR(_browser.GetCurrentView(ref interfaceId, out viewPointer));
+            if (viewPointer == IntPtr.Zero)
+                throw new InvalidOperationException("The Shell content view is unavailable.");
+
+            view = (IShellView)Marshal.GetObjectForIUnknown(viewPointer);
+            return ShellFileOperations.GetSelectedFileSystemPaths(view);
+        }
+        finally
+        {
+            if (view is not null && Marshal.IsComObject(view))
+                _ = Marshal.ReleaseComObject(view);
+            if (viewPointer != IntPtr.Zero)
+                _ = Marshal.Release(viewPointer);
+        }
+    }
+
+    private void InvokeCurrentViewCommand(uint selectionKind, string verb)
+    {
+        if (_browser is null || !_initialized)
+            throw new InvalidOperationException("The Shell content view is not ready.");
+
+        IntPtr viewPointer = IntPtr.Zero;
+        IShellView? view = null;
+        try
+        {
+            var interfaceId = typeof(IShellView).GUID;
+            Marshal.ThrowExceptionForHR(_browser.GetCurrentView(ref interfaceId, out viewPointer));
+            if (viewPointer == IntPtr.Zero)
+                throw new InvalidOperationException("The Shell content view is unavailable.");
+
+            view = (IShellView)Marshal.GetObjectForIUnknown(viewPointer);
+            ShellContextMenu.InvokeViewCommand(view, selectionKind, _hostWindow, verb);
+        }
+        finally
+        {
+            if (view is not null && Marshal.IsComObject(view))
+                _ = Marshal.ReleaseComObject(view);
+            if (viewPointer != IntPtr.Zero)
+                _ = Marshal.Release(viewPointer);
+        }
+    }
 
     public void SynchronizeChangeNotifications(IEnumerable<string> directories)
     {
