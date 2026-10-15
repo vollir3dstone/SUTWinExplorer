@@ -44,8 +44,6 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         Path.GetTempPath(), $"SUTWinExplorer-column-sizing-{Environment.ProcessId}.log");
     private static readonly string KeyboardTracePath = Path.Combine(
         Path.GetTempPath(), $"SUTWinExplorer-keyboard-{Environment.ProcessId}.log");
-    private static bool _shellClipboardHasFileTransfer;
-
     private IExplorerBrowserNative? _browser;
     private IObjectWithSiteNative? _browserSite;
     private ShellBrowserSite? _site;
@@ -70,15 +68,6 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     public static event EventHandler? ToolbarOperationStateChanged;
 
     public bool HasSelection { get; private set; }
-    public static bool HasShellClipboardFileTransfer => _shellClipboardHasFileTransfer;
-
-    public static void UpdateShellClipboardState(bool hasFileTransfer)
-    {
-        var stateChanged = _shellClipboardHasFileTransfer != hasFileTransfer;
-        _shellClipboardHasFileTransfer = hasFileTransfer;
-        if (stateChanged)
-            ToolbarOperationStateChanged?.Invoke(null, EventArgs.Empty);
-    }
 
     public ShellExplorerBrowserHost(bool isBrowsable)
     {
@@ -145,6 +134,9 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     {
         InvokeCurrentViewCommand(ShellContextMenu.ShellViewSelection, "rename");
     }
+
+    public void InvokeShellCopyCommand() =>
+        InvokeCurrentViewCommand(ShellContextMenu.ShellViewSelection, "copy");
 
     public List<string> GetSelectedFileSystemPaths()
     {

@@ -71,6 +71,8 @@ internal static class ShellFileOperations
         if (sourcePaths.Count == 0)
             throw new InvalidOperationException($"Select one or more items to {operationName}.");
 
+        ValidateTransferPaths(sourcePaths, destinationPath, operationName);
+
         IFileOperationNative? operation = null;
         IShellItemNative? destination = null;
         var sources = new List<IShellItemNative>(sourcePaths.Count);
@@ -100,6 +102,10 @@ internal static class ShellFileOperations
                     ref ShellItemInterfaceId,
                     out var source));
                 sources.Add(source);
+            }
+
+            foreach (var source in sources)
+            {
                 Marshal.ThrowExceptionForHR(queueOperation(operation, source, destination));
             }
 
@@ -119,6 +125,37 @@ internal static class ShellFileOperations
                 _ = Marshal.ReleaseComObject(destination);
             if (operation is not null && Marshal.IsComObject(operation))
                 _ = Marshal.ReleaseComObject(operation);
+        }
+    }
+
+    private static void ValidateTransferPaths(
+        IReadOnlyList<string> sourcePaths,
+        string destinationPath,
+        string operationName)
+    {
+        try
+        {
+            if ((File.GetAttributes(destinationPath) & FileAttributes.Directory) == 0)
+                throw new InvalidOperationException($"The destination is not a folder: {destinationPath}");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            throw new InvalidOperationException(
+                $"The destination folder no longer exists or cannot be accessed: {destinationPath}", exception);
+        }
+
+        foreach (var sourcePath in sourcePaths)
+        {
+            try
+            {
+                _ = File.GetAttributes(sourcePath);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot {operationName} because this source no longer exists or cannot be accessed: {sourcePath}",
+                    exception);
+            }
         }
     }
 

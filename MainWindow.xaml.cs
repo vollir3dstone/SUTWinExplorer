@@ -1,19 +1,13 @@
 ﻿using System.IO;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using System.Windows.Interop;
 using System.Windows.Input;
-using System.Windows.Threading;
 
 namespace SUTWinExplorer;
 
 public partial class MainWindow : Window
 {
-    private const int WmClipboardUpdate = 0x031D;
-    private const string ShellIdListClipboardFormat = "Shell IDList Array";
-    private const string FileGroupDescriptorClipboardFormat = "FileGroupDescriptorW";
     private const int MaxDisplayedPathLength = 40;
     private const string DisplayEllipsis = "…";
     private static readonly string DisplayPathSeparator = Path.DirectorySeparatorChar.ToString();
@@ -24,8 +18,7 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, Pathview> _fixedPathviewsByPath = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<Pathview, string> _pathsByFixedPathview = new();
     private readonly Dictionary<Pathview, TabItem> _tabsByPathview = new();
-    private HwndSource? _windowSource;
-    private bool _clipboardListenerRegistered;
+    private ShellCopyIntegration? _shellCopyIntegration;
 
     public MainWindow()
     {
@@ -35,64 +28,37 @@ public partial class MainWindow : Window
         AddPaneview(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), isBrowsable: true);
     }
 
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool AddClipboardFormatListener(IntPtr hwnd);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
-
     private void MainWindow_SourceInitialized(object? sender, EventArgs e)
     {
-        _windowSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
-        if (_windowSource is null)
-            return;
-
-        _windowSource.AddHook(MainWindow_WndProc);
-        _clipboardListenerRegistered = AddClipboardFormatListener(_windowSource.Handle);
-        RefreshShellClipboardState();
+        var windowHandle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        try
+        {
+            _shellCopyIntegration = new ShellCopyIntegration(windowHandle, HandleExternalShellCopy);
+        }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Debug.WriteLine($"Optional Shell Copy integration unavailable: {exception}");
+        }
     }
 
     private void MainWindow_Closed(object? sender, EventArgs e)
     {
-        if (_windowSource is null)
-            return;
-
-        _windowSource.RemoveHook(MainWindow_WndProc);
-        if (_clipboardListenerRegistered)
-            _ = RemoveClipboardFormatListener(_windowSource.Handle);
+        _shellCopyIntegration?.Dispose();
+        _shellCopyIntegration = null;
     }
 
-    private IntPtr MainWindow_WndProc(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+    internal void InvokeToolbarShellCopy(ShellExplorerBrowserHost? shellHost)
     {
-        if (message == WmClipboardUpdate)
-            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(RefreshShellClipboardState));
-
-        return IntPtr.Zero;
+        if (shellHost is not null)
+            _shellCopyIntegration?.InvokeToolbarCopy(shellHost.InvokeShellCopyCommand);
     }
 
-    private static void RefreshShellClipboardState()
+    private void HandleExternalShellCopy(IReadOnlyList<string> copiedPaths)
     {
-        bool hasFileTransfer;
-        try
-        {
-            var clipboardData = Clipboard.GetDataObject();
-            hasFileTransfer = clipboardData is not null &&
-                (clipboardData.GetDataPresent(DataFormats.FileDrop, false) ||
-                 clipboardData.GetDataPresent(ShellIdListClipboardFormat, false) ||
-                 clipboardData.GetDataPresent(FileGroupDescriptorClipboardFormat, false));
-        }
-        catch (ExternalException)
-        {
-            return;
-        }
-        catch (InvalidOperationException)
-        {
-            return;
-        }
+        if (MoveWorkflowState.Shared.IsPrepared)
+            MoveWorkflowState.Shared.Abort();
 
-        ShellExplorerBrowserHost.UpdateShellClipboardState(hasFileTransfer);
+        _ = CopyWorkflowState.Shared.TryPrepareFromShell(copiedPaths);
     }
 
     private Pathview? CurrentPathview => (ExplorerTabs.SelectedItem as TabItem)?.Content as Pathview;

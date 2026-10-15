@@ -118,8 +118,23 @@ when it is created and cannot be changed by the user.
   Move buttons and enables only Copy paste/abort in its group. A prepared Move
   disables all Copy buttons and enables only Move paste/abort in its group.
   Paste or Abort returns that workflow to idle. Copy uses native file copy and
-  Move uses native file move; neither reads or writes Shell clipboard state.
-  The main-window clipboard listener remains separate. **Rename**, **Path
+  Move uses native file move; neither workflow reads or writes Shell clipboard
+  state. As an optional integration, toolbar **Copy get** also invokes the
+  Shell Copy verb, and an external Shell Copy stages its file paths through the
+  same Copy get transition. Shell Cut and unrelated clipboard contents do not
+  affect the internal workflows. Staging records paths only: it does not keep
+  file handles, reserve the objects, or lock them against changes by the user,
+  another process, or the Shell. Before Paste starts, the app checks that the
+  destination is an accessible folder, reads filesystem attributes for every
+  staged source, and resolves all sources before beginning the transfer. If
+  these preflight checks fail, no transfer is started, an error is shown, and
+  the staged workflow remains available. Passing preflight does not prove
+  that all file contents are readable or that permissions allow the complete
+  operation. The check cannot protect paths after it completes: an object or
+  its permissions may change before or during the operation. Such a late
+  failure is reported, but a multi-item operation may already have transferred
+  some items; Copy and Move are not atomic and do not roll back completed work.
+  **Rename**, **Path
   get**, and **Delete** retain their existing behavior; other
   selection-dependent actions are disabled when nothing is selected.
 
@@ -224,9 +239,16 @@ when it is created and cannot be changed by the user.
   abort become enabled, Copy get becomes disabled, and all Move buttons remain
   disabled. Use Copy paste and verify the items are copied into the active
   folder without changing Shell clipboard state. Repeat and use Copy abort;
-  verify the source items remain unchanged.
+  verify the source items remain unchanged. Also stage a Copy, remove or rename
+  one source before Paste, and verify preflight reports an error,
+  starts no transfer, and preserves the staged workflow. Confirm staging does
+  not prevent another process from changing a source path.
 11. Use **Move get** and verify the Copy group becomes disabled while Move
   paste/abort become enabled. Use Move paste and verify the sources move into
   the active folder without changing Shell clipboard state. Repeat and use
   Move abort; verify the source items remain in place. Verify **Path get**
-  copies the first selected item's filesystem path.
+  copies the first selected item's filesystem path. Also stage a Move, remove
+  or rename one source before Paste, and verify preflight reports an
+  error, starts no transfer, and preserves the staged workflow. A change after
+  preflight may still cause a late failure; multi-item Paste is not atomic and
+  may leave already-transferred items in place.

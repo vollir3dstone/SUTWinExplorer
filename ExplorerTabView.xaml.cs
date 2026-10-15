@@ -284,6 +284,7 @@ public partial class Pathview : UserControl
                         ? FileList.SelectedItems.OfType<FileEntry>().Select(entry => entry.FullPath).ToList()
                         : _shellBrowserHost?.GetSelectedFileSystemPaths() ?? [];
                     CopyWorkflowState.Shared.Prepare(copyPaths);
+                    (Window.GetWindow(this) as MainWindow)?.InvokeToolbarShellCopy(_shellBrowserHost);
                     break;
                 case "CopyPaste":
                     var preparedPaths = CopyWorkflowState.Shared.PreparedPaths;

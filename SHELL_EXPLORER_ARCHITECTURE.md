@@ -126,9 +126,27 @@ leading ellipsis prefix is omitted.
   filesystem paths; Paste uses native `IFileOperation` to copy or move them to
   the active folder; Abort clears the staged paths. A prepared workflow
   disables the other workflow's entire group, while enabling only its own
-  Paste and Abort buttons. The clipboard listener continues to record Shell
-  file-transfer formats separately and does not influence either workflow.
-  Rename, Path get, and Delete remain active and selection-aware. The Shell
+  Paste and Abort buttons. The app-owned workflow is independent of the Shell
+  clipboard and native context-menu Copy/Cut state; the optional integration
+  below is the only bridge from Shell Copy into the app-owned Copy state. The
+  staged data consists only of path strings: it holds no file handles and
+  creates no locks, reservations, or leases on source objects. At Paste, the
+  app checks that the destination is an accessible folder, reads filesystem
+  attributes for every source, then resolves all source Shell items before
+  queuing the native operation. A failed preflight starts no transfer and is
+  surfaced through the operation error dialog; staged state is retained.
+  Passing preflight does not prove all file contents are readable or all
+  required permissions are granted. This is a point-in-time check, not
+  protection against subsequent filesystem changes. If an object, its access
+  rights, or the destination changes after preflight, `IFileOperation` can
+  still fail. Multi-item operations are not transactional: a late failure may
+  occur after earlier items have completed, with no automatic rollback.
+  Optional Shell-copy integration lives in the
+  removable `ShellCopyIntegration` side path: toolbar Copy get invokes the
+  Shell Copy verb, while clipboard updates marked with the Shell Copy drop
+  effect stage copied file paths through the internal Copy state transition.
+  Shell clipboard state does not otherwise influence either workflow. Rename,
+  Path get, and Delete remain active and selection-aware. The Shell
   view's native context-menu Copy and Cut commands continue to work normally.
 - The browsable **Active path and siblings** tree has a default-unchecked
   **Hide internal** checkbox. When enabled, child directories whose filesystem
