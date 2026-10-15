@@ -70,14 +70,20 @@ ellipsis prefix is omitted.
 ## Current Composition
 
 - `MainWindow` owns the WPF application toolbar and `TabControl`.
-- Each `ExplorerTabView` owns its active path, back/forward history, two custom
-  directory trees, **Show directories**, status count, and one content view.
-- Production creates one `ShellExplorerBrowserHost` per tab. It derives from
+- Each application tab contains one `Pathview`. A `Pathview` is the complete
+  per-tab browsing unit for the displays and settings attached to that tab: it
+  owns the active path, back/forward history, left directory-tree pane, right
+  content pane, status display, and temporary view settings. Its left pane
+  switches between two custom tree modes. **Show directories** is currently
+  the tab-local setting; sort parameters are captured from the Shell folder
+  view rather than stored independently by the `Pathview`.
+- The right content pane is a separate content view. Production creates one
+  `ShellExplorerBrowserHost` per `Pathview`; it derives from
   `HwndHost` and hosts one Shell `IExplorerBrowser` COM instance.
 - `ActivePathTree` shows only the current ancestor route.
 - `ActivePathAndSiblingsTree` additionally shows immediate child directories
   along the route. Both continue to navigate the Shell view through the common
-  `ExplorerTabView.Navigate` method.
+  `Pathview.Navigate` method.
 - The legacy WPF `ListView`, its filtering, icon binding, sizing, and menus are
   retained. `UseLegacyWpfFileList` in `ExplorerTabView.xaml.cs` is the explicit
   rollback switch: `false` selects the Shell view (production default); `true`
@@ -98,7 +104,7 @@ Both directory trees in `ExplorerTabView.xaml` share
   header. It hides placeholder entries and applies a light-blue selected-row
   background.
 
-`ExplorerTabView.DirectoryTreeRowHeight` in `ExplorerTabView.xaml.cs` sets the
+`Pathview.DirectoryTreeRowHeight` in `ExplorerTabView.xaml.cs` sets the
 header border's minimum height to **24 WPF device-independent units (DIPs)**.
 The header content is vertically centered, so this value controls the minimum
 distance between rows in both directory trees. Adjust this constant to change
@@ -196,7 +202,7 @@ must have no horizontal scroll range at the tested layout sizes. Enabling
 **Show directories** can create or remove a vertical Shell scrollbar without
 changing the WPF pane size, so that refresh also requires a width recalculation.
 
-`ExplorerTabView.ShellBrowserSlot_SizeChanged` converts the WPF size to physical
+`Pathview.ShellBrowserSlot_SizeChanged` converts the WPF size to physical
 pixels and calls `ShellExplorerBrowserHost.SetViewSize`. The host applies those
 bounds through `IExplorerBrowser.SetRect`. `OnWindowPositionChanged` is also
 retained as a native-host fallback. After a successful `SetRect`, the host

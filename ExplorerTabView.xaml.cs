@@ -14,7 +14,7 @@ using System.Windows.Threading;
 
 namespace SUTWinExplorer;
 
-public partial class ExplorerTabView : UserControl
+public partial class Pathview : UserControl
 {
     public const double DirectoryTreeRowHeight = 24;
 
@@ -46,7 +46,7 @@ public partial class ExplorerTabView : UserControl
     private bool _fileSystemStateDirty = true;
     private bool _shellViewNeedsRefresh = true;
 
-    public ExplorerTabView(string initialPath)
+    public Pathview(string initialPath)
     {
         InitializeComponent();
         _fileSystemRefreshTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
@@ -54,9 +54,9 @@ public partial class ExplorerTabView : UserControl
             Interval = TimeSpan.FromMilliseconds(200)
         };
         _fileSystemRefreshTimer.Tick += FileSystemRefreshTimer_Tick;
-        Loaded += ExplorerTabView_Loaded;
-        Unloaded += ExplorerTabView_Unloaded;
-        IsVisibleChanged += ExplorerTabView_IsVisibleChanged;
+        Loaded += Pathview_Loaded;
+        Unloaded += Pathview_Unloaded;
+        IsVisibleChanged += Pathview_IsVisibleChanged;
         FileList.Visibility = IsLegacyWpfFileList ? Visibility.Visible : Visibility.Collapsed;
         ShellBrowserSlot.Visibility = IsLegacyWpfFileList ? Visibility.Collapsed : Visibility.Visible;
         StatusLabel.Visibility = IsLegacyWpfFileList ? Visibility.Visible : Visibility.Collapsed;
@@ -234,7 +234,7 @@ public partial class ExplorerTabView : UserControl
             (int)Math.Round(e.NewSize.Height * dpi.DpiScaleY));
     }
 
-    private void ExplorerTabView_Loaded(object sender, RoutedEventArgs e)
+    private void Pathview_Loaded(object sender, RoutedEventArgs e)
     {
         _fileSystemStateDirty = true;
         _shellViewNeedsRefresh = true;
@@ -242,7 +242,7 @@ public partial class ExplorerTabView : UserControl
         ScheduleFileSystemRefreshIfVisible();
     }
 
-    private void ExplorerTabView_Unloaded(object sender, RoutedEventArgs e)
+    private void Pathview_Unloaded(object sender, RoutedEventArgs e)
     {
         _fileSystemRefreshTimer.Stop();
         _fileSystemStateDirty = true;
@@ -250,7 +250,7 @@ public partial class ExplorerTabView : UserControl
         _shellBrowserHost?.ClearChangeNotifications();
     }
 
-    private void ExplorerTabView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    private void Pathview_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (IsVisible)
         {

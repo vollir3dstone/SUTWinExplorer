@@ -1,4 +1,4 @@
-<UserControl x:Class="SUTWinExplorer.ExplorerTabView"
+<UserControl x:Class="SUTWinExplorer.Pathview"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SUTWinExplorer">
@@ -34,7 +34,7 @@
                                           IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
                                           Content="{Binding}" ContentTemplate="{StaticResource ShellIconTemplate}" />
                             <Border x:Name="HeaderBorder" Grid.Row="0" Grid.Column="1" Padding="1,0"
-                                    MinHeight="{x:Static local:ExplorerTabView.DirectoryTreeRowHeight}">
+                                    MinHeight="{x:Static local:Pathview.DirectoryTreeRowHeight}">
                                 <ContentPresenter x:Name="PART_Header" ContentSource="Header"
                                                   VerticalAlignment="Center" />
                             </Border>

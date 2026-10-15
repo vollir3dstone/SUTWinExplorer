@@ -20,11 +20,11 @@ public partial class MainWindow : Window
         AddTab(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
     }
 
-    private ExplorerTabView? CurrentTab => (ExplorerTabs.SelectedItem as TabItem)?.Content as ExplorerTabView;
+    private Pathview? CurrentPathview => (ExplorerTabs.SelectedItem as TabItem)?.Content as Pathview;
 
     private void NewTab_Click(object sender, RoutedEventArgs e)
     {
-        var currentPath = CurrentTab?.CurrentPath;
+        var currentPath = CurrentPathview?.CurrentPath;
         AddTab(string.IsNullOrWhiteSpace(currentPath)
             ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
             : currentPath);
@@ -32,7 +32,7 @@ public partial class MainWindow : Window
 
     private void AddTab(string path)
     {
-        var view = new ExplorerTabView(path);
+        var view = new Pathview(path);
         var hasCurrentPath = !string.IsNullOrWhiteSpace(view.CurrentPath);
         var title = new TextBlock
         {
@@ -90,7 +90,7 @@ public partial class MainWindow : Window
         };
         view.NavigationFailed += (_, _) =>
         {
-            if (ReferenceEquals(CurrentTab, view))
+            if (ReferenceEquals(CurrentPathview, view))
                 RefreshPathChoices();
         };
 
@@ -118,7 +118,7 @@ public partial class MainWindow : Window
 
     private void CloseTab_Click(object sender, RoutedEventArgs e)
     {
-        if (ExplorerTabs.Items.Count <= 1 || sender is not Button { Tag: ExplorerTabView view })
+        if (ExplorerTabs.Items.Count <= 1 || sender is not Button { Tag: Pathview view })
             return;
 
         var tab = ExplorerTabs.Items.Cast<TabItem>().FirstOrDefault(item => ReferenceEquals(item.Content, view));
@@ -160,7 +160,7 @@ public partial class MainWindow : Window
 
         var choices = new List<TabPathChoice> { new(-1, string.Empty) };
         choices.AddRange(ExplorerTabs.Items.Cast<TabItem>()
-            .Select((item, index) => new TabPathChoice(index, ((ExplorerTabView)item.Content).CurrentPath))
+            .Select((item, index) => new TabPathChoice(index, ((Pathview)item.Content).CurrentPath))
             .OrderBy(choice => choice.Path, StringComparer.CurrentCultureIgnoreCase));
 
         _updatingPathChoices = true;
@@ -168,9 +168,9 @@ public partial class MainWindow : Window
         {
             AddressBox.ItemsSource = choices;
             AddressBox.SelectedValue = ExplorerTabs.SelectedIndex;
-            AddressBox.Text = CurrentTab is null
+            AddressBox.Text = CurrentPathview is null
                 ? string.Empty
-                : ShellDisplayNameProvider.GetDisplayPath(CurrentTab.CurrentPath);
+                : ShellDisplayNameProvider.GetDisplayPath(CurrentPathview.CurrentPath);
         }
         finally
         {
@@ -178,11 +178,11 @@ public partial class MainWindow : Window
         }
     }
 
-    private void Back_Click(object sender, RoutedEventArgs e) => CurrentTab?.GoBack();
+    private void Back_Click(object sender, RoutedEventArgs e) => CurrentPathview?.GoBack();
 
-    private void Forward_Click(object sender, RoutedEventArgs e) => CurrentTab?.GoForward();
+    private void Forward_Click(object sender, RoutedEventArgs e) => CurrentPathview?.GoForward();
 
-    private void Up_Click(object sender, RoutedEventArgs e) => CurrentTab?.GoUp();
+    private void Up_Click(object sender, RoutedEventArgs e) => CurrentPathview?.GoUp();
 
     private void Go_Click(object sender, RoutedEventArgs e) => NavigateAddress();
 
@@ -194,12 +194,12 @@ public partial class MainWindow : Window
 
     private void NavigateAddress()
     {
-        if (CurrentTab is null || string.IsNullOrWhiteSpace(AddressBox.Text))
+        if (CurrentPathview is null || string.IsNullOrWhiteSpace(AddressBox.Text))
             return;
 
         try
         {
-            CurrentTab.Navigate(ShellDisplayNameProvider.ResolvePath(AddressBox.Text));
+            CurrentPathview.Navigate(ShellDisplayNameProvider.ResolvePath(AddressBox.Text));
         }
         catch (Exception exception)
         {

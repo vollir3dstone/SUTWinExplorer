@@ -10,10 +10,18 @@
 
 Checkboxes record implementation status, not changes to the expected behavior.
 
+## Terminology
+
+A **Pathview** is the browsing unit attached to an application tab. It comprises
+the directory-tree pane, content pane, status display, active location, and
+temporary view settings scoped to that tab. Each tab retains its own Pathview
+state when the user switches tabs. For example, **Show directories** is
+tab-scoped; sort parameters continue to follow the active folder's configured
+view.
+
 ## P0: Core Behavior
 
 ### Navigation and tabs
-
 - [x] Each application tab retains its own active folder.
 - [x] Switching tabs restores that tab's location.
 - [x] The address field accepts typed filesystem paths and offers the paths
