@@ -37,6 +37,8 @@ public partial class MainWindow : Window
         var title = new TextBlock
         {
             Text = hasCurrentPath ? GetTabLabelFromPath(view.CurrentPath) : "Loading...",
+            FontSize = 13,
+            FontWeight = FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center
         };
         var tooltipText = new TextBlock
