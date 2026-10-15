@@ -345,7 +345,7 @@ public partial class MainWindow : Window
 
         var currentOnlyTitle = prefix + currentDir;
         if (currentOnlyTitle.Length >= MaxDisplayedPathLength)
-            return currentOnlyTitle[..MaxDisplayedPathLength];
+            return currentOnlyTitle[..(MaxDisplayedPathLength - DisplayEllipsis.Length)] + DisplayEllipsis;
 
         var currentDirUsedLength = currentDir.Length;
         var displayedCurrentDir = currentDir;

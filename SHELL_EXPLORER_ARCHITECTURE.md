@@ -55,7 +55,8 @@ languages.
 names and limits them to `MaxDisplayedPathLength` (currently 40 characters).
 Filesystem roots are displayed as their root label. For other paths, the
 default label starts with an ellipsis and the current directory name. If that
-alone fills the limit, it is clipped to the limit and the parent is omitted.
+alone fills the limit, it is clipped to the limit with a trailing ellipsis and
+the parent is omitted.
 
 Otherwise, the label includes the parent and current directory. When it is too
 long, the parent name is shortened first, preserving as much of it as needed to
