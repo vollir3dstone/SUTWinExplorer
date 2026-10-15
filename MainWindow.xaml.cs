@@ -14,25 +14,28 @@ public partial class MainWindow : Window
     private static readonly string DefaultTabLabelPrefix = DisplayEllipsis + DisplayPathSeparator;
     private bool _updatingPathChoices;
     private Pathview? _browsablePathview;
+    private TabItem? _browsableTab;
+    private readonly Dictionary<string, Pathview> _fixedPathviewsByPath = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<Pathview, string> _pathsByFixedPathview = new();
+    private readonly Dictionary<Pathview, TabItem> _tabsByPathview = new();
 
     public MainWindow()
     {
         InitializeComponent();
-        AddTab(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), isBrowsable: true);
+        AddPaneview(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), isBrowsable: true);
     }
 
     private Pathview? CurrentPathview => (ExplorerTabs.SelectedItem as TabItem)?.Content as Pathview;
 
-    private void NewTab_Click(object sender, RoutedEventArgs e)
+    private void AddPaneview(string path, bool isBrowsable)
     {
-        var currentPath = CurrentPathview?.CurrentPath;
-        AddTab(string.IsNullOrWhiteSpace(currentPath)
-            ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
-            : currentPath, isBrowsable: false);
-    }
+        var pathKey = GetPathKey(path);
+        if (!isBrowsable && _fixedPathviewsByPath.TryGetValue(pathKey, out var existingPathview))
+        {
+            SelectPathviewTab(existingPathview);
+            return;
+        }
 
-    private void AddTab(string path, bool isBrowsable)
-    {
         if (isBrowsable != (ExplorerTabs.Items.Count == 0))
             throw new InvalidOperationException("The browsable Pathview must be the first and only browsable tab.");
 
@@ -40,7 +43,9 @@ public partial class MainWindow : Window
         var hasCurrentPath = !string.IsNullOrWhiteSpace(view.CurrentPath);
         var title = new TextBlock
         {
-            Text = hasCurrentPath ? GetTabLabelFromPath(view.CurrentPath) : "Loading...",
+            Text = view.IsBrowsable
+                ? "BROWSE"
+                : hasCurrentPath ? GetTabLabelFromPath(view.CurrentPath) : "Loading...",
             FontSize = 13,
             FontWeight = FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center
@@ -89,12 +94,16 @@ public partial class MainWindow : Window
         tab.ToolTipOpening += (_, _) => ConfigurePathToolTip(pathToolTip, tooltipText);
         view.LocationChanged += (_, currentPath) =>
         {
-            title.Text = GetTabLabelFromPath(currentPath);
+            if (!view.IsBrowsable)
+                RegisterFixedPathview(view, currentPath);
+            title.Text = view.IsBrowsable ? "BROWSE" : GetTabLabelFromPath(currentPath);
             tooltipText.Text = ShellDisplayNameProvider.GetDisplayPath(currentPath);
             RefreshPathChoices();
         };
         view.NavigationFailed += (_, _) =>
         {
+            if (!view.IsBrowsable && string.IsNullOrWhiteSpace(view.CurrentPath))
+                RemoveFixedPathview(view);
             if (ReferenceEquals(CurrentPathview, view))
                 RefreshPathChoices();
         };
@@ -102,7 +111,15 @@ public partial class MainWindow : Window
         view.BrowseRequested += Pathview_BrowseRequested;
 
         if (view.IsBrowsable)
+        {
             _browsablePathview = view;
+            _browsableTab = tab;
+        }
+        else
+        {
+            RegisterFixedPathview(view, string.IsNullOrWhiteSpace(view.CurrentPath) ? path : view.CurrentPath);
+        }
+        _tabsByPathview.Add(view, tab);
         ExplorerTabs.Items.Insert(view.IsBrowsable ? 0 : ExplorerTabs.Items.Count, tab);
         ExplorerTabs.SelectedItem = tab;
         RefreshPathChoices();
@@ -113,25 +130,59 @@ public partial class MainWindow : Window
         if (sender is not Pathview { IsBrowsable: true } view || string.IsNullOrWhiteSpace(view.CurrentPath))
             return;
 
-        AddTab(view.CurrentPath, isBrowsable: false);
+        AddPaneview(view.CurrentPath, isBrowsable: false);
     }
 
     private void Pathview_BrowseRequested(object? sender, EventArgs e)
     {
         if (sender is not Pathview { IsBrowsable: false } view ||
-            _browsablePathview is null || string.IsNullOrWhiteSpace(view.CurrentPath))
+            _browsablePathview is null || _browsableTab is null || string.IsNullOrWhiteSpace(view.CurrentPath))
             return;
 
         try
         {
+            ExplorerTabs.SelectedItem = _browsableTab;
             _browsablePathview.Navigate(view.CurrentPath);
-            ExplorerTabs.SelectedItem = _browsablePathview;
         }
         catch (Exception exception)
         {
             MessageBox.Show(this, exception.Message, "Cannot open location", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
+
+    private void RegisterFixedPathview(Pathview view, string path)
+    {
+        var pathKey = GetPathKey(path);
+        if (_pathsByFixedPathview.TryGetValue(view, out var previousPathKey) &&
+            !string.Equals(previousPathKey, pathKey, StringComparison.OrdinalIgnoreCase))
+            _fixedPathviewsByPath.Remove(previousPathKey);
+
+        if (_fixedPathviewsByPath.TryGetValue(pathKey, out var existingPathview) &&
+            !ReferenceEquals(existingPathview, view))
+            return;
+
+        _fixedPathviewsByPath[pathKey] = view;
+        _pathsByFixedPathview[view] = pathKey;
+    }
+
+    private void RemoveFixedPathview(Pathview view)
+    {
+        if (!_pathsByFixedPathview.Remove(view, out var pathKey))
+            return;
+
+        if (_fixedPathviewsByPath.TryGetValue(pathKey, out var existingPathview) &&
+            ReferenceEquals(existingPathview, view))
+            _fixedPathviewsByPath.Remove(pathKey);
+    }
+
+    private void SelectPathviewTab(Pathview view)
+    {
+        if (_tabsByPathview.TryGetValue(view, out var tab))
+            ExplorerTabs.SelectedItem = tab;
+    }
+
+    private static string GetPathKey(string path) =>
+        Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
 
     private void ConfigurePathToolTip(ToolTip toolTip, TextBlock pathText)
     {
@@ -159,6 +210,8 @@ public partial class MainWindow : Window
         if (tab is not null)
         {
             ExplorerTabs.Items.Remove(tab);
+            _tabsByPathview.Remove(view);
+            RemoveFixedPathview(view);
             RefreshPathChoices();
         }
     }
@@ -220,10 +273,10 @@ public partial class MainWindow : Window
 
     private void NavigateBrowsablePathview(Action<Pathview> navigate)
     {
-        if (_browsablePathview is null)
+        if (_browsablePathview is null || _browsableTab is null)
             return;
 
-        ExplorerTabs.SelectedItem = _browsablePathview;
+        ExplorerTabs.SelectedItem = _browsableTab;
         navigate(_browsablePathview);
     }
 
@@ -237,13 +290,20 @@ public partial class MainWindow : Window
 
     private void NavigateAddress()
     {
-        if (_browsablePathview is null || string.IsNullOrWhiteSpace(AddressBox.Text))
+        if (_browsablePathview is null || _browsableTab is null || string.IsNullOrWhiteSpace(AddressBox.Text))
             return;
 
         try
         {
             var path = ShellDisplayNameProvider.ResolvePath(AddressBox.Text);
-            ExplorerTabs.SelectedItem = _browsablePathview;
+            var pathKey = GetPathKey(path);
+            if (_fixedPathviewsByPath.TryGetValue(pathKey, out var existingPathview))
+            {
+                SelectPathviewTab(existingPathview);
+                return;
+            }
+
+            ExplorerTabs.SelectedItem = _browsableTab;
             _browsablePathview.Navigate(path);
         }
         catch (Exception exception)

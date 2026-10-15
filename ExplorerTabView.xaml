@@ -64,14 +64,14 @@
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
         <TabControl Grid.Column="0" x:Name="SidebarTabs" Background="White">
-            <TabItem Header="Active path">
+            <TabItem x:Name="ActivePathTab" Header="Active path">
                 <TreeView x:Name="ActivePathTree" ItemContainerStyle="{StaticResource DirectoryTreeItemStyle}"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                           PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown"
                           PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
                           MouseDoubleClick="Tree_MouseDoubleClick" />
             </TabItem>
-            <TabItem Header="Active path and siblings">
+            <TabItem x:Name="ActivePathAndSiblingsTab" Header="Active path and siblings">
                 <TreeView x:Name="ActivePathAndSiblingsTree" ItemContainerStyle="{StaticResource DirectoryTreeItemStyle}"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                           PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown"
@@ -90,15 +90,26 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock x:Name="LocationLabel" Grid.Row="0" Grid.ColumnSpan="2" Padding="12,10"
-                       FontSize="14" FontWeight="SemiBold" Foreground="#263443" />
-            <CheckBox x:Name="ShowDirectoriesCheckBox" Grid.Row="1" Grid.Column="0"
+            <StackPanel x:Name="LocationHeaderPanel" Grid.Row="0" Grid.ColumnSpan="2"
+                        Orientation="Horizontal" SizeChanged="LocationHeaderPanel_SizeChanged">
+                <Border x:Name="FixedPathBadge" Background="#E1E4E7" Padding="6,3"
+                        Margin="10,0,8,0" VerticalAlignment="Center" Visibility="Collapsed">
+                    <TextBlock Text="FIXED" FontWeight="Bold" Foreground="#4E5963" />
+                </Border>
+                <TextBlock x:Name="LocationLabel" Padding="12,10" FontSize="14"
+                           FontWeight="SemiBold" Foreground="#263443" TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <Button x:Name="BrowsePathviewButton" Content="Browse" Padding="10,1"
+                        Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed"
+                        IsEnabled="False" Click="PathviewActionButton_Click" />
+                <Button x:Name="FixPathviewButton" Content="Fix" Padding="10,1"
+                    Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed"
+                    IsEnabled="False" Click="PathviewActionButton_Click" />
+            </StackPanel>
+                <CheckBox x:Name="ShowDirectoriesCheckBox" Grid.Row="1" Grid.ColumnSpan="2"
                       Content="Show directories" IsChecked="False" Margin="10,0,10,8"
                       Checked="ShowDirectoriesCheckBox_StateChanged"
                       Unchecked="ShowDirectoriesCheckBox_StateChanged" />
-            <Button x:Name="PathviewActionButton" Grid.Row="1" Grid.Column="1"
-                    Content="Fix" Padding="10,1" Margin="0,0,10,8"
-                    Click="PathviewActionButton_Click" />
             <ListView x:Name="FileList" Grid.Row="2" Grid.Column="0" SelectionMode="Single"
                       SizeChanged="FileList_SizeChanged"
                       PreviewMouseLeftButtonDown="FileList_PreviewMouseLeftButtonDown"

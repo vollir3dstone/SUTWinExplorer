@@ -17,31 +17,43 @@ the directory-tree pane, content pane, status display, active location, and
 temporary view settings scoped to that tab. Each tab retains its own Pathview
 state when the user switches tabs. For example, **Show directories** is
 tab-scoped; sort parameters continue to follow the active folder's configured
-view.
+view. A Pathview is either browsable or non-browsable; that role is assigned
+when it is created and cannot be changed by the user.
 
 ## P0: Core Behavior
 
 ### Navigation and tabs
-- [x] Each application tab retains its own active folder.
-- [x] Switching tabs restores that tab's location.
-- [x] Exactly one tab contains a browsable Pathview; it is always first. Every
-  other tab contains a non-browsable Pathview.
-- [x] **Fix** on the browsable Pathview creates and selects a non-browsable
-  Pathview at the same location.
-- [x] **Browse** on a non-browsable Pathview navigates the browsable Pathview to
-  that location and selects the first tab.
-- [x] A non-browsable Pathview does not change location from its tree or from
+- [x] The application starts with exactly one browsable Pathview in the first
+  tab. Its tab title is **BROWSE**, independent of its current location, and it
+  cannot be closed.
+- [x] Every other tab contains a non-browsable Pathview. The **New tab** toolbar
+  command is absent; a fixed Pathview is created with **Fix**.
+- [x] **Fix** creates a non-browsable Pathview at the browsable Pathview's
+  current location. If that location already has an open non-browsable
+  Pathview, **Fix** selects that tab instead of creating a duplicate.
+- [x] **Browse** on a non-browsable Pathview selects the first tab and navigates
+  the browsable Pathview to the fixed Pathview's location.
+- [x] Non-browsable Pathviews can be closed; the browsable Pathview remains
+  open, so at least one tab is always present.
+- [x] The browsable Pathview shows only the **Active path and siblings** tree
+  tab. Each non-browsable Pathview shows only the **Active path** tree tab.
+- [x] A non-browsable Pathview shows a bold **FIXED** badge before its path and
+  a **Browse** button immediately after it. The browsable Pathview shows its
+  path followed by **Fix**, with no badge. **Show directories** is below this
+  title row.
+- [x] Each Pathview retains its own location and **Show directories** setting
+  when the user switches tabs. Sort parameters continue to follow the active
+  folder's configured view.
+- [x] The address field offers paths currently open in tabs. Selecting a
+  dropdown entry selects its associated tab. Typing a path selects an existing
+  Pathview at that location, or navigates the browsable Pathview if none exists.
+- [x] Back, Forward, and Up always target the browsable Pathview and select its
+  tab.
+- [x] A non-browsable Pathview does not change location through its tree or
   folder activation in its Shell content pane. This blocks folder navigation
-  only; other native Shell commands and operations remain available.
-- [x] Typed address navigation and Back, Forward, and Up target the browsable
-  Pathview; choosing a path from the address dropdown selects that path's tab.
-- [x] The address field accepts typed filesystem paths and offers the paths
-  currently open in tabs.
-- [x] Back, Forward, and Up navigate within the active tab.
-- [x] The user can create and close tabs; at least one tab remains open.
-- [x] Opening a folder from the content view navigates within the active tab.
-- [x] Navigation initiated from the content view updates the address, tab title,
-  and custom directory trees.
+  only; other native Shell commands and file operations remain available.
+- [x] Navigation in the browsable Pathview updates the address, tab title,
+  custom directory tree, and its own content view.
 
 ### Directory trees
 
@@ -49,9 +61,11 @@ view.
   directory.
 - [x] **Active path and siblings** shows the active route and each route node's
   immediate child directories. Off-route branches remain collapsed.
-- [x] The active directory is highlighted, and both trees follow navigation
-  initiated elsewhere in the application.
-- [x] Single-click navigation opens the clicked directory in the content view.
+- [x] The active directory is highlighted, and the visible tree follows
+  navigation initiated elsewhere in the application.
+- [x] In the browsable Pathview, single-click navigation opens the clicked
+  directory in the content view. A non-browsable Pathview's tree does not
+  navigate its location.
 - [x] Expanding a tree node does not trigger navigation during application
   startup or other programmatic tree updates.
 
@@ -74,8 +88,9 @@ view.
 
 ### Selection and opening
 
-- [x] Users can select items and open folders or files with the expected
-  Windows Shell behavior.
+- [x] Users can select items and open files with the expected Windows Shell
+  behavior. Folder navigation is available only in the browsable Pathview;
+  fixed Pathviews retain other native Shell commands and file operations.
 - [ ] Selection supports the expected multi-select and keyboard-focus behavior
   for common file operations.
 - [ ] Selection remains predictable when the content view refreshes or
@@ -136,17 +151,22 @@ view.
 1. With **Show directories** off, ordinary folders and directory reparse points
    are absent from the content view; switching it on displays them, and
    switching it off hides them again without changing the active path.
-2. Navigate using either custom tree, the address field, the Shell content
-   view, and the tab-path dropdown; all paths, titles, and trees stay in sync.
-3. Open two tabs at different paths and verify switching tabs restores each
-   location independently.
-4. Use item and folder-background menus for Properties, New Text Document,
+2. Navigate the browsable Pathview using its tree, address field, Shell content
+  view, and toolbar history. Verify its address, title, tree, and content stay
+  synchronized. Verify folder navigation attempts from a non-browsable tree or
+  Shell content view do not change that Pathview's location.
+3. Use **Fix** repeatedly at one location and type that location into the
+  address field. Verify the existing non-browsable tab is selected instead of
+  creating a duplicate. Use a dropdown entry to select its associated tab.
+4. Open fixed Pathviews at different locations and verify switching tabs
+  restores each location and its **Show directories** setting.
+5. Use item and folder-background menus for Properties, New Text Document,
    Copy/Paste, Paste shortcut, and drag/drop with Windows Explorer.
-5. Verify cancellation, name collisions, access denied, and disconnected
+6. Verify cancellation, name collisions, access denied, and disconnected
   destinations do not crash the application. If folder navigation fails, the
   active path, address, tab title, trees, and history remain on the last
   successfully displayed folder.
-6. Navigate between folders with different saved view modes, groups, columns,
+7. Navigate between folders with different saved view modes, groups, columns,
   and sort choices. Verify the content view always uses the standard ungrouped
   Details layout and column order, while retaining each folder's selected
   sort column and direction.

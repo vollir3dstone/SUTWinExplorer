@@ -50,11 +50,14 @@ public partial class Pathview : UserControl
     {
         InitializeComponent();
         IsBrowsable = isBrowsable;
-        PathviewActionButton.Content = IsBrowsable ? "Fix" : "Browse";
-        PathviewActionButton.ToolTip = IsBrowsable
-            ? "Create a non-browsable Pathview at this location"
-            : "Open this location in the browsable Pathview";
-        PathviewActionButton.IsEnabled = false;
+        ActivePathTab.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
+        ActivePathAndSiblingsTab.Visibility = IsBrowsable ? Visibility.Visible : Visibility.Collapsed;
+        SidebarTabs.SelectedItem = IsBrowsable ? ActivePathAndSiblingsTab : ActivePathTab;
+        FixedPathBadge.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
+        BrowsePathviewButton.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
+        FixPathviewButton.Visibility = IsBrowsable ? Visibility.Visible : Visibility.Collapsed;
+        BrowsePathviewButton.ToolTip = "Open this location in the browsable Pathview";
+        FixPathviewButton.ToolTip = "Create a non-browsable Pathview at this location";
         _fileSystemRefreshTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
         {
             Interval = TimeSpan.FromMilliseconds(200)
@@ -167,7 +170,8 @@ public partial class Pathview : UserControl
         }
 
         CurrentPath = path;
-        PathviewActionButton.IsEnabled = true;
+        FixPathviewButton.IsEnabled = true;
+        BrowsePathviewButton.IsEnabled = true;
         LocationLabel.Text = ShellDisplayNameProvider.GetDisplayPath(path);
         RefreshActivePathAndSiblingsTree();
         RefreshActivePathTree();
@@ -248,6 +252,20 @@ public partial class Pathview : UserControl
             FixRequested?.Invoke(this, EventArgs.Empty);
         else
             BrowseRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void LocationHeaderPanel_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var fixedBadgeWidth = FixedPathBadge.Visibility == Visibility.Visible
+            ? FixedPathBadge.ActualWidth + FixedPathBadge.Margin.Left + FixedPathBadge.Margin.Right
+            : 0;
+        var actionButton = IsBrowsable ? FixPathviewButton : BrowsePathviewButton;
+        var actionButtonWidth = actionButton.Visibility == Visibility.Visible
+            ? actionButton.ActualWidth + actionButton.Margin.Left + actionButton.Margin.Right
+            : 0;
+        var titlePadding = LocationLabel.Padding.Left + LocationLabel.Padding.Right;
+        LocationLabel.MaxWidth = Math.Max(0,
+            LocationHeaderPanel.ActualWidth - fixedBadgeWidth - actionButtonWidth - titlePadding);
     }
 
     private void ShellBrowserSlot_SizeChanged(object sender, SizeChangedEventArgs e)

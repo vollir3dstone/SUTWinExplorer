@@ -73,24 +73,50 @@ ellipsis prefix is omitted.
 - Each application tab contains one `Pathview`. A `Pathview` is the complete
   per-tab browsing unit for the displays and settings attached to that tab: it
   owns the active path, back/forward history, left directory-tree pane, right
-  content pane, status display, and temporary view settings. Its left pane
-  switches between two custom tree modes. **Show directories** is currently
-  the tab-local setting; sort parameters are captured from the Shell folder
-  view rather than stored independently by the `Pathview`.
+  content pane, status display, and temporary view settings. The browsable
+  Pathview shows only **Active path and siblings**; non-browsable Pathviews show
+  only **Active path**. **Show directories** is tab-local; sort parameters are
+  captured from the Shell folder view rather than stored independently by the
+  `Pathview`.
 - `Pathview.IsBrowsable` is immutable for the lifetime of a Pathview. `MainWindow`
-  creates exactly one browsable Pathview at tab index 0; all subsequent tabs are
-  non-browsable. The browsable tab cannot be closed. **Fix** creates a new
-  non-browsable Pathview at the browsable location; **Browse** navigates the
-  browsable Pathview to a non-browsable Pathview's location and selects tab 0.
+  creates exactly one browsable Pathview as the `TabControl`'s first item; all
+  subsequent Pathviews are non-browsable. The browsable tab is titled **BROWSE**
+  regardless of location, has no close button, and is never inserted into the
+  fixed-path map. The **New tab** toolbar control was removed; **Fix** is the
+  operation for opening a fixed Pathview.
+- `MainWindow._fixedPathviewsByPath` is a case-insensitive dictionary keyed by
+  normalized full filesystem paths (`Path.GetFullPath`, with a trailing
+  directory separator removed). It indexes only non-browsable Pathviews; the
+  browsable Pathview is held separately and is never entered in this map. A
+  reverse Pathview-to-key map supports cleanup, and a Pathview-to-`TabItem` map
+  supports selection without searching the tab collection. A fixed Pathview is
+  first registered with its requested initial path, then its key is reconciled
+  after each successful location commit. Entries are removed when a fixed tab
+  closes or its initial navigation fails.
+- **Fix** looks up the browsable Pathview's current path in the fixed-path map.
+  It selects the mapped tab when present, otherwise it creates a fixed
+  Pathview, registers it, adds the tab after the first item, and selects it.
+  This prevents duplicate fixed Pathviews at the same normalized path. **Browse**
+  selects the first `TabItem` and navigates its browsable Pathview to the fixed
+  Pathview's current location.
+- Typed address input is resolved to a filesystem path and normalized to the
+  same map key. If a fixed Pathview already owns that path, its tab is selected;
+  otherwise the address request selects and navigates the browsable Pathview.
+  Selecting an address dropdown entry remains a direct tab selection for the
+  associated Pathview. Back, Forward, and Up select and operate on the
+  browsable Pathview.
 - App-owned navigation is ignored by non-browsable Pathviews. For navigation
   initiated inside the hosted Shell view, its `IExplorerBrowserEvents.OnNavigationPending`
   callback returns `E_ABORT` for unapproved navigation on non-browsable
-  Pathviews. Explicit app-requested navigation, including initial loading, is
-  allowed. This cancels only folder navigation while leaving other Shell
-  commands and operations intact.
-- Typed address submissions and Back, Forward, and Up target the browsable
-  Pathview. Selecting an address dropdown entry still selects its associated
-  Pathview directly.
+  Pathviews. The host records each app-requested destination and allows a
+  pending browse only when its filesystem path matches that requested
+  destination; this permits initialization and other explicit app navigation.
+  Rejected Shell folder navigation does not disable the Shell pane or its other
+  commands and file operations.
+- The content header presents non-browsable Pathviews as **FIXED** badge, path,
+  then **Browse** button on one row. The browsable Pathview presents its path
+  followed by **Fix**, with no badge. **Show directories** remains on the row
+  below. The left pane uses the role-specific tree tab described above.
 - The right content pane is a separate content view. Production creates one
   `ShellExplorerBrowserHost` per `Pathview`; it derives from
   `HwndHost` and hosts one Shell `IExplorerBrowser` COM instance.
