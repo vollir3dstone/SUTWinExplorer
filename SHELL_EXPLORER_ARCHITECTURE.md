@@ -148,9 +148,16 @@ Both directory trees in `ExplorerTabView.xaml` share
   for nested tree items.
 - `DirectoryTreeItemStyle` binds each item's expanded and selected states to
   the `TreeEntry`, and supplies the custom `TreeViewItem` control template.
-- The `TreeViewItem` control template puts the shell icon/toggle in the first
-  column, the entry header in the second, and expanded children below the
-  header. It hides placeholder entries and applies a light-blue selected-row
+  The `TreeViewItem` control template puts a directional disclosure triangle,
+  the shell folder icon, and the entry header in separate columns, with
+  expanded children below the header. Clicking any part of a row makes its
+  directory active; only the triangle can collapse an expanded branch. If the
+  collapsed directory is the active browsable path, the parent becomes active
+  and selected. The
+  triangle is based on the presence of immediate subdirectories before tree
+  filtering, so internal and directory-link entries count. Hidden filesystem
+  items retain their Shell icon and are rendered with reduced opacity. The
+  template hides placeholder entries and applies a light-blue selected-row
   background.
 
 `Pathview.DirectoryTreeRowHeight` in `ExplorerTabView.xaml.cs` sets the

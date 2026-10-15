@@ -625,7 +625,9 @@ public partial class Pathview : UserControl
 
         try
         {
-            var directories = Directory.EnumerateDirectories(entry.Path)
+            var directories = Directory.EnumerateDirectories(entry.Path).ToArray();
+            entry.HasSubdirectories = directories.Length > 0;
+            directories = directories
                 .Where(directory => !ShouldHideTreeDirectory(directory))
                 .OrderBy(path => path, StringComparer.CurrentCultureIgnoreCase)
                 .ToArray();
@@ -644,6 +646,7 @@ public partial class Pathview : UserControl
                 else
                 {
                     child.RefreshDisplayName();
+                    child.RefreshIcons();
                 }
 
                 refreshedChildren.Add(child);
@@ -804,21 +807,21 @@ public partial class Pathview : UserControl
             return;
         }
 
-        if (FindAncestor<ToggleButton>(e.OriginalSource as DependencyObject) is not null)
+        var isDisclosureClick = FindAncestor<ToggleButton>(e.OriginalSource as DependencyObject) is not null;
+        if (isDisclosureClick && IsBrowsable && item.IsExpanded &&
+            string.Equals(CurrentPath, entry.Path, StringComparison.OrdinalIgnoreCase) &&
+            ItemsControl.ItemsControlFromItemContainer(item) is TreeViewItem { DataContext: TreeEntry parentEntry })
         {
-            if (ReferenceEquals(sender, ActivePathTree))
-            {
-                item.IsSelected = true;
-                item.IsExpanded = true;
-                e.Handled = true;
-            }
-            QueueTreeNavigation(entry);
+            entry.IsSelected = false;
+            parentEntry.IsSelected = true;
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => NavigateFromTree(parentEntry)));
             return;
         }
 
-        // Clicking a folder name selects and expands it; expansion shows its contents in the right pane.
         item.IsSelected = true;
-        item.IsExpanded = true;
+        if (!isDisclosureClick)
+            item.IsExpanded = true;
+
         QueueTreeNavigation(entry);
     }
 
@@ -921,6 +924,7 @@ public sealed class TreeEntry : INotifyPropertyChanged
 {
     private bool _isExpanded;
     private bool _isSelected;
+    private bool _hasSubdirectories;
 
     private TreeEntry(string name, string path, bool isPlaceholder)
     {
@@ -928,6 +932,7 @@ public sealed class TreeEntry : INotifyPropertyChanged
         Path = path;
         IsPlaceholder = isPlaceholder;
         IsLoaded = isPlaceholder;
+        _hasSubdirectories = !isPlaceholder && ContainsSubdirectories(path);
         Icons = isPlaceholder ? null : ShellIconProvider.GetSmallIcons(path);
     }
 
@@ -937,6 +942,11 @@ public sealed class TreeEntry : INotifyPropertyChanged
     public string Path { get; }
     public bool IsPlaceholder { get; }
     public bool IsLoaded { get; set; }
+    public bool HasSubdirectories
+    {
+        get => _hasSubdirectories;
+        set => SetField(ref _hasSubdirectories, value);
+    }
     public bool IsExpanded
     {
         get => _isExpanded;
@@ -952,6 +962,18 @@ public sealed class TreeEntry : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public static TreeEntry Placeholder() => new("Loading", string.Empty, true);
+
+    private static bool ContainsSubdirectories(string path)
+    {
+        try
+        {
+            return Directory.EnumerateDirectories(path).Any();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
 
     public void RefreshIcons()
     {
@@ -1008,7 +1030,7 @@ public sealed class FileEntry
     public string ModifiedText => Modified.ToString("g");
 }
 
-public sealed record ShellIconSet(ImageSource? BaseIcon, ImageSource? OverlayIcon);
+public sealed record ShellIconSet(ImageSource? BaseIcon, ImageSource? OverlayIcon, double Opacity);
 
 internal static class ShellDisplayNameProvider
 {
@@ -1136,12 +1158,24 @@ internal static class ShellIconProvider
             if (overlaySlot > 0 && imageList.GetOverlayImage(overlaySlot, out var overlayImageIndex) >= 0)
                 overlayIcon = GetImage(imageList, overlayImageIndex);
 
-            return new ShellIconSet(baseIcon, overlayIcon);
+            return new ShellIconSet(baseIcon, overlayIcon, GetOpacity(path));
         }
         finally
         {
             if (imageList is not null && Marshal.IsComObject(imageList))
                 _ = Marshal.FinalReleaseComObject(imageList);
+        }
+    }
+
+    private static double GetOpacity(string path)
+    {
+        try
+        {
+            return (File.GetAttributes(path) & FileAttributes.Hidden) != 0 ? 0.55 : 1;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return 1;
         }
     }
 

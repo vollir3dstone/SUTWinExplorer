@@ -69,9 +69,15 @@ when it is created and cannot be changed by the user.
   directories and junctions remain visible. The active route stays visible
   even when a route directory matches a filter rule; the setting does not
   affect the content view.
-- [x] In the browsable Pathview, single-click navigation opens the clicked
-  directory in the content view. A non-browsable Pathview's tree does not
-  navigate its location.
+- [x] A single click anywhere on a directory row, including its disclosure
+  triangle, folder icon, or name, makes that directory active and opens it in
+  the browsable Pathview's content view. Clicking the triangle of an expanded
+  directory collapses its tree branch; if it is the active directory, the
+  active path and selection move to its parent. Clicking its icon or name
+  never collapses it. A disclosure triangle is shown only when
+  the directory contains immediate subdirectories, including internal and
+  directory-link entries. A non-browsable Pathview's tree does not navigate
+  its location.
 - [x] Expanding a tree node does not trigger navigation during application
   startup or other programmatic tree updates.
 
