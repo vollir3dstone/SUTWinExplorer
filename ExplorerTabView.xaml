@@ -165,6 +165,15 @@
                               IsChecked="True" VerticalAlignment="Center"
                               Checked="HideInternalContentCheckBox_StateChanged"
                               Unchecked="HideInternalContentCheckBox_StateChanged" />
+                    <TextBlock Text="Name pattern" Margin="16,0,6,0" VerticalAlignment="Center" />
+                    <TextBox x:Name="NamePatternTextBox" Width="150" Height="20" Padding="3,0"
+                             BorderThickness="1,1,0,1"
+                             VerticalAlignment="Center" VerticalContentAlignment="Center"
+                             ToolTip="Use * and ? as wildcards"
+                             TextChanged="NamePatternTextBox_TextChanged" />
+                        <Button Content="×" Width="20" Height="20" Padding="0"
+                            BorderThickness="0,1,1,1" VerticalAlignment="Center"
+                            ToolTip="Clear name pattern" Click="ClearNamePatternButton_Click" />
                 </StackPanel>
             <Grid Grid.Row="2" Grid.ColumnSpan="2" Margin="10,0,10,8">
                 <Grid.ColumnDefinitions>

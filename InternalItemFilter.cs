@@ -1,9 +1,25 @@
 using System.IO;
+using System.IO.Enumeration;
 
 namespace SUTWinExplorer;
 
 internal static class InternalItemFilter
 {
+    public static bool MatchesNamePattern(string itemPath, string pattern)
+    {
+        if (string.IsNullOrEmpty(pattern))
+            return true;
+
+        var itemName = ShellDisplayNameProvider.GetDisplayName(itemPath);
+        if (string.IsNullOrEmpty(itemName))
+            itemName = Path.GetFileName(Path.TrimEndingDirectorySeparator(itemPath));
+
+        return MatchesName(itemName, pattern);
+    }
+
+    public static bool MatchesName(string itemName, string pattern) =>
+        string.IsNullOrEmpty(pattern) || FileSystemName.MatchesSimpleExpression(pattern, itemName, ignoreCase: true);
+
     public static bool ShouldHide(string itemPath, bool isDirectory)
     {
         var itemName = Path.GetFileName(Path.TrimEndingDirectorySeparator(itemPath));

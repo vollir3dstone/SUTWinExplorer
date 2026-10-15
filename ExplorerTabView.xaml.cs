@@ -78,6 +78,7 @@ public partial class Pathview : UserControl
             _shellBrowserHost.FileSystemChanged += ShellBrowserHost_FileSystemChanged;
             _shellBrowserHost.SetShowDirectories(HideDirectoriesCheckBox.IsChecked != true);
             _shellBrowserHost.SetHideInternal(HideInternalContentCheckBox.IsChecked == true);
+            _shellBrowserHost.SetNamePattern(NamePatternTextBox.Text);
             ShellBrowserSlot.Content = _shellBrowserHost;
         }
         Navigate(initialPath, NavigationHistoryAction.None);
@@ -192,6 +193,9 @@ public partial class Pathview : UserControl
             {
                 foreach (var directory in Directory.EnumerateDirectories(CurrentPath))
                 {
+                    if (!InternalItemFilter.MatchesNamePattern(directory, NamePatternTextBox.Text))
+                        continue;
+
                     if (HideInternalContentCheckBox.IsChecked == true && InternalItemFilter.ShouldHide(directory, true))
                         continue;
 
@@ -212,6 +216,9 @@ public partial class Pathview : UserControl
                 {
                     var info = new FileInfo(file);
                     var isDirectory = (info.Attributes & FileAttributes.Directory) != 0;
+                    if (!InternalItemFilter.MatchesNamePattern(file, NamePatternTextBox.Text))
+                        continue;
+
                     if (HideInternalContentCheckBox.IsChecked == true && InternalItemFilter.ShouldHide(file, isDirectory))
                         continue;
 
@@ -265,6 +272,24 @@ public partial class Pathview : UserControl
             _shellBrowserHost?.SetHideInternal(HideInternalContentCheckBox.IsChecked == true);
 
         RefreshShellStatusCount();
+    }
+
+    private void NamePatternTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(CurrentPath))
+            return;
+
+        if (IsLegacyWpfFileList)
+            RefreshFiles();
+        else
+            _shellBrowserHost?.SetNamePattern(NamePatternTextBox.Text);
+
+        RefreshShellStatusCount();
+    }
+
+    private void ClearNamePatternButton_Click(object sender, RoutedEventArgs e)
+    {
+        NamePatternTextBox.Clear();
     }
 
     private void ContentOperationButton_Click(object sender, RoutedEventArgs e)
@@ -591,10 +616,12 @@ public partial class Pathview : UserControl
         {
             var count = Directory.EnumerateFiles(CurrentPath)
                 .Count(path => (File.GetAttributes(path) & FileAttributes.Directory) == 0 &&
+                               InternalItemFilter.MatchesNamePattern(path, NamePatternTextBox.Text) &&
                                (HideInternalContentCheckBox.IsChecked != true || !InternalItemFilter.ShouldHide(path, false)));
             if (HideDirectoriesCheckBox.IsChecked != true)
                 count += Directory.EnumerateDirectories(CurrentPath)
-                    .Count(path => HideInternalContentCheckBox.IsChecked != true || !InternalItemFilter.ShouldHide(path, true));
+                    .Count(path => InternalItemFilter.MatchesNamePattern(path, NamePatternTextBox.Text) &&
+                                   (HideInternalContentCheckBox.IsChecked != true || !InternalItemFilter.ShouldHide(path, true)));
             StatusLabel.Text = $"{count} items";
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)

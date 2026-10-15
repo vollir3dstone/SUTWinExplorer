@@ -163,7 +163,10 @@ leading ellipsis prefix is omitted.
   directory returns access-denied. The Shell `ICommDlgBrowser.IncludeObject` hook applies
   the filter to Shell items; the retained WPF list and status count use the same
   helper. This setting is independent of the tree checkbox and
-  **Hide directories**.
+  **Hide directories**. The **Name pattern** editor matches the Shell display
+  name case-insensitively, falling back to the filesystem leaf name when no
+  display name is available; blank means no pattern constraint, `?` matches one
+  character, `*` matches zero or more characters, and `.` is literal.
 - The content filtering row starts with a **VIEW:** badge styled like the
   **SELECTED:** and **FIXED** badges.
 - The right content pane is a separate content view. Production creates one
@@ -382,10 +385,13 @@ visibility correction.
 
 ### Content item filtering
 
-When **Hide directories** is checked, `IncludeObject` excludes items classified
-as folders. When unchecked, folders are included unless the separate content
-**Hide internal** checkbox excludes the item. If neither filter is active,
-`IncludeObject` returns `S_OK` for every item. Otherwise it:
+The **Name pattern** editor, when nonblank, requires the item's Shell display
+name (or filesystem leaf name if unavailable) to match its wildcard expression.
+When **Hide directories** is checked,
+`IncludeObject` excludes items classified as folders. The separate content
+**Hide internal** checkbox excludes items matching its rules. If the pattern is
+blank and neither hide filter is active, `IncludeObject` returns `S_OK` for
+every item. Otherwise it:
 
 The exclusion rules combine with OR: an item is excluded if any enabled rule
 matches. Inclusion is the AND of passing each enabled filter:
@@ -393,15 +399,19 @@ matches. Inclusion is the AND of passing each enabled filter:
 ```text
 hideByName = name starts with "." or "$"
 hideBySystemAccess = isSystem and accessDenied
-exclude = (hideDirectories and isDirectory)
-    or (hideInternal and (hideByName or hideBySystemAccess))
-include = not exclude
+patternMatches = pattern is blank or wildcard-matches the display name
+exclude = not patternMatches
+  or (hideDirectories and isDirectory)
+  or (hideInternal and (hideByName or hideBySystemAccess))
+include = patternMatches and not (hideDirectories and isDirectory)
+  and not (hideInternal and (hideByName or hideBySystemAccess))
 ```
 
 Equivalently, inclusion requires all of these conditions:
 
 ```text
-(not hideDirectories or not isDirectory)
+(patternMatches)
+and (not hideDirectories or not isDirectory)
 and (not hideInternal or
   (not hideByName and (not isSystem or accessAllowed)))
 ```
@@ -421,9 +431,10 @@ exclude an item. Junction status is not part of either rule.
 3. Places the callback's borrowed child PIDL into a one-element pointer array
    and calls `IShellFolder.GetAttributesOf` with `SFGAO_FOLDER`.
 4. Returns `S_FALSE` for folder items when **Hide directories** is checked.
-5. When content **Hide internal** is checked, gets the child item's parsing
-  name, combines it with the current path, and evaluates the shared
-  `InternalItemFilter` predicate for files and folders. Dot- and
+5. When the pattern is nonblank or content **Hide internal** is checked, gets
+  the child item's parsing name and combines it with the current path. It
+  rejects names that do not match the pattern, then evaluates the shared
+  `InternalItemFilter` predicate when **Hide internal** is checked. Dot- and
   dollar-prefixed names are excluded. A System item is excluded only when
   opening a file for read or listing a directory returns access-denied.
 

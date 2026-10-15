@@ -53,6 +53,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     private bool _initialized;
     private bool _showDirectories;
     private bool _hideInternal;
+    private string _namePattern = string.Empty;
     private NativeRect _viewBounds;
     private bool _hasViewBounds;
     private string? _currentPath;
@@ -105,6 +106,13 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         _hideInternal = hideInternal;
         _site?.SetHideInternal(hideInternal);
         RefreshAfterFilterChange($"Hide internal refresh settled: {hideInternal}");
+    }
+
+    public void SetNamePattern(string namePattern)
+    {
+        _namePattern = namePattern;
+        _site?.SetNamePattern(namePattern);
+        RefreshAfterFilterChange("Name pattern refresh settled");
     }
 
     private void RefreshAfterFilterChange(string traceMessage)
@@ -332,6 +340,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             _site = new ShellBrowserSite(
                 () => _showDirectories,
                 () => _hideInternal,
+                () => _namePattern,
                 () => _pendingPath,
                 ScheduleSelectionStateRefresh);
             _browserSite = (IObjectWithSiteNative)_browser;
@@ -1172,6 +1181,7 @@ public interface IShellViewForFiltering
 public sealed class ShellBrowserSite(
     Func<bool> showDirectories,
     Func<bool> hideInternal,
+    Func<string?> namePattern,
     Func<string?> currentPath,
     Action selectionChanged) : IServiceProviderNative, ICommDlgBrowserNative, IDisposable
 {
@@ -1180,6 +1190,7 @@ public sealed class ShellBrowserSite(
     private const uint ShellViewBackground = 0;
     private const uint ShellAttributeFolder = 0x20000000;
     private const uint ShellDisplayNameInFolderForParsing = 0x8001;
+    private const uint ShellDisplayNameInFolder = 0x0001;
     private const int ShellStringReturnSize = 272;
     private const uint CommDlgBrowserSelectionChanged = 2;
     private const int S_OK = 0;
@@ -1192,9 +1203,11 @@ public sealed class ShellBrowserSite(
 
     public void SetShowDirectories(bool value) => _showDirectories = value;
     public void SetHideInternal(bool value) => _hideInternal = value;
+    public void SetNamePattern(string value) => _namePattern = value;
 
     private bool _showDirectories = showDirectories();
     private bool _hideInternal = hideInternal();
+    private string _namePattern = namePattern() ?? string.Empty;
 
     public int QueryService(ref Guid serviceId, ref Guid interfaceId, out IntPtr result)
     {
@@ -1223,7 +1236,7 @@ public sealed class ShellBrowserSite(
 
     public int IncludeObject(IShellViewForFiltering shellView, IntPtr childItemIdList)
     {
-        if (_showDirectories && !_hideInternal)
+        if (_showDirectories && !_hideInternal && string.IsNullOrEmpty(_namePattern))
             return S_OK;
 
         IntPtr childArray = IntPtr.Zero;
@@ -1244,10 +1257,21 @@ public sealed class ShellBrowserSite(
             if (!_showDirectories && isDirectory)
                 return S_FALSE;
 
-            if (_hideInternal)
+            if (_hideInternal || !string.IsNullOrEmpty(_namePattern))
             {
                 var itemPath = GetChildPath(folder, childItemIdList);
-                if (itemPath is not null && InternalItemFilter.ShouldHide(itemPath, isDirectory))
+                if (!string.IsNullOrEmpty(_namePattern))
+                {
+                    var itemName = GetChildName(folder, childItemIdList, ShellDisplayNameInFolder);
+                    if (string.IsNullOrEmpty(itemName) && itemPath is not null)
+                        itemName = Path.GetFileName(Path.TrimEndingDirectorySeparator(itemPath));
+
+                    if (itemName is not null && !InternalItemFilter.MatchesName(itemName, _namePattern))
+                        return S_FALSE;
+                }
+
+                if (_hideInternal && itemPath is not null &&
+                    InternalItemFilter.ShouldHide(itemPath, isDirectory))
                     return S_FALSE;
             }
 
@@ -1270,11 +1294,17 @@ public sealed class ShellBrowserSite(
         if (string.IsNullOrWhiteSpace(currentPath))
             return null;
 
+        var childName = GetChildName(folder, childItemIdList, ShellDisplayNameInFolderForParsing);
+        return string.IsNullOrEmpty(childName) ? null : Path.Combine(currentPath, childName);
+    }
+
+    private static string? GetChildName(IShellFolder folder, IntPtr childItemIdList, uint displayNameFlags)
+    {
         var shellStringReturn = Marshal.AllocCoTaskMem(ShellStringReturnSize);
         try
         {
             Marshal.WriteInt32(shellStringReturn, 0);
-            var result = folder.GetDisplayNameOf(childItemIdList, ShellDisplayNameInFolderForParsing, shellStringReturn);
+            var result = folder.GetDisplayNameOf(childItemIdList, displayNameFlags, shellStringReturn);
             if (result < 0)
                 return null;
 
@@ -1286,7 +1316,7 @@ public sealed class ShellBrowserSite(
                 2 => Marshal.PtrToStringAnsi(IntPtr.Add(shellStringReturn, unionOffset)),
                 _ => null
             };
-            return string.IsNullOrEmpty(childName) ? null : Path.Combine(currentPath, childName);
+            return childName;
         }
         catch
         {

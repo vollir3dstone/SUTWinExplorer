@@ -94,8 +94,14 @@ when it is created and cannot be changed by the user.
   the tree's **Hide internal** checkbox and updates the Shell view without
   navigating.
 - [x] Content visibility filters are independent exclusions: an item is hidden
-  if it matches either enabled filter, and displayed only if it passes both.
-  A System attribute alone does not hide an item; access must also be denied.
+  if it matches either enabled hide filter, and displayed only if its name
+  matches the pattern and it passes both hide filters. A System attribute alone
+  does not hide an item; access must also be denied.
+- [x] The **Name pattern** editor filters files and directories by Shell display name.
+  Blank applies no pattern constraint; `?` matches one character, `*` matches
+  zero or more characters, and `.` is literal. Matching is case-insensitive
+  and updates the content view as the pattern is edited. If Shell cannot
+  provide a display name, matching falls back to the filesystem leaf name.
 - [x] Directory junctions and other directory reparse points follow the same
   visibility rule as ordinary directories when the Shell classifies them as
   folders.
@@ -235,7 +241,12 @@ when it is created and cannot be changed by the user.
   directories disappear only when listing them is denied. Verify normal
   junctions remain visible and **Hide directories** still controls directory
   visibility independently.
-10. Select multiple items and use **Copy get**. Verify Copy paste and Copy
+10. Enter patterns such as `*.txt`, `file?.dat`, and `*.*`. Verify matching is
+  case-insensitive, `?` matches exactly one character, `*` matches zero or more
+  characters, `.` is literal, and a blank pattern removes only the pattern
+  constraint. Verify both files and directories are filtered without
+  navigation.
+11. Select multiple items and use **Copy get**. Verify Copy paste and Copy
   abort become enabled, Copy get becomes disabled, and all Move buttons remain
   disabled. Use Copy paste and verify the items are copied into the active
   folder without changing Shell clipboard state. Repeat and use Copy abort;
