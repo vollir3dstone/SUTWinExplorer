@@ -121,14 +121,15 @@ leading ellipsis prefix is omitted.
   **Hide internal** appear beside each other below this row. The left pane uses
   the role-specific tree tab described above.
 - Below the two visibility checkboxes, each Pathview has a five-group content
-  operations toolbar. **Copy get**, **Copy abort**, **Copy paste**, and the
-  three Move buttons are disabled placeholders with no command handlers. The
-  Copy group uses **Copy🠝**, **Copy❌**, and **Copy🠟** as its visual mnemonics.
-  The main window still listens for Windows clipboard updates and records
-  whether Shell file-transfer formats such as `CF_HDROP` and `Shell IDList
-  Array` are present; the toolbar is not yet wired to that state. Rename,
-  Path get, and Delete remain active and selection-aware. The Shell view's
-  native context-menu Copy and Cut commands continue to work normally.
+  operations toolbar. Copy and Move have separate app-owned path state
+  machines, independent of the Shell clipboard. Each Get stages the selected
+  filesystem paths; Paste uses native `IFileOperation` to copy or move them to
+  the active folder; Abort clears the staged paths. A prepared workflow
+  disables the other workflow's entire group, while enabling only its own
+  Paste and Abort buttons. The clipboard listener continues to record Shell
+  file-transfer formats separately and does not influence either workflow.
+  Rename, Path get, and Delete remain active and selection-aware. The Shell
+  view's native context-menu Copy and Cut commands continue to work normally.
 - The browsable **Active path and siblings** tree has a default-unchecked
   **Hide internal** checkbox. When enabled, child directories whose filesystem
   names begin with `.` or `$` are omitted; a directory with the Windows System

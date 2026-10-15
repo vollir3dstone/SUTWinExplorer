@@ -276,6 +276,55 @@ public partial class Pathview : UserControl
         {
             switch (action)
             {
+                case "CopyGet":
+                    if (MoveWorkflowState.Shared.IsPrepared)
+                        throw new InvalidOperationException("Abort or complete the prepared Move before starting a Copy.");
+
+                    var copyPaths = IsLegacyWpfFileList
+                        ? FileList.SelectedItems.OfType<FileEntry>().Select(entry => entry.FullPath).ToList()
+                        : _shellBrowserHost?.GetSelectedFileSystemPaths() ?? [];
+                    CopyWorkflowState.Shared.Prepare(copyPaths);
+                    break;
+                case "CopyPaste":
+                    var preparedPaths = CopyWorkflowState.Shared.PreparedPaths;
+                    if (string.IsNullOrWhiteSpace(CurrentPath))
+                        throw new InvalidOperationException("The destination folder is not ready.");
+
+                    var owner = Window.GetWindow(this) is { } window
+                        ? new System.Windows.Interop.WindowInteropHelper(window).Handle
+                        : IntPtr.Zero;
+                    ShellFileOperations.Copy(preparedPaths, CurrentPath, owner);
+                    CopyWorkflowState.Shared.CompletePaste();
+                    _shellBrowserHost?.RefreshContents();
+                    break;
+                case "CopyAbort":
+                    CopyWorkflowState.Shared.Abort();
+                    break;
+                case "MoveGet":
+                    if (CopyWorkflowState.Shared.IsPrepared)
+                        throw new InvalidOperationException("Abort or complete the prepared Copy before starting a Move.");
+
+                    var movePaths = IsLegacyWpfFileList
+                        ? FileList.SelectedItems.OfType<FileEntry>().Select(entry => entry.FullPath).ToList()
+                        : _shellBrowserHost?.GetSelectedFileSystemPaths() ?? [];
+                    MoveWorkflowState.Shared.Prepare(movePaths);
+                    break;
+                case "MovePaste":
+                    var preparedMovePaths = MoveWorkflowState.Shared.PreparedPaths;
+                    if (string.IsNullOrWhiteSpace(CurrentPath))
+                        throw new InvalidOperationException("The destination folder is not ready.");
+
+                    var moveOwner = Window.GetWindow(this) is { } moveWindow
+                        ? new System.Windows.Interop.WindowInteropHelper(moveWindow).Handle
+                        : IntPtr.Zero;
+                    ShellFileOperations.Move(preparedMovePaths, CurrentPath, moveOwner);
+                    MoveWorkflowState.Shared.CompletePaste();
+                    _shellBrowserHost?.RefreshContents();
+                    _shellBrowserHost?.RefreshSelectionState();
+                    break;
+                case "MoveAbort":
+                    MoveWorkflowState.Shared.Abort();
+                    break;
                 case "Rename":
                     _shellBrowserHost?.RenameSelection();
                     break;
@@ -339,6 +388,8 @@ public partial class Pathview : UserControl
     private void Pathview_Loaded(object sender, RoutedEventArgs e)
     {
         ShellExplorerBrowserHost.ToolbarOperationStateChanged += ShellExplorerBrowserHost_ToolbarOperationStateChanged;
+        CopyWorkflowState.Shared.Changed += CopyWorkflowState_Changed;
+        MoveWorkflowState.Shared.Changed += MoveWorkflowState_Changed;
         _shellBrowserHost?.RefreshSelectionState();
         UpdateToolbarOperationButtons();
         _fileSystemStateDirty = true;
@@ -350,6 +401,8 @@ public partial class Pathview : UserControl
     private void Pathview_Unloaded(object sender, RoutedEventArgs e)
     {
         ShellExplorerBrowserHost.ToolbarOperationStateChanged -= ShellExplorerBrowserHost_ToolbarOperationStateChanged;
+        CopyWorkflowState.Shared.Changed -= CopyWorkflowState_Changed;
+        MoveWorkflowState.Shared.Changed -= MoveWorkflowState_Changed;
         _fileSystemRefreshTimer.Stop();
         _fileSystemStateDirty = true;
         _shellViewNeedsRefresh = true;
@@ -357,6 +410,12 @@ public partial class Pathview : UserControl
     }
 
     private void ShellExplorerBrowserHost_ToolbarOperationStateChanged(object? sender, EventArgs e) =>
+        UpdateToolbarOperationButtons();
+
+    private void CopyWorkflowState_Changed(object? sender, EventArgs e) =>
+        UpdateToolbarOperationButtons();
+
+    private void MoveWorkflowState_Changed(object? sender, EventArgs e) =>
         UpdateToolbarOperationButtons();
 
     private void UpdateToolbarOperationButtons()
@@ -367,6 +426,15 @@ public partial class Pathview : UserControl
         RenameButton.IsEnabled = hasSelection;
         PathGetButton.IsEnabled = hasSelection;
         DeleteButton.IsEnabled = hasSelection;
+        var copyPrepared = CopyWorkflowState.Shared.IsPrepared;
+        var movePrepared = MoveWorkflowState.Shared.IsPrepared;
+        var canStartOperation = !copyPrepared && !movePrepared;
+        CopyGetButton.IsEnabled = hasSelection && canStartOperation;
+        CopyPasteButton.IsEnabled = copyPrepared;
+        CopyAbortButton.IsEnabled = copyPrepared;
+        MoveGetButton.IsEnabled = hasSelection && canStartOperation;
+        MovePasteButton.IsEnabled = movePrepared;
+        MoveAbortButton.IsEnabled = movePrepared;
     }
 
     private void Pathview_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)

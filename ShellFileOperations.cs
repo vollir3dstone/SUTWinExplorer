@@ -53,10 +53,23 @@ internal static class ShellFileOperations
         }
     }
 
-    public static void Move(IReadOnlyList<string> sourcePaths, string destinationPath, IntPtr ownerWindow)
+    public static void Copy(IReadOnlyList<string> sourcePaths, string destinationPath, IntPtr ownerWindow) =>
+        Transfer(sourcePaths, destinationPath, ownerWindow, "copy",
+            (operation, source, destination) => operation.CopyItem(source, destination, null, IntPtr.Zero));
+
+    public static void Move(IReadOnlyList<string> sourcePaths, string destinationPath, IntPtr ownerWindow) =>
+        Transfer(sourcePaths, destinationPath, ownerWindow, "move",
+            (operation, source, destination) => operation.MoveItem(source, destination, null, IntPtr.Zero));
+
+    private static void Transfer(
+        IReadOnlyList<string> sourcePaths,
+        string destinationPath,
+        IntPtr ownerWindow,
+        string operationName,
+        Func<IFileOperationNative, IShellItemNative, IShellItemNative, int> queueOperation)
     {
         if (sourcePaths.Count == 0)
-            throw new InvalidOperationException("Select one or more items to move.");
+            throw new InvalidOperationException($"Select one or more items to {operationName}.");
 
         IFileOperationNative? operation = null;
         IShellItemNative? destination = null;
@@ -87,7 +100,7 @@ internal static class ShellFileOperations
                     ref ShellItemInterfaceId,
                     out var source));
                 sources.Add(source);
-                Marshal.ThrowExceptionForHR(operation.MoveItem(source, destination, null, IntPtr.Zero));
+                Marshal.ThrowExceptionForHR(queueOperation(operation, source, destination));
             }
 
             Marshal.ThrowExceptionForHR(operation.PerformOperations());

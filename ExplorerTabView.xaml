@@ -201,19 +201,25 @@
                     </StackPanel>
                     <StackPanel Grid.Column="5" Orientation="Horizontal">
                         <Button x:Name="CopyGetButton" Content="Copy🠝" AutomationProperties.Name="Copy get" ToolTip="Copy get"
-                            Tag="CopyGet" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False" />
-                        <Button Content="Copy❌" AutomationProperties.Name="Copy abort" ToolTip="Copy abort"
-                            Tag="CopyAbort" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False" />
+                            Tag="CopyGet" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False"
+                            Click="ContentOperationButton_Click" />
+                        <Button x:Name="CopyAbortButton" Content="Copy❌" AutomationProperties.Name="Copy abort" ToolTip="Copy abort"
+                            Tag="CopyAbort" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False"
+                            Click="ContentOperationButton_Click" />
                         <Button x:Name="CopyPasteButton" Content="Copy🠟" AutomationProperties.Name="Copy paste" ToolTip="Copy paste"
-                            Tag="CopyPaste" Width="48" Padding="0" IsEnabled="False" />
+                            Tag="CopyPaste" Width="48" Padding="0" IsEnabled="False"
+                            Click="ContentOperationButton_Click" />
                     </StackPanel>
                     <StackPanel Grid.Column="7" Orientation="Horizontal">
                         <Button x:Name="MoveGetButton" Content="Move🠝" AutomationProperties.Name="Move get" ToolTip="Move get"
-                            Tag="MoveGet" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False" />
+                            Tag="MoveGet" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False"
+                            Click="ContentOperationButton_Click" />
                         <Button x:Name="MoveAbortButton" Content="Move❌" AutomationProperties.Name="Move abort" ToolTip="Move abort"
-                            Tag="MoveAbort" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False" />
+                            Tag="MoveAbort" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False"
+                            Click="ContentOperationButton_Click" />
                         <Button x:Name="MovePasteButton" Content="Move🠟" AutomationProperties.Name="Move paste" ToolTip="Move paste"
-                            Tag="MovePaste" Width="48" Padding="0" IsEnabled="False" />
+                            Tag="MovePaste" Width="48" Padding="0" IsEnabled="False"
+                            Click="ContentOperationButton_Click" />
                     </StackPanel>
                     <StackPanel Grid.Column="9" Orientation="Horizontal">
                         <Button x:Name="DeleteButton" Content="Del🗑️" AutomationProperties.Name="Delete" ToolTip="Delete"

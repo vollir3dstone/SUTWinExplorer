@@ -110,12 +110,18 @@ when it is created and cannot be changed by the user.
 - [x] Below the two visibility checkboxes, the content pane provides five
   separated action groups: **Rename**; **Path get**; **Copy get**, **Copy abort**,
   and **Copy paste**; **Move get**, **Move abort**, and **Move paste**; and
-  **Delete**. The Copy and Move buttons are currently disabled placeholders
-  with no command handlers. Their compact visual mnemonics include **Copy🠝**,
-  **Copy❌**, **Copy🠟**, **Move🠝**, **Move❌**, and **Move🠟**. The main-window
-  clipboard listener continues to observe Shell file-transfer data for later
-  wiring. **Rename**, **Path get**, and **Delete** retain their existing
-  behavior; selection-dependent actions are disabled when nothing is selected.
+  **Delete**. Copy and Move each have an app-owned two-state workflow,
+  independent of Shell clipboard state. Their **get** buttons stage selected
+  filesystem paths; **paste** performs the operation into the active folder;
+  **abort** clears the staged paths. Initially, Get is enabled when there is a
+  selection, while Paste and Abort are disabled. A prepared Copy disables all
+  Move buttons and enables only Copy paste/abort in its group. A prepared Move
+  disables all Copy buttons and enables only Move paste/abort in its group.
+  Paste or Abort returns that workflow to idle. Copy uses native file copy and
+  Move uses native file move; neither reads or writes Shell clipboard state.
+  The main-window clipboard listener remains separate. **Rename**, **Path
+  get**, and **Delete** retain their existing behavior; other
+  selection-dependent actions are disabled when nothing is selected.
 
 ### Selection and opening
 
@@ -214,7 +220,13 @@ when it is created and cannot be changed by the user.
   directories disappear only when listing them is denied. Verify normal
   junctions remain visible and **Hide directories** still controls directory
   visibility independently.
-10. Verify the Copy and Move toolbar buttons are disabled placeholders and
-  have no command handlers. Use the Shell context menu's Copy command and
-  verify the main-window clipboard listener observes the resulting file data.
-  Verify **Path get** copies the first selected item's filesystem path.
+10. Select multiple items and use **Copy get**. Verify Copy paste and Copy
+  abort become enabled, Copy get becomes disabled, and all Move buttons remain
+  disabled. Use Copy paste and verify the items are copied into the active
+  folder without changing Shell clipboard state. Repeat and use Copy abort;
+  verify the source items remain unchanged.
+11. Use **Move get** and verify the Copy group becomes disabled while Move
+  paste/abort become enabled. Use Move paste and verify the sources move into
+  the active folder without changing Shell clipboard state. Repeat and use
+  Move abort; verify the source items remain in place. Verify **Path get**
+  copies the first selected item's filesystem path.
