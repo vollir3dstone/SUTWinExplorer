@@ -53,10 +53,11 @@ languages.
 
 `MainWindow.GetTabLabelFromPath` builds tab labels from localized Shell display
 names and limits them to `MaxDisplayedPathLength` (currently 40 characters).
-Filesystem roots are displayed as their root label. For other paths, the
-default label starts with an ellipsis and the current directory name. If that
-alone fills the limit, it is clipped to the limit with a trailing ellipsis and
-the parent is omitted.
+Filesystem roots use the filesystem path root (for example, `C:\`), matching
+the address field and content-pane path display rather than the Shell's volume
+label. For other paths, the default label starts with an ellipsis and the
+current directory name. If that alone fills the limit, it is clipped to the
+limit with a trailing ellipsis and the parent is omitted.
 
 Otherwise, the label includes the parent and current directory. When it is too
 long, the parent name is shortened first, preserving as much of it as needed to
@@ -65,8 +66,8 @@ the full overflow, the current directory name is shortened in five-character
 steps and the combined label is recalculated. The current name is not shortened
 below ten characters; when the next step would cross that minimum, the current
 combined label is returned even if it exceeds the configured length limit.
-When there is no non-root parent, the root label replaces it and the leading
-ellipsis prefix is omitted.
+When there is no non-root parent, the filesystem root replaces it and the
+leading ellipsis prefix is omitted.
 
 ## Current Composition
 
