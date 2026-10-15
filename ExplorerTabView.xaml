@@ -186,33 +186,44 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="1" Orientation="Horizontal">
-                        <Button Content="Copy get" Tag="CopyGet" Width="92" Margin="0,0,4,0"
-                                Click="ContentOperationButton_Click" />
-                        <Button Content="Copy paste" Tag="CopyPaste" Width="92"
+                        <Button x:Name="RenameButton" Content="Rename" AutomationProperties.Name="Rename" ToolTip="Rename"
+                            Tag="Rename" Width="72" Padding="0" IsEnabled="False"
                                 Click="ContentOperationButton_Click" />
                     </StackPanel>
                     <StackPanel Grid.Column="3" Orientation="Horizontal">
-                        <Button Content="Path get" Tag="PathGet" Width="92"
+                        <Button x:Name="PathGetButton" Content="Path🠝" AutomationProperties.Name="Path get" ToolTip="Path get"
+                            Tag="PathGet" Width="48" Padding="0" IsEnabled="False"
                                 Click="ContentOperationButton_Click" />
                     </StackPanel>
                     <StackPanel Grid.Column="5" Orientation="Horizontal">
-                        <Button Content="Move get" Tag="MoveGet" Width="92" Margin="0,0,4,0"
-                                Click="ContentOperationButton_Click" />
-                        <Button Content="Move abort" Tag="MoveAbort" Width="92" Margin="0,0,4,0"
-                                Click="ContentOperationButton_Click" />
-                        <Button Content="Move paste" Tag="MovePaste" Width="92"
-                                Click="ContentOperationButton_Click" />
+                        <Button x:Name="CopyGetButton" Content="Copy🠝" AutomationProperties.Name="Copy get" ToolTip="Copy get"
+                            Tag="CopyGet" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False" />
+                        <Button Content="Copy❌" AutomationProperties.Name="Copy abort" ToolTip="Copy abort"
+                            Tag="CopyAbort" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False" />
+                        <Button x:Name="CopyPasteButton" Content="Copy🠟" AutomationProperties.Name="Copy paste" ToolTip="Copy paste"
+                            Tag="CopyPaste" Width="48" Padding="0" IsEnabled="False" />
                     </StackPanel>
                     <StackPanel Grid.Column="7" Orientation="Horizontal">
-                        <Button Content="Delete" Tag="Delete" Width="92"
+                        <Button x:Name="MoveGetButton" Content="Move🠝" AutomationProperties.Name="Move get" ToolTip="Move get"
+                            Tag="MoveGet" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False" />
+                        <Button x:Name="MoveAbortButton" Content="Move❌" AutomationProperties.Name="Move abort" ToolTip="Move abort"
+                            Tag="MoveAbort" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False" />
+                        <Button x:Name="MovePasteButton" Content="Move🠟" AutomationProperties.Name="Move paste" ToolTip="Move paste"
+                            Tag="MovePaste" Width="48" Padding="0" IsEnabled="False" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="9" Orientation="Horizontal">
+                        <Button x:Name="DeleteButton" Content="Del🗑️" AutomationProperties.Name="Delete" ToolTip="Delete"
+                            Tag="Delete" Width="48" Padding="0" IsEnabled="False"
                                 Click="ContentOperationButton_Click" />
                     </StackPanel>
                 </Grid>
             </Grid>
             <ListView x:Name="FileList" Grid.Row="3" Grid.Column="0" SelectionMode="Single"
-                      SizeChanged="FileList_SizeChanged"
+                      SelectionChanged="FileList_SelectionChanged" SizeChanged="FileList_SizeChanged"
                       PreviewMouseLeftButtonDown="FileList_PreviewMouseLeftButtonDown"
                       MouseDoubleClick="FileList_MouseDoubleClick"
                       PreviewMouseRightButtonDown="FileList_PreviewMouseRightButtonDown"

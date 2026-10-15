@@ -107,21 +107,15 @@ when it is created and cannot be changed by the user.
   folder-specific view settings are ignored.
 - [x] The WPF application chrome keeps the app's custom tabs, address field,
   directory trees, and item-count status area.
-- [x] Below the two visibility checkboxes, the content pane provides four
-  separated action groups: **Copy get** and **Copy paste**; **Path get**;
-  **Move get**, **Move abort**, and **Move paste**; and **Delete**. The
-  toolbar's different Copy labels map
-  directly to the Shell commands: **Copy get** is Copy for selected items, and
-  **Copy paste** is Paste into the active folder. **Path get** copies the first
-  selected item's filesystem path as text. The toolbar Move workflow is
-  separate from Shell Cut/Paste: Move get stages selected filesystem paths
-  inside the app and does not change or synchronize with Shell clipboard/Cut
-  state. Move paste invokes a native Shell move into the active folder only
-  after a dialog lists the item names and the user confirms. Cancel leaves the
-  source items in place and discards the staged paths. Move abort also discards
-  the staged paths, and starting another toolbar action aborts them. **Delete**
-  invokes the selected items' native Shell Delete command, including its normal
-  verification dialogs.
+- [x] Below the two visibility checkboxes, the content pane provides five
+  separated action groups: **Rename**; **Path get**; **Copy get**, **Copy abort**,
+  and **Copy paste**; **Move get**, **Move abort**, and **Move paste**; and
+  **Delete**. The Copy and Move buttons are currently disabled placeholders
+  with no command handlers. Their compact visual mnemonics include **Copy🠝**,
+  **Copy❌**, **Copy🠟**, **Move🠝**, **Move❌**, and **Move🠟**. The main-window
+  clipboard listener continues to observe Shell file-transfer data for later
+  wiring. **Rename**, **Path get**, and **Delete** retain their existing
+  behavior; selection-dependent actions are disabled when nothing is selected.
 
 ### Selection and opening
 
@@ -220,13 +214,7 @@ when it is created and cannot be changed by the user.
   directories disappear only when listing them is denied. Verify normal
   junctions remain visible and **Hide directories** still controls directory
   visibility independently.
-10. Select multiple Shell items and use **Copy get**, then **Copy paste** in
-  another folder. Verify **Path get** places the first selected item's
-  filesystem path on the clipboard. Use **Move get** followed by ordinary
-  Shell Paste and verify it does not complete the staged move. Use **Move
-  paste**, verify the dialog lists the selected names, then cancel and verify
-  the source items remain. Repeat and confirm; verify the items move. Verify
-  **Move abort** leaves the source items in place and does not change the
-  clipboard. Complete one move,
-  then prepare and complete another move; verify the second operation uses its
-  new selection rather than stale data from the first move.
+10. Verify the Copy and Move toolbar buttons are disabled placeholders and
+  have no command handlers. Use the Shell context menu's Copy command and
+  verify the main-window clipboard listener observes the resulting file data.
+  Verify **Path get** copies the first selected item's filesystem path.

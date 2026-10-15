@@ -276,14 +276,10 @@ public partial class Pathview : UserControl
         {
             switch (action)
             {
-                case "CopyGet":
-                    _shellBrowserHost?.CopySelection();
-                    break;
-                case "CopyPaste":
-                    _shellBrowserHost?.PasteCopy();
+                case "Rename":
+                    _shellBrowserHost?.RenameSelection();
                     break;
                 case "PathGet":
-                    ShellExplorerBrowserHost.CancelPreparedMove();
                     var selectedPaths = IsLegacyWpfFileList
                         ? FileList.SelectedItems.OfType<FileEntry>().Select(entry => entry.FullPath).ToList()
                         : _shellBrowserHost?.GetSelectedFileSystemPaths() ?? [];
@@ -291,15 +287,6 @@ public partial class Pathview : UserControl
                         throw new InvalidOperationException("Select an item before using Path get.");
 
                     Clipboard.SetText(selectedPaths[0]);
-                    break;
-                case "MoveGet":
-                    _shellBrowserHost?.PrepareMove();
-                    break;
-                case "MoveAbort":
-                    ShellExplorerBrowserHost.CancelPreparedMove();
-                    break;
-                case "MovePaste":
-                    ConfirmAndPasteMove();
                     break;
                 case "Delete":
                     _shellBrowserHost?.DeleteSelection();
@@ -313,30 +300,8 @@ public partial class Pathview : UserControl
         }
     }
 
-    private void ConfirmAndPasteMove()
-    {
-        if (_shellBrowserHost is null)
-            throw new InvalidOperationException("The Shell content view is not ready.");
-
-        var itemNames = _shellBrowserHost.GetPreparedMoveNames();
-        if (itemNames.Count == 0)
-            throw new InvalidOperationException("There is no prepared move to paste.");
-
-        var dialog = new MoveConfirmationDialog(itemNames);
-        if (Window.GetWindow(this) is { } owner)
-        {
-            dialog.Owner = owner;
-            dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        }
-
-        if (dialog.ShowDialog() != true)
-        {
-            ShellExplorerBrowserHost.CancelPreparedMove();
-            return;
-        }
-
-        _shellBrowserHost.PasteMove();
-    }
+    private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        UpdateToolbarOperationButtons();
 
     private void PathviewActionButton_Click(object sender, RoutedEventArgs e)
     {
@@ -373,6 +338,9 @@ public partial class Pathview : UserControl
 
     private void Pathview_Loaded(object sender, RoutedEventArgs e)
     {
+        ShellExplorerBrowserHost.ToolbarOperationStateChanged += ShellExplorerBrowserHost_ToolbarOperationStateChanged;
+        _shellBrowserHost?.RefreshSelectionState();
+        UpdateToolbarOperationButtons();
         _fileSystemStateDirty = true;
         _shellViewNeedsRefresh = true;
         SynchronizeShellChangeNotifications();
@@ -381,10 +349,24 @@ public partial class Pathview : UserControl
 
     private void Pathview_Unloaded(object sender, RoutedEventArgs e)
     {
+        ShellExplorerBrowserHost.ToolbarOperationStateChanged -= ShellExplorerBrowserHost_ToolbarOperationStateChanged;
         _fileSystemRefreshTimer.Stop();
         _fileSystemStateDirty = true;
         _shellViewNeedsRefresh = true;
         _shellBrowserHost?.ClearChangeNotifications();
+    }
+
+    private void ShellExplorerBrowserHost_ToolbarOperationStateChanged(object? sender, EventArgs e) =>
+        UpdateToolbarOperationButtons();
+
+    private void UpdateToolbarOperationButtons()
+    {
+        var hasSelection = IsLegacyWpfFileList
+            ? FileList.SelectedItems.Count > 0
+            : _shellBrowserHost?.HasSelection == true;
+        RenameButton.IsEnabled = hasSelection;
+        PathGetButton.IsEnabled = hasSelection;
+        DeleteButton.IsEnabled = hasSelection;
     }
 
     private void Pathview_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)

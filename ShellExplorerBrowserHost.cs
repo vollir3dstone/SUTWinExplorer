@@ -44,7 +44,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         Path.GetTempPath(), $"SUTWinExplorer-column-sizing-{Environment.ProcessId}.log");
     private static readonly string KeyboardTracePath = Path.Combine(
         Path.GetTempPath(), $"SUTWinExplorer-keyboard-{Environment.ProcessId}.log");
-    private static List<string>? _preparedMovePaths;
+    private static bool _shellClipboardHasFileTransfer;
 
     private IExplorerBrowserNative? _browser;
     private IObjectWithSiteNative? _browserSite;
@@ -67,6 +67,18 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     public event EventHandler<string>? NavigationCompleted;
     public event EventHandler<string>? NavigationFailed;
     public event EventHandler? FileSystemChanged;
+    public static event EventHandler? ToolbarOperationStateChanged;
+
+    public bool HasSelection { get; private set; }
+    public static bool HasShellClipboardFileTransfer => _shellClipboardHasFileTransfer;
+
+    public static void UpdateShellClipboardState(bool hasFileTransfer)
+    {
+        var stateChanged = _shellClipboardHasFileTransfer != hasFileTransfer;
+        _shellClipboardHasFileTransfer = hasFileTransfer;
+        if (stateChanged)
+            ToolbarOperationStateChanged?.Invoke(null, EventArgs.Empty);
+    }
 
     public ShellExplorerBrowserHost(bool isBrowsable)
     {
@@ -124,56 +136,15 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
     public void RefreshContents() => RefreshCurrentView();
 
-    public void CopySelection()
-    {
-        CancelPreparedMove();
-        InvokeCurrentViewCommand(ShellContextMenu.ShellViewSelection, "copy");
-    }
-
-    public void PasteCopy()
-    {
-        CancelPreparedMove();
-        InvokeCurrentViewCommand(ShellContextMenu.ShellViewBackground, "paste");
-    }
-
     public void DeleteSelection()
     {
-        CancelPreparedMove();
         InvokeCurrentViewCommand(ShellContextMenu.ShellViewSelection, "delete");
     }
 
-    public void PrepareMove()
+    public void RenameSelection()
     {
-        CancelPreparedMove();
-        _preparedMovePaths = GetSelectedFileSystemPaths();
-        if (_preparedMovePaths.Count == 0)
-            throw new InvalidOperationException("Select one or more items before using Move get.");
+        InvokeCurrentViewCommand(ShellContextMenu.ShellViewSelection, "rename");
     }
-
-    public void PasteMove()
-    {
-        if (_preparedMovePaths is not { Count: > 0 } paths)
-            throw new InvalidOperationException("There is no prepared move to paste.");
-        if (string.IsNullOrWhiteSpace(_currentPath))
-            throw new InvalidOperationException("The destination folder is not ready.");
-
-        _preparedMovePaths = null;
-        try
-        {
-            ShellFileOperations.Move(paths, _currentPath, _hostWindow);
-            RefreshCurrentView();
-        }
-        finally
-        {
-            _preparedMovePaths = null;
-        }
-    }
-
-    public IReadOnlyList<string> GetPreparedMoveNames() => (_preparedMovePaths ?? [])
-        .Select(path => ShellDisplayNameProvider.GetDisplayName(path) ?? Path.GetFileName(path))
-        .ToArray();
-
-    public static void CancelPreparedMove() => _preparedMovePaths = null;
 
     public List<string> GetSelectedFileSystemPaths()
     {
@@ -200,6 +171,32 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
                 _ = Marshal.Release(viewPointer);
         }
     }
+
+    public void RefreshSelectionState()
+    {
+        bool hasSelection;
+        try
+        {
+            hasSelection = GetSelectedFileSystemPaths().Count > 0;
+        }
+        catch (COMException)
+        {
+            hasSelection = false;
+        }
+        catch (InvalidOperationException)
+        {
+            hasSelection = false;
+        }
+
+        if (HasSelection == hasSelection)
+            return;
+
+        HasSelection = hasSelection;
+        ToolbarOperationStateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ScheduleSelectionStateRefresh() =>
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(RefreshSelectionState));
 
     private void InvokeCurrentViewCommand(uint selectionKind, string verb)
     {
@@ -340,7 +337,11 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             var interfaceId = typeof(IExplorerBrowserNative).GUID;
             Marshal.ThrowExceptionForHR(CoCreateInstance(ref classId, IntPtr.Zero, ClsctxInprocServer, ref interfaceId, out _browser));
 
-            _site = new ShellBrowserSite(() => _showDirectories, () => _hideInternal, () => _pendingPath);
+            _site = new ShellBrowserSite(
+                () => _showDirectories,
+                () => _hideInternal,
+                () => _pendingPath,
+                ScheduleSelectionStateRefresh);
             _browserSite = (IObjectWithSiteNative)_browser;
             _browserSite.SetSite(_site);
 
@@ -1176,7 +1177,11 @@ public interface IShellViewForFiltering
 
 [ComVisible(true)]
 [ClassInterface(ClassInterfaceType.None)]
-public sealed class ShellBrowserSite(Func<bool> showDirectories, Func<bool> hideInternal, Func<string?> currentPath) : IServiceProviderNative, ICommDlgBrowserNative, IDisposable
+public sealed class ShellBrowserSite(
+    Func<bool> showDirectories,
+    Func<bool> hideInternal,
+    Func<string?> currentPath,
+    Action selectionChanged) : IServiceProviderNative, ICommDlgBrowserNative, IDisposable
 {
     private static readonly Guid CommDlgBrowserServiceId = new("000214F1-0000-0000-C000-000000000046");
     private static readonly Guid CommDlgBrowserInterfaceId = new("000214F1-0000-0000-C000-000000000046");
@@ -1184,10 +1189,12 @@ public sealed class ShellBrowserSite(Func<bool> showDirectories, Func<bool> hide
     private const uint ShellAttributeFolder = 0x20000000;
     private const uint ShellDisplayNameInFolderForParsing = 0x8001;
     private const int ShellStringReturnSize = 272;
+    private const uint CommDlgBrowserSelectionChanged = 2;
     private const int S_OK = 0;
     private const int S_FALSE = 1;
     private const int E_NOINTERFACE = unchecked((int)0x80004002);
     private readonly Func<string?> _currentPath = currentPath;
+    private readonly Action _selectionChanged = selectionChanged;
     private string? _cachedFolderPath;
     private IShellFolder? _cachedFolder;
 
@@ -1210,7 +1217,12 @@ public sealed class ShellBrowserSite(Func<bool> showDirectories, Func<bool> hide
     }
 
     public int OnDefaultCommand(IShellView shellView) => S_FALSE;
-    public int OnStateChange(IShellView shellView, uint change) => S_OK;
+    public int OnStateChange(IShellView shellView, uint change)
+    {
+        if (change == CommDlgBrowserSelectionChanged)
+            _selectionChanged();
+        return S_OK;
+    }
 
     public void Dispose()
     {

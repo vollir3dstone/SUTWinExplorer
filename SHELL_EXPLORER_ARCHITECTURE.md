@@ -120,22 +120,15 @@ leading ellipsis prefix is omitted.
   followed by **Pin**, with no badge. **Hide directories** and content
   **Hide internal** appear beside each other below this row. The left pane uses
   the role-specific tree tab described above.
-- Below the two visibility checkboxes, each Pathview has the four-group content
-  operations toolbar. The toolbar labels **Copy get** and **Copy paste** differ
-  from the Shell labels but map directly to the same commands: Copy on the
-  active view's selected items and Paste into the active folder. They use the
-  Shell's normal clipboard data and interoperate with Windows Explorer. **Path
-  get** copies the first selected item's filesystem path as clipboard text.
-  Toolbar Move state is entirely app-owned and is not synchronized with Shell
-  Cut/clipboard state: **Move get** reads the selected filesystem paths without
-  invoking Cut or changing the clipboard, and does not show the Shell's cut
-  marking. **Move paste** confirms the staged names, then submits the paths to
-  Windows `IFileOperation` for the actual native move into the active folder.
-  Cancel, **Move abort**, or any other toolbar action discards the staged
-  paths. The Shell view's own context-menu Cut and Ctrl+X continue to use the
-  Windows clipboard normally and do not create or update toolbar Move state.
-  The final **Delete** group invokes the selected-item Shell `delete` verb so
-  Shell confirmation and deletion behavior remain in effect.
+- Below the two visibility checkboxes, each Pathview has a five-group content
+  operations toolbar. **Copy get**, **Copy abort**, **Copy paste**, and the
+  three Move buttons are disabled placeholders with no command handlers. The
+  Copy group uses **Copy🠝**, **Copy❌**, and **Copy🠟** as its visual mnemonics.
+  The main window still listens for Windows clipboard updates and records
+  whether Shell file-transfer formats such as `CF_HDROP` and `Shell IDList
+  Array` are present; the toolbar is not yet wired to that state. Rename,
+  Path get, and Delete remain active and selection-aware. The Shell view's
+  native context-menu Copy and Cut commands continue to work normally.
 - The browsable **Active path and siblings** tree has a default-unchecked
   **Hide internal** checkbox. When enabled, child directories whose filesystem
   names begin with `.` or `$` are omitted; a directory with the Windows System
