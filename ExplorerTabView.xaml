@@ -152,10 +152,20 @@
                     Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed"
                     IsEnabled="False" Click="PathviewActionButton_Click" />
             </StackPanel>
-                <CheckBox x:Name="ShowDirectoriesCheckBox" Grid.Row="1" Grid.ColumnSpan="2"
-                      Content="Show directories" IsChecked="False" Margin="10,0,10,8"
-                      Checked="ShowDirectoriesCheckBox_StateChanged"
-                      Unchecked="ShowDirectoriesCheckBox_StateChanged" />
+                <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="10,0,10,8">
+                    <Border Background="#E1E4E7" Padding="6,3" Margin="0,0,8,0"
+                            HorizontalAlignment="Left" VerticalAlignment="Center">
+                        <TextBlock Text="VIEW:" FontWeight="Bold" Foreground="#4E5963" />
+                    </Border>
+                    <CheckBox x:Name="HideDirectoriesCheckBox" Content="Hide directories"
+                              IsChecked="True" Margin="0,0,16,0" VerticalAlignment="Center"
+                              Checked="HideDirectoriesCheckBox_StateChanged"
+                              Unchecked="HideDirectoriesCheckBox_StateChanged" />
+                    <CheckBox x:Name="HideInternalContentCheckBox" Content="Hide internal"
+                              IsChecked="True" VerticalAlignment="Center"
+                              Checked="HideInternalContentCheckBox_StateChanged"
+                              Unchecked="HideInternalContentCheckBox_StateChanged" />
+                </StackPanel>
             <Grid Grid.Row="2" Grid.ColumnSpan="2" Margin="10,0,10,8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />

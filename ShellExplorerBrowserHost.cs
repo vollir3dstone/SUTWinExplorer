@@ -54,6 +54,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     private IntPtr _hostWindow;
     private bool _initialized;
     private bool _showDirectories;
+    private bool _hideInternal;
     private NativeRect _viewBounds;
     private bool _hasViewBounds;
     private string? _currentPath;
@@ -95,6 +96,18 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     {
         _showDirectories = showDirectories;
         _site?.SetShowDirectories(showDirectories);
+        RefreshAfterFilterChange($"Show directories refresh settled: {showDirectories}");
+    }
+
+    public void SetHideInternal(bool hideInternal)
+    {
+        _hideInternal = hideInternal;
+        _site?.SetHideInternal(hideInternal);
+        RefreshAfterFilterChange($"Hide internal refresh settled: {hideInternal}");
+    }
+
+    private void RefreshAfterFilterChange(string traceMessage)
+    {
         RefreshCurrentView();
         var refreshTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
         {
@@ -103,7 +116,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         refreshTimer.Tick += (_, _) =>
         {
             refreshTimer.Stop();
-            TraceColumnSizing($"Show directories refresh settled: {showDirectories}");
+            TraceColumnSizing(traceMessage);
             ApplyViewBounds();
         };
         refreshTimer.Start();
@@ -321,7 +334,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             var interfaceId = typeof(IExplorerBrowserNative).GUID;
             Marshal.ThrowExceptionForHR(CoCreateInstance(ref classId, IntPtr.Zero, ClsctxInprocServer, ref interfaceId, out _browser));
 
-            _site = new ShellBrowserSite(() => _showDirectories, () => _pendingPath);
+            _site = new ShellBrowserSite(() => _showDirectories, () => _hideInternal, () => _pendingPath);
             _browserSite = (IObjectWithSiteNative)_browser;
             _browserSite.SetSite(_site);
 
@@ -1157,12 +1170,14 @@ public interface IShellViewForFiltering
 
 [ComVisible(true)]
 [ClassInterface(ClassInterfaceType.None)]
-public sealed class ShellBrowserSite(Func<bool> showDirectories, Func<string?> currentPath) : IServiceProviderNative, ICommDlgBrowserNative, IDisposable
+public sealed class ShellBrowserSite(Func<bool> showDirectories, Func<bool> hideInternal, Func<string?> currentPath) : IServiceProviderNative, ICommDlgBrowserNative, IDisposable
 {
     private static readonly Guid CommDlgBrowserServiceId = new("000214F1-0000-0000-C000-000000000046");
     private static readonly Guid CommDlgBrowserInterfaceId = new("000214F1-0000-0000-C000-000000000046");
     private const uint ShellViewBackground = 0;
     private const uint ShellAttributeFolder = 0x20000000;
+    private const uint ShellDisplayNameInFolderForParsing = 0x8001;
+    private const int ShellStringReturnSize = 272;
     private const int S_OK = 0;
     private const int S_FALSE = 1;
     private const int E_NOINTERFACE = unchecked((int)0x80004002);
@@ -1171,8 +1186,10 @@ public sealed class ShellBrowserSite(Func<bool> showDirectories, Func<string?> c
     private IShellFolder? _cachedFolder;
 
     public void SetShowDirectories(bool value) => _showDirectories = value;
+    public void SetHideInternal(bool value) => _hideInternal = value;
 
     private bool _showDirectories = showDirectories();
+    private bool _hideInternal = hideInternal();
 
     public int QueryService(ref Guid serviceId, ref Guid interfaceId, out IntPtr result)
     {
@@ -1196,7 +1213,7 @@ public sealed class ShellBrowserSite(Func<bool> showDirectories, Func<string?> c
 
     public int IncludeObject(IShellViewForFiltering shellView, IntPtr childItemIdList)
     {
-        if (_showDirectories)
+        if (_showDirectories && !_hideInternal)
             return S_OK;
 
         IntPtr childArray = IntPtr.Zero;
@@ -1213,7 +1230,18 @@ public sealed class ShellBrowserSite(Func<bool> showDirectories, Func<string?> c
             if (attributeResult < 0)
                 return S_OK;
 
-            return (attributes & ShellAttributeFolder) != 0 ? S_FALSE : S_OK;
+            var isDirectory = (attributes & ShellAttributeFolder) != 0;
+            if (!_showDirectories && isDirectory)
+                return S_FALSE;
+
+            if (_hideInternal)
+            {
+                var itemPath = GetChildPath(folder, childItemIdList);
+                if (itemPath is not null && InternalItemFilter.ShouldHide(itemPath, isDirectory))
+                    return S_FALSE;
+            }
+
+            return S_OK;
         }
         catch
         {
@@ -1223,6 +1251,48 @@ public sealed class ShellBrowserSite(Func<bool> showDirectories, Func<string?> c
         {
             if (childArray != IntPtr.Zero)
                 Marshal.FreeCoTaskMem(childArray);
+        }
+    }
+
+    private string? GetChildPath(IShellFolder folder, IntPtr childItemIdList)
+    {
+        var currentPath = _currentPath();
+        if (string.IsNullOrWhiteSpace(currentPath))
+            return null;
+
+        var shellStringReturn = Marshal.AllocCoTaskMem(ShellStringReturnSize);
+        try
+        {
+            Marshal.WriteInt32(shellStringReturn, 0);
+            var result = folder.GetDisplayNameOf(childItemIdList, ShellDisplayNameInFolderForParsing, shellStringReturn);
+            if (result < 0)
+                return null;
+
+            var unionOffset = IntPtr.Size == 8 ? 8 : 4;
+            var childName = Marshal.ReadInt32(shellStringReturn) switch
+            {
+                0 => Marshal.PtrToStringUni(Marshal.ReadIntPtr(shellStringReturn, unionOffset)),
+                1 => Marshal.PtrToStringAnsi(IntPtr.Add(childItemIdList, Marshal.ReadInt32(shellStringReturn, unionOffset))),
+                2 => Marshal.PtrToStringAnsi(IntPtr.Add(shellStringReturn, unionOffset)),
+                _ => null
+            };
+            return string.IsNullOrEmpty(childName) ? null : Path.Combine(currentPath, childName);
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            if (Marshal.ReadInt32(shellStringReturn) == 0)
+            {
+                var stringPointerOffset = IntPtr.Size == 8 ? 8 : 4;
+                var shellString = Marshal.ReadIntPtr(shellStringReturn, stringPointerOffset);
+                if (shellString != IntPtr.Zero)
+                    Marshal.FreeCoTaskMem(shellString);
+            }
+
+            Marshal.FreeCoTaskMem(shellStringReturn);
         }
     }
 

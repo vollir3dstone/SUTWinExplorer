@@ -15,7 +15,7 @@ Checkboxes record implementation status, not changes to the expected behavior.
 A **Pathview** is the browsing unit attached to an application tab. It comprises
 the directory-tree pane, content pane, status display, active location, and
 temporary view settings scoped to that tab. Each tab retains its own Pathview
-state when the user switches tabs. For example, **Show directories** is
+state when the user switches tabs. For example, **Hide directories** is
 tab-scoped; sort parameters continue to follow the active folder's configured
 view. A Pathview is either browsable or non-browsable; that role is assigned
 when it is created and cannot be changed by the user.
@@ -39,9 +39,10 @@ when it is created and cannot be changed by the user.
   tab. Each non-browsable Pathview shows only the **Active path** tree tab.
 - [x] A non-browsable Pathview shows a bold **FIXED** badge before its path and
   a **Browse** button immediately after it. The browsable Pathview shows its
-  path followed by **Pin**, with no badge. **Show directories** is below this
-  title row.
-- [x] Each Pathview retains its own location and **Show directories** setting
+  path followed by **Pin**, with no badge. **Hide directories** and
+  **Hide internal** are below this title row.
+- [x] Each Pathview retains its own location, **Hide directories**, and
+  content **Hide internal** settings
   when the user switches tabs. Sort parameters continue to follow the active
   folder's configured view.
 - [x] The address field offers paths currently open in tabs. Selecting a
@@ -84,8 +85,17 @@ when it is created and cannot be changed by the user.
 ### Content listing
 
 - [x] The content view displays the active directory's files.
-- [x] **Show directories** controls whether directories appear in the content
-  view. It defaults to off; changing it updates the view without navigating.
+- [x] **Hide directories** controls whether directories appear in the content
+  view. It defaults to on; unchecking it displays directories, and changing it
+  updates the view without navigating.
+- [x] The content pane's default-on **Hide internal** checkbox filters files
+  and directories whose names begin with `.` or `$`, and System items only
+  when reading a file or listing a directory is denied. It is independent from
+  the tree's **Hide internal** checkbox and updates the Shell view without
+  navigating.
+- [x] Content visibility filters are independent exclusions: an item is hidden
+  if it matches either enabled filter, and displayed only if it passes both.
+  A System attribute alone does not hide an item; access must also be denied.
 - [x] Directory junctions and other directory reparse points follow the same
   visibility rule as ordinary directories when the Shell classifies them as
   folders.
@@ -97,7 +107,7 @@ when it is created and cannot be changed by the user.
   folder-specific view settings are ignored.
 - [x] The WPF application chrome keeps the app's custom tabs, address field,
   directory trees, and item-count status area.
-- [x] Below **Show directories**, the content pane provides three separated
+- [x] Below the two visibility checkboxes, the content pane provides three separated
   action groups: **Copy get** and **Copy paste**; **Path get**; and **Move get**,
   **Move abort**, and **Move paste**. The toolbar's different Copy labels map
   directly to the Shell commands: **Copy get** is Copy for selected items, and
@@ -138,7 +148,8 @@ when it is created and cannot be changed by the user.
 
 ### Refresh and failure handling
 
-- [x] Changing **Show directories** refreshes the current content view.
+- [x] Changing **Hide directories** or content **Hide internal** refreshes the
+  current content view.
 - [x] External changes made by Explorer or another application appear without
   restarting the application.
 - [ ] Empty folders, unavailable drives, access failures, and long paths have
@@ -172,9 +183,9 @@ when it is created and cannot be changed by the user.
 
 ## Acceptance Checks
 
-1. With **Show directories** off, ordinary folders and directory reparse points
-   are absent from the content view; switching it on displays them, and
-   switching it off hides them again without changing the active path.
+1. With **Hide directories** on, ordinary folders and directory reparse points
+  are absent from the content view; unchecking it displays them, and checking
+  it hides them again without changing the active path.
 2. Navigate the browsable Pathview using its tree, address field, Shell content
   view, and toolbar history. Verify its address, title, tree, and content stay
   synchronized. Verify folder navigation attempts from a non-browsable tree or
@@ -183,7 +194,8 @@ when it is created and cannot be changed by the user.
   address field. Verify the existing non-browsable tab is selected instead of
   creating a duplicate. Use a dropdown entry to select its associated tab.
 4. Open fixed Pathviews at different locations and verify switching tabs
-  restores each location and its **Show directories** setting.
+  restores each location and its **Hide directories** and content **Hide
+  internal** settings.
 5. Use item and folder-background menus for Properties, New Text Document,
    Copy/Paste, Paste shortcut, and drag/drop with Windows Explorer.
 6. Verify cancellation, name collisions, access denied, and disconnected
@@ -199,7 +211,13 @@ when it is created and cannot be changed by the user.
   directory is hidden only when listing its contents is denied. Verify normal
   junctions remain visible, the active route remains visible, and the content
   view is unchanged.
-9. Select multiple Shell items and use **Copy get**, then **Copy paste** in
+9. Toggle the content pane's **Hide internal** independently of the tree
+  checkbox. Verify dot-prefixed and dollar-prefixed files and directories are
+  hidden, System files disappear only when reading them is denied, and System
+  directories disappear only when listing them is denied. Verify normal
+  junctions remain visible and **Hide directories** still controls directory
+  visibility independently.
+10. Select multiple Shell items and use **Copy get**, then **Copy paste** in
   another folder. Verify **Path get** places the first selected item's
   filesystem path on the clipboard. Use **Move get** followed by ordinary
   Shell Paste and verify it does not complete the staged move. Use **Move

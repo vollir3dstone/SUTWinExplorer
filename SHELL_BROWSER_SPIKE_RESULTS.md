@@ -94,11 +94,11 @@ The spike findings below are historical. Production now uses one
 can be reactivated by setting `UseLegacyWpfFileList` to true in
 `ExplorerTabView.xaml.cs`; its production value is false.
 
-The Show directories checkbox is now implemented through the browser site's
-`IServiceProvider` and `ICommDlgBrowser.IncludeObject`. It checks `SFGAO_FOLDER`
-and returns `S_FALSE` for directories when unchecked. Runtime UI Automation
-verified that the row count changes from files-only to files-plus-directories
-and back when toggled.
+The **Hide directories** checkbox is implemented through the browser site's
+`IServiceProvider` and `ICommDlgBrowser.IncludeObject`. It checks
+`SFGAO_FOLDER` and returns `S_FALSE` for directories when checked. Runtime UI
+Automation verified that the row count changes from files-only to
+files-plus-directories and back when toggled.
 
 The spike's Name-column fill failure was later fixed in the production host.
 The implementation uses `IColumnManager` to preserve other visible column

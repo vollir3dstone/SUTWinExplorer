@@ -77,9 +77,9 @@ leading ellipsis prefix is omitted.
   owns the active path, back/forward history, left directory-tree pane, right
   content pane, status display, and temporary view settings. The browsable
   Pathview shows only **Active path and siblings**; non-browsable Pathviews show
-  only **Active path**. **Show directories** is tab-local; sort parameters are
-  captured from the Shell folder view rather than stored independently by the
-  `Pathview`.
+  only **Active path**. **Hide directories** and content **Hide internal** are
+  tab-local; sort parameters are captured from the Shell folder view rather
+  than stored independently by the `Pathview`.
 - `Pathview.IsBrowsable` is immutable for the lifetime of a Pathview. `MainWindow`
   creates exactly one browsable Pathview as the `TabControl`'s first item; all
   subsequent Pathviews are non-browsable. The browsable tab is titled **BROWSE**
@@ -117,9 +117,10 @@ leading ellipsis prefix is omitted.
   commands and file operations.
 - The content header presents non-browsable Pathviews as **FIXED** badge, path,
   then **Browse** button on one row. The browsable Pathview presents its path
-  followed by **Pin**, with no badge. **Show directories** remains on the row
-  below. The left pane uses the role-specific tree tab described above.
-- Below **Show directories**, each Pathview has the three-group content
+  followed by **Pin**, with no badge. **Hide directories** and content
+  **Hide internal** appear beside each other below this row. The left pane uses
+  the role-specific tree tab described above.
+- Below the two visibility checkboxes, each Pathview has the three-group content
   operations toolbar. The toolbar labels **Copy get** and **Copy paste** differ
   from the Shell labels but map directly to the same commands: Copy on the
   active view's selected items and Paste into the active folder. They use the
@@ -140,8 +141,17 @@ leading ellipsis prefix is omitted.
   access-denied. Hidden-only directories, accessible System directories, and
   junctions are not excluded by those classifications alone. Active-path
   ancestors remain visible. The filter is applied by the shared tree-child
-  refresh path, including filesystem-change reconciliation, and does not
-  affect the Shell content view.
+  refresh path, including filesystem-change reconciliation.
+- The content pane has a separate, default-checked **Hide internal** checkbox
+  beside the default-checked **Hide directories** checkbox. It uses the same
+  item predicate for files and directories: it hides dot- and dollar-prefixed
+  names, plus System items only when opening a file for read or listing a
+  directory returns access-denied. The Shell `ICommDlgBrowser.IncludeObject` hook applies
+  the filter to Shell items; the retained WPF list and status count use the same
+  helper. This setting is independent of the tree checkbox and
+  **Hide directories**.
+- The content filtering row starts with a **VIEW:** badge styled like the
+  **SELECTED:** and **FIXED** badges.
 - The right content pane is a separate content view. Production creates one
   `ShellExplorerBrowserHost` per `Pathview`; it derives from
   `HwndHost` and hosts one Shell `IExplorerBrowser` COM instance.
@@ -271,8 +281,9 @@ Shell-provided widths and Name uses the remaining width. The standard column
 order is Name, Type, Size, and Date modified; the Shell's Size column provides
 the KB-formatted value. The resulting view
 must have no horizontal scroll range at the tested layout sizes. Enabling
-**Show directories** can create or remove a vertical Shell scrollbar without
-changing the WPF pane size, so that refresh also requires a width recalculation.
+Unchecking **Hide directories** can create or remove a vertical Shell scrollbar
+without changing the WPF pane size, so that refresh also requires a width
+recalculation.
 
 `Pathview.ShellBrowserSlot_SizeChanged` converts the WPF size to physical
 pixels and calls `ShellExplorerBrowserHost.SetViewSize`. The host applies those
@@ -288,7 +299,7 @@ to identify Name. The target width is:
 
 The other widths are read with `GetColumnInfo`; the Name width is applied with
 `SetColumnInfo`. The width is recalculated after Shell navigation because the
-Shell may replace the current view. After **Show directories** refreshes the
+Shell may replace the current view. After **Hide directories** refreshes the
 view, a one-shot 250ms dispatcher timer allows Shell's scrollbar child windows
 to settle before measuring the visible vertical scrollbar and recalculating
 Name. `IColumnManager` widths are physical pixels. Its COM method declarations
@@ -315,7 +326,7 @@ resized view. The host widths in those checks were 882px and 1202px
 respectively. A window-width increase also produced a matching `SetRect` and
 Name-width update.
 
-Enabling **Show directories** in a folder with enough entries to show the
+Unchecking **Hide directories** in a folder with enough entries to show the
 vertical bar left the Shell view 880px wide, but its visible vertical scrollbar
 was 17px wide, reducing usable width to 863px. The delayed recalculation
 reduced Name from 525px to 508px; Size stayed at its Shell-provided 80px, and
@@ -331,11 +342,13 @@ opt-in per-process trace in `%TEMP%` named
 `SUTWinExplorer-column-sizing-<pid>.log`; it records WPF/native sizes, COM
 results, and computed widths.
 
-## Show Directories Filter
+## Hide Directories Filter
 
-The checkbox is WPF-owned and defaults to unchecked. The filter is implemented
-at the Shell view boundary, so the Shell still owns enumeration, icons, menus,
-and file operations.
+The **Hide directories** checkbox is WPF-owned and defaults to checked, which
+preserves the default-hidden directory behavior. The positive internal
+`_showDirectories` value is set to the inverse of the checkbox. The filter is
+implemented at the Shell view boundary, so the Shell still owns enumeration,
+icons, menus, and file operations.
 
 ### Service registration
 
@@ -353,10 +366,35 @@ the site did not expose the service correctly; runtime tracing confirmed that
 service requests and `IncludeObject` calls were occurring after the COM
 visibility correction.
 
-### Folder classification
+### Content item filtering
 
-When **Show directories** is checked, `IncludeObject` returns `S_OK` for all
-items. When unchecked, it:
+When **Hide directories** is checked, `IncludeObject` excludes items classified
+as folders. When unchecked, folders are included unless the separate content
+**Hide internal** checkbox excludes the item. If neither filter is active,
+`IncludeObject` returns `S_OK` for every item. Otherwise it:
+
+The exclusion rules combine with OR: an item is excluded if any enabled rule
+matches. Inclusion is the AND of passing each enabled filter:
+
+```text
+hideByName = name starts with "." or "$"
+hideBySystemAccess = isSystem and accessDenied
+exclude = (hideDirectories and isDirectory)
+    or (hideInternal and (hideByName or hideBySystemAccess))
+include = not exclude
+```
+
+Equivalently, inclusion requires all of these conditions:
+
+```text
+(not hideDirectories or not isDirectory)
+and (not hideInternal or
+  (not hideByName and (not isSystem or accessAllowed)))
+```
+
+For a file, `accessDenied` means it cannot be opened for reading; for a
+directory, it means its entries cannot be listed. `isSystem` alone does not
+exclude an item. Junction status is not part of either rule.
 
 1. Reads the current folder path supplied by the `ShellExplorerBrowserHost`.
    `OnNavigationPending` updates this path before the destination view
@@ -368,24 +406,31 @@ items. When unchecked, it:
    is destroyed.
 3. Places the callback's borrowed child PIDL into a one-element pointer array
    and calls `IShellFolder.GetAttributesOf` with `SFGAO_FOLDER`.
-4. Returns `S_FALSE` when `SFGAO_FOLDER` is present, hiding the entry; otherwise
-   returns `S_OK` so it is displayed.
+4. Returns `S_FALSE` for folder items when **Hide directories** is checked.
+5. When content **Hide internal** is checked, gets the child item's parsing
+  name, combines it with the current path, and evaluates the shared
+  `InternalItemFilter` predicate for files and folders. Dot- and
+  dollar-prefixed names are excluded. A System item is excluded only when
+  opening a file for read or listing a directory returns access-denied.
 
 The child PIDL passed to `IncludeObject` is borrowed and is not freed. The child
 PIDL returned by `SHBindToParent` points into the absolute PIDL allocation and
 is also not freed separately. Only the pointer array allocated for
 `GetAttributesOf` and the absolute PIDL allocation are freed by this code.
-Folder-query failures fail open (`S_OK`) rather than accidentally hiding
-ordinary files.
+Folder-query and name-resolution failures fail open (`S_OK`) rather than
+accidentally hiding ordinary files. Access-denied is the only I/O failure used
+to exclude a System item; other I/O failures remain visible.
 
-Directory reparse points are expected to follow the same behavior when the
-Shell reports `SFGAO_FOLDER`. Runtime testing verified ordinary directories;
-junction/reparse-point coverage remains a dedicated acceptance test.
+Directory reparse points follow the same folder and internal-item rules when
+the Shell reports `SFGAO_FOLDER`; junction status alone is not a filter
+condition. Runtime testing verified ordinary directories; junction/reparse-
+point coverage remains a dedicated acceptance test.
 
-When the checkbox changes, `ShellExplorerBrowserHost.SetShowDirectories`
-updates the site state, obtains the current `IShellView` through
+When either content checkbox changes, `ShellExplorerBrowserHost` updates the
+site state, obtains the current `IShellView` through
 `IExplorerBrowser.GetCurrentView`, and calls `IShellView.Refresh` to re-enumerate
-the active folder without navigation.
+the active folder without navigation. `SetShowDirectories` receives the
+positive value derived from the inverse of **Hide directories**.
 
 ### Filter debugging findings
 
@@ -398,8 +443,9 @@ the active folder without navigation.
   `SHParseDisplayName`, `SHBindToParent`, and `BindToObject`.
 - A temporary trace confirmed that `QueryService` and `IncludeObject` were
   reached. The trace was removed after fixing folder binding.
-- Runtime UI Automation on the default profile observed 23 file rows with the
-  checkbox off, 28 rows with it on, and 23 again when turned off. This proves
+- Runtime UI Automation on the default profile observed 23 file rows with
+  **Hide directories** checked, 28 rows when unchecked, and 23 again when
+  checked. This proves
   live checkbox refresh in that folder; it is not a complete reparse-point
   test.
 
