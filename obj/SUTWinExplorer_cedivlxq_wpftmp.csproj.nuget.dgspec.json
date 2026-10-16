@@ -1,15 +1,15 @@
 {
   "format": 1,
   "restore": {
-    "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\SUTWinExplorer.csproj": {}
+    "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\SUTWinExplorer_cedivlxq_wpftmp.csproj": {}
   },
   "projects": {
-    "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\SUTWinExplorer.csproj": {
+    "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\SUTWinExplorer_cedivlxq_wpftmp.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\SUTWinExplorer.csproj",
+        "projectUniqueName": "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\SUTWinExplorer_cedivlxq_wpftmp.csproj",
         "projectName": "SUTWinExplorer",
-        "projectPath": "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\SUTWinExplorer.csproj",
+        "projectPath": "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\SUTWinExplorer_cedivlxq_wpftmp.csproj",
         "packagesPath": "C:\\Users\\Volker\\.nuget\\packages\\",
         "outputPath": "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\obj\\",
         "projectStyle": "PackageReference",
