@@ -1,0 +1,35 @@
+{
+	"types": [
+		{
+			"type": "book",
+			"extensions": [".txt", ".text", ".doc", ".docx", ".odt", ".rtf", ".pdf", ".html", ".htm", ".md", ".pptx", ".ppt"]
+		},
+		{
+			"type": "struct",
+			"extensions": [".xml", ".json", ".csv", ".tsv", ".xlsx", ".xls", ".ods", ".yaml", ".yml", ".css"]
+		},
+		{
+			"type": "image",
+			"extensions": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".avif", ".heic", ".svg"]
+		},
+		{
+			"type": "audio",
+			"extensions": [".wav", ".mp3", ".aac", ".flac", ".aiff", ".aif", ".m4a", ".m4b", ".weba", ".opus", ".wma"]
+		},
+		{
+			"type": "video",
+			"extensions": [".mp4", ".m4v", ".mov", ".avi", ".wmv", ".mpg", ".mpeg", ".mkv", ".webm", ".ogv", ".ts", ".m2ts", ".3gp", ".flv"]
+		},
+		{
+			"type": "code",
+			"extensions": [
+				".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx",
+				".cs", ".java", ".kt", ".kts", ".swift", ".go", ".rs",
+				".py", ".pyw", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts",
+				".cts", ".tsx", ".php", ".phtml", ".rb", ".pl", ".pm", ".r",
+				".R", ".dart", ".scala", ".sc", ".lua", ".sh", ".bash", ".zsh",
+				".ps1", ".psm1", ".psd1", ".sql"
+				]
+		}
+	]
+}
