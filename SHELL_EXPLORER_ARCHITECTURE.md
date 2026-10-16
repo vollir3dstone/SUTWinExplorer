@@ -190,13 +190,29 @@ leading ellipsis prefix is omitted.
 - `ActivePathTree` shows only the current ancestor route.
 - `ActivePathAndSiblingsTree` additionally shows immediate child directories
   along the route. Both continue to navigate the Shell view through the common
-  `Pathview.Navigate` method.
+  `Pathview.Navigate` method. Tree selection reflects the committed
+  `CurrentPath`, regardless of whether navigation came from the tree, address
+  field, toolbar history, or Shell content view. While navigation is pending,
+  the prior successful path remains selected; completion commits and selects
+  the new path, while failure preserves the prior selection. A browsable-tree
+  click sets `TreeEntry.IsNavigationPending` before deferring the navigation
+  request to the Shell. Its row uses a light-gray background; this is separate
+  from `IsSelected`. The pending state clears on success, failure, synchronous
+  request errors, or superseding navigation. At commit, the active route node is
+  marked selected first; then its ancestors expand to reveal it, followed by
+  expansion of the active node itself.
 - The legacy WPF `ListView`, its filtering, icon binding, sizing, and menus are
   retained. `UseLegacyWpfFileList` in `ExplorerTabView.xaml.cs` is the explicit
   rollback switch: `false` selects the Shell view (production default); `true`
   makes the WPF list active again.
 
 ### Custom Tree Templates
+
+**Success-gated active route:** `CurrentPath`, the selected tree node, and
+programmatic expansion to a requested destination are committed only after the
+Shell content view reports successful navigation. Until then, the previous
+committed path remains selected. A tree-originated request is shown separately
+through `TreeEntry.IsNavigationPending`; it is not WPF selection.
 
 Both directory trees in `ExplorerTabView.xaml` share
 `DirectoryTreeItemStyle`. Its templates provide the following behavior:
@@ -208,10 +224,11 @@ Both directory trees in `ExplorerTabView.xaml` share
   the `TreeEntry`, and supplies the custom `TreeViewItem` control template.
   The `TreeViewItem` control template puts a directional disclosure triangle,
   the shell folder icon, and the entry header in separate columns, with
-  expanded children below the header. Clicking any part of a row makes its
-  directory active; only the triangle can collapse an expanded branch. If the
-  collapsed directory is the active browsable path, the parent becomes active
-  and selected. The
+  expanded children below the header. Clicking any part of a row requests
+  navigation; its directory becomes active and selected only after the Shell
+  view successfully opens it. Only the triangle can collapse an expanded
+  branch. If the collapsed directory is active, navigation to its parent must
+  succeed before the parent becomes active and selected. The
   triangle is based on the presence of immediate subdirectories before tree
   filtering, so internal and directory-link entries count. Hidden filesystem
   items retain their Shell icon and are rendered with reduced opacity. The

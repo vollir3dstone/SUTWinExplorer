@@ -14,9 +14,9 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\SUTWinExplorer_50faepb5_wpftmp.csproj",
+      "projectUniqueName": "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\SUTWinExplorer.csproj",
       "projectName": "SUTWinExplorer",
-      "projectPath": "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\SUTWinExplorer_50faepb5_wpftmp.csproj",
+      "projectPath": "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\SUTWinExplorer.csproj",
       "packagesPath": "C:\\Users\\Volker\\.nuget\\packages\\",
       "outputPath": "D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\obj\\",
       "projectStyle": "PackageReference",

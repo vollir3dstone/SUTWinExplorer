@@ -58,12 +58,22 @@ when it is created and cannot be changed by the user.
 
 ### Directory trees
 
+**Success-gated active route:** The tree must not commit a requested directory as
+active or selected, or programmatically expand the destination route, until the
+Shell content view confirms that the directory opened successfully. While
+navigation is pending, the last successfully opened directory remains active
+and selected. Failure leaves that path and selection unchanged. A tree click
+may show its requested row in light gray without changing the active selection.
+
 - [x] **Active path** shows only the route from the drive root to the active
   directory.
 - [x] **Active path and siblings** shows the active route and each route node's
   immediate child directories. Off-route branches remain collapsed.
-- [x] The active directory is highlighted, and the visible tree follows
-  navigation initiated elsewhere in the application.
+- [x] The successfully opened active directory is highlighted, and the visible
+  tree follows navigation initiated by the tree, address field, toolbar history,
+  or Shell content view. A requested destination is not selected while
+  navigation is pending; failure preserves the last successfully opened
+  directory and its selection.
 - [x] The browsable Pathview's default-off **Hide internal** checkbox filters
   its directory tree: names beginning with `.` or `$` are hidden, as are directories that
   have the Windows System attribute and deny directory listing access. Normal
@@ -71,11 +81,16 @@ when it is created and cannot be changed by the user.
   even when a route directory matches a filter rule; the setting does not
   affect the content view.
 - [x] A single click anywhere on a directory row, including its disclosure
-  triangle, folder icon, or name, makes that directory active and opens it in
-  the browsable Pathview's content view. Clicking the triangle of an expanded
-  directory collapses its tree branch; if it is the active directory, the
-  active path and selection move to its parent. Clicking its icon or name
-  never collapses it. A disclosure triangle is shown only when
+  triangle, folder icon, or name, requests that directory be opened in the
+  browsable Pathview's content view. It becomes active and selected only after
+  navigation succeeds. The route expands to reveal it, and the active node is
+  selected before its own branch expands. Immediately after a tree click, before the content view
+  is asked to navigate, the requested row gets a light-gray highlight distinct
+  from the blue selected active path. The request highlight clears on success,
+  failure, or superseding navigation. Clicking the triangle of an expanded
+  directory collapses its tree branch; if it is active, navigation to its parent
+  is requested and the parent becomes active and selected only after success.
+  Clicking its icon or name never collapses it. A disclosure triangle is shown only when
   the directory contains immediate subdirectories, including internal and
   directory-link entries. A non-browsable Pathview's tree does not navigate
   its location.

@@ -81,6 +81,9 @@
                             <DataTrigger Binding="{Binding HasSubdirectories}" Value="False">
                                 <Setter TargetName="Expander" Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
+                            <DataTrigger Binding="{Binding IsNavigationPending}" Value="True">
+                                <Setter TargetName="HeaderBorder" Property="Background" Value="#E6E6E6" />
+                            </DataTrigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="HeaderBorder" Property="Background" Value="#DCEBFA" />
                             </Trigger>
@@ -119,6 +122,7 @@
                               ItemContainerStyle="{StaticResource DirectoryTreeItemStyle}"
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                               PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown"
+                              PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"
                               PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
                               MouseDoubleClick="Tree_MouseDoubleClick" />
                 </Grid>

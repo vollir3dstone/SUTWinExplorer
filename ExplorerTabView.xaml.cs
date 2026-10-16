@@ -41,6 +41,7 @@ public partial class Pathview : UserControl
     private readonly Stack<string> _forwardHistory = new();
     private readonly DispatcherTimer _fileSystemRefreshTimer;
     private ShellExplorerBrowserHost? _shellBrowserHost;
+    private TreeEntry? _pendingTreeNavigationEntry;
     private string? _pendingNavigationPath;
     private NavigationHistoryAction _pendingNavigationHistoryAction;
     private bool _fileSystemStateDirty = true;
@@ -122,6 +123,12 @@ public partial class Pathview : UserControl
             return;
 
         var fullPath = Path.GetFullPath(Environment.ExpandEnvironmentVariables(path.Trim().Trim('"')));
+        if (_pendingTreeNavigationEntry is { } pendingEntry &&
+            !string.Equals(pendingEntry.Path, fullPath, StringComparison.OrdinalIgnoreCase))
+        {
+            ClearPendingTreeNavigation();
+        }
+
         if (IsLegacyWpfFileList && !Directory.Exists(fullPath))
             throw new DirectoryNotFoundException($"The directory does not exist or is not accessible: {fullPath}");
 
@@ -150,6 +157,12 @@ public partial class Pathview : UserControl
 
     private void CommitNavigation(string path, NavigationHistoryAction historyAction)
     {
+        if (_pendingTreeNavigationEntry is { } pendingEntry &&
+            string.Equals(pendingEntry.Path, path, StringComparison.OrdinalIgnoreCase))
+        {
+            ClearPendingTreeNavigation();
+        }
+
         switch (historyAction)
         {
             case NavigationHistoryAction.Normal:
@@ -563,8 +576,7 @@ public partial class Pathview : UserControl
 
         var currentPath = rootPath;
         AddNotificationPath(paths, currentPath);
-        var segments = Path.GetRelativePath(rootPath, CurrentPath)
-            .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+        var segments = GetPathSegments(rootPath, CurrentPath);
         foreach (var segment in segments)
         {
             currentPath = Path.Combine(currentPath, segment);
@@ -639,6 +651,17 @@ public partial class Pathview : UserControl
     private void ShellBrowserHost_NavigationCompleted(object? sender, string path)
     {
         var fullPath = Path.GetFullPath(path);
+        if (_pendingTreeNavigationEntry is { } pendingEntry &&
+            string.Equals(pendingEntry.Path, fullPath, StringComparison.OrdinalIgnoreCase))
+        {
+            ClearPendingTreeNavigation();
+        }
+        else if (_pendingTreeNavigationEntry is { } supersededEntry &&
+                 string.Equals(_pendingNavigationPath, supersededEntry.Path, StringComparison.OrdinalIgnoreCase))
+        {
+            ClearPendingTreeNavigation();
+        }
+
         var isPendingNavigation = string.Equals(_pendingNavigationPath, fullPath, StringComparison.OrdinalIgnoreCase);
         var historyAction = isPendingNavigation ? _pendingNavigationHistoryAction : NavigationHistoryAction.Normal;
         if (isPendingNavigation)
@@ -656,6 +679,12 @@ public partial class Pathview : UserControl
             string.Equals(_pendingNavigationPath, path, StringComparison.OrdinalIgnoreCase);
         if (isCurrentFailure)
             _pendingNavigationPath = null;
+
+        if (_pendingTreeNavigationEntry is { } pendingEntry &&
+            (string.IsNullOrEmpty(path) || string.Equals(pendingEntry.Path, path, StringComparison.OrdinalIgnoreCase)))
+        {
+            ClearPendingTreeNavigation();
+        }
 
         RefreshActivePathAndSiblingsTree();
         RefreshActivePathTree();
@@ -750,24 +779,33 @@ public partial class Pathview : UserControl
         if (active is null)
             return;
 
-        var segments = Path.GetRelativePath(rootPath!, CurrentPath)
-            .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+        var segments = GetPathSegments(rootPath!, CurrentPath);
+        var route = new List<TreeEntry> { active };
 
         foreach (var segment in segments)
         {
             LoadChildren(active);
-            active.IsExpanded = true;
             var childPath = Path.Combine(active.Path, segment);
             var child = active.Children.FirstOrDefault(candidate =>
                 !candidate.IsPlaceholder && string.Equals(candidate.Path, childPath, StringComparison.OrdinalIgnoreCase));
             if (child is null)
                 return;
             active = child;
+            route.Add(active);
         }
 
         LoadChildren(active);
-        active.IsExpanded = true;
         active.IsSelected = true;
+        foreach (var routeEntry in route)
+            routeEntry.IsExpanded = true;
+    }
+
+    private static string[] GetPathSegments(string rootPath, string path)
+    {
+        var relativePath = Path.GetRelativePath(rootPath, path);
+        return relativePath == "."
+            ? []
+            : relativePath.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
     }
 
     private static void CollapseLoadedNodes(TreeEntry entry)
@@ -947,6 +985,19 @@ public partial class Pathview : UserControl
         e.Handled = true;
     }
 
+    private void Tree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!IsBrowsable || sender is not TreeView tree ||
+            FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { DataContext: TreeEntry entry } ||
+            entry.IsPlaceholder || FindAncestor<ToggleButton>(e.OriginalSource as DependencyObject) is not null)
+        {
+            return;
+        }
+
+        tree.Focus();
+        e.Handled = true;
+    }
+
     private void Tree_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (ActiveTreeNavigationMode != TreeNavigationMode.SingleClick ||
@@ -961,14 +1012,11 @@ public partial class Pathview : UserControl
             string.Equals(CurrentPath, entry.Path, StringComparison.OrdinalIgnoreCase) &&
             ItemsControl.ItemsControlFromItemContainer(item) is TreeViewItem { DataContext: TreeEntry parentEntry })
         {
-            entry.IsSelected = false;
-            parentEntry.IsSelected = true;
-            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => NavigateFromTree(parentEntry)));
+            QueueTreeNavigation(parentEntry);
             return;
         }
 
-        item.IsSelected = true;
-        if (!isDisclosureClick)
+        if (!isDisclosureClick && string.Equals(CurrentPath, entry.Path, StringComparison.OrdinalIgnoreCase))
             item.IsExpanded = true;
 
         QueueTreeNavigation(entry);
@@ -991,6 +1039,8 @@ public partial class Pathview : UserControl
         }
         catch (Exception exception)
         {
+            if (ReferenceEquals(_pendingTreeNavigationEntry, entry))
+                ClearPendingTreeNavigation();
             MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot open folder", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
@@ -1000,6 +1050,13 @@ public partial class Pathview : UserControl
         if (string.Equals(CurrentPath, entry.Path, StringComparison.OrdinalIgnoreCase))
             return;
 
+        if (IsBrowsable)
+        {
+            ClearPendingTreeNavigation();
+            _pendingTreeNavigationEntry = entry;
+            entry.IsNavigationPending = true;
+        }
+
         if (ActivePathAndSiblingsTree.ItemsSource is ObservableCollection<TreeEntry> roots)
         {
             foreach (var root in roots)
@@ -1007,6 +1064,15 @@ public partial class Pathview : UserControl
         }
         RefreshActivePathTree();
         Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => NavigateFromTree(entry)));
+    }
+
+    private void ClearPendingTreeNavigation()
+    {
+        if (_pendingTreeNavigationEntry is not { } entry)
+            return;
+
+        entry.IsNavigationPending = false;
+        _pendingTreeNavigationEntry = null;
     }
 
     private void RestoreTreeSelection(TreeEntry entry)
@@ -1073,6 +1139,7 @@ public sealed class TreeEntry : INotifyPropertyChanged
 {
     private bool _isExpanded;
     private bool _isSelected;
+    private bool _isNavigationPending;
     private bool _hasSubdirectories;
 
     private TreeEntry(string name, string path, bool isPlaceholder)
@@ -1105,6 +1172,11 @@ public sealed class TreeEntry : INotifyPropertyChanged
     {
         get => _isSelected;
         set => SetField(ref _isSelected, value);
+    }
+    public bool IsNavigationPending
+    {
+        get => _isNavigationPending;
+        set => SetField(ref _isNavigationPending, value);
     }
     public ShellIconSet? Icons { get; private set; }
     public ObservableCollection<TreeEntry> Children { get; } = new();
