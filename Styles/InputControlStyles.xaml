@@ -32,32 +32,39 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type ButtonBase}">
-                    <Border x:Name="border" Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{Binding Path=(local:InputChrome.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
-                            SnapsToDevicePixels="True">
+                    <Grid SnapsToDevicePixels="True">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="{Binding Path=(local:InputChrome.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}" />
+                        <Rectangle x:Name="stateBackground" Visibility="Collapsed" IsHitTestVisible="False" />
+                        <Border x:Name="outline" Background="Transparent"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{Binding Path=(local:InputChrome.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
+                                IsHitTestVisible="False" />
                         <ContentPresenter Margin="{TemplateBinding Padding}"
                                           HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                           RecognizesAccessKey="True"
                                           SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
-                    </Border>
+                    </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="border" Property="Background" Value="{StaticResource Input.ButtonHoverBackground}" />
-                            <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource Input.HoverBorder}" />
+                            <Setter TargetName="stateBackground" Property="Fill" Value="{StaticResource Input.ButtonHoverBackground}" />
+                            <Setter TargetName="stateBackground" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="outline" Property="BorderBrush" Value="{StaticResource Input.HoverBorder}" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="border" Property="Background" Value="{StaticResource Input.ButtonPressedBackground}" />
-                            <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource Input.FocusBorder}" />
+                            <Setter TargetName="stateBackground" Property="Fill" Value="{StaticResource Input.ButtonPressedBackground}" />
+                            <Setter TargetName="stateBackground" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="outline" Property="BorderBrush" Value="{StaticResource Input.FocusBorder}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource Input.FocusBorder}" />
+                            <Setter TargetName="outline" Property="BorderBrush" Value="{StaticResource Input.FocusBorder}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="border" Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
-                            <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource Input.DisabledBorder}" />
+                            <Setter TargetName="stateBackground" Property="Fill" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
+                            <Setter TargetName="stateBackground" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="outline" Property="BorderBrush" Value="{StaticResource Input.DisabledBorder}" />
                             <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -147,57 +154,6 @@
             </Setter.Value>
         </Setter>
     </Style>
-
-    <Style x:Key="RoundedCheckBoxStyle" TargetType="{x:Type CheckBox}">
-        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
-        <Setter Property="local:InputChrome.CornerRadius" Value="{StaticResource InputCornerRadius}" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="{x:Type CheckBox}">
-                    <BulletDecorator SnapsToDevicePixels="True">
-                        <BulletDecorator.Bullet>
-                            <Border x:Name="box" Width="14" Height="14" Background="White"
-                                    BorderBrush="{StaticResource Input.Border}" BorderThickness="1"
-                                    CornerRadius="{Binding Path=(local:InputChrome.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}">
-                                <Path x:Name="mark" Data="M 2,7 L 5.5,10.5 L 12,3"
-                                      Stroke="White" StrokeThickness="2" Visibility="Collapsed" />
-                            </Border>
-                        </BulletDecorator.Bullet>
-                        <ContentPresenter Margin="5,0,0,0" VerticalAlignment="Center"
-                                          RecognizesAccessKey="True"
-                                          Content="{TemplateBinding Content}"
-                                          ContentTemplate="{TemplateBinding ContentTemplate}"
-                                          ContentTemplateSelector="{TemplateBinding ContentTemplateSelector}"
-                                          ContentStringFormat="{TemplateBinding ContentStringFormat}" />
-                    </BulletDecorator>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="box" Property="BorderBrush" Value="{StaticResource Input.HoverBorder}" />
-                        </Trigger>
-                        <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="box" Property="BorderBrush" Value="{StaticResource Input.FocusBorder}" />
-                        </Trigger>
-                        <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="box" Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                            <Setter TargetName="box" Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                            <Setter TargetName="mark" Property="Visibility" Value="Visible" />
-                        </Trigger>
-                        <Trigger Property="IsChecked" Value="{x:Null}">
-                            <Setter TargetName="box" Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                            <Setter TargetName="box" Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                            <Setter TargetName="mark" Property="Data" Value="M 3,7 L 11,7" />
-                            <Setter TargetName="mark" Property="Visibility" Value="Visible" />
-                        </Trigger>
-                        <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="box" Property="Opacity" Value="0.56" />
-                            <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
-    <Style TargetType="{x:Type CheckBox}" BasedOn="{StaticResource RoundedCheckBoxStyle}" />
 
     <Style x:Key="ComboBoxEditableTextBoxStyle" TargetType="{x:Type TextBox}">
         <Setter Property="OverridesDefaultStyle" Value="True" />
