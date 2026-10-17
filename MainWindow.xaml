@@ -3,43 +3,6 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="SUT Win Explorer" Icon="Assets/app.ico" Height="760" Width="1180"
         MinHeight="520" MinWidth="820" Background="#F3F5F7">
-    <Window.Resources>
-        <Style TargetType="TabItem">
-            <Setter Property="Height" Value="30" />
-            <Setter Property="Padding" Value="10,0" />
-            <Setter Property="Margin" Value="0,0,-1,0" />
-            <Setter Property="Foreground" Value="#263443" />
-            <Setter Property="UseLayoutRounding" Value="True" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TabItem">
-                        <Border x:Name="TabBorder"
-                                Background="Transparent"
-                                BorderBrush="#CCD3DA"
-                                BorderThickness="1"
-                                CornerRadius="6,6,0,0"
-                                SnapsToDevicePixels="True">
-                            <ContentPresenter ContentSource="Header"
-                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                              VerticalAlignment="Center"
-                                              Margin="{TemplateBinding Padding}"
-                                              RecognizesAccessKey="True" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="TabBorder" Property="Background" Value="#FFFFFF" />
-                                <Setter TargetName="TabBorder" Property="BorderThickness" Value="1,1,1,0" />
-                                <Setter Property="Height" Value="32" />
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="TabBorder" Property="Opacity" Value="0.55" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-    </Window.Resources>
     <DockPanel>
         <Grid DockPanel.Dock="Top" Background="#F3F5F7" Margin="4">
             <Grid.ColumnDefinitions>
