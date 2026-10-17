@@ -1,4 +1,5 @@
-/obj/project.nuget.cache
-/obj/Debug/net8.0-windows/*.cache
-/obj/Debug/net10.0-windows/*.cache
-/*.csproj
+/obj/
+*_wpftmp.csproj
+.vs/
+*.user
+*.suo
