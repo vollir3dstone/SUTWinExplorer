@@ -246,7 +246,7 @@
                         <Button x:Name="CopyGetButton" Content="Copy🠝" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Copy get" ToolTip="Copy get"
                             Tag="CopyGet" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False"
                             Click="ContentOperationButton_Click" />
-                        <Button x:Name="CopyAbortButton" Content="Copy❌" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Copy abort" ToolTip="Copy abort"
+                        <Button x:Name="CopyAbortButton" Content="Copy✕" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Copy abort" ToolTip="Copy abort"
                             Tag="CopyAbort" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False"
                             Click="ContentOperationButton_Click" />
                         <Button x:Name="CopyPasteButton" Content="Copy🠟" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Copy paste" ToolTip="Copy paste"
@@ -257,7 +257,7 @@
                         <Button x:Name="MoveGetButton" Content="Move🠝" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Move get" ToolTip="Move get"
                             Tag="MoveGet" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False"
                             Click="ContentOperationButton_Click" />
-                        <Button x:Name="MoveAbortButton" Content="Move❌" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Move abort" ToolTip="Move abort"
+                        <Button x:Name="MoveAbortButton" Content="Move✕" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Move abort" ToolTip="Move abort"
                             Tag="MoveAbort" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False"
                             Click="ContentOperationButton_Click" />
                         <Button x:Name="MovePasteButton" Content="Move🠟" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Move paste" ToolTip="Move paste"
