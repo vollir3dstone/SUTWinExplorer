@@ -3,6 +3,36 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="SUT Win Explorer" Icon="Assets/app.ico" Height="760" Width="1180"
         MinHeight="520" MinWidth="820" Background="#F3F5F7">
+    <Window.Resources>
+        <Style x:Key="TabCloseButtonStyle" TargetType="{x:Type Button}">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          RecognizesAccessKey="True" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="#C42B1C" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Foreground" Value="#8B1A10" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
     <DockPanel>
         <Grid DockPanel.Dock="Top" Background="#F3F5F7" Margin="4">
             <Grid.ColumnDefinitions>

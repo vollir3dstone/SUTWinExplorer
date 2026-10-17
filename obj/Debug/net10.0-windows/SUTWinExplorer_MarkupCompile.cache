@@ -1,5 +1,5 @@
 ﻿SUTWinExplorer
-1.0.0.0
+
 
 winexe
 C#
@@ -12,9 +12,9 @@ TRACE;DEBUG;NET;NET10_0;NETCOREAPP;WINDOWS;WINDOWS7_0;NET5_0_OR_GREATER;NET6_0_O
 D:\Projekte\Softwareprojekte gross\SUTWinExplorer\SUTWinExplorer-Project\App.xaml
 3-1337689130
 
-20798785680
-4121064826828
+14-1857319560
+206532413414
 ExplorerTabView.xaml;MainWindow.xaml;Styles\TabItemStyle.xaml;
 
-True
+False
 
