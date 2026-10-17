@@ -3,6 +3,12 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SUTWinExplorer">
     <UserControl.Resources>
+         <Style x:Key="ContentPaneButtonStyle" TargetType="{x:Type Button}"
+             BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Height" Value="24" />
+            <Setter Property="MinHeight" Value="24" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
         <DataTemplate x:Key="ShellIconTemplate">
             <Grid Width="16" Height="16" ClipToBounds="False"
                   Opacity="{Binding Icons.Opacity, TargetNullValue=1, FallbackValue=1}">
@@ -149,10 +155,10 @@
                 <TextBlock x:Name="LocationLabel" Padding="12,10" FontSize="14"
                            FontWeight="SemiBold" Foreground="#263443" TextWrapping="NoWrap"
                            TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                <Button x:Name="BrowsePathviewButton" Content="Browse" Padding="10,1"
+                <Button x:Name="BrowsePathviewButton" Content="Browse" Style="{StaticResource ContentPaneButtonStyle}" Padding="10,1"
                         Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed"
                         IsEnabled="False" Click="PathviewActionButton_Click" />
-                <Button x:Name="PinPathviewButton" Content="Pin" Padding="10,1"
+                <Button x:Name="PinPathviewButton" Content="Pin" Style="{StaticResource ContentPaneButtonStyle}" Padding="10,1"
                     Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed"
                     IsEnabled="False" Click="PathviewActionButton_Click" />
             </StackPanel>
@@ -170,14 +176,29 @@
                               Checked="HideInternalContentCheckBox_StateChanged"
                               Unchecked="HideInternalContentCheckBox_StateChanged" />
                     <TextBlock Text="Name pattern" Margin="16,0,6,0" VerticalAlignment="Center" />
-                    <TextBox x:Name="NamePatternTextBox" Width="150" Height="20" Padding="3,0"
-                             BorderThickness="1,1,0,1"
-                             VerticalAlignment="Center" VerticalContentAlignment="Center"
-                             ToolTip="Use * and ? as wildcards"
-                             TextChanged="NamePatternTextBox_TextChanged" />
-                        <Button Content="×" Width="20" Height="20" Padding="0"
-                            BorderThickness="0,1,1,1" VerticalAlignment="Center"
-                            ToolTip="Clear name pattern" Click="ClearNamePatternButton_Click" />
+                    <Border Width="172" Height="24" VerticalAlignment="Center"
+                            Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+                            BorderBrush="{StaticResource Input.Border}" BorderThickness="1"
+                            CornerRadius="{StaticResource InputCornerRadius}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150" />
+                                <ColumnDefinition Width="20" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="NamePatternTextBox" Grid.Column="0" Padding="3,0"
+                                     local:InputChrome.CornerRadius="3,0,0,3"
+                                     Background="Transparent" BorderThickness="0"
+                                     VerticalContentAlignment="Center"
+                                     ToolTip="Use * and ? as wildcards"
+                                     TextChanged="NamePatternTextBox_TextChanged" />
+                            <Button Grid.Column="1" Content="×" Style="{StaticResource ContentPaneButtonStyle}"
+                                    Width="20" Height="22" Padding="0"
+                                    local:InputChrome.CornerRadius="0,3,3,0"
+                                    Background="Transparent" BorderThickness="0"
+                                    VerticalAlignment="Center"
+                                    ToolTip="Clear name pattern" Click="ClearNamePatternButton_Click" />
+                        </Grid>
+                    </Border>
                 </StackPanel>
             <Grid Grid.Row="2" Grid.ColumnSpan="2" Margin="10,0,10,8">
                 <Grid.ColumnDefinitions>
@@ -203,39 +224,39 @@
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="1" Orientation="Horizontal">
-                        <Button x:Name="RenameButton" Content="Rename" AutomationProperties.Name="Rename" ToolTip="Rename"
+                        <Button x:Name="RenameButton" Content="Rename" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Rename" ToolTip="Rename"
                             Tag="Rename" Width="72" Padding="0" IsEnabled="False"
                                 Click="ContentOperationButton_Click" />
                     </StackPanel>
                     <StackPanel Grid.Column="3" Orientation="Horizontal">
-                        <Button x:Name="PathGetButton" Content="Path🠝" AutomationProperties.Name="Path get" ToolTip="Path get"
+                        <Button x:Name="PathGetButton" Content="Path🠝" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Path get" ToolTip="Path get"
                             Tag="PathGet" Width="48" Padding="0" IsEnabled="False"
                                 Click="ContentOperationButton_Click" />
                     </StackPanel>
                     <StackPanel Grid.Column="5" Orientation="Horizontal">
-                        <Button x:Name="CopyGetButton" Content="Copy🠝" AutomationProperties.Name="Copy get" ToolTip="Copy get"
+                        <Button x:Name="CopyGetButton" Content="Copy🠝" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Copy get" ToolTip="Copy get"
                             Tag="CopyGet" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False"
                             Click="ContentOperationButton_Click" />
-                        <Button x:Name="CopyAbortButton" Content="Copy❌" AutomationProperties.Name="Copy abort" ToolTip="Copy abort"
+                        <Button x:Name="CopyAbortButton" Content="Copy❌" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Copy abort" ToolTip="Copy abort"
                             Tag="CopyAbort" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False"
                             Click="ContentOperationButton_Click" />
-                        <Button x:Name="CopyPasteButton" Content="Copy🠟" AutomationProperties.Name="Copy paste" ToolTip="Copy paste"
+                        <Button x:Name="CopyPasteButton" Content="Copy🠟" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Copy paste" ToolTip="Copy paste"
                             Tag="CopyPaste" Width="48" Padding="0" IsEnabled="False"
                             Click="ContentOperationButton_Click" />
                     </StackPanel>
                     <StackPanel Grid.Column="7" Orientation="Horizontal">
-                        <Button x:Name="MoveGetButton" Content="Move🠝" AutomationProperties.Name="Move get" ToolTip="Move get"
+                        <Button x:Name="MoveGetButton" Content="Move🠝" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Move get" ToolTip="Move get"
                             Tag="MoveGet" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False"
                             Click="ContentOperationButton_Click" />
-                        <Button x:Name="MoveAbortButton" Content="Move❌" AutomationProperties.Name="Move abort" ToolTip="Move abort"
+                        <Button x:Name="MoveAbortButton" Content="Move❌" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Move abort" ToolTip="Move abort"
                             Tag="MoveAbort" Width="48" Padding="0" Margin="0,0,4,0" IsEnabled="False"
                             Click="ContentOperationButton_Click" />
-                        <Button x:Name="MovePasteButton" Content="Move🠟" AutomationProperties.Name="Move paste" ToolTip="Move paste"
+                        <Button x:Name="MovePasteButton" Content="Move🠟" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Move paste" ToolTip="Move paste"
                             Tag="MovePaste" Width="48" Padding="0" IsEnabled="False"
                             Click="ContentOperationButton_Click" />
                     </StackPanel>
                     <StackPanel Grid.Column="9" Orientation="Horizontal">
-                        <Button x:Name="DeleteButton" Content="Del🗑️" AutomationProperties.Name="Delete" ToolTip="Delete"
+                        <Button x:Name="DeleteButton" Content="Del🗑️" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Delete" ToolTip="Delete"
                             Tag="Delete" Width="48" Padding="0" IsEnabled="False"
                                 Click="ContentOperationButton_Click" />
                     </StackPanel>

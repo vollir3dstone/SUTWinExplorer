@@ -66,3 +66,4 @@ C:\Users\Volker\AppData\Local\Temp\SUTWinExplorer-ShellNotifyBuild\bin\SUTWinExp
 D:\Projekte\Softwareprojekte gross\SUTWinExplorer\SUTWinExplorer-Project\bin\Debug\net10.0-windows\SUTWinExplorer.exe
 D:\Projekte\Softwareprojekte gross\SUTWinExplorer\SUTWinExplorer-Project\obj\Debug\net10.0-windows\Styles\TabItemStyle.baml
 D:\Projekte\Softwareprojekte gross\SUTWinExplorer\SUTWinExplorer-Project\obj\Debug\net10.0-windows\App.baml
+D:\Projekte\Softwareprojekte gross\SUTWinExplorer\SUTWinExplorer-Project\obj\Debug\net10.0-windows\Styles\InputControlStyles.baml
