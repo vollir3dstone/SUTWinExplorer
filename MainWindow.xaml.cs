@@ -94,9 +94,9 @@ public partial class MainWindow : Window
 
         var close = new Button
         {
-            Content = "x",
-            Padding = new Thickness(6, 0, 6, 0),
-            Margin = new Thickness(8, 0, 0, 0),
+            Content = "🗙",
+            Style = (Style)FindResource("TabCloseButtonStyle"),
+            Margin = new Thickness(6, 0, 0, 0),
             ToolTip = "Close tab",
             Tag = view,
             Visibility = view.IsBrowsable ? Visibility.Collapsed : Visibility.Visible
