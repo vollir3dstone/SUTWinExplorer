@@ -72,6 +72,9 @@ leading ellipsis prefix is omitted.
 ## Current Composition
 
 - `MainWindow` owns the WPF application toolbar and `TabControl`.
+- The application-wide implicit `TabItem` style, its Aero2 source, and the
+  intentional corner-radius and border-overlap adaptations are documented in
+  [TAB_ITEM_STYLE.md](TAB_ITEM_STYLE.md).
 - Each application tab contains one `Pathview`. A `Pathview` is the complete
   per-tab browsing unit for the displays and settings attached to that tab: it
   owns the active path, back/forward history, left directory-tree pane, right
