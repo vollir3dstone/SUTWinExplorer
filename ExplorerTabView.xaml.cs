@@ -50,6 +50,10 @@ public partial class Pathview : UserControl
     public Pathview(string initialPath, bool isBrowsable)
     {
         InitializeComponent();
+        HideDirectoriesCheckBox.GetCheckBox().Checked += HideDirectoriesCheckBox_StateChanged;
+        HideDirectoriesCheckBox.GetCheckBox().Unchecked += HideDirectoriesCheckBox_StateChanged;
+        HideInternalContentCheckBox.GetCheckBox().Checked += HideInternalContentCheckBox_StateChanged;
+        HideInternalContentCheckBox.GetCheckBox().Unchecked += HideInternalContentCheckBox_StateChanged;
         IsBrowsable = isBrowsable;
         ActivePathTab.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
         ActivePathAndSiblingsTab.Visibility = IsBrowsable ? Visibility.Visible : Visibility.Collapsed;
@@ -77,8 +81,8 @@ public partial class Pathview : UserControl
             _shellBrowserHost.NavigationCompleted += ShellBrowserHost_NavigationCompleted;
             _shellBrowserHost.NavigationFailed += ShellBrowserHost_NavigationFailed;
             _shellBrowserHost.FileSystemChanged += ShellBrowserHost_FileSystemChanged;
-            _shellBrowserHost.SetShowDirectories(HideDirectoriesCheckBox.IsChecked != true);
-            _shellBrowserHost.SetHideInternal(HideInternalContentCheckBox.IsChecked == true);
+            _shellBrowserHost.SetShowDirectories(HideDirectoriesCheckBox.GetCheckBox().IsChecked != true);
+            _shellBrowserHost.SetHideInternal(HideInternalContentCheckBox.GetCheckBox().IsChecked == true);
             _shellBrowserHost.SetNamePattern(NamePatternTextBox.Text);
             ShellBrowserSlot.Content = _shellBrowserHost;
         }
@@ -199,7 +203,7 @@ public partial class Pathview : UserControl
     private void RefreshFiles()
     {
         var entries = new List<FileEntry>();
-        var showDirectories = HideDirectoriesCheckBox.IsChecked != true;
+        var showDirectories = HideDirectoriesCheckBox.GetCheckBox().IsChecked != true;
         try
         {
             if (showDirectories)
@@ -209,7 +213,7 @@ public partial class Pathview : UserControl
                     if (!InternalItemFilter.MatchesNamePattern(directory, NamePatternTextBox.Text))
                         continue;
 
-                    if (HideInternalContentCheckBox.IsChecked == true && InternalItemFilter.ShouldHide(directory, true))
+                    if (HideInternalContentCheckBox.GetCheckBox().IsChecked == true && InternalItemFilter.ShouldHide(directory, true))
                         continue;
 
                     try
@@ -232,7 +236,7 @@ public partial class Pathview : UserControl
                     if (!InternalItemFilter.MatchesNamePattern(file, NamePatternTextBox.Text))
                         continue;
 
-                    if (HideInternalContentCheckBox.IsChecked == true && InternalItemFilter.ShouldHide(file, isDirectory))
+                    if (HideInternalContentCheckBox.GetCheckBox().IsChecked == true && InternalItemFilter.ShouldHide(file, isDirectory))
                         continue;
 
                     if (isDirectory)
@@ -270,7 +274,7 @@ public partial class Pathview : UserControl
             return;
         }
 
-        _shellBrowserHost?.SetShowDirectories(HideDirectoriesCheckBox.IsChecked != true);
+        _shellBrowserHost?.SetShowDirectories(HideDirectoriesCheckBox.GetCheckBox().IsChecked != true);
         RefreshShellStatusCount();
     }
 
@@ -282,7 +286,7 @@ public partial class Pathview : UserControl
         if (IsLegacyWpfFileList)
             RefreshFiles();
         else
-            _shellBrowserHost?.SetHideInternal(HideInternalContentCheckBox.IsChecked == true);
+            _shellBrowserHost?.SetHideInternal(HideInternalContentCheckBox.GetCheckBox().IsChecked == true);
 
         RefreshShellStatusCount();
     }
@@ -635,11 +639,11 @@ public partial class Pathview : UserControl
             var count = Directory.EnumerateFiles(CurrentPath)
                 .Count(path => (File.GetAttributes(path) & FileAttributes.Directory) == 0 &&
                                InternalItemFilter.MatchesNamePattern(path, NamePatternTextBox.Text) &&
-                               (HideInternalContentCheckBox.IsChecked != true || !InternalItemFilter.ShouldHide(path, false)));
-            if (HideDirectoriesCheckBox.IsChecked != true)
+                               (HideInternalContentCheckBox.GetCheckBox().IsChecked != true || !InternalItemFilter.ShouldHide(path, false)));
+            if (HideDirectoriesCheckBox.GetCheckBox().IsChecked != true)
                 count += Directory.EnumerateDirectories(CurrentPath)
                     .Count(path => InternalItemFilter.MatchesNamePattern(path, NamePatternTextBox.Text) &&
-                                   (HideInternalContentCheckBox.IsChecked != true || !InternalItemFilter.ShouldHide(path, true)));
+                                   (HideInternalContentCheckBox.GetCheckBox().IsChecked != true || !InternalItemFilter.ShouldHide(path, true)));
             StatusLabel.Text = $"{count} items";
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)

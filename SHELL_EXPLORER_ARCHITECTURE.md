@@ -185,6 +185,54 @@ leading ellipsis prefix is omitted.
   name case-insensitively, falling back to the filesystem leaf name when no
   display name is available; blank means no pattern constraint, `?` matches one
   character, `*` matches zero or more characters, and `.` is literal.
+
+### Baseline-aligned inline checkbox widget
+
+Use `CheckBoxWrapper` when a checkbox and its one-line label must align with
+neighboring text in a `TextBlock`. The stock WPF `CheckBox` aligns its glyph
+with its own caption, but an enclosing `TextBlock` sees an embedded checkbox
+as one UI element; it does not automatically use the baseline of the caption
+hidden inside the checkbox template.
+
+`CheckBoxWrapper` derives from `TextBlock` and places a contentless WPF
+`CheckBox` in an `InlineUIContainer`, followed by the label as a `Run`. Its own
+text line therefore has the label's baseline. After layout, it copies its
+`TextBlock.BaselineOffset` to the attached baseline property used by the outer
+`InlineUIContainer`. The outer line must set `BaselineAlignment="Baseline"`:
+
+```xaml
+<TextBlock TextWrapping="NoWrap">
+    <InlineUIContainer BaselineAlignment="Baseline">
+        <local:CheckBoxWrapper x:Name="HideDirectoriesCheckBox"
+                               Label="Hide directories"
+                               Margin="0,0,16,0" />
+    </InlineUIContainer>
+    <Run Text="Name pattern " />
+</TextBlock>
+```
+
+The `local` namespace should resolve to `clr-namespace:SUTWinExplorer`. The
+wrapper's `Label` sets the displayed caption. Its `x:Name` identifies the
+wrapper, not the inner checkbox; use `GetCheckBox()` to access the actual WPF
+control without duplicating or forwarding the checkbox API:
+
+```csharp
+HideDirectoriesCheckBox.GetCheckBox().Checked += HideDirectoriesCheckBox_StateChanged;
+var isChecked = HideDirectoriesCheckBox.GetCheckBox().IsChecked == true;
+```
+
+Attach checkbox events after `InitializeComponent()`. The checkbox is owned by
+the wrapper, so event handlers should be attached by the owning view and use
+its normal lifetime. The widget's baseline refresh is tied only to its own
+`Loaded` and `SizeChanged` events; it does not subscribe to static or
+long-lived event sources.
+
+The checkbox is visually translated down by 4 WPF device-independent units;
+this render transform does not change the label baseline or layout size. Its
+internal right margin (`4`) controls the checkbox-to-label gap. Set the
+wrapper's XAML `Margin` to control the gap after the complete checkbox-label
+unit (currently `16` in the content-filter row).
+
 - The content filtering row starts with a **VIEW:** badge styled like the
   **SELECTED:** and **FIXED** badges.
 - The right content pane is a separate content view. Production creates one

@@ -162,44 +162,53 @@
                     Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed"
                     IsEnabled="False" Click="PathviewActionButton_Click" />
             </StackPanel>
-                <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="10,0,10,8">
-                    <Border Background="#E1E4E7" Padding="6,3" Margin="0,0,8,0"
-                            HorizontalAlignment="Left" VerticalAlignment="Center">
-                        <TextBlock Text="VIEW:" FontWeight="Bold" Foreground="#4E5963" />
+                <Grid Grid.Row="1" Grid.ColumnSpan="2" Margin="10,0,10,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Height="24" Background="#E1E4E7" Padding="6,0"
+                            Margin="0,0,8,0" VerticalAlignment="Center">
+                        <TextBlock Text="VIEW:" FontWeight="Bold" Foreground="#4E5963"
+                                   VerticalAlignment="Center" />
                     </Border>
-                    <CheckBox x:Name="HideDirectoriesCheckBox" Content="Hide directories"
-                              IsChecked="True" Margin="0,0,16,0" VerticalAlignment="Center"
-                              Checked="HideDirectoriesCheckBox_StateChanged"
-                              Unchecked="HideDirectoriesCheckBox_StateChanged" />
-                    <CheckBox x:Name="HideInternalContentCheckBox" Content="Hide internal"
-                              IsChecked="True" VerticalAlignment="Center"
-                              Checked="HideInternalContentCheckBox_StateChanged"
-                              Unchecked="HideInternalContentCheckBox_StateChanged" />
-                    <TextBlock Text="Name pattern" Margin="16,0,6,0" VerticalAlignment="Center" />
-                    <Border Width="172" Height="24" VerticalAlignment="Center"
-                            Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
-                            BorderBrush="{StaticResource Input.Border}" BorderThickness="1"
-                            CornerRadius="{StaticResource InputCornerRadius}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="150" />
-                                <ColumnDefinition Width="20" />
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="NamePatternTextBox" Grid.Column="0" Padding="3,0"
-                                     local:InputChrome.CornerRadius="3,0,0,3"
-                                     Background="Transparent" BorderThickness="0"
-                                     VerticalContentAlignment="Center"
-                                     ToolTip="Use * and ? as wildcards"
-                                     TextChanged="NamePatternTextBox_TextChanged" />
-                            <Button Grid.Column="1" Content="×" Style="{StaticResource ContentPaneButtonStyle}"
-                                    Width="20" Height="22" Padding="0"
-                                    local:InputChrome.CornerRadius="0,3,3,0"
-                                    Background="Transparent" BorderThickness="0"
-                                    VerticalAlignment="Center"
-                                    ToolTip="Clear name pattern" Click="ClearNamePatternButton_Click" />
-                        </Grid>
-                    </Border>
-                </StackPanel>
+                    <TextBlock Grid.Column="1" TextWrapping="NoWrap">
+                        <InlineUIContainer BaselineAlignment="Baseline">
+                            <local:CheckBoxWrapper x:Name="HideDirectoriesCheckBox"
+                                                   Label="Hide directories" Margin="0,0,16,0" />
+                        </InlineUIContainer>
+                        <InlineUIContainer BaselineAlignment="Baseline">
+                            <local:CheckBoxWrapper x:Name="HideInternalContentCheckBox"
+                                                   Label="Hide internal" Margin="0,0,16,0" />
+                        </InlineUIContainer>
+                        <Run Text="Name pattern  " />
+                        <InlineUIContainer BaselineAlignment="Baseline">
+                            <Border Width="172" Height="24"
+                                    local:InputChrome.BaselineSource="{Binding ElementName=NamePatternTextBox}"
+                                    Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+                                    BorderBrush="{StaticResource Input.Border}" BorderThickness="1"
+                                    CornerRadius="{StaticResource InputCornerRadius}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="20" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="NamePatternTextBox" Grid.Column="0" Padding="3,0"
+                                             local:InputChrome.CornerRadius="3,0,0,3"
+                                             Background="Transparent" BorderThickness="0"
+                                             VerticalContentAlignment="Center"
+                                             ToolTip="Use * and ? as wildcards"
+                                             TextChanged="NamePatternTextBox_TextChanged" />
+                                    <Button Grid.Column="1" Content="×" Style="{StaticResource ContentPaneButtonStyle}"
+                                            Width="20" Height="22" Padding="0"
+                                            local:InputChrome.CornerRadius="0,3,3,0"
+                                            Background="Transparent" BorderThickness="0"
+                                            ToolTip="Clear name pattern" Click="ClearNamePatternButton_Click" />
+                                </Grid>
+                            </Border>
+                        </InlineUIContainer>
+                    </TextBlock>
+                </Grid>
             <Grid Grid.Row="2" Grid.ColumnSpan="2" Margin="10,0,10,8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
