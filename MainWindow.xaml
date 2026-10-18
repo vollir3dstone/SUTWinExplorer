@@ -43,9 +43,21 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Button Grid.Column="0" Content="Back" Click="Back_Click" Padding="10,4" />
-            <Button Grid.Column="1" Content="Forward" Click="Forward_Click" Padding="10,4" />
-            <Button Grid.Column="2" Content="Up" Click="Up_Click" Padding="10,4" />
+                <Button Grid.Column="0" Click="Back_Click" Padding="0" Margin="0,0,12,0"
+                    Width="24" Height="24"
+                    ToolTip="Back" AutomationProperties.Name="Back">
+                <TextBlock FontFamily="Segoe Fluent Icons" FontSize="16" Text="&#xE72B;" />
+            </Button>
+                <Button Grid.Column="1" Click="Forward_Click" Padding="0" Margin="0,0,12,0"
+                    Width="24" Height="24"
+                    ToolTip="Forward" AutomationProperties.Name="Forward">
+                <TextBlock FontFamily="Segoe Fluent Icons" FontSize="16" Text="&#xE72A;" />
+            </Button>
+                <Button Grid.Column="2" Click="Up_Click" Padding="0" Margin="0,0,12,0"
+                    Width="24" Height="24"
+                    ToolTip="Up" AutomationProperties.Name="Up">
+                <TextBlock FontFamily="Segoe Fluent Icons" FontSize="16" Text="&#xE74A;" />
+            </Button>
             <Border Grid.Column="3" Width="1" Height="24" Margin="6,0" Background="#D8DDE3" />
             <ComboBox Grid.Column="4" x:Name="AddressBox" IsEditable="True" IsTextSearchEnabled="False"
                       StaysOpenOnEdit="True" DisplayMemberPath="DisplayPath" SelectedValuePath="TabIndex"
