@@ -803,6 +803,49 @@ public partial class Pathview : UserControl
         active.IsSelected = true;
         foreach (var routeEntry in route)
             routeEntry.IsExpanded = true;
+
+        if (IsBrowsable)
+        {
+            var activeEntry = active;
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+            {
+                if (string.Equals(CurrentPath, activeEntry.Path, StringComparison.OrdinalIgnoreCase))
+                {
+                    ActivePathAndSiblingsTree.UpdateLayout();
+                    CenterTreeItemInView(ActivePathAndSiblingsTree, activeEntry);
+                }
+            }));
+        }
+    }
+
+    private static void CenterTreeItemInView(TreeView tree, TreeEntry entry)
+    {
+        var item = FindTreeViewItem(tree, entry);
+        var scrollViewer = FindVisualChild<ScrollViewer>(tree);
+        if (item is null || scrollViewer is null || scrollViewer.ViewportHeight <= 0 ||
+            item.Template.FindName("PART_Header", item) is not FrameworkElement header ||
+            header.ActualHeight <= 0)
+        {
+            return;
+        }
+
+        var headerCenterY = header.TranslatePoint(new Point(0, header.ActualHeight / 2), scrollViewer).Y;
+        scrollViewer.ScrollToVerticalOffset(
+            scrollViewer.VerticalOffset + headerCenterY - scrollViewer.ViewportHeight / 2);
+    }
+
+    private static TreeViewItem? FindTreeViewItem(DependencyObject parent, TreeEntry entry)
+    {
+        if (parent is TreeViewItem item && ReferenceEquals(item.DataContext, entry))
+            return item;
+
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            if (FindTreeViewItem(VisualTreeHelper.GetChild(parent, index), entry) is { } descendant)
+                return descendant;
+        }
+
+        return null;
     }
 
     private static string[] GetPathSegments(string rootPath, string path)
