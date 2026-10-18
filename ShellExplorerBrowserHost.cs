@@ -25,6 +25,9 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     private const uint ColumnStateVisible = 1;
     private const int MinimumNameColumnWidth = 80;
     private const int ShellColumnTrailingInset = 11;
+    private const int ScrollBarControl = 2;
+    private const uint ScrollInfoRange = 0x1;
+    private const uint ScrollInfoPosition = 0x4;
     private const int HResultAbort = unchecked((int)0x80004004);
     private const int ShellChangeNotifyMessage = 0x8000 + 0x271;
     private const int ShellChangeNotifySources = 0x0001 | 0x0002 | 0x8000;
@@ -51,6 +54,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     private ExplorerBrowserEventsSink? _eventsSink;
     private uint _eventsCookie;
     private IntPtr _hostWindow;
+    private IntPtr _verticalScrollBarWindow;
     private bool _initialized;
     private bool _showDirectories;
     private bool _hideInternal;
@@ -150,7 +154,13 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     public void InvokeShellCopyCommand() =>
         InvokeCurrentViewCommand(ShellContextMenu.ShellViewSelection, "copy");
 
-    public List<string> GetSelectedFileSystemPaths()
+    public List<string> GetSelectedFileSystemPaths() =>
+        QueryCurrentView(ShellFileOperations.GetSelectedFileSystemPaths);
+
+    public List<string> GetDisplayedFileSystemPaths() =>
+        QueryCurrentView(ShellFileOperations.GetDisplayedFileSystemPaths);
+
+    private List<string> QueryCurrentView(Func<IShellView, List<string>> query)
     {
         if (_browser is null || !_initialized)
             throw new InvalidOperationException("The Shell content view is not ready.");
@@ -165,7 +175,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
                 throw new InvalidOperationException("The Shell content view is unavailable.");
 
             view = (IShellView)Marshal.GetObjectForIUnknown(viewPointer);
-            return ShellFileOperations.GetSelectedFileSystemPaths(view);
+            return query(view);
         }
         finally
         {
@@ -473,6 +483,51 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             if (viewPointer != IntPtr.Zero)
                 _ = Marshal.Release(viewPointer);
         }
+    }
+
+    // The Shell view is DirectUI; its vertical ScrollBar child is a standard scroll bar whose
+    // range is item count x 100 (observed), so position / total is the exact fractional row offset.
+    public bool TryGetVerticalScrollRange(out int position, out int total)
+    {
+        position = 0;
+        total = 0;
+        if (_hostWindow == IntPtr.Zero)
+            return false;
+
+        var scrollBar = FindVerticalScrollBarWindow();
+        if (scrollBar == IntPtr.Zero)
+            return true;
+
+        var info = new ScrollInfo { Size = (uint)Marshal.SizeOf<ScrollInfo>(), Mask = ScrollInfoRange | ScrollInfoPosition };
+        if (!GetScrollInfo(scrollBar, ScrollBarControl, ref info))
+            return false;
+
+        position = info.Position;
+        total = info.Max - info.Min + 1;
+        return true;
+    }
+
+    private IntPtr FindVerticalScrollBarWindow()
+    {
+        if (_verticalScrollBarWindow != IntPtr.Zero && IsWindow(_verticalScrollBarWindow) &&
+            IsWindowVisible(_verticalScrollBarWindow))
+            return _verticalScrollBarWindow;
+
+        var found = IntPtr.Zero;
+        EnumChildWindows(_hostWindow, (childWindow, _) =>
+        {
+            var className = new System.Text.StringBuilder(64);
+            if (GetClassName(childWindow, className, className.Capacity) == 0 ||
+                className.ToString() != "ScrollBar" || !IsWindowVisible(childWindow) ||
+                !GetClientRect(childWindow, out var bounds) ||
+                bounds.Bottom - bounds.Top <= bounds.Right - bounds.Left)
+                return true;
+
+            found = childWindow;
+            return false;
+        }, IntPtr.Zero);
+        _verticalScrollBarWindow = found;
+        return found;
     }
 
     public void SetViewSize(int width, int height)
@@ -999,6 +1054,24 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
     [DllImport("user32.dll")]
     private static extern bool IsWindowVisible(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindow(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetScrollInfo(IntPtr window, int bar, ref ScrollInfo info);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ScrollInfo
+    {
+        public uint Size;
+        public uint Mask;
+        public int Min;
+        public int Max;
+        public uint Page;
+        public int Position;
+        public int TrackPosition;
+    }
 
     [DllImport("user32.dll")]
     private static extern bool EnumChildWindows(IntPtr parent, EnumWindowsProc callback, IntPtr parameter);

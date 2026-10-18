@@ -590,12 +590,29 @@
                     </GridView>
                 </ListView.View>
             </ListView>
-            <Border Grid.Row="4" Grid.Column="0" BorderBrush="{StaticResource ViewFrameBrush}"
-                    BorderThickness="{StaticResource ViewFrameThickness}" Margin="10,0,0,0"
-                    Visibility="{Binding Visibility, ElementName=ShellBrowserSlot}">
-                <ContentControl x:Name="ShellBrowserSlot" Visibility="Collapsed"
-                                SizeChanged="ShellBrowserSlot_SizeChanged" />
-            </Border>
+            <Grid Grid.Row="4" Grid.Column="0" Margin="10,0,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <ListView x:Name="PrivateFileTable" Grid.Column="0" Visibility="Collapsed"
+                          BorderThickness="0,0,1,0" ScrollViewer.CanContentScroll="False"
+                          ScrollViewer.VerticalScrollBarVisibility="Hidden"
+                          ScrollViewer.HorizontalScrollBarVisibility="Hidden">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="Name (private table)" Width="190"
+                                            DisplayMemberBinding="{Binding}" />
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+                <Border Grid.Column="1" BorderBrush="{StaticResource ViewFrameBrush}"
+                        BorderThickness="{StaticResource ViewFrameThickness}"
+                        Visibility="{Binding Visibility, ElementName=ShellBrowserSlot}">
+                    <ContentControl x:Name="ShellBrowserSlot" Visibility="Collapsed"
+                                    SizeChanged="ShellBrowserSlot_SizeChanged" />
+                </Border>
+            </Grid>
             <Border Grid.Row="4" Grid.Column="1" BorderBrush="#E0E4E8" BorderThickness="1,0,0,0"
                     Background="#F6F7F8" VerticalAlignment="Stretch">
                 <TextBlock x:Name="StatusLabel" Padding="8,6" Foreground="#596675"

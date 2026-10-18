@@ -51,6 +51,10 @@ public partial class Pathview : UserControl
     private readonly Stack<string> _forwardHistory = new();
     private string _historyCurrentPath = string.Empty;
     private readonly DispatcherTimer _fileSystemRefreshTimer;
+    private readonly DispatcherTimer _privateTableRefreshTimer;
+    private readonly DispatcherTimer _scrollSyncTimer;
+    private ScrollViewer? _privateTableScrollViewer;
+    private double? _lastShellScrollOffset;
     private ShellExplorerBrowserHost? _shellBrowserHost;
     private bool _suppressTreeBringIntoView;
     private TreeEntry? _pendingTreeNavigationEntry;
@@ -91,11 +95,22 @@ public partial class Pathview : UserControl
             Interval = TimeSpan.FromMilliseconds(200)
         };
         _fileSystemRefreshTimer.Tick += FileSystemRefreshTimer_Tick;
+        _privateTableRefreshTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+        {
+            Interval = TimeSpan.FromMilliseconds(300)
+        };
+        _privateTableRefreshTimer.Tick += PrivateTableRefreshTimer_Tick;
+        _scrollSyncTimer = new DispatcherTimer(DispatcherPriority.Render, Dispatcher)
+        {
+            Interval = TimeSpan.FromMilliseconds(30)
+        };
+        _scrollSyncTimer.Tick += ScrollSyncTimer_Tick;
         Loaded += Pathview_Loaded;
         Unloaded += Pathview_Unloaded;
         IsVisibleChanged += Pathview_IsVisibleChanged;
         FileList.Visibility = IsLegacyWpfFileList ? Visibility.Visible : Visibility.Collapsed;
         ShellBrowserSlot.Visibility = IsLegacyWpfFileList ? Visibility.Collapsed : Visibility.Visible;
+        PrivateFileTable.Visibility = ShellBrowserSlot.Visibility;
         StatusLabel.Visibility = IsLegacyWpfFileList ? Visibility.Visible : Visibility.Collapsed;
         InitializeActivePathAndSiblingsTree();
         if (!IsLegacyWpfFileList)
@@ -633,6 +648,7 @@ public partial class Pathview : UserControl
     private void Pathview_Loaded(object sender, RoutedEventArgs e)
     {
         ShellExplorerBrowserHost.ToolbarOperationStateChanged += ShellExplorerBrowserHost_ToolbarOperationStateChanged;
+        _scrollSyncTimer.Start();
         CopyWorkflowState.Shared.Changed += CopyWorkflowState_Changed;
         MoveWorkflowState.Shared.Changed += MoveWorkflowState_Changed;
         _shellBrowserHost?.RefreshSelectionState();
@@ -645,6 +661,7 @@ public partial class Pathview : UserControl
 
     private void Pathview_Unloaded(object sender, RoutedEventArgs e)
     {
+        _scrollSyncTimer.Stop();
         ShellExplorerBrowserHost.ToolbarOperationStateChanged -= ShellExplorerBrowserHost_ToolbarOperationStateChanged;
         CopyWorkflowState.Shared.Changed -= CopyWorkflowState_Changed;
         MoveWorkflowState.Shared.Changed -= MoveWorkflowState_Changed;
@@ -862,6 +879,12 @@ public partial class Pathview : UserControl
 
     private void RefreshShellStatusCount()
     {
+        if (!IsLegacyWpfFileList)
+        {
+            _privateTableRefreshTimer.Stop();
+            _privateTableRefreshTimer.Start();
+        }
+
         if (IsTopPath(CurrentPath))
         {
             var count = HideDirectoriesCheckBox.GetCheckBox().IsChecked == true
@@ -890,6 +913,48 @@ public partial class Pathview : UserControl
         {
             StatusLabel.Text = exception.Message;
         }
+    }
+
+    private void PrivateTableRefreshTimer_Tick(object? sender, EventArgs e)
+    {
+        _privateTableRefreshTimer.Stop();
+        try
+        {
+            var paths = _shellBrowserHost?.GetDisplayedFileSystemPaths() ?? [];
+            PrivateFileTable.ItemsSource = paths.Select(Path.GetFileName).ToList();
+            _lastShellScrollOffset = null;
+        }
+        catch (Exception exception) when (exception is COMException or InvalidOperationException)
+        {
+        }
+    }
+
+    private void ScrollSyncTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_shellBrowserHost is null || !_shellBrowserHost.TryGetVerticalScrollRange(out var position, out var total))
+            return;
+
+        var itemCount = PrivateFileTable.Items.Count;
+        if (itemCount == 0 || PrivateFileTable.ItemContainerGenerator.ContainerFromIndex(0) is not FrameworkElement firstRow)
+            return;
+
+        // Row pitch, not ActualHeight: item containers have a margin/border that adds to the spacing.
+        var rowPitch = itemCount > 1 &&
+                       PrivateFileTable.ItemContainerGenerator.ContainerFromIndex(1) is FrameworkElement secondRow
+            ? secondRow.TranslatePoint(new Point(), firstRow).Y
+            : firstRow.ActualHeight;
+
+        _privateTableScrollViewer ??= FindVisualChild<ScrollViewer>(PrivateFileTable);
+        if (_privateTableScrollViewer is null)
+            return;
+
+        var rowsScrolled = total > 0 ? (double)position * itemCount / total : 0;
+        var offset = rowsScrolled * rowPitch;
+        if (_lastShellScrollOffset == offset)
+            return;
+
+        _lastShellScrollOffset = offset;
+        _privateTableScrollViewer.ScrollToVerticalOffset(offset);
     }
 
     private void ShellBrowserHost_NavigationCompleted(object? sender, string path)

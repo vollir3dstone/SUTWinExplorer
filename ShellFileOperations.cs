@@ -53,7 +53,15 @@ internal static class ShellFileOperations
         }
     }
 
-    public static List<string> GetSelectedFileSystemPaths(IShellView shellView)
+    private const uint ShellViewAllItems = 2;
+
+    public static List<string> GetSelectedFileSystemPaths(IShellView shellView) =>
+        GetFileSystemPaths(shellView, ShellContextMenu.ShellViewSelection);
+
+    public static List<string> GetDisplayedFileSystemPaths(IShellView shellView) =>
+        GetFileSystemPaths(shellView, ShellViewAllItems);
+
+    private static List<string> GetFileSystemPaths(IShellView shellView, uint selectionKind)
     {
         IntPtr dataObjectPointer = IntPtr.Zero;
         IDataObject? dataObject = null;
@@ -63,7 +71,7 @@ internal static class ShellFileOperations
         {
             var interfaceId = typeof(IDataObject).GUID;
             var result = shellView.GetItemObject(
-                ShellContextMenu.ShellViewSelection,
+                selectionKind,
                 ref interfaceId,
                 out dataObjectPointer);
             if (result < 0 || dataObjectPointer == IntPtr.Zero)
