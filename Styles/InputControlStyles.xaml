@@ -6,6 +6,17 @@
     <SolidColorBrush x:Key="Input.HoverBorder" Color="#7EB4EA" />
     <SolidColorBrush x:Key="Input.FocusBorder" Color="#569DE5" />
     <SolidColorBrush x:Key="Input.DisabledBorder" Color="#D9D9D9" />
+    <SolidColorBrush x:Key="PathHeaderDisplayForeground" Color="#263443" />
+    <Style x:Key="PathHeaderDisplayStyle" TargetType="{x:Type TextBlock}">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource PathHeaderDisplayForeground}" />
+    </Style>
+    <Style x:Key="PathHeaderDisplayComboBoxItemStyle" TargetType="{x:Type ComboBoxItem}">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource PathHeaderDisplayForeground}" />
+    </Style>
     <LinearGradientBrush x:Key="Input.ButtonBackground" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#F0F0F0" Offset="0" />
         <GradientStop Color="#E5E5E5" Offset="1" />
@@ -379,5 +390,12 @@
                 <Setter Property="Template" Value="{StaticResource RoundedEditableComboBoxTemplate}" />
             </Trigger>
         </Style.Triggers>
+    </Style>
+    <Style x:Key="PathHeaderDisplayComboBoxStyle" TargetType="{x:Type ComboBox}"
+           BasedOn="{StaticResource {x:Type ComboBox}}">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource PathHeaderDisplayForeground}" />
+        <Setter Property="ItemContainerStyle" Value="{StaticResource PathHeaderDisplayComboBoxItemStyle}" />
     </Style>
 </ResourceDictionary>

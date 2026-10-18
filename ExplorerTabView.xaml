@@ -153,8 +153,8 @@
                         Margin="10,0,8,0" VerticalAlignment="Center" Visibility="Collapsed">
                     <TextBlock Text="FIXED" FontWeight="Bold" Foreground="#4E5963" />
                 </Border>
-                <TextBlock x:Name="LocationLabel" Padding="12,10" FontSize="14"
-                           FontWeight="SemiBold" Foreground="#263443" TextWrapping="NoWrap"
+                <TextBlock x:Name="LocationLabel" Style="{StaticResource PathHeaderDisplayStyle}"
+                           Padding="12,10" TextWrapping="NoWrap"
                            TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                 <Button x:Name="BrowsePathviewButton" Content="Browse" Style="{StaticResource ContentPaneButtonStyle}" Padding="10,1"
                         Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed"

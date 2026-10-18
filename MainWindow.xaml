@@ -49,6 +49,7 @@
             <Border Grid.Column="3" Width="1" Height="24" Margin="6,0" Background="#D8DDE3" />
             <ComboBox Grid.Column="4" x:Name="AddressBox" IsEditable="True" IsTextSearchEnabled="False"
                       StaysOpenOnEdit="True" DisplayMemberPath="DisplayPath" SelectedValuePath="TabIndex"
+                      Style="{StaticResource PathHeaderDisplayComboBoxStyle}"
                       VerticalContentAlignment="Center" KeyDown="AddressBox_KeyDown"
                       SelectionChanged="AddressBox_SelectionChanged" Margin="6,0" />
             <Button Grid.Column="5" Content="Go" Click="Go_Click" Padding="12,4" />
