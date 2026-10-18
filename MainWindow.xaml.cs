@@ -137,7 +137,15 @@ public partial class MainWindow : Window
                 RegisterFixedPathview(view, currentPath);
             title.Text = view.IsBrowsable ? "BROWSE" : GetTabLabelFromPath(currentPath);
             tooltipText.Text = ShellDisplayNameProvider.GetDisplayPath(currentPath);
-            RefreshPathChoices();
+            if (view.IsBrowsable)
+            {
+                if (ReferenceEquals(CurrentPathview, view))
+                    UpdateCurrentAddressText();
+            }
+            else
+            {
+                RefreshPathChoices();
+            }
         };
         view.NavigationFailed += (_, _) =>
         {
@@ -285,22 +293,38 @@ public partial class MainWindow : Window
             return;
 
         var choices = new List<TabPathChoice> { new(-1, string.Empty) };
-        choices.AddRange(ExplorerTabs.Items.Cast<TabItem>()
-            .Select((item, index) => new TabPathChoice(index, ((Pathview)item.Content).CurrentPath))
-            .OrderBy(choice => choice.Path, StringComparer.CurrentCultureIgnoreCase));
 
         _updatingPathChoices = true;
         try
         {
+            choices.AddRange(ExplorerTabs.Items.Cast<TabItem>()
+                .Select((item, index) => new { View = (Pathview)item.Content, TabIndex = index })
+                .Where(entry => !entry.View.IsBrowsable)
+                .Select(entry => new TabPathChoice(entry.TabIndex, entry.View.CurrentPath))
+                .OrderBy(choice => choice.DisplayPath, StringComparer.OrdinalIgnoreCase));
             AddressBox.ItemsSource = choices;
             AddressBox.SelectedValue = ExplorerTabs.SelectedIndex;
+            UpdateCurrentAddressText();
+        }
+        finally
+        {
+            _updatingPathChoices = false;
+        }
+    }
+
+    private void UpdateCurrentAddressText()
+    {
+        var wasUpdatingPathChoices = _updatingPathChoices;
+        _updatingPathChoices = true;
+        try
+        {
             AddressBox.Text = CurrentPathview is null
                 ? string.Empty
                 : ShellDisplayNameProvider.GetDisplayPath(CurrentPathview.CurrentPath);
         }
         finally
         {
-            _updatingPathChoices = false;
+            _updatingPathChoices = wasUpdatingPathChoices;
         }
     }
 

@@ -45,9 +45,11 @@ when it is created and cannot be changed by the user.
   content **Hide internal** settings
   when the user switches tabs. Sort parameters continue to follow the active
   folder's configured view.
-- [x] The address field offers paths currently open in tabs. Selecting a
-  dropdown entry selects its associated tab. Typing a path selects an existing
-  Pathview at that location, or navigates the browsable Pathview if none exists.
+- [x] The address field displays the selected tab's path and offers paths from
+  open non-browsable tabs in its dropdown; the browsable tab's current path is
+  never a dropdown entry. Selecting a dropdown entry selects its associated tab.
+  Typing a path selects an existing Pathview at that location, or navigates the
+  browsable Pathview if none exists.
 - [x] Back, Forward, and Up always target the browsable Pathview and select its
   tab.
 - [x] A non-browsable Pathview does not change location through its tree or
@@ -233,9 +235,11 @@ may show its requested row in light gray without changing the active selection.
   view, and toolbar history. Verify its address, title, tree, and content stay
   synchronized. Verify folder navigation attempts from a non-browsable tree or
   Shell content view do not change that Pathview's location.
-3. Use **Pin** repeatedly at one location and type that location into the
-  address field. Verify the existing non-browsable tab is selected instead of
-  creating a duplicate. Use a dropdown entry to select its associated tab.
+3. Verify the browsable Pathview's current path is shown in the address field
+  but is not offered in its dropdown. Use **Pin** repeatedly at one location
+  and type that location into the address field. Verify the existing
+  non-browsable tab is selected instead of creating a duplicate. Use a
+  dropdown entry to select its associated tab.
 4. Open fixed Pathviews at different locations and verify switching tabs
   restores each location and its **Hide directories** and content **Hide
   internal** settings.
