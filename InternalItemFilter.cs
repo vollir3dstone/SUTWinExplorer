@@ -20,7 +20,7 @@ internal static class InternalItemFilter
     public static bool MatchesName(string itemName, string pattern) =>
         string.IsNullOrEmpty(pattern) || FileSystemName.MatchesSimpleExpression(pattern, itemName, ignoreCase: true);
 
-    public static bool ShouldHide(string itemPath, bool isDirectory)
+    public static bool IsInternal(string itemPath, bool isDirectory)
     {
         var itemName = Path.GetFileName(Path.TrimEndingDirectorySeparator(itemPath));
         if (itemName.StartsWith(".", StringComparison.Ordinal) ||

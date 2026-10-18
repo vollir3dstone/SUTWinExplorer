@@ -69,8 +69,23 @@ may show its requested row in light gray without changing the active selection.
 
 - [x] **Active path** shows only the route from the drive root to the active
   directory.
+- [x] In a non-browsable Pathview, the **Active path** pane places that route
+  in its own black-framed, non-scrolling tree box sized to its rows. The
+  remaining pane space shows the active directory's immediate subdirectories
+  in a gray-framed **Sub directories** section. Its vertically scrolling,
+  single-line list has its own black frame and is inset horizontally by 10 px;
+  each row shows only the folder's Shell icon (including overlays) and name.
+  The sections have a visible gap, and each subfolder row matches the tree's
+  row height.
+- [x] The fixed **Active path** pane has a default-on **Hide internal** checkbox
+  above its subfolder list. It uses the content pane's internal-item rules but
+  filters only that subfolder list; it is independent from the content pane's
+  **Hide internal** setting.
 - [x] **Active path and siblings** shows the active route and each route node's
   immediate child directories. Off-route branches remain collapsed.
+- [x] Tree sibling lists and the fixed **Active path** subfolder list are sorted
+  lexicographically by Shell-localized display name. The Shell content view
+  retains its configured sort column and direction.
 - [x] The successfully opened active directory is highlighted, and the visible
   tree brings it near the vertical center after navigation initiated by the tree,
   address field, toolbar history, or Shell content view, when the scroll range
@@ -108,8 +123,8 @@ may show its requested row in light gray without changing the active selection.
 - [x] The content pane's default-on **Hide internal** checkbox filters files
   and directories whose names begin with `.` or `$`, and System items only
   when reading a file or listing a directory is denied. It is independent from
-  the tree's **Hide internal** checkbox and updates the Shell view without
-  navigating.
+  both tree/subfolder **Hide internal** checkboxes and updates the Shell view
+  without navigating.
 - [x] Content visibility filters are independent exclusions: an item is hidden
   if it matches either enabled hide filter, and displayed only if its name
   matches the pattern and it passes both hide filters. A System attribute alone
@@ -240,9 +255,12 @@ may show its requested row in light gray without changing the active selection.
   and type that location into the address field. Verify the existing
   non-browsable tab is selected instead of creating a duplicate. Use a
   dropdown entry to select its associated tab.
-4. Open fixed Pathviews at different locations and verify switching tabs
-  restores each location and its **Hide directories** and content **Hide
-  internal** settings.
+4. Open fixed Pathviews at different locations and verify the **Active path**
+  tree shows the complete route without a scrollbar and only uses the height
+  required for its rows. Verify the remaining pane space shows the active
+  folder's immediate subdirectories with Shell icons and overlays, and that
+  long lists scroll independently. Verify switching tabs restores each
+  location and its **Hide directories** and content **Hide internal** settings.
 5. Use item and folder-background menus for Properties, New Text Document,
    Copy/Paste, Paste shortcut, and drag/drop with Windows Explorer.
 6. Verify cancellation, name collisions, access denied, and disconnected

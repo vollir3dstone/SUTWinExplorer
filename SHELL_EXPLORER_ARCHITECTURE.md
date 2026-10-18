@@ -42,7 +42,9 @@ labels.
 dropdown, the content-pane heading, and tab headers use Shell-provided display
 names. The address field resolves typed localized path components back to
 filesystem paths before navigation. The Shell-hosted content view continues to
-render its own localized names.
+render its own localized names. Custom tree sibling collections sort
+lexicographically by those display names; the Shell content view retains its
+configured sort column and direction.
 
 **Rationale:** Localized display names are presentation values and may not be
 valid filesystem path components. Canonical paths remain suitable for
@@ -80,9 +82,9 @@ leading ellipsis prefix is omitted.
   owns the active path, back/forward history, left directory-tree pane, right
   content pane, status display, and temporary view settings. The browsable
   Pathview shows only **Active path and siblings**; non-browsable Pathviews show
-  only **Active path**. **Hide directories** and content **Hide internal** are
-  tab-local; sort parameters are captured from the Shell folder view rather
-  than stored independently by the `Pathview`.
+  only **Active path**. **Hide directories** and each pane's **Hide internal**
+  setting are tab-local; sort parameters are captured from the Shell folder
+  view rather than stored independently by the `Pathview`.
 - `Pathview.IsBrowsable` is immutable for the lifetime of a Pathview. `MainWindow`
   creates exactly one browsable Pathview as the `TabControl`'s first item; all
   subsequent Pathviews are non-browsable. The browsable tab is titled **BROWSE**
@@ -174,14 +176,18 @@ leading ellipsis prefix is omitted.
   junctions are not excluded by those classifications alone. Active-path
   ancestors remain visible. The filter is applied by the shared tree-child
   refresh path, including filesystem-change reconciliation.
+- A fixed Pathview's **Active path** pane has its own default-checked
+  **Hide internal** checkbox above the subfolder list. It applies the same
+  internal-item predicate to that list's immediate children only; it does not
+  change the content-pane filter or the browsable tree filter.
 - The content pane has a separate, default-checked **Hide internal** checkbox
   beside the default-checked **Hide directories** checkbox. It uses the same
   item predicate for files and directories: it hides dot- and dollar-prefixed
   names, plus System items only when opening a file for read or listing a
   directory returns access-denied. The Shell `ICommDlgBrowser.IncludeObject` hook applies
   the filter to Shell items; the retained WPF list and status count use the same
-  helper. This setting is independent of the tree checkbox and
-  **Hide directories**. The **Name pattern** editor matches the Shell display
+  helper. This setting is independent of the browsable tree and fixed subfolder
+  checkboxes and **Hide directories**. The **Name pattern** editor matches the Shell display
   name case-insensitively, falling back to the filesystem leaf name when no
   display name is available; blank means no pattern constraint, `?` matches one
   character, `*` matches zero or more characters, and `.` is literal.
@@ -285,6 +291,25 @@ Both directory trees in `ExplorerTabView.xaml` share
   items retain their Shell icon and are rendered with reduced opacity. The
   template hides placeholder entries and applies a light-blue selected-row
   background.
+
+In a non-browsable Pathview, `ActivePathTab` contains a two-row grid. The
+`ActivePathTree` sits in a black-framed top box whose height is set to the
+active route's row count times `Pathview.DirectoryTreeRowHeight`; both tree
+scrollbars are disabled. The lower star-sized row is a gray-framed `GroupBox`
+headed **Sub directories**. It contains the default-checked
+`HideInternalSubfoldersCheckBox` and a `ListView` inside its own black frame,
+with 10px horizontal margins. The `ListView` fills the remaining area and
+scrolls vertically; its item-container height uses the same
+`DirectoryTreeRowHeight` as the tree.
+
+`RefreshActivePathTree` loads the active route endpoint's immediate child
+directories into its `TreeEntry.Children` and binds those entries to
+`ActivePathSubfoldersList`. The list reuses `ShellIconTemplate`, so base icons
+and overlays match the trees. Tree siblings and subfolders are ordered by the
+Shell-localized `TreeEntry.Name`. The subfolder checkbox passes its own filter
+choice through `RefreshTreeChildren`; `InternalItemFilter.IsInternal` is shared
+with the content and browsable-tree filters, while each view's checkbox state
+remains independent.
 
 `Pathview.DirectoryTreeRowHeight` in `ExplorerTabView.xaml.cs` sets the
 header border's minimum height to **24 WPF device-independent units (DIPs)**.

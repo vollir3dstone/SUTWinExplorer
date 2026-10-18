@@ -1277,7 +1277,7 @@ public sealed class ShellBrowserSite(
                 }
 
                 if (_hideInternal && itemPath is not null &&
-                    InternalItemFilter.ShouldHide(itemPath, isDirectory))
+                    InternalItemFilter.IsInternal(itemPath, isDirectory))
                     return S_FALSE;
             }
 

@@ -55,6 +55,8 @@ public partial class Pathview : UserControl
         HideDirectoriesCheckBox.GetCheckBox().Unchecked += HideDirectoriesCheckBox_StateChanged;
         HideInternalContentCheckBox.GetCheckBox().Checked += HideInternalContentCheckBox_StateChanged;
         HideInternalContentCheckBox.GetCheckBox().Unchecked += HideInternalContentCheckBox_StateChanged;
+        HideInternalSubfoldersCheckBox.GetCheckBox().Checked += HideInternalSubfoldersCheckBox_StateChanged;
+        HideInternalSubfoldersCheckBox.GetCheckBox().Unchecked += HideInternalSubfoldersCheckBox_StateChanged;
         IsBrowsable = isBrowsable;
         ActivePathTab.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
         ActivePathAndSiblingsTab.Visibility = IsBrowsable ? Visibility.Visible : Visibility.Collapsed;
@@ -214,13 +216,14 @@ public partial class Pathview : UserControl
                     if (!InternalItemFilter.MatchesNamePattern(directory, NamePatternTextBox.Text))
                         continue;
 
-                    if (HideInternalContentCheckBox.GetCheckBox().IsChecked == true && InternalItemFilter.ShouldHide(directory, true))
+                    if (HideInternalContentCheckBox.GetCheckBox().IsChecked == true && InternalItemFilter.IsInternal(directory, true))
                         continue;
 
                     try
                     {
                         var info = new DirectoryInfo(directory);
-                        entries.Add(new FileEntry(info.Name, directory, true, "Folder", "", info.LastWriteTime));
+                        var displayName = ShellDisplayNameProvider.GetDisplayName(directory) ?? info.Name;
+                        entries.Add(new FileEntry(displayName, directory, true, "Folder", "", info.LastWriteTime));
                     }
                     catch (UnauthorizedAccessException)
                     {
@@ -237,17 +240,21 @@ public partial class Pathview : UserControl
                     if (!InternalItemFilter.MatchesNamePattern(file, NamePatternTextBox.Text))
                         continue;
 
-                    if (HideInternalContentCheckBox.GetCheckBox().IsChecked == true && InternalItemFilter.ShouldHide(file, isDirectory))
+                    if (HideInternalContentCheckBox.GetCheckBox().IsChecked == true && InternalItemFilter.IsInternal(file, isDirectory))
                         continue;
 
                     if (isDirectory)
                     {
                         if (showDirectories)
-                            entries.Add(new FileEntry(info.Name, file, true, "Folder", "", info.LastWriteTime));
+                        {
+                            var displayName = ShellDisplayNameProvider.GetDisplayName(file) ?? info.Name;
+                            entries.Add(new FileEntry(displayName, file, true, "Folder", "", info.LastWriteTime));
+                        }
                         continue;
                     }
 
-                    entries.Add(new FileEntry(info.Name, file, false, info.Extension, FormatSize(info.Length), info.LastWriteTime));
+                    var fileDisplayName = ShellDisplayNameProvider.GetDisplayName(file) ?? info.Name;
+                    entries.Add(new FileEntry(fileDisplayName, file, false, info.Extension, FormatSize(info.Length), info.LastWriteTime));
                 }
                 catch (UnauthorizedAccessException)
                 {
@@ -552,6 +559,12 @@ public partial class Pathview : UserControl
             RefreshLoadedTree(root);
     }
 
+    private void HideInternalSubfoldersCheckBox_StateChanged(object sender, RoutedEventArgs e)
+    {
+        if (!IsBrowsable)
+            RefreshActivePathTree();
+    }
+
     private void RefreshLoadedTree(TreeEntry entry)
     {
         if (entry.IsPlaceholder || !entry.IsLoaded)
@@ -640,11 +653,11 @@ public partial class Pathview : UserControl
             var count = Directory.EnumerateFiles(CurrentPath)
                 .Count(path => (File.GetAttributes(path) & FileAttributes.Directory) == 0 &&
                                InternalItemFilter.MatchesNamePattern(path, NamePatternTextBox.Text) &&
-                               (HideInternalContentCheckBox.GetCheckBox().IsChecked != true || !InternalItemFilter.ShouldHide(path, false)));
+                               (HideInternalContentCheckBox.GetCheckBox().IsChecked != true || !InternalItemFilter.IsInternal(path, false)));
             if (HideDirectoriesCheckBox.GetCheckBox().IsChecked != true)
                 count += Directory.EnumerateDirectories(CurrentPath)
                     .Count(path => InternalItemFilter.MatchesNamePattern(path, NamePatternTextBox.Text) &&
-                                   (HideInternalContentCheckBox.GetCheckBox().IsChecked != true || !InternalItemFilter.ShouldHide(path, true)));
+                                   (HideInternalContentCheckBox.GetCheckBox().IsChecked != true || !InternalItemFilter.IsInternal(path, true)));
             StatusLabel.Text = $"{count} items";
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -753,8 +766,7 @@ public partial class Pathview : UserControl
 
         var root = new TreeEntry(rootPath, rootPath);
         root.IsLoaded = true;
-        var segments = Path.GetRelativePath(rootPath, CurrentPath)
-            .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+        var segments = GetPathSegments(rootPath, CurrentPath);
         var parent = root;
         var currentPath = rootPath;
 
@@ -767,8 +779,12 @@ public partial class Pathview : UserControl
             parent = child;
         }
 
+        RefreshTreeChildren(parent, useSubfolderFilter: true);
+        parent.HasSubdirectories = false;
         parent.IsSelected = true;
+        ActivePathTree.Height = (segments.Length + 1) * DirectoryTreeRowHeight;
         ActivePathTree.ItemsSource = new[] { root };
+        ActivePathSubfoldersList.ItemsSource = parent.Children;
     }
 
     private void RefreshActivePathAndSiblingsTree()
@@ -885,7 +901,7 @@ public partial class Pathview : UserControl
         RefreshTreeChildren(entry);
     }
 
-    private void RefreshTreeChildren(TreeEntry entry)
+    private void RefreshTreeChildren(TreeEntry entry, bool useSubfolderFilter = false)
     {
         if (entry.IsPlaceholder)
             return;
@@ -895,8 +911,9 @@ public partial class Pathview : UserControl
             var directories = Directory.EnumerateDirectories(entry.Path).ToArray();
             entry.HasSubdirectories = directories.Length > 0;
             directories = directories
-                .Where(directory => !ShouldHideTreeDirectory(directory))
-                .OrderBy(path => path, StringComparer.CurrentCultureIgnoreCase)
+                .Where(directory => !(useSubfolderFilter
+                    ? ShouldHideSubfolderDirectory(directory)
+                    : ShouldHideTreeDirectory(directory)))
                 .ToArray();
             var existingChildren = entry.Children
                 .Where(child => !child.IsPlaceholder)
@@ -918,6 +935,11 @@ public partial class Pathview : UserControl
 
                 refreshedChildren.Add(child);
             }
+
+            refreshedChildren = refreshedChildren
+                .OrderBy(child => child.Name, StringComparer.CurrentCultureIgnoreCase)
+                .ThenBy(child => child.Path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
             for (var index = 0; index < refreshedChildren.Count; index++)
             {
@@ -943,7 +965,13 @@ public partial class Pathview : UserControl
     {
         return HideInternalCheckBox.IsChecked == true &&
                !IsOnCurrentPath(directoryPath) &&
-               InternalItemFilter.ShouldHide(directoryPath, true);
+               InternalItemFilter.IsInternal(directoryPath, true);
+    }
+
+    private bool ShouldHideSubfolderDirectory(string directoryPath)
+    {
+        return HideInternalSubfoldersCheckBox.GetCheckBox().IsChecked == true &&
+               InternalItemFilter.IsInternal(directoryPath, true);
     }
 
     private bool IsOnCurrentPath(string directoryPath)
