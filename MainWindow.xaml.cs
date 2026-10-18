@@ -27,7 +27,16 @@ public partial class MainWindow : Window
         InitializeComponent();
         SourceInitialized += MainWindow_SourceInitialized;
         Closed += MainWindow_Closed;
-        AddPaneview(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), isBrowsable: true);
+        AddPaneview(GetInitialDirectory(), isBrowsable: true);
+    }
+
+    private static string GetInitialDirectory()
+    {
+        var arguments = Environment.GetCommandLineArgs();
+        if (arguments.Length == 2)
+            return arguments[1].Trim().Trim('\"');
+
+        return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     }
 
     private void MainWindow_SourceInitialized(object? sender, EventArgs e)

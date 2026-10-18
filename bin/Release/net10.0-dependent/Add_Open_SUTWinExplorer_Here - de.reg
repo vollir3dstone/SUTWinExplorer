@@ -1,0 +1,12 @@
+Windows Registry Editor Version 5.00
+
+[-HKEY_CLASSES_ROOT\Directory\shell\sunwinexplorer]
+
+[HKEY_CLASSES_ROOT\Directory\shell\sunwinexplorer]
+@="SUTWinExplorer hier öffnen"
+"Icon"="D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\bin\\Release\\net10.0-dependent\\SUTWinExplorer.exe"
+
+[HKEY_CLASSES_ROOT\Directory\shell\sunwinexplorer\command]
+@="D:\\Projekte\\Softwareprojekte gross\\SUTWinExplorer\\SUTWinExplorer-Project\\bin\\Release\\net10.0-dependent\\SUTWinExplorer.exe \"%V\""
+
+

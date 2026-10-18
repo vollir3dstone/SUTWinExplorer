@@ -9,11 +9,13 @@ The application targets `net10.0-windows` and uses WPF. The publish profiles tar
 
 ## Build
 
-From the repository root, build the application in Release configuration:
+From the repository root, build the application in Debug configuration:
 
 ```powershell
-dotnet build .\SUTWinExplorer.csproj -c Release
+dotnet build .\SUTWinExplorer.csproj -c Debug
 ```
+
+Do not run a standard Release build with `dotnet build -c Release`. The only Release builds are the `Included` and `Dependent` publish profiles below.
 
 ## Publish Profiles
 
@@ -48,7 +50,7 @@ Both profiles enable native-library self-extraction. The publish output includes
 
 ## Release Checklist
 
-1. Build the configuration with `dotnet build .\SUTWinExplorer.csproj -c Release`.
+1. Build the application with `dotnet build .\SUTWinExplorer.csproj -c Debug`.
 2. Publish the `Included` profile for machines that should not require a preinstalled .NET runtime, or publish the `Dependent` profile when the .NET 10 Desktop Runtime is a deployment prerequisite.
 3. Distribute the contents of the selected output directory. Keep the `.pdb` file for diagnostics if desired; it is not required to run the application.
 
