@@ -17,6 +17,12 @@ namespace SUTWinExplorer;
 public partial class Pathview : UserControl
 {
     public const double DirectoryTreeRowHeight = 24;
+    public static readonly DependencyProperty PaneBackgroundProperty =
+        DependencyProperty.Register(
+            nameof(PaneBackground),
+            typeof(Brush),
+            typeof(Pathview),
+            new FrameworkPropertyMetadata(new SolidColorBrush(Color.FromRgb(243, 245, 247))));
 
     // Set true to reactivate the retained WPF ListView; false selects the Shell-hosted production view.
     private const bool UseLegacyWpfFileList = false;
@@ -64,6 +70,7 @@ public partial class Pathview : UserControl
         FixedPathBadge.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
         BrowsePathviewButton.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
         PinPathviewButton.Visibility = IsBrowsable ? Visibility.Visible : Visibility.Collapsed;
+        PaneColorButton.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
         BrowsePathviewButton.ToolTip = "Open this location in the browsable Pathview";
         PinPathviewButton.ToolTip = "Keep this location open in a non-browsable Pathview";
         _fileSystemRefreshTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
@@ -93,6 +100,12 @@ public partial class Pathview : UserControl
     }
 
     public bool IsBrowsable { get; }
+    public Brush PaneBackground
+    {
+        get => (Brush)GetValue(PaneBackgroundProperty);
+        set => SetValue(PaneBackgroundProperty, value);
+    }
+
     public string CurrentPath { get; private set; } = string.Empty;
     public event EventHandler<string>? LocationChanged;
     public event EventHandler? NavigationFailed;
@@ -415,6 +428,18 @@ public partial class Pathview : UserControl
             PinRequested?.Invoke(this, EventArgs.Empty);
         else
             BrowseRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void PaneColorButton_Click(object sender, RoutedEventArgs e) =>
+        PaneColorPopup.IsOpen = true;
+
+    private void PaneColorSwatch_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: SolidColorBrush selectedBrush })
+            return;
+
+        PaneBackground = selectedBrush;
+        PaneColorPopup.IsOpen = false;
     }
 
     private void LocationHeaderPanel_SizeChanged(object sender, SizeChangedEventArgs e)

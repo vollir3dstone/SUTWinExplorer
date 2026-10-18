@@ -43,6 +43,11 @@ when it is created and cannot be changed by the user.
   always last. The browsable Pathview has no badge. Below this row, the tree
   pane is on the left and the content pane is on the right; **Hide directories**
   and **Hide internal** appear below the location row in the content pane.
+- [x] Each fixed Pathview's tab header and full-width location row share a
+  selectable background color. Its palette button appears at the right of the
+  location row and offers twelve light colors distributed across the spectrum;
+  choosing one changes only that Pathview. The browsable Pathview keeps the
+  default background and has no color-selection button.
 - [x] Each Pathview retains its own location, **Hide directories**, and
   content **Hide internal** settings
   when the user switches tabs. Sort parameters continue to follow the active

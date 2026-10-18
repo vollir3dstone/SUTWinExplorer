@@ -2,6 +2,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Input;
 
 namespace SUTWinExplorer;
@@ -106,9 +107,14 @@ public partial class MainWindow : Window
         };
         close.Click += CloseTab_Click;
 
-        var header = new StackPanel { Orientation = Orientation.Horizontal };
-        header.Children.Add(title);
-        header.Children.Add(close);
+        var headerContent = new StackPanel { Orientation = Orientation.Horizontal };
+        headerContent.Children.Add(title);
+        headerContent.Children.Add(close);
+        var header = new Border { Child = headerContent };
+        header.SetBinding(Border.BackgroundProperty, new Binding(nameof(Pathview.PaneBackground))
+        {
+            Source = view
+        });
 
         var tab = new TabItem { Header = header, Content = view };
         var pathToolTip = new ToolTip

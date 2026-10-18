@@ -125,7 +125,12 @@ leading ellipsis prefix is omitted.
   its **FIXED** badge next, and the path label is always last. The main area
   below is split horizontally, with the role-specific directory-tree pane on
   the left and the content pane on the right. **Hide directories** and content
-  **Hide internal** appear below the location header in the content pane.
+  **Hide internal** appear below the location header in the content pane. Fixed
+  Pathviews show a right-aligned color-palette button that changes their
+  `PaneBackground`, shared by the location header and matching application tab
+  header. Its twelve light spectrum colors are held in the `PaneColorPalette`
+  resource and rendered with `PaneColorSwatchTemplate`. The browsable Pathview
+  retains the default background and has no palette button.
 - Below the two visibility checkboxes, each Pathview has a five-group content
   operations toolbar. Copy and Move have separate app-owned path state
   machines, independent of the Shell clipboard. Each Get stages the selected
