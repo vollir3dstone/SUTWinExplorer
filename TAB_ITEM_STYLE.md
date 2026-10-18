@@ -50,6 +50,29 @@ placement-specific border thickness, selected content layering, and
 `Panel.ZIndex`, remains in the template. The side-placement trigger values are
 retained, but the app's tab strips currently use the default top placement.
 
+## Per-Tab Background Color
+
+Application Pathview tabs can receive an optional user-selected background.
+The template has two separate brushes for this because the selected-state
+`innerBorder` is an overlay: changing only `TabItem.Background` would leave the
+selected overlay white and hide the chosen color.
+
+- `TabItem.Background` supplies the tab's normal background, including its
+  unselected state. It keeps the implicit style's normal gray appearance until
+  a color is selected.
+- `TabItemChrome.SelectedBackground` supplies the selected overlay's
+  background. Its default is white, so an uncolored selected tab keeps the
+  normal white selected appearance.
+- When a palette swatch is clicked, `Pathview.PaneColorSwatch_Click` first
+  updates the Pathview's `PaneBackground`, which colors its location row. It
+  then calls `MainWindow.SetPathviewTabBackground`; that method finds the
+  corresponding tab and sets both `TabItem.Background` and
+  `TabItemChrome.SelectedBackground` to the chosen brush.
+
+The palette is available only on fixed Pathviews. `PaneColorPalette` stores
+twelve light spectrum brushes, and `PaneColorSwatchTemplate` renders each
+brush as a clickable swatch in a six-column `UniformGrid`.
+
 ## Customization
 
 Set a radius per tab in XAML:

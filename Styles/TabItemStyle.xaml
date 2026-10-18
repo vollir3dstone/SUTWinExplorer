@@ -34,7 +34,7 @@
                                 BorderBrush="{TemplateBinding BorderBrush}" Margin="0"
                                 CornerRadius="{Binding Path=(local:TabItemChrome.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}">
                             <Border x:Name="innerBorder" BorderThickness="1,1,1,0"
-                                    Background="{StaticResource TabItem.Selected.Background}"
+                                    Background="{Binding Path=(local:TabItemChrome.SelectedBackground), RelativeSource={RelativeSource TemplatedParent}}"
                                     BorderBrush="{StaticResource TabItem.Selected.Border}"
                                     Margin="-1" Opacity="0"
                                     CornerRadius="{Binding Path=(local:TabItemChrome.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}" />

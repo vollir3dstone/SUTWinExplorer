@@ -22,7 +22,7 @@ public partial class Pathview : UserControl
             nameof(PaneBackground),
             typeof(Brush),
             typeof(Pathview),
-            new FrameworkPropertyMetadata(new SolidColorBrush(Color.FromRgb(243, 245, 247))));
+            new FrameworkPropertyMetadata(new SolidColorBrush(Colors.White)));
 
     // Set true to reactivate the retained WPF ListView; false selects the Shell-hosted production view.
     private const bool UseLegacyWpfFileList = false;
@@ -439,6 +439,8 @@ public partial class Pathview : UserControl
             return;
 
         PaneBackground = selectedBrush;
+        if (Window.GetWindow(this) is MainWindow mainWindow)
+            mainWindow.SetPathviewTabBackground(this, selectedBrush);
         PaneColorPopup.IsOpen = false;
     }
 

@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace SUTWinExplorer;
 
@@ -64,6 +65,15 @@ public partial class MainWindow : Window
 
     private Pathview? CurrentPathview => (ExplorerTabs.SelectedItem as TabItem)?.Content as Pathview;
 
+    internal void SetPathviewTabBackground(Pathview view, Brush background)
+    {
+        if (_tabsByPathview.TryGetValue(view, out var tab))
+        {
+            tab.Background = background;
+            TabItemChrome.SetSelectedBackground(tab, background);
+        }
+    }
+
     private void AddPaneview(string path, bool isBrowsable)
     {
         var pathKey = GetPathKey(path);
@@ -110,13 +120,7 @@ public partial class MainWindow : Window
         var headerContent = new StackPanel { Orientation = Orientation.Horizontal };
         headerContent.Children.Add(title);
         headerContent.Children.Add(close);
-        var header = new Border { Child = headerContent };
-        header.SetBinding(Border.BackgroundProperty, new Binding(nameof(Pathview.PaneBackground))
-        {
-            Source = view
-        });
-
-        var tab = new TabItem { Header = header, Content = view };
+        var tab = new TabItem { Header = headerContent, Content = view };
         var pathToolTip = new ToolTip
         {
             Content = tooltipText,

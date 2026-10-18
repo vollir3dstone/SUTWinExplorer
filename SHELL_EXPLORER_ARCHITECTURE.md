@@ -125,12 +125,27 @@ leading ellipsis prefix is omitted.
   its **FIXED** badge next, and the path label is always last. The main area
   below is split horizontally, with the role-specific directory-tree pane on
   the left and the content pane on the right. **Hide directories** and content
-  **Hide internal** appear below the location header in the content pane. Fixed
-  Pathviews show a right-aligned color-palette button that changes their
-  `PaneBackground`, shared by the location header and matching application tab
-  header. Its twelve light spectrum colors are held in the `PaneColorPalette`
-  resource and rendered with `PaneColorSwatchTemplate`. The browsable Pathview
-  retains the default background and has no palette button.
+  **Hide internal** appear below the location header in the content pane. The
+  location-row widget grid has a symmetric 10-DIP horizontal margin. The second
+  row containing the sidebar, splitter, and content pane has a 4-DIP white
+  inset; the outer `ExplorerTabs` has `Padding="0"`. Fixed Pathviews show a
+  right-aligned color-palette button. Their location header starts white;
+  choosing one of twelve light spectrum colors changes that header and the
+  matching application tab. The browsable Pathview has no palette button.
+  `PaneColorPalette` contains the brushes, displayed by
+  `PaneColorSwatchTemplate` in a six-column grid. The swatch click updates the
+  Pathview's `PaneBackground`, then asks `MainWindow` to update the matching
+  `TabItem`.
+
+  Tab coloring has a separate selected-state brush because the tab template's
+  selected overlay would otherwise cover the `TabItem.Background`. Each tab's
+  `TabItemChrome.SelectedBackground` defaults to white, preserving the normal
+  white-selected/gray-unselected appearance before a picker selection. On a
+  selection, `MainWindow.SetPathviewTabBackground` sets both the tab's normal
+  `Background` (used when unselected) and its `SelectedBackground` (used by the
+  selected overlay). `Browse` and `Pin` use `ContentPaneButtonStyle`, which
+  suppresses the visible focus visual without making the buttons
+  non-focusable.
 - Below the two visibility checkboxes, each Pathview has a five-group content
   operations toolbar. Copy and Move have separate app-owned path state
   machines, independent of the Shell clipboard. Each Get stages the selected
