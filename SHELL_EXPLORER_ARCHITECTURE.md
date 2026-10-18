@@ -126,9 +126,11 @@ leading ellipsis prefix is omitted.
   below is split horizontally, with the role-specific directory-tree pane on
   the left and the content pane on the right. **Hide directories** and content
   **Hide internal** appear below the location header in the content pane. The
-  location-row widget grid has a symmetric 10-DIP horizontal margin. The second
-  row containing the sidebar, splitter, and content pane has a 4-DIP white
-  inset; the outer `ExplorerTabs` has `Padding="0"`. Fixed Pathviews show a
+  location-row widget grid has a symmetric 10-DIP horizontal margin, and its
+  outer border has a 36-DIP minimum height; inner widgets use 2-DIP vertical
+  margins so the color-picker visibility does not change row height. The
+  second row containing the sidebar, splitter, and content pane has a 4-DIP
+  white inset; the outer `ExplorerTabs` has `Padding="0"`. Fixed Pathviews show a
   right-aligned color-palette button. Their location header starts white;
   choosing one of twelve light spectrum colors changes that header and the
   matching application tab. The browsable Pathview has no palette button.

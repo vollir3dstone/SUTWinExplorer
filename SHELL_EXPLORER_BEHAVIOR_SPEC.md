@@ -44,8 +44,10 @@ when it is created and cannot be changed by the user.
   pane is on the left and the content pane is on the right; **Hide directories**
   and **Hide internal** appear below the location row in the content pane.
 - [x] The location-row widgets sit 10 DIP from both outer horizontal edges.
-  The second-row split area (sidebar, splitter, and content pane) has a 4-DIP
-  white inset; the outer tab content has no additional padding.
+  Its outer row has a 36-DIP minimum height, independent of whether its color
+  picker is visible; the widget group uses 2-DIP vertical margins. The
+  second-row split area (sidebar, splitter, and content pane) has a 4-DIP white
+  inset; the outer tab content has no additional padding.
 - [x] Each fixed Pathview's location row starts with a white background. Its
   right-aligned palette offers twelve light colors distributed across the
   spectrum; choosing one changes only that Pathview's location row and tab
