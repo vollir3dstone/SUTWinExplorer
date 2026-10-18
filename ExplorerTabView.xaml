@@ -596,12 +596,33 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <ListView x:Name="PrivateFileTable" Grid.Column="0" Visibility="Collapsed"
-                          BorderThickness="0,0,1,0" VirtualizingPanel.ScrollUnit="Pixel"
+                          BorderThickness="1,1,0,1" BorderBrush="#646464" VirtualizingPanel.ScrollUnit="Pixel"
                           ScrollViewer.VerticalScrollBarVisibility="Hidden"
                           ScrollViewer.HorizontalScrollBarVisibility="Hidden">
                     <ListView.View>
                         <GridView>
-                            <GridViewColumn Header="Name (private table)" Width="190"
+                            <GridView.ColumnHeaderContainerStyle>
+                                <!-- Plain header like the Shell details header (measured at 96 DPI): text centered in the top 22 DIP, first row 30 DIP below the list top. -->
+                                <Style TargetType="GridViewColumnHeader">
+                                    <Setter Property="Height" Value="30" />
+                                    <Setter Property="Focusable" Value="False" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="GridViewColumnHeader">
+                                                <Grid Background="White">
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="22" />
+                                                        <RowDefinition Height="*" />
+                                                    </Grid.RowDefinitions>
+                                                    <ContentPresenter Margin="6,0,0,0" HorizontalAlignment="Left"
+                                                                      VerticalAlignment="Center" />
+                                                </Grid>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </GridView.ColumnHeaderContainerStyle>
+                            <GridViewColumn Header="Name" Width="190"
                                             DisplayMemberBinding="{Binding}" />
                         </GridView>
                     </ListView.View>
