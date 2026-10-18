@@ -37,10 +37,12 @@ when it is created and cannot be changed by the user.
   open, so at least one tab is always present.
 - [x] The browsable Pathview shows only the **Active path and siblings** tree
   tab. Each non-browsable Pathview shows only the **Active path** tree tab.
-- [x] A non-browsable Pathview shows a bold **FIXED** badge before its path and
-  a **Browse** button immediately after it. The browsable Pathview shows its
-  path followed by **Pin**, with no badge. **Hide directories** and
-  **Hide internal** are below this title row.
+- [x] Each Pathview shows its location row across the full width above the
+  side-by-side panes. The visible **Browse** or **Pin** button comes first; a
+  non-browsable Pathview then shows its bold **FIXED** badge, and the path is
+  always last. The browsable Pathview has no badge. Below this row, the tree
+  pane is on the left and the content pane is on the right; **Hide directories**
+  and **Hide internal** appear below the location row in the content pane.
 - [x] Each Pathview retains its own location, **Hide directories**, and
   content **Hide internal** settings
   when the user switches tabs. Sort parameters continue to follow the active
@@ -70,9 +72,9 @@ may show its requested row in light gray without changing the active selection.
 - [x] **Active path** shows only the route from the drive root to the active
   directory.
 - [x] In a non-browsable Pathview, the **Active path** pane places that route
-  in its own black-framed, non-scrolling tree box sized to its rows. The
-  remaining pane space shows the active directory's immediate subdirectories
-  in a gray-framed **Sub directories** section. Its vertically scrolling,
+  in a gray-framed **Path** section sized to its rows, with no tree scrollbars.
+  The remaining pane space shows the active directory's immediate
+  subdirectories in a gray-framed **Sub directories** section. Its vertically scrolling,
   single-line list has its own black frame and is inset horizontally by 10 px;
   each row shows only the folder's Shell icon (including overlays) and name.
   The sections have a visible gap, and each subfolder row matches the tree's

@@ -120,11 +120,12 @@ leading ellipsis prefix is omitted.
   destination; this permits initialization and other explicit app navigation.
   Rejected Shell folder navigation does not disable the Shell pane or its other
   commands and file operations.
-- The content header presents non-browsable Pathviews as **FIXED** badge, path,
-  then **Browse** button on one row. The browsable Pathview presents its path
-  followed by **Pin**, with no badge. **Hide directories** and content
-  **Hide internal** appear beside each other below this row. The left pane uses
-  the role-specific tree tab described above.
+- Each Pathview's location header spans the full width above its body. The
+  visible **Browse** or **Pin** button is first; a non-browsable Pathview places
+  its **FIXED** badge next, and the path label is always last. The main area
+  below is split horizontally, with the role-specific directory-tree pane on
+  the left and the content pane on the right. **Hide directories** and content
+  **Hide internal** appear below the location header in the content pane.
 - Below the two visibility checkboxes, each Pathview has a five-group content
   operations toolbar. Copy and Move have separate app-owned path state
   machines, independent of the Shell clipboard. Each Get stages the selected
@@ -293,10 +294,11 @@ Both directory trees in `ExplorerTabView.xaml` share
   background.
 
 In a non-browsable Pathview, `ActivePathTab` contains a two-row grid. The
-`ActivePathTree` sits in a black-framed top box whose height is set to the
-active route's row count times `Pathview.DirectoryTreeRowHeight`; both tree
-scrollbars are disabled. The lower star-sized row is a gray-framed `GroupBox`
-headed **Sub directories**. It contains the default-checked
+`ActivePathTree` sits in a gray-framed `GroupBox` headed **Path**, whose height
+is set to the active route's row count times
+`Pathview.DirectoryTreeRowHeight`; both tree scrollbars are disabled. The
+lower star-sized row is a gray-framed `GroupBox` headed **Sub directories**.
+It contains the default-checked
 `HideInternalSubfoldersCheckBox` and a `ListView` inside its own black frame,
 with 10px horizontal margins. The `ListView` fills the remaining area and
 scrolls vertically; its item-container height uses the same
