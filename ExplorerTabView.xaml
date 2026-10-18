@@ -114,7 +114,9 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <Border Grid.Row="0" BorderBrush="Black" BorderThickness="1" Margin="0,0,0,4">
+                    <GroupBox Grid.Row="0" Header="Path"
+                              BorderBrush="#A6A6A6" BorderThickness="1"
+                              Margin="0,0,0,4" Padding="0">
                         <TreeView x:Name="ActivePathTree"
                                   ItemContainerStyle="{StaticResource DirectoryTreeItemStyle}"
                                   BorderThickness="0" Padding="0"
@@ -123,7 +125,7 @@
                                   PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown"
                                   PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
                                   MouseDoubleClick="Tree_MouseDoubleClick" />
-                    </Border>
+                    </GroupBox>
                     <GroupBox Grid.Row="1" Header="Sub directories"
                               BorderBrush="#A6A6A6" BorderThickness="1"
                               Margin="0,4,0,0" Padding="0">
