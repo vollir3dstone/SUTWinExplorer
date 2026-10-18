@@ -55,6 +55,7 @@ public partial class Pathview : UserControl
     private readonly DispatcherTimer _scrollSyncTimer;
     private ScrollViewer? _privateTableScrollViewer;
     private double? _lastShellScrollOffset;
+    private double _privateTableRowPitch;
     private ShellExplorerBrowserHost? _shellBrowserHost;
     private bool _suppressTreeBringIntoView;
     private TreeEntry? _pendingTreeNavigationEntry;
@@ -935,14 +936,24 @@ public partial class Pathview : UserControl
             return;
 
         var itemCount = PrivateFileTable.Items.Count;
-        if (itemCount == 0 || PrivateFileTable.ItemContainerGenerator.ContainerFromIndex(0) is not FrameworkElement firstRow)
+        if (itemCount == 0)
             return;
 
         // Row pitch, not ActualHeight: item containers have a margin/border that adds to the spacing.
-        var rowPitch = itemCount > 1 &&
-                       PrivateFileTable.ItemContainerGenerator.ContainerFromIndex(1) is FrameworkElement secondRow
-            ? secondRow.TranslatePoint(new Point(), firstRow).Y
-            : firstRow.ActualHeight;
+        // Measured once from the first two realized rows, since virtualization recycles them while scrolling.
+        if (_privateTableRowPitch == 0 &&
+            PrivateFileTable.ItemContainerGenerator.ContainerFromIndex(0) is FrameworkElement firstRow)
+        {
+            _privateTableRowPitch = itemCount > 1 &&
+                                    PrivateFileTable.ItemContainerGenerator.ContainerFromIndex(1) is FrameworkElement secondRow
+                ? secondRow.TranslatePoint(new Point(), firstRow).Y
+                : firstRow.ActualHeight;
+        }
+
+        if (_privateTableRowPitch == 0)
+            return;
+
+        var rowPitch = _privateTableRowPitch;
 
         _privateTableScrollViewer ??= FindVisualChild<ScrollViewer>(PrivateFileTable);
         if (_privateTableScrollViewer is null)

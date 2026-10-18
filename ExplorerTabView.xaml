@@ -596,7 +596,7 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <ListView x:Name="PrivateFileTable" Grid.Column="0" Visibility="Collapsed"
-                          BorderThickness="0,0,1,0" ScrollViewer.CanContentScroll="False"
+                          BorderThickness="0,0,1,0" VirtualizingPanel.ScrollUnit="Pixel"
                           ScrollViewer.VerticalScrollBarVisibility="Hidden"
                           ScrollViewer.HorizontalScrollBarVisibility="Hidden">
                     <ListView.View>
