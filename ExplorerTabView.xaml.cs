@@ -41,6 +41,7 @@ public partial class Pathview : UserControl
     private readonly Stack<string> _forwardHistory = new();
     private readonly DispatcherTimer _fileSystemRefreshTimer;
     private ShellExplorerBrowserHost? _shellBrowserHost;
+    private bool _suppressTreeBringIntoView;
     private TreeEntry? _pendingTreeNavigationEntry;
     private string? _pendingNavigationPath;
     private NavigationHistoryAction _pendingNavigationHistoryAction;
@@ -998,8 +999,29 @@ public partial class Pathview : UserControl
             return;
         }
 
-        tree.Focus();
+        FocusTreeWithoutScrolling(tree);
         e.Handled = true;
+    }
+
+    // TreeView.Focus() focuses the selected item, whose BringIntoView would scroll the tree between
+    // mouse down and mouse up, so the release would hit a different row than the one clicked.
+    private void FocusTreeWithoutScrolling(TreeView tree)
+    {
+        _suppressTreeBringIntoView = true;
+        try
+        {
+            tree.Focus();
+        }
+        finally
+        {
+            _suppressTreeBringIntoView = false;
+        }
+    }
+
+    private void Tree_RequestBringIntoView(object sender, RequestBringIntoViewEventArgs e)
+    {
+        if (_suppressTreeBringIntoView)
+            e.Handled = true;
     }
 
     private void Tree_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)

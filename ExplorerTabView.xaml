@@ -98,6 +98,7 @@
                 </Setter.Value>
             </Setter>
             <EventSetter Event="Expanded" Handler="TreeItem_Expanded" />
+            <EventSetter Event="RequestBringIntoView" Handler="Tree_RequestBringIntoView" />
         </Style>
     </UserControl.Resources>
     <Grid Background="White">
