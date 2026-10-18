@@ -3,3 +3,4 @@
 .vs/
 *.user
 *.suo
+/bin/Release/net10.0-included
