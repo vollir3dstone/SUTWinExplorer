@@ -7,18 +7,18 @@
              xmlns:local="clr-namespace:SUTWinExplorer">
     <UserControl.Resources>
         <x:Array x:Key="PaneColorPalette" Type="{x:Type SolidColorBrush}">
-            <SolidColorBrush Color="#FFF8D8D8" />
-            <SolidColorBrush Color="#FFFFE1CC" />
-            <SolidColorBrush Color="#FFFFF0C4" />
-            <SolidColorBrush Color="#FFFAFAC4" />
-            <SolidColorBrush Color="#FFEAF3C4" />
-            <SolidColorBrush Color="#FFD7EDC8" />
-            <SolidColorBrush Color="#FFD4EFF5" />
-            <SolidColorBrush Color="#ffcfe9ff" />
-            <SolidColorBrush Color="#FFbdd1ff" />
-            <SolidColorBrush Color="#FFdedaff" />
-            <SolidColorBrush Color="#FFf9e1ff" />
-            <SolidColorBrush Color="#FFffe1f3" />
+            <SolidColorBrush Color="#FFEC8F8F" />
+            <SolidColorBrush Color="#FFFAB891" />
+            <SolidColorBrush Color="#FFFDDF86" />
+            <SolidColorBrush Color="#FFF5F5A1" />
+            <SolidColorBrush Color="#FFBFEC8C" />
+            <SolidColorBrush Color="#FF8FCF98" />
+            <SolidColorBrush Color="#FF85E6FC" />
+            <SolidColorBrush Color="#FF8ECCFF" />
+            <SolidColorBrush Color="#FF85ADE9" />
+            <SolidColorBrush Color="#FFBFB8FF" />
+            <SolidColorBrush Color="#FFD995F3" />
+            <SolidColorBrush Color="#FFFFADDE" />
         </x:Array>
         <DataTemplate x:Key="PaneColorSwatchTemplate">
             <Button Width="26" Height="26" Margin="3" Padding="2"
