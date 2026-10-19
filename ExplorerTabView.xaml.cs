@@ -90,6 +90,7 @@ public partial class Pathview : UserControl
             _shellBrowserHost = new ShellExplorerBrowserHost(IsBrowsable);
             _shellBrowserHost.NavigationCompleted += ShellBrowserHost_NavigationCompleted;
             _shellBrowserHost.NavigationFailed += ShellBrowserHost_NavigationFailed;
+            _shellBrowserHost.FolderOpenRequested += ShellBrowserHost_FolderOpenRequested;
             _shellBrowserHost.FileSystemChanged += ShellBrowserHost_FileSystemChanged;
             _shellBrowserHost.SetShowDirectories(HideDirectoriesCheckBox.GetCheckBox().IsChecked != true);
             _shellBrowserHost.SetHideInternal(HideInternalContentCheckBox.GetCheckBox().IsChecked == true);
@@ -111,6 +112,7 @@ public partial class Pathview : UserControl
     public event EventHandler? NavigationFailed;
     public event EventHandler? PinRequested;
     public event EventHandler? BrowseRequested;
+    public event EventHandler<string>? BrowseLocationRequested;
 
     public void Navigate(string path) => Navigate(path, NavigationHistoryAction.Normal);
 
@@ -1025,8 +1027,10 @@ public partial class Pathview : UserControl
 
         try
         {
-            if (entry.IsDirectory)
+            if (entry.IsDirectory && IsBrowsable)
                 Navigate(entry.FullPath);
+            else if (entry.IsDirectory)
+                BrowseLocationRequested?.Invoke(this, entry.FullPath);
             else
                 Process.Start(new ProcessStartInfo(entry.FullPath) { UseShellExecute = true });
         }
@@ -1085,6 +1089,12 @@ public partial class Pathview : UserControl
             ShowNativeBackgroundMenu();
 
         e.Handled = true;
+    }
+
+    private void ActivePathSubfoldersList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (ActivePathSubfoldersList.SelectedItem is TreeEntry { IsPlaceholder: false } entry)
+            BrowseLocationRequested?.Invoke(this, entry.Path);
     }
 
     private void FileList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -1156,7 +1166,7 @@ public partial class Pathview : UserControl
 
     private void Tree_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (ActiveTreeNavigationMode != TreeNavigationMode.SingleClick ||
+        if (!IsBrowsable || ActiveTreeNavigationMode != TreeNavigationMode.SingleClick ||
             FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { DataContext: TreeEntry entry } item ||
             entry.IsPlaceholder)
         {
@@ -1180,12 +1190,20 @@ public partial class Pathview : UserControl
 
     private void Tree_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (ActiveTreeNavigationMode == TreeNavigationMode.DoubleClick &&
-            sender is TreeView tree && tree.SelectedItem is TreeEntry { IsPlaceholder: false } entry)
+        if (FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not
+            { DataContext: TreeEntry { IsPlaceholder: false } entry })
         {
-            NavigateFromTree(entry);
+            return;
+        }
+
+        if (!IsBrowsable)
+        {
+            BrowseLocationRequested?.Invoke(this, entry.Path);
         }
     }
+
+    private void ShellBrowserHost_FolderOpenRequested(object? sender, string path) =>
+        BrowseLocationRequested?.Invoke(this, path);
 
     private void NavigateFromTree(TreeEntry entry)
     {

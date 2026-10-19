@@ -119,7 +119,12 @@ leading ellipsis prefix is omitted.
   pending browse only when its filesystem path matches that requested
   destination; this permits initialization and other explicit app navigation.
   Rejected Shell folder navigation does not disable the Shell pane or its other
-  commands and file operations.
+  commands and file operations. Explicit folder opening is separate from
+  navigation of the fixed Pathview: double-clicking a directory in its Active
+  path tree, Sub directories list, or Shell content view requests that path in
+  the browsable Pathview, selects the browsable tab, and leaves the fixed
+  Pathview's location unchanged. A Shell-view `.lnk` targeting a directory
+  requests its resolved target path in the same way.
 - Each Pathview's location header spans the full width above its body. The
   visible **Browse** or **Pin** button is first; a non-browsable Pathview places
   its **FIXED** badge next, and the path label is always last. The main area
@@ -387,6 +392,18 @@ browse is requested; those values and displays change only after
 completed path, leaving the active location and history unchanged.
 Non-filesystem namespace locations do not become filesystem paths and are not
 fully integrated with the custom trees yet.
+
+For a non-browsable Pathview, double-clicking a directory in the Active path
+tree or Sub directories list raises an explicit open request instead of
+navigating that Pathview. The Shell view routes its default open command through
+`ICommDlgBrowser.OnDefaultCommand`; the host reads the selected filesystem path
+and accepts the command only for a directory or a `.lnk` resolving to a
+directory. If Shell navigation for a folder or folder shortcut reaches
+`OnNavigationPending`, the fixed host still returns `E_ABORT`, but first
+resolves a filesystem folder target and raises the same open request. The WPF
+owner selects the browsable tab and calls its normal success-gated `Navigate`,
+so the browsable path and history commit only when its Shell view confirms
+success. The fixed Pathview's location and state are not changed.
 
 The initial browse must not run synchronously inside `BuildWindowCore`.
 `BrowseToIDList` can pump Windows messages; doing so during WPF's initial layout

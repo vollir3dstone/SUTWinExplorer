@@ -65,6 +65,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
     public event EventHandler<string>? NavigationCompleted;
     public event EventHandler<string>? NavigationFailed;
+    public event EventHandler<string>? FolderOpenRequested;
     public event EventHandler? FileSystemChanged;
     public static event EventHandler? ToolbarOperationStateChanged;
 
@@ -348,7 +349,8 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
                 () => _hideInternal,
                 () => _namePattern,
                 () => _pendingPath,
-                ScheduleSelectionStateRefresh);
+                ScheduleSelectionStateRefresh,
+                HandleShellDefaultCommand);
             _browserSite = (IObjectWithSiteNative)_browser;
             _browserSite.SetSite(_site);
 
@@ -856,7 +858,15 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         var path = TryGetFileSystemPath(itemIdList);
         if (!_isBrowsable &&
             (path is null || !string.Equals(_programmaticNavigationPath, path, StringComparison.OrdinalIgnoreCase)))
+        {
+            if (path is not null && ShellFileOperations.GetFolderTarget(path) is { } folderPath)
+            {
+                _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                    FolderOpenRequested?.Invoke(this, folderPath)));
+            }
+
             return HResultAbort;
+        }
 
         if (!_isBrowsable)
             _programmaticNavigationPath = null;
@@ -864,6 +874,30 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             _pendingPath = path;
 
         return 0;
+    }
+
+    private bool HandleShellDefaultCommand(IShellView shellView)
+    {
+        if (_isBrowsable)
+            return false;
+
+        try
+        {
+            var selectedPaths = ShellFileOperations.GetSelectedFileSystemPaths(shellView);
+            if (selectedPaths.Count != 1 ||
+                ShellFileOperations.GetFolderTarget(selectedPaths[0]) is not { } folderPath)
+            {
+                return false;
+            }
+
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                FolderOpenRequested?.Invoke(this, folderPath)));
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static string? TryGetFileSystemPath(IntPtr itemIdList)
@@ -1189,7 +1223,8 @@ public sealed class ShellBrowserSite(
     Func<bool> hideInternal,
     Func<string?> namePattern,
     Func<string?> currentPath,
-    Action selectionChanged) : IServiceProviderNative, ICommDlgBrowserNative, IDisposable
+    Action selectionChanged,
+    Func<IShellView, bool> defaultCommand) : IServiceProviderNative, ICommDlgBrowserNative, IDisposable
 {
     private static readonly Guid CommDlgBrowserServiceId = new("000214F1-0000-0000-C000-000000000046");
     private static readonly Guid CommDlgBrowserInterfaceId = new("000214F1-0000-0000-C000-000000000046");
@@ -1204,6 +1239,7 @@ public sealed class ShellBrowserSite(
     private const int E_NOINTERFACE = unchecked((int)0x80004002);
     private readonly Func<string?> _currentPath = currentPath;
     private readonly Action _selectionChanged = selectionChanged;
+    private readonly Func<IShellView, bool> _defaultCommand = defaultCommand;
     private string? _cachedFolderPath;
     private IShellFolder? _cachedFolder;
 
@@ -1227,7 +1263,7 @@ public sealed class ShellBrowserSite(
         return E_NOINTERFACE;
     }
 
-    public int OnDefaultCommand(IShellView shellView) => S_FALSE;
+    public int OnDefaultCommand(IShellView shellView) => _defaultCommand(shellView) ? S_OK : S_FALSE;
     public int OnStateChange(IShellView shellView, uint change)
     {
         if (change == CommDlgBrowserSelectionChanged)

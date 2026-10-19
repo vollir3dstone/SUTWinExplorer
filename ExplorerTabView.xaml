@@ -221,7 +221,8 @@
                                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                           ScrollViewer.VerticalScrollBarVisibility="Auto"
                                           PreviewMouseRightButtonDown="ActivePathSubfoldersList_PreviewMouseRightButtonDown"
-                                          PreviewKeyDown="ActivePathSubfoldersList_PreviewKeyDown">
+                                          PreviewKeyDown="ActivePathSubfoldersList_PreviewKeyDown"
+                                          MouseDoubleClick="ActivePathSubfoldersList_MouseDoubleClick">
                                     <ListView.ItemContainerStyle>
                                         <Style TargetType="{x:Type ListViewItem}">
                                             <Setter Property="Height"

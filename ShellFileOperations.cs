@@ -12,6 +12,46 @@ internal static class ShellFileOperations
     private const uint ClsctxInprocServer = 1;
     private const uint FileOperationAllowUndo = 0x40;
     private static readonly Guid FileOperationClassId = new("3AD05575-8857-4850-9277-11B85BDB8E09");
+    private static readonly Guid ShellLinkClassId = new("00021401-0000-0000-C000-000000000046");
+    private static readonly Guid ShellLinkInterfaceId = new("000214F9-0000-0000-C000-000000000046");
+
+    public static string? GetFolderTarget(string path)
+    {
+        if (Directory.Exists(path))
+            return Path.GetFullPath(path);
+        if (!string.Equals(Path.GetExtension(path), ".lnk", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        IShellLinkNative shellLink = null!;
+        try
+        {
+            var classId = ShellLinkClassId;
+            var interfaceId = ShellLinkInterfaceId;
+            Marshal.ThrowExceptionForHR(CoCreateShellLink(
+                ref classId,
+                IntPtr.Zero,
+                ClsctxInprocServer,
+                ref interfaceId,
+                out shellLink));
+            var persistFile = (IPersistFileNative)shellLink;
+            Marshal.ThrowExceptionForHR(persistFile.Load(path, 0));
+            Marshal.ThrowExceptionForHR(shellLink.Resolve(IntPtr.Zero, 0x19));
+
+            var targetBuffer = new StringBuilder(32768);
+            Marshal.ThrowExceptionForHR(shellLink.GetPath(targetBuffer, targetBuffer.Capacity, IntPtr.Zero, 0));
+            var targetPath = targetBuffer.ToString();
+            return Directory.Exists(targetPath) ? Path.GetFullPath(targetPath) : null;
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+        finally
+        {
+            if (Marshal.IsComObject(shellLink))
+                _ = Marshal.ReleaseComObject(shellLink);
+        }
+    }
 
     public static List<string> GetSelectedFileSystemPaths(IShellView shellView)
     {
@@ -192,6 +232,14 @@ internal static class ShellFileOperations
         ref Guid interfaceId,
         [MarshalAs(UnmanagedType.Interface)] out IFileOperationNative operation);
 
+    [DllImport("ole32.dll", PreserveSig = true)]
+    private static extern int CoCreateShellLink(
+        ref Guid classId,
+        IntPtr outer,
+        uint context,
+        ref Guid interfaceId,
+        [MarshalAs(UnmanagedType.Interface)] out IShellLinkNative shellLink);
+
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
     private static extern int SHCreateItemFromParsingName(
         string path,
@@ -210,6 +258,44 @@ internal static class ShellFileOperations
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IShellItemNative
     {
+    }
+
+    [ComImport]
+    [Guid("000214F9-0000-0000-C000-000000000046")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellLinkNative
+    {
+        [PreserveSig] int GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder path, int pathLength, IntPtr findData, uint flags);
+        [PreserveSig] int GetIDList(out IntPtr itemIdList);
+        [PreserveSig] int SetIDList(IntPtr itemIdList);
+        [PreserveSig] int GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder name, int nameLength);
+        [PreserveSig] int SetDescription([MarshalAs(UnmanagedType.LPWStr)] string name);
+        [PreserveSig] int GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder directory, int directoryLength);
+        [PreserveSig] int SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string directory);
+        [PreserveSig] int GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder arguments, int argumentsLength);
+        [PreserveSig] int SetArguments([MarshalAs(UnmanagedType.LPWStr)] string arguments);
+        [PreserveSig] int GetHotkey(out short hotkey);
+        [PreserveSig] int SetHotkey(short hotkey);
+        [PreserveSig] int GetShowCmd(out int showCommand);
+        [PreserveSig] int SetShowCmd(int showCommand);
+        [PreserveSig] int GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder iconPath, int iconPathLength, out int iconIndex);
+        [PreserveSig] int SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string iconPath, int iconIndex);
+        [PreserveSig] int SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string path, uint reserved);
+        [PreserveSig] int Resolve(IntPtr window, uint flags);
+        [PreserveSig] int SetPath([MarshalAs(UnmanagedType.LPWStr)] string path);
+    }
+
+    [ComImport]
+    [Guid("0000010B-0000-0000-C000-000000000046")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IPersistFileNative
+    {
+        [PreserveSig] int GetClassID(out Guid classId);
+        [PreserveSig] int IsDirty();
+        [PreserveSig] int Load([MarshalAs(UnmanagedType.LPWStr)] string fileName, uint mode);
+        [PreserveSig] int Save([MarshalAs(UnmanagedType.LPWStr)] string fileName, [MarshalAs(UnmanagedType.Bool)] bool remember);
+        [PreserveSig] int SaveCompleted([MarshalAs(UnmanagedType.LPWStr)] string fileName);
+        [PreserveSig] int GetCurFile([MarshalAs(UnmanagedType.LPWStr)] out string fileName);
     }
 
     [ComImport]

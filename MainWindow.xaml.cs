@@ -175,6 +175,7 @@ public partial class MainWindow : Window
         };
         view.PinRequested += Pathview_PinRequested;
         view.BrowseRequested += Pathview_BrowseRequested;
+        view.BrowseLocationRequested += Pathview_BrowseLocationRequested;
 
         if (view.IsBrowsable)
         {
@@ -202,13 +203,29 @@ public partial class MainWindow : Window
     private void Pathview_BrowseRequested(object? sender, EventArgs e)
     {
         if (sender is not Pathview { IsBrowsable: false } view ||
-            _browsablePathview is null || _browsableTab is null || string.IsNullOrWhiteSpace(view.CurrentPath))
+            string.IsNullOrWhiteSpace(view.CurrentPath))
+            return;
+
+        BrowseLocationInBrowsablePathview(view, view.CurrentPath);
+    }
+
+    private void Pathview_BrowseLocationRequested(object? sender, string path)
+    {
+        if (sender is not Pathview { IsBrowsable: false } view || string.IsNullOrWhiteSpace(path))
+            return;
+
+        BrowseLocationInBrowsablePathview(view, path);
+    }
+
+    private void BrowseLocationInBrowsablePathview(Pathview source, string path)
+    {
+        if (_browsablePathview is null || _browsableTab is null)
             return;
 
         try
         {
             ExplorerTabs.SelectedItem = _browsableTab;
-            _browsablePathview.Navigate(view.CurrentPath);
+            _browsablePathview.Navigate(path);
         }
         catch (Exception exception)
         {

@@ -65,9 +65,13 @@ when it is created and cannot be changed by the user.
   browsable Pathview if none exists.
 - [x] Back, Forward, and Up always target the browsable Pathview and select its
   tab.
-- [x] A non-browsable Pathview does not change location through its tree or
-  folder activation in its Shell content pane. This blocks folder navigation
-  only; other native Shell commands and file operations remain available.
+- [x] A non-browsable Pathview does not change its own location through its
+  tree, **Sub directories** list, or Shell content pane. Double-clicking a
+  directory in any of those views opens that directory in the browsable
+  Pathview and selects its tab. In the Shell content pane, double-clicking a
+  `.lnk` whose target is a directory opens the target there. A single click
+  does not navigate; other native Shell commands and file operations remain
+  available.
 - [x] Navigation in the browsable Pathview updates the address, tab title,
   custom directory tree, and its own content view.
 
@@ -266,8 +270,12 @@ may show its requested row in light gray without changing the active selection.
   it hides them again without changing the active path.
 2. Navigate the browsable Pathview using its tree, address field, Shell content
   view, and toolbar history. Verify its address, title, tree, and content stay
-  synchronized. Verify folder navigation attempts from a non-browsable tree or
-  Shell content view do not change that Pathview's location.
+  synchronized. In a non-browsable Pathview, verify single-clicks in the tree
+  do not navigate and double-clicking a directory in the tree, **Sub
+  directories** list, or Shell content view selects the browsable tab and opens
+  the directory there without changing the fixed Pathview's location. Verify
+  double-clicking a `.lnk` to a directory in the Shell content view opens its
+  target in the browsable Pathview.
 3. Verify the browsable Pathview's current path is shown in the address field
   but is not offered in its dropdown. Use **Pin** repeatedly at one location
   and type that location into the address field. Verify the existing
