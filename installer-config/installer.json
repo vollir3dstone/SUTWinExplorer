@@ -1,0 +1,24 @@
+{
+  "_type": "installer_profiles",
+  "appName": "SUTWinExplorer",
+  "appVersion": "1.0.0",
+  "publisher": "SUTWinExplorer",
+  "profiles": [
+    {
+      "_type": "profile",
+      "profileId": "net-included",
+      "configuration": {
+        "publishProfile": "Included",
+        "addFolderContextMenu": true
+      }
+    },
+    {
+      "_type": "profile",
+      "profileId": "net-dependent",
+      "configuration": {
+        "publishProfile": "Dependent",
+        "addFolderContextMenu": true
+      }
+    }
+  ]
+}

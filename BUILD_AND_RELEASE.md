@@ -54,4 +54,86 @@ Both profiles enable native-library self-extraction. The publish output includes
 2. Publish the `Included` profile for machines that should not require a preinstalled .NET runtime, or publish the `Dependent` profile when the .NET 10 Desktop Runtime is a deployment prerequisite.
 3. Distribute the contents of the selected output directory. Keep the `.pdb` file for diagnostics if desired; it is not required to run the application.
 
-The publish profiles currently create application builds only. They do not create an installer or upload artifacts to a release service.
+Running `dotnet publish` directly creates application builds only. It does not create an installer or upload artifacts to a release service.
+
+## Build Installers
+
+### Requirements and Files
+
+- Windows x64, the .NET 10 SDK, and Inno Setup 6.
+- `ISCC.exe` must be available on `PATH` or installed in the standard Inno Setup 6 directory under `Program Files`.
+- `installer-config\installer.json` is the versioned configuration: it contains shared product metadata and a list of installer profiles.
+- `installer-config\installer.iss` is the versioned Inno Setup template. It contains the installer behavior and layout, such as the destination directory, application files, Start Menu shortcut, and optional shell integration. It is not generated from the JSON.
+- `installer-config\build-installer.ps1` orchestrates publishing, creates one complete temporary ISS script per selected profile, and invokes `ISCC.exe`.
+
+The JSON and ISS have different responsibilities. The JSON supplies values that vary between builds; the ISS template defines what the installer does. For each profile, the PowerShell script prepends Inno Setup `#define` directives to the template and writes the resulting complete script to `installer\Temp\<profileId>.iss`. Inno Setup compiles that generated script, not the template file directly. The temporary ISS file for each selected profile is regenerated on every script run and should not be edited manually. Files for profiles not selected in a filtered run are left untouched.
+
+### Configuration
+
+The root object must have `_type` set to `installer_profiles`. Shared properties are `appName`, `appVersion`, and `publisher`. Each entry in `profiles` must have `_type` set to `profile`, a unique `profileId`, and a `configuration` object. The current configuration supports:
+
+- `publishProfile`: `Included` or `Dependent`; selects the matching MSBuild publish profile and output directory.
+- `addFolderContextMenu`: Boolean; controls whether the per-user Explorer folder context-menu entry is included and registered for removal on uninstall.
+
+Example:
+
+```json
+{
+	"_type": "installer_profiles",
+	"appName": "SUTWinExplorer",
+	"appVersion": "1.0.0",
+	"publisher": "SUTWinExplorer",
+	"profiles": [
+		{
+			"_type": "profile",
+			"profileId": "net-included",
+			"configuration": {
+				"publishProfile": "Included",
+				"addFolderContextMenu": true
+			}
+		},
+		{
+			"_type": "profile",
+			"profileId": "net-dependent",
+			"configuration": {
+				"publishProfile": "Dependent",
+				"addFolderContextMenu": true
+			}
+		}
+	]
+}
+```
+
+`profileId` is used in the generated temporary script and installer filename. `publishProfile` must match one of the two profiles supported by the build script. To add another installer variant, add a profile entry using a supported publish profile and configure its options; the installer behavior itself remains in `installer.iss`.
+
+### Build and Outputs
+
+The installer script is not automatically run by `dotnet build` or `dotnet publish`. Run it explicitly from the repository root. With no filter it processes every entry in the JSON profile list:
+
+```powershell
+.\installer-config\build-installer.ps1
+```
+
+To process only one or more selected profiles, pass their IDs:
+
+```powershell
+.\installer-config\build-installer.ps1 -ProfileId net-included
+```
+
+To select multiple profiles in one run:
+
+```powershell
+.\installer-config\build-installer.ps1 -ProfileId net-included,net-dependent
+```
+
+For each selected profile, the script performs these steps:
+
+1. Validates the configuration and resolves `publishProfile` to its publish output directory.
+2. Checks that the corresponding `SUTWinExplorer.exe` is not running. If it is, the script stops with an instruction to close it; it does not terminate the application.
+3. Runs `dotnet publish` for that profile. `Included` publishes to `bin\Release\net10.0-included`; `Dependent` publishes to `bin\Release\net10.0-dependent`.
+4. Prepends the shared metadata, profile ID, publish directory, installer output directory, and context-menu option as `#define` directives to the ISS template. The resulting complete per-profile ISS file is written under `installer\Temp`.
+5. Runs Inno Setup's command-line compiler (`ISCC.exe`) on that generated ISS file.
+
+The setup executable is written to `installer\Release` as `<appName>-<profileId>-Setup-<appVersion>.exe`. The installer installs per-user under `%LOCALAPPDATA%\Programs\<appName>`, creates a Start Menu shortcut, excludes `.pdb` files, and optionally adds the Explorer folder context-menu entry under the current user's registry hive. Inno Setup removes that entry during uninstall.
+
+`installer\Release` contains distributable installer artifacts. `installer\Temp` contains generated ISS scripts and Inno Setup's temporary build data. Both directories are ignored by Git; the JSON, template, and build script remain versioned. Re-running the script recreates or replaces the generated scripts and installer files for the selected profiles. Outputs for unselected profiles are not removed.
