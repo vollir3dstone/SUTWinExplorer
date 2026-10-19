@@ -5,3 +5,4 @@
 *.suo
 /bin/Release/net10.0-included
 /bin/Release/net10.0-windows
+/bin/Release/net10.0-raw
