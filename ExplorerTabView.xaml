@@ -1,5 +1,7 @@
 <UserControl x:Class="SUTWinExplorer.Pathview"
              x:Name="Root"
+             UseLayoutRounding="True"
+             SnapsToDevicePixels="True"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SUTWinExplorer">
@@ -212,7 +214,7 @@
                             </Grid.RowDefinitions>
                             <local:CheckBoxWrapper x:Name="HideInternalSubfoldersCheckBox" Grid.Row="0"
                                                    Label="Hide internal" Margin="8,6,8,4" />
-                            <Border Grid.Row="1" BorderBrush="Black" BorderThickness="1"
+                                                <Border Grid.Row="1" BorderBrush="#646464" BorderThickness="0.7"
                                     Margin="10,0,10,0">
                                 <ListView x:Name="ActivePathSubfoldersList"
                                           BorderThickness="0" Padding="0"

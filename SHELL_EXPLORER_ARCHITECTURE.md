@@ -321,10 +321,17 @@ is set to the active route's row count times
 `Pathview.DirectoryTreeRowHeight`; both tree scrollbars are disabled. The
 lower star-sized row is a gray-framed `GroupBox` headed **Sub directories**.
 It contains the default-checked
-`HideInternalSubfoldersCheckBox` and a `ListView` inside its own black frame,
-with 10px horizontal margins. The `ListView` fills the remaining area and
-scrolls vertically; its item-container height uses the same
+`HideInternalSubfoldersCheckBox` and a `ListView` inside its own frame, with
+10px horizontal margins. The outer `GroupBox` frame is `#A6A6A6` at 1 DIP; the
+inner list frame is `#646464` at 0.7 DIP. The `ListView` fills the remaining
+area and scrolls vertically; its item-container height uses the same
 `DirectoryTreeRowHeight` as the tree.
+
+The `Pathview` root enables `UseLayoutRounding` and `SnapsToDevicePixels`, so
+the layout and rendered edges throughout the pane use WPF's device-pixel
+rounding and snapping. These settings improve edge alignment but do not
+guarantee identical physical-pixel thickness at every DPI scale, especially
+for fractional-DIP borders.
 
 `RefreshActivePathTree` loads the active route endpoint's immediate child
 directories into its `TreeEntry.Children` and binds those entries to
