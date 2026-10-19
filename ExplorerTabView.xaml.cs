@@ -1055,6 +1055,38 @@ public partial class Pathview : UserControl
         e.Handled = true;
     }
 
+    private void ActivePathSubfoldersList_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var source = e.OriginalSource as DependencyObject;
+        if (FindAncestor<ListViewItem>(source) is { DataContext: TreeEntry entry } && !entry.IsPlaceholder)
+        {
+            ActivePathSubfoldersList.SelectedItem = entry;
+            ShowNativeMenu(entry.Path);
+            e.Handled = true;
+            return;
+        }
+
+        if (IsListChrome(source))
+            return;
+
+        ActivePathSubfoldersList.SelectedItem = null;
+        ShowNativeBackgroundMenu();
+        e.Handled = true;
+    }
+
+    private void ActivePathSubfoldersList_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Apps && !(e.Key == Key.F10 && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)))
+            return;
+
+        if (ActivePathSubfoldersList.SelectedItem is TreeEntry entry && !entry.IsPlaceholder)
+            ShowNativeMenu(entry.Path);
+        else
+            ShowNativeBackgroundMenu();
+
+        e.Handled = true;
+    }
+
     private void FileList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         var source = e.OriginalSource as DependencyObject;

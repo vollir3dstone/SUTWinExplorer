@@ -219,7 +219,9 @@
                                 <ListView x:Name="ActivePathSubfoldersList"
                                           BorderThickness="0" Padding="0"
                                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                          ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                          ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                          PreviewMouseRightButtonDown="ActivePathSubfoldersList_PreviewMouseRightButtonDown"
+                                          PreviewKeyDown="ActivePathSubfoldersList_PreviewKeyDown">
                                     <ListView.ItemContainerStyle>
                                         <Style TargetType="{x:Type ListViewItem}">
                                             <Setter Property="Height"

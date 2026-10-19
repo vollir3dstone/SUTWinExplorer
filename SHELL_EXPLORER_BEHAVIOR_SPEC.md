@@ -208,6 +208,11 @@ may show its requested row in light gray without changing the active selection.
 - [x] Right-clicking empty content space shows the active folder's native
   background menu.
 - [x] Tree folders show their native Shell context menu.
+- [x] In a fixed Pathview's **Sub directories** list, right-clicking a folder
+  shows its native Shell context menu; right-clicking empty list space shows
+  the active folder's native background menu. The Apps key and Shift+F10 show
+  the selected folder's menu or, when no folder is selected, the background
+  menu.
 - [x] The native menu can execute common commands, including Properties,
   background New, context-menu Copy/Paste, and Paste shortcut as verified in
   the spike.
