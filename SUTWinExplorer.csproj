@@ -11,6 +11,10 @@
 
   <ItemGroup>
     <Resource Include="Assets\app.ico" />
+    <Resource Include="Assets\ic_fluent_arrow_left_16_regular.png" />
+    <Resource Include="Assets\ic_fluent_arrow_right_16_regular.png" />
+    <Resource Include="Assets\ic_fluent_arrow_up_16_regular.png" />
+    <Resource Include="Assets\ic_fluent_color_32_regular.png" />
   </ItemGroup>
 
 </Project>

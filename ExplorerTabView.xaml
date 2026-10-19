@@ -158,7 +158,7 @@
                     Margin="8,0,0,0" ToolTip="Choose pane background color"
                         AutomationProperties.Name="Choose pane background color"
                         Click="PaneColorButton_Click">
-                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="16" Text="&#xE790;" />
+                    <Image Width="16" Height="16" Source="/Assets/ic_fluent_color_32_regular.png" />
                 </Button>
                 <Popup x:Name="PaneColorPopup" PlacementTarget="{Binding ElementName=PaneColorButton}"
                        Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
