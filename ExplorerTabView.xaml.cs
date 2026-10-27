@@ -57,6 +57,9 @@ public partial class Pathview : UserControl
     private TreeEntry? _editingTreeEntry;
     private string? _pendingNavigationPath;
     private NavigationHistoryAction _pendingNavigationHistoryAction;
+    private bool? _pendingHideSiblings;
+    private bool? _pendingHideInternalDirectories;
+    private bool? _pendingHideInternalContentItems;
     private bool _fileSystemStateDirty = true;
     private bool _shellViewNeedsRefresh = true;
     private readonly List<TreeEntry> _driveRoots = [];
@@ -119,10 +122,15 @@ public partial class Pathview : UserControl
     public event EventHandler? NavigationFailed;
     public event EventHandler? PinRequested;
     public event EventHandler? BrowseRequested;
-    public event EventHandler<string>? BrowseLocationRequested;
+    public event Action<Pathview, string, bool?, bool?, bool?>? BrowseLocationRequested;
     public event Action<string, string>? DirectoryRenamed;
 
-    public void Navigate(string path) => Navigate(path, NavigationHistoryAction.Normal);
+    public void Navigate(
+        string path,
+        bool? hideSiblings = null,
+        bool? hideInternalDirectories = null,
+        bool? hideInternalContentItems = null) =>
+        Navigate(path, NavigationHistoryAction.Normal, hideSiblings, hideInternalDirectories, hideInternalContentItems);
 
     internal string? BackHistoryPath => _backHistory.TryPeek(out var path) ? path : null;
     internal string? ForwardHistoryPath => _forwardHistory.TryPeek(out var path) ? path : null;
@@ -206,7 +214,12 @@ public partial class Pathview : UserControl
             Navigate(parent);
     }
 
-    private void Navigate(string path, NavigationHistoryAction historyAction)
+    private void Navigate(
+        string path,
+        NavigationHistoryAction historyAction,
+        bool? hideSiblings = null,
+        bool? hideInternalDirectories = null,
+        bool? hideInternalContentItems = null)
     {
         if (!IsBrowsable && historyAction != NavigationHistoryAction.None)
             return;
@@ -225,18 +238,23 @@ public partial class Pathview : UserControl
         if (string.Equals(CurrentPath, fullPath, StringComparison.OrdinalIgnoreCase))
         {
             UpdateHistory(fullPath, historyAction);
+            ApplyNavigationOptions(hideSiblings, hideInternalDirectories, hideInternalContentItems);
             return;
         }
 
         if (IsLegacyWpfFileList)
         {
             CommitNavigation(fullPath, historyAction);
+            ApplyNavigationOptions(hideSiblings, hideInternalDirectories, hideInternalContentItems);
             RefreshFiles();
             return;
         }
 
         _pendingNavigationPath = fullPath;
         _pendingNavigationHistoryAction = historyAction;
+        _pendingHideSiblings = hideSiblings;
+        _pendingHideInternalDirectories = hideInternalDirectories;
+        _pendingHideInternalContentItems = hideInternalContentItems;
         try
         {
             _shellBrowserHost?.NavigateTo(fullPath);
@@ -244,8 +262,27 @@ public partial class Pathview : UserControl
         catch
         {
             _pendingNavigationPath = null;
+            _pendingHideSiblings = null;
+            _pendingHideInternalDirectories = null;
+            _pendingHideInternalContentItems = null;
             throw;
         }
+    }
+
+    private void ApplyNavigationOptions(
+        bool? hideSiblings,
+        bool? hideInternalDirectories,
+        bool? hideInternalContentItems)
+    {
+        if (!IsBrowsable)
+            return;
+
+        if (hideSiblings is { } hideSiblingsValue)
+            HideSiblingsCheckBox.IsChecked = hideSiblingsValue;
+        if (hideInternalDirectories is { } hideInternalDirectoriesValue)
+            HideInternalCheckBox.IsChecked = hideInternalDirectoriesValue;
+        if (hideInternalContentItems is { } hideInternalContentItemsValue)
+            HideInternalContentCheckBox.GetCheckBox().IsChecked = hideInternalContentItemsValue;
     }
 
     private void CommitNavigation(string path, NavigationHistoryAction historyAction)
@@ -828,13 +865,25 @@ public partial class Pathview : UserControl
 
         var isPendingNavigation = string.Equals(_pendingNavigationPath, fullPath, StringComparison.OrdinalIgnoreCase);
         var historyAction = isPendingNavigation ? _pendingNavigationHistoryAction : NavigationHistoryAction.Normal;
+        var hideSiblings = isPendingNavigation ? _pendingHideSiblings : null;
+        var hideInternalDirectories = isPendingNavigation ? _pendingHideInternalDirectories : null;
+        var hideInternalContentItems = isPendingNavigation ? _pendingHideInternalContentItems : null;
         if (isPendingNavigation)
+        {
             _pendingNavigationPath = null;
+            _pendingHideSiblings = null;
+            _pendingHideInternalDirectories = null;
+            _pendingHideInternalContentItems = null;
+        }
 
         if (string.Equals(CurrentPath, fullPath, StringComparison.OrdinalIgnoreCase))
+        {
+            ApplyNavigationOptions(hideSiblings, hideInternalDirectories, hideInternalContentItems);
             return;
+        }
 
         CommitNavigation(fullPath, historyAction);
+        ApplyNavigationOptions(hideSiblings, hideInternalDirectories, hideInternalContentItems);
     }
 
     private void ShellBrowserHost_NavigationFailed(object? sender, string path)
@@ -842,7 +891,12 @@ public partial class Pathview : UserControl
         var isCurrentFailure = string.IsNullOrEmpty(path) ||
             string.Equals(_pendingNavigationPath, path, StringComparison.OrdinalIgnoreCase);
         if (isCurrentFailure)
+        {
             _pendingNavigationPath = null;
+            _pendingHideSiblings = null;
+            _pendingHideInternalDirectories = null;
+            _pendingHideInternalContentItems = null;
+        }
 
         if (_pendingTreeNavigationEntry is { } pendingEntry &&
             (string.IsNullOrEmpty(path) || string.Equals(pendingEntry.Path, path, StringComparison.OrdinalIgnoreCase)))
@@ -1205,7 +1259,7 @@ public partial class Pathview : UserControl
             if (entry.IsDirectory && IsBrowsable)
                 Navigate(entry.FullPath);
             else if (entry.IsDirectory)
-                BrowseLocationRequested?.Invoke(this, entry.FullPath);
+                RequestBrowseLocation(entry.FullPath);
             else
                 Process.Start(new ProcessStartInfo(entry.FullPath) { UseShellExecute = true });
         }
@@ -1279,7 +1333,7 @@ public partial class Pathview : UserControl
 
         if (FindAncestor<ListViewItem>(e.OriginalSource as DependencyObject) is
             { DataContext: TreeEntry { IsPlaceholder: false } entry })
-            BrowseLocationRequested?.Invoke(this, entry.Path);
+            RequestBrowseLocation(entry.Path);
     }
 
     private void FileList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -1361,7 +1415,7 @@ public partial class Pathview : UserControl
         {
             if (FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is
                 { DataContext: TreeEntry { IsPlaceholder: false } fixedEntry })
-                BrowseLocationRequested?.Invoke(this, fixedEntry.Path);
+                RequestBrowseLocation(fixedEntry.Path);
             return;
         }
 
@@ -1397,12 +1451,20 @@ public partial class Pathview : UserControl
 
         if (!IsBrowsable)
         {
-            BrowseLocationRequested?.Invoke(this, entry.Path);
+            RequestBrowseLocation(entry.Path);
         }
     }
 
     private void ShellBrowserHost_FolderOpenRequested(object? sender, string path) =>
-        BrowseLocationRequested?.Invoke(this, path);
+        RequestBrowseLocation(path);
+
+    private void RequestBrowseLocation(string path) =>
+        BrowseLocationRequested?.Invoke(
+            this,
+            path,
+            true,
+            HideInternalSubfoldersCheckBox.GetCheckBox().IsChecked,
+            HideInternalContentCheckBox.GetCheckBox().IsChecked);
 
     private void NavigateFromTree(TreeEntry entry)
     {

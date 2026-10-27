@@ -86,8 +86,13 @@ when it is created and cannot be changed by the user.
   one in the Shell content pane, opens it in the browsable Pathview and selects
   its tab. In the Shell content pane, double-clicking a `.lnk` whose target is
   a directory opens the target there. Single clicks in the Shell content pane
-  do not navigate; other native Shell commands and file operations remain
-  available.
+  not navigate; other native Shell commands and file operations remain
+  available. These directory activations set the browsable Pathview's **Hide
+  siblings** to on, its directory-tree **Hide internal** to the fixed
+  Pathview's **Sub directories** **Hide internal** value, and its content-item
+  **Hide internal** to the fixed Pathview's content **Hide internal** value.
+  Other navigation, including history and address-field navigation, does not
+  supply these filter values.
 - [x] Navigation in the browsable Pathview updates the address, tab title,
   custom directory tree, and its own content view.
 

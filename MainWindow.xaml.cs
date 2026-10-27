@@ -247,18 +247,31 @@ public partial class MainWindow : Window
             string.IsNullOrWhiteSpace(view.CurrentPath))
             return;
 
-        BrowseLocationInBrowsablePathview(view, view.CurrentPath);
+        BrowseLocationInBrowsablePathview(view.CurrentPath);
     }
 
-    private void Pathview_BrowseLocationRequested(object? sender, string path)
+    private void Pathview_BrowseLocationRequested(
+        Pathview source,
+        string path,
+        bool? hideSiblings = null,
+        bool? hideInternalDirectories = null,
+        bool? hideInternalContentItems = null)
     {
-        if (sender is not Pathview { IsBrowsable: false } view || string.IsNullOrWhiteSpace(path))
+        if (source.IsBrowsable || string.IsNullOrWhiteSpace(path))
             return;
 
-        BrowseLocationInBrowsablePathview(view, path);
+        BrowseLocationInBrowsablePathview(
+            path,
+            hideSiblings,
+            hideInternalDirectories,
+            hideInternalContentItems);
     }
 
-    private void BrowseLocationInBrowsablePathview(Pathview source, string path)
+    private void BrowseLocationInBrowsablePathview(
+        string path,
+        bool? hideSiblings = null,
+        bool? hideInternalDirectories = null,
+        bool? hideInternalContentItems = null)
     {
         if (_browsablePathview is null || _browsableTab is null)
             return;
@@ -266,7 +279,11 @@ public partial class MainWindow : Window
         try
         {
             SelectTabForNavigation(_browsableTab);
-            _browsablePathview.Navigate(path);
+            _browsablePathview.Navigate(
+                path,
+                hideSiblings,
+                hideInternalDirectories,
+                hideInternalContentItems);
         }
         catch (Exception exception)
         {
