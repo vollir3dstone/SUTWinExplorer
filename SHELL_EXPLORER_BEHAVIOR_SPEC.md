@@ -140,6 +140,12 @@ may show its requested row in light gray without changing the active selection.
 - [x] Tree sibling lists and the fixed **Active path** subfolder list are sorted
   lexicographically by Shell-localized display name. The Shell content view
   retains its configured sort column and direction.
+- [x] When a filesystem folder's Shell PIDL name is a GUID, use its Shell
+  filesystem display name if available, such as **OneDrive**. Displayed path
+  components entered in the address field are matched against the parent
+  directory's children to recover internal paths; existing filesystem paths
+  take precedence. An unresolved GUID can remain visible, and duplicate
+  display names do not guarantee an unambiguous match.
 - [x] The successfully opened active directory is highlighted, and the visible
   tree brings it near the vertical center after navigation initiated by the tree,
   address field, toolbar history, or Shell content view, when the scroll range

@@ -47,6 +47,46 @@ render its own localized names. Custom tree sibling collections sort
 lexicographically by those display names; the Shell content view retains its
 configured sort column and direction.
 
+#### GUID display names and address resolution
+
+`ShellDisplayNameProvider.GetDisplayName` first calls `SHParseDisplayName` and
+`SHGetNameFromIDList` with `SIGDN_NORMALDISPLAY`. The Shell can return a GUID
+parsing name instead of the name shown by Explorer even for a filesystem path.
+For example, on the development machine the OneDrive directory's PIDL normal
+display name was `::{018D5C66-4533-4307-9B53-224DE2ED1FE6}`, whereas
+`SHGetFileInfo` with `SHGFI_DISPLAYNAME` returned `OneDrive` for that same path.
+
+When the initial display name has the form `::{GUID}`, the provider uses
+`SHGetFileInfo` on a fully qualified original path and returns its nonempty
+display name if available. Otherwise, it attempts to resolve the GUID itself
+as a Shell parsing name and falls back to the original GUID if that fails.
+This is a general Shell fallback, not a OneDrive-specific mapping. It depends
+on the Shell providing a useful name; a GUID may remain visible if neither
+lookup resolves it. If the initial PIDL lookup fails, the provider returns no
+name and callers can fall back to the filesystem leaf name.
+
+The provider changes presentation only: tree entries, navigation, history and
+file operations retain the original internal filesystem path. The virtual
+**Top** location remains the explicit Shell parsing-name exception below.
+
+`ResolvePath` performs the reverse translation in the application, not by
+asking the Shell to reverse an entire display path. It expands environment
+variables and resolves relative input against the process working directory.
+An existing full filesystem path wins immediately. Otherwise, it walks from
+the root: an existing filesystem child wins; for any other component it
+enumerates the parent's directories and compares their display names using the
+same provider, case-insensitively. The first matching directory supplies the
+internal path component. If enumeration fails or no name matches, the input
+component is retained and navigation may subsequently fail. Duplicate display
+names are therefore ambiguous, and a bare name such as `OneDrive` is not a
+global search for the OneDrive folder. The localized **This PC** name and the
+English `This PC` are handled separately as the virtual **Top** location.
+
+The OneDrive example was checked in both directions on the development machine:
+the display path `C:\Benutzer\Volker\OneDrive` resolved back to the internal
+path `C:\Users\Volker\OneDrive`. This verifies that example, not every Shell
+extension or GUID.
+
 **Rationale:** Localized display names are presentation values and may not be
 valid filesystem path components. Canonical paths remain suitable for
 navigation, history, tab state, and filesystem operations across Windows

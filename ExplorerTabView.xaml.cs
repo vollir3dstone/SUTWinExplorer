@@ -1798,6 +1798,7 @@ public sealed record ShellIconSet(ImageSource? BaseIcon, ImageSource? OverlayIco
 internal static class ShellDisplayNameProvider
 {
     private const uint ShellDisplayNameNormal = 0;
+    private const uint ShellFileInfoDisplayName = 0x00000200;
 
     public static string GetDisplayPath(string path)
     {
@@ -1873,6 +1874,26 @@ internal static class ShellDisplayNameProvider
 
     public static string? GetDisplayName(string path)
     {
+        var displayName = GetShellDisplayName(path);
+        if (displayName is not null && displayName.StartsWith("::{", StringComparison.Ordinal) &&
+            Guid.TryParse(displayName.AsSpan(2), out _))
+        {
+            if (Path.IsPathFullyQualified(path))
+            {
+                var fileInfo = new ShellFileInfo();
+                if (SHGetFileInfo(path, 0, ref fileInfo, (uint)Marshal.SizeOf<ShellFileInfo>(), ShellFileInfoDisplayName) != IntPtr.Zero &&
+                    !string.IsNullOrEmpty(fileInfo.DisplayName))
+                    return fileInfo.DisplayName;
+            }
+
+            return GetShellDisplayName(displayName) ?? displayName;
+        }
+
+        return displayName;
+    }
+
+    private static string? GetShellDisplayName(string path)
+    {
         if (string.IsNullOrEmpty(path) || SHParseDisplayName(path, IntPtr.Zero, out var itemIdList, 0, out _) < 0 || itemIdList == IntPtr.Zero)
             return null;
 
@@ -1901,6 +1922,9 @@ internal static class ShellDisplayNameProvider
 
     [DllImport("shell32.dll", PreserveSig = true)]
     private static extern int SHGetNameFromIDList(IntPtr itemIdList, uint sigdnName, out IntPtr name);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr SHGetFileInfo(string path, uint fileAttributes, ref ShellFileInfo fileInfo, uint fileInfoSize, uint flags);
 }
 
 internal static class ShellIconProvider
@@ -2013,15 +2037,16 @@ internal static class ShellIconProvider
     [DllImport("shell32.dll", PreserveSig = true)]
     private static extern int SHGetImageList(int imageList, ref Guid interfaceId, out IImageList result);
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct ShellFileInfo
-    {
-        public IntPtr IconHandle;
-        public int IconIndex;
-        public uint Attributes;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string DisplayName;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)] public string TypeName;
-    }
+}
+
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+internal struct ShellFileInfo
+{
+    public IntPtr IconHandle;
+    public int IconIndex;
+    public uint Attributes;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string DisplayName;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)] public string TypeName;
 }
 
 [ComImport]
