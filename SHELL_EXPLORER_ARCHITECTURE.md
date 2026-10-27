@@ -131,19 +131,32 @@ leading ellipsis prefix is omitted.
   Pathview, registers it, adds the tab after the first item, and selects it.
   This prevents duplicate fixed Pathviews at the same normalized path.
 - Typed address input is resolved to a filesystem path and normalized to the
-  same map key, then uses the shared `MainWindow.ActivatePath` operation. The
-  operation prefers an already-open fixed Pathview by default; otherwise it
-  selects and navigates the browsable Pathview. The **Browse** button uses the
-  same operation but explicitly disables fixed-tab preference, so it always
-  navigates the browsable Pathview. Selecting an address dropdown entry remains
-  a direct tab selection for the associated Pathview. The browsable Pathview
-  stores the shared path history; successful navigation and tab activation
-  record paths in order. Back and Forward retain their history-specific path:
-  they select an open fixed Pathview for a matching destination, or navigate
-  the browsable Pathview when no matching fixed Pathview is ready. Programmatic
-  tab selection during history navigation does not record another visit. Up
-  selects and operates on the browsable Pathview.
-- `MainWindow.ActivatePath` accepts four optional nullable settings. A `null`
+- Typed address input is resolved to a filesystem path and normalized to the
+  same map key, then uses `MainWindow.NavigateWithHistory`. The **Browse**
+  button uses that same history-aware operation but explicitly disables
+  fixed-tab preference, so it always navigates the browsable Pathview.
+  Selecting an address dropdown entry remains a direct tab selection for the
+  associated Pathview. The browsable Pathview stores the shared path history;
+  successful navigation and tab activation record paths in order.
+- Navigation is split into two layers. `MainWindow.DisplayPathHistoryAgnostic`
+  is the lower, shared presentation layer: it selects an exact matching fixed
+  Pathview when preferred and available; otherwise it selects the browsable tab
+  and invokes the supplied action on the browsable Pathview. It does not update
+  history. `MainWindow.NavigateWithHistory` is the upper layer for normal
+  activation: it calls the shared presentation layer, then records a visit when
+  that layer selected a fixed tab. When the destination is shown in BROWSE,
+  `Pathview.Navigate` records normal history only after Shell navigation
+  succeeds. This keeps failed navigation out of history.
+- Back and Forward are separate history-aware upper operations over the same
+  presentation layer. If the destination belongs to an open fixed Pathview,
+  the layer selects it and the caller advances the browsable Pathview's shared
+  history with `ActivateHistoryLocation`. Otherwise, the layer selects BROWSE
+  and invokes `GoBack` or `GoForward`, which navigate with the corresponding
+  history action. Programmatic tab selection during history navigation does
+  not add another visit. Up uses `NavigateWithHistory` for the parent path with
+  `preferFixedView: false`, so it records normal navigation while always staying
+  in the browsable Pathview.
+- `MainWindow.NavigateWithHistory` accepts four optional nullable settings. A `null`
   filter setting means "leave the browsable Pathview's current setting
   unchanged"; it does not mean to use the checkbox default. `preferFixedView`
   has different null semantics: `null` is treated as `true`. If true, an exact
@@ -155,7 +168,8 @@ leading ellipsis prefix is omitted.
   | Fixed **Path** tree, **Sub directories**, or Shell content directory activation | `true` | Fixed **Sub directories / Hide internal** value | Fixed content **Hide internal** value | omitted (`null`, therefore prefer fixed) |
   | Fixed **Browse** button | `true` | Fixed **Sub directories / Hide internal** value | Fixed content **Hide internal** value | `false` (always browse) |
   | Typed address input / Go | omitted (`null`, keep current) | omitted (`null`, keep current) | omitted (`null`, keep current) | omitted (`null`, therefore prefer fixed) |
-  | Back / Forward history or Up | Not passed to `ActivatePath`; history uses its own fixed-tab lookup, and Up navigates the browsable Pathview | Not passed | Not passed | Not passed |
+  | Back / Forward history | Not passed to `NavigateWithHistory`; each uses the shared display layer and its own history action | Not passed | Not passed | Not passed |
+  | Up | omitted (`null`, keep current) | omitted (`null`, keep current) | omitted (`null`, keep current) | `false` (always browse; normal history is written) |
 
 - App-owned navigation is ignored by non-browsable Pathviews. For navigation
   initiated inside the hosted Shell view, its `IExplorerBrowserEvents.OnNavigationPending`
@@ -167,8 +181,8 @@ leading ellipsis prefix is omitted.
   commands and file operations. Explicit folder opening is separate from
   navigation of the fixed Pathview: single-clicking a directory in its Active
   path tree or Sub directories list, or double-clicking one in its Shell content
-  view, requests that path through `ActivatePath`, selects an exact matching
-  fixed Pathview when available, and leaves the source fixed Pathview's
+  view, requests that path through `NavigateWithHistory`, selects an exact
+  matching fixed Pathview when available, and leaves the source fixed Pathview's
   location unchanged. A Shell-view `.lnk` targeting a directory requests its
   resolved target path in the same way.
 - Each Pathview's location header spans the full width above its body. The

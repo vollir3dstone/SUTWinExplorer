@@ -251,7 +251,7 @@ public partial class MainWindow : Window
         if (source.IsBrowsable || string.IsNullOrWhiteSpace(path))
             return;
 
-        ActivatePath(
+        NavigateWithHistory(
             path,
             hideSiblings,
             hideInternalDirectories,
@@ -259,13 +259,13 @@ public partial class MainWindow : Window
             preferFixedView);
     }
 
-    /// <summary>Activates a path, optionally selecting an open fixed view and applying filter settings.</summary>
+    /// <summary>Navigates to a path and records the activation in shared history.</summary>
     /// <param name="path">The destination path to activate.</param>
     /// <param name="hideSiblings">The browsable tree setting; null leaves its current value unchanged.</param>
     /// <param name="hideInternalDirectories">The browsable directory-tree filter; null leaves its current value unchanged.</param>
     /// <param name="hideInternalContentItems">The browsable content-item filter; null leaves its current value unchanged.</param>
     /// <param name="preferFixedView">Null prefers a matching open fixed view; false always navigates the browsable view.</param>
-    private void ActivatePath(
+    private void NavigateWithHistory(
         string path,
         bool? hideSiblings = null,
         bool? hideInternalDirectories = null,
@@ -277,15 +277,16 @@ public partial class MainWindow : Window
 
         try
         {
-            if ((preferFixedView ?? true) && TrySelectFixedPathview(path))
-                return;
-
-            SelectTabForNavigation(_browsableTab);
-            _browsablePathview.Navigate(
+            var selectedFixedView = DisplayPathHistoryAgnostic(
                 path,
-                hideSiblings,
-                hideInternalDirectories,
-                hideInternalContentItems);
+                view => view.Navigate(
+                    path,
+                    hideSiblings,
+                    hideInternalDirectories,
+                    hideInternalContentItems),
+                preferFixedView);
+            if (selectedFixedView is not null)
+                _browsablePathview.RecordVisitedLocation(path);
         }
         catch (Exception exception)
         {
@@ -293,20 +294,38 @@ public partial class MainWindow : Window
         }
     }
 
-    private bool TrySelectFixedPathview(string path)
+    private Pathview? DisplayPathHistoryAgnostic(
+        string path,
+        Action<Pathview> displayInBrowsableView,
+        bool? preferFixedView = null)
     {
+        if (string.IsNullOrWhiteSpace(path) || _browsablePathview is null || _browsableTab is null)
+            return null;
+
+        if ((preferFixedView ?? true) && TryGetFixedPathview(path, out var fixedView))
+        {
+            SelectTabForNavigation(_tabsByPathview[fixedView]);
+            return fixedView;
+        }
+
+        SelectTabForNavigation(_browsableTab);
+        displayInBrowsableView(_browsablePathview);
+        return null;
+    }
+
+    private bool TryGetFixedPathview(string path, out Pathview fixedView)
+    {
+        fixedView = null!;
         if (Pathview.IsTopPath(path))
             return false;
 
         var pathKey = GetPathKey(path);
-        if (!_fixedPathviewsByPath.TryGetValue(pathKey, out var fixedView) ||
-            string.IsNullOrWhiteSpace(fixedView.CurrentPath) ||
-            !string.Equals(GetPathKey(fixedView.CurrentPath), pathKey, StringComparison.OrdinalIgnoreCase))
-        {
+        if (!_fixedPathviewsByPath.TryGetValue(pathKey, out var candidate) ||
+            string.IsNullOrWhiteSpace(candidate.CurrentPath) ||
+            !string.Equals(GetPathKey(candidate.CurrentPath), pathKey, StringComparison.OrdinalIgnoreCase))
             return false;
-        }
 
-        SelectPathviewTab(fixedView);
+        fixedView = candidate;
         return true;
     }
 
@@ -447,7 +466,19 @@ public partial class MainWindow : Window
 
     private void Forward_Click(object sender, RoutedEventArgs e) => NavigateHistory(isBack: false);
 
-    private void Up_Click(object sender, RoutedEventArgs e) => NavigateBrowsablePathview(pathview => pathview.GoUp());
+    private void Up_Click(object sender, RoutedEventArgs e)
+    {
+        if (_browsablePathview is null ||
+            string.IsNullOrWhiteSpace(_browsablePathview.CurrentPath) ||
+            Pathview.IsTopPath(_browsablePathview.CurrentPath))
+        {
+            return;
+        }
+
+        var parentPath = Directory.GetParent(_browsablePathview.CurrentPath)?.FullName;
+        if (parentPath is not null)
+            NavigateWithHistory(parentPath, preferFixedView: false);
+    }
 
     private void NavigateHistory(bool isBack)
     {
@@ -458,22 +489,20 @@ public partial class MainWindow : Window
         if (path is null)
             return;
 
-        if (!Pathview.IsTopPath(path) &&
-            _fixedPathviewsByPath.TryGetValue(GetPathKey(path), out var fixedView) &&
-            !string.IsNullOrWhiteSpace(fixedView.CurrentPath) &&
-            string.Equals(GetPathKey(fixedView.CurrentPath), GetPathKey(path), StringComparison.OrdinalIgnoreCase) &&
-            _tabsByPathview.TryGetValue(fixedView, out var fixedTab))
+        var selectedFixedView = DisplayPathHistoryAgnostic(
+            path,
+            view =>
+            {
+                if (isBack)
+                    view.GoBack();
+                else
+                    view.GoForward();
+            });
+        if (selectedFixedView is not null)
         {
             _browsablePathview.ActivateHistoryLocation(path, isBack);
-            SelectTabForNavigation(fixedTab);
             return;
         }
-
-        SelectTabForNavigation(_browsableTab);
-        if (isBack)
-            _browsablePathview.GoBack();
-        else
-            _browsablePathview.GoForward();
     }
 
     private void SelectTabForNavigation(TabItem tab)
@@ -514,7 +543,7 @@ public partial class MainWindow : Window
         try
         {
             var path = ShellDisplayNameProvider.ResolvePath(AddressBox.Text);
-            ActivatePath(path);
+            NavigateWithHistory(path);
         }
         catch (Exception exception)
         {
