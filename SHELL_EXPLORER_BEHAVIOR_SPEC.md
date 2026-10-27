@@ -75,6 +75,11 @@ when it is created and cannot be changed by the user.
   navigate the browsable Pathview. History navigation does not add entries, and
   failed navigation leaves the history unchanged. Up targets and selects the
   browsable Pathview.
+- [x] Renaming a folder through the tree or **Sub directories** inline editor
+  updates affected Back and Forward history paths, including descendants.
+  External renames do not update the history.
+- [ ] Renaming a folder in the Shell content view also updates affected history
+  paths without treating external renames as internal operations.
 - [x] A non-browsable Pathview does not change its own location through its
   tree, **Sub directories** list, or Shell content pane. Single-clicking a
   directory in the **Path** tree or **Sub directories** list, or double-clicking
