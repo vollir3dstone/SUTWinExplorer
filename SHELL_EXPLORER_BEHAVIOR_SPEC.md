@@ -91,8 +91,10 @@ when it is created and cannot be changed by the user.
   siblings** to on, its directory-tree **Hide internal** to the fixed
   Pathview's **Sub directories** **Hide internal** value, and its content-item
   **Hide internal** to the fixed Pathview's content **Hide internal** value.
-  Other navigation, including history and address-field navigation, does not
-  supply these filter values.
+  Activations prefer an already-open fixed Pathview at the destination before
+  navigating the browsable Pathview. The **Browse** button uses the same
+  activation and filter metadata but always navigates the browsable Pathview.
+  Other navigation, including history, does not supply these filter values.
 - [x] Navigation in the browsable Pathview updates the address, tab title,
   custom directory tree, and its own content view.
 

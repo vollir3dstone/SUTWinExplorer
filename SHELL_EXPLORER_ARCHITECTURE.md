@@ -129,19 +129,34 @@ leading ellipsis prefix is omitted.
 - **Pin** looks up the browsable Pathview's current path in the fixed-path map.
   It selects the mapped tab when present, otherwise it creates a fixed
   Pathview, registers it, adds the tab after the first item, and selects it.
-  This prevents duplicate fixed Pathviews at the same normalized path. **Browse**
-  selects the first `TabItem` and navigates its browsable Pathview to the fixed
-  Pathview's current location.
+  This prevents duplicate fixed Pathviews at the same normalized path.
 - Typed address input is resolved to a filesystem path and normalized to the
-  same map key. If a fixed Pathview already owns that path, its tab is selected;
-  otherwise the address request selects and navigates the browsable Pathview.
-  Selecting an address dropdown entry remains a direct tab selection for the
-  associated Pathview. The browsable Pathview stores the shared path history;
-  successful navigation and tab activation record paths in order. Back and
-  Forward select an open fixed Pathview for a matching path, or navigate the
-  browsable Pathview when no matching fixed Pathview is ready. Programmatic tab
-  selection during history navigation does not record another visit. Up selects
-  and operates on the browsable Pathview.
+  same map key, then uses the shared `MainWindow.ActivatePath` operation. The
+  operation prefers an already-open fixed Pathview by default; otherwise it
+  selects and navigates the browsable Pathview. The **Browse** button uses the
+  same operation but explicitly disables fixed-tab preference, so it always
+  navigates the browsable Pathview. Selecting an address dropdown entry remains
+  a direct tab selection for the associated Pathview. The browsable Pathview
+  stores the shared path history; successful navigation and tab activation
+  record paths in order. Back and Forward retain their history-specific path:
+  they select an open fixed Pathview for a matching destination, or navigate
+  the browsable Pathview when no matching fixed Pathview is ready. Programmatic
+  tab selection during history navigation does not record another visit. Up
+  selects and operates on the browsable Pathview.
+- `MainWindow.ActivatePath` accepts four optional nullable settings. A `null`
+  filter setting means "leave the browsable Pathview's current setting
+  unchanged"; it does not mean to use the checkbox default. `preferFixedView`
+  has different null semantics: `null` is treated as `true`. If true, an exact
+  matching open fixed Pathview is selected when available; if false, the path
+  is always navigated in the browsable Pathview.
+
+  | Caller | `hideSiblings` | `hideInternalDirectories` | `hideInternalContentItems` | `preferFixedView` |
+  | --- | --- | --- | --- | --- |
+  | Fixed **Path** tree, **Sub directories**, or Shell content directory activation | `true` | Fixed **Sub directories / Hide internal** value | Fixed content **Hide internal** value | omitted (`null`, therefore prefer fixed) |
+  | Fixed **Browse** button | `true` | Fixed **Sub directories / Hide internal** value | Fixed content **Hide internal** value | `false` (always browse) |
+  | Typed address input / Go | omitted (`null`, keep current) | omitted (`null`, keep current) | omitted (`null`, keep current) | omitted (`null`, therefore prefer fixed) |
+  | Back / Forward history or Up | Not passed to `ActivatePath`; history uses its own fixed-tab lookup, and Up navigates the browsable Pathview | Not passed | Not passed | Not passed |
+
 - App-owned navigation is ignored by non-browsable Pathviews. For navigation
   initiated inside the hosted Shell view, its `IExplorerBrowserEvents.OnNavigationPending`
   callback returns `E_ABORT` for unapproved navigation on non-browsable
@@ -152,10 +167,10 @@ leading ellipsis prefix is omitted.
   commands and file operations. Explicit folder opening is separate from
   navigation of the fixed Pathview: single-clicking a directory in its Active
   path tree or Sub directories list, or double-clicking one in its Shell content
-  view, requests that path in
-  the browsable Pathview, selects the browsable tab, and leaves the fixed
-  Pathview's location unchanged. A Shell-view `.lnk` targeting a directory
-  requests its resolved target path in the same way.
+  view, requests that path through `ActivatePath`, selects an exact matching
+  fixed Pathview when available, and leaves the source fixed Pathview's
+  location unchanged. A Shell-view `.lnk` targeting a directory requests its
+  resolved target path in the same way.
 - Each Pathview's location header spans the full width above its body. The
   visible **Browse** or **Pin** button is first; a non-browsable Pathview places
   its **FIXED** badge next, and the path label is always last. The main area

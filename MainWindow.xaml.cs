@@ -183,7 +183,6 @@ public partial class MainWindow : Window
                 RefreshPathChoices();
         };
         view.PinRequested += Pathview_PinRequested;
-        view.BrowseRequested += Pathview_BrowseRequested;
         view.BrowseLocationRequested += Pathview_BrowseLocationRequested;
         view.DirectoryRenamed += Pathview_DirectoryRenamed;
 
@@ -241,43 +240,46 @@ public partial class MainWindow : Window
         }
     }
 
-    private void Pathview_BrowseRequested(object? sender, EventArgs e)
-    {
-        if (sender is not Pathview { IsBrowsable: false } view ||
-            string.IsNullOrWhiteSpace(view.CurrentPath))
-            return;
-
-        BrowseLocationInBrowsablePathview(view.CurrentPath);
-    }
-
     private void Pathview_BrowseLocationRequested(
         Pathview source,
         string path,
         bool? hideSiblings = null,
         bool? hideInternalDirectories = null,
-        bool? hideInternalContentItems = null)
+        bool? hideInternalContentItems = null,
+        bool? preferFixedView = null)
     {
         if (source.IsBrowsable || string.IsNullOrWhiteSpace(path))
             return;
 
-        BrowseLocationInBrowsablePathview(
+        ActivatePath(
             path,
             hideSiblings,
             hideInternalDirectories,
-            hideInternalContentItems);
+            hideInternalContentItems,
+            preferFixedView);
     }
 
-    private void BrowseLocationInBrowsablePathview(
+    /// <summary>Activates a path, optionally selecting an open fixed view and applying filter settings.</summary>
+    /// <param name="path">The destination path to activate.</param>
+    /// <param name="hideSiblings">The browsable tree setting; null leaves its current value unchanged.</param>
+    /// <param name="hideInternalDirectories">The browsable directory-tree filter; null leaves its current value unchanged.</param>
+    /// <param name="hideInternalContentItems">The browsable content-item filter; null leaves its current value unchanged.</param>
+    /// <param name="preferFixedView">Null prefers a matching open fixed view; false always navigates the browsable view.</param>
+    private void ActivatePath(
         string path,
         bool? hideSiblings = null,
         bool? hideInternalDirectories = null,
-        bool? hideInternalContentItems = null)
+        bool? hideInternalContentItems = null,
+        bool? preferFixedView = null)
     {
-        if (_browsablePathview is null || _browsableTab is null)
+        if (string.IsNullOrWhiteSpace(path) || _browsablePathview is null || _browsableTab is null)
             return;
 
         try
         {
+            if ((preferFixedView ?? true) && TrySelectFixedPathview(path))
+                return;
+
             SelectTabForNavigation(_browsableTab);
             _browsablePathview.Navigate(
                 path,
@@ -289,6 +291,23 @@ public partial class MainWindow : Window
         {
             MessageBox.Show(this, exception.Message, "Cannot open location", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private bool TrySelectFixedPathview(string path)
+    {
+        if (Pathview.IsTopPath(path))
+            return false;
+
+        var pathKey = GetPathKey(path);
+        if (!_fixedPathviewsByPath.TryGetValue(pathKey, out var fixedView) ||
+            string.IsNullOrWhiteSpace(fixedView.CurrentPath) ||
+            !string.Equals(GetPathKey(fixedView.CurrentPath), pathKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        SelectPathviewTab(fixedView);
+        return true;
     }
 
     private void RegisterFixedPathview(Pathview view, string path)
@@ -495,15 +514,7 @@ public partial class MainWindow : Window
         try
         {
             var path = ShellDisplayNameProvider.ResolvePath(AddressBox.Text);
-            var pathKey = GetPathKey(path);
-            if (_fixedPathviewsByPath.TryGetValue(pathKey, out var existingPathview))
-            {
-                SelectPathviewTab(existingPathview);
-                return;
-            }
-
-            SelectTabForNavigation(_browsableTab);
-            _browsablePathview.Navigate(path);
+            ActivatePath(path);
         }
         catch (Exception exception)
         {

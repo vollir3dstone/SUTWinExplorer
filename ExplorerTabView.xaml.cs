@@ -121,10 +121,14 @@ public partial class Pathview : UserControl
     public event EventHandler<string>? LocationChanged;
     public event EventHandler? NavigationFailed;
     public event EventHandler? PinRequested;
-    public event EventHandler? BrowseRequested;
-    public event Action<Pathview, string, bool?, bool?, bool?>? BrowseLocationRequested;
+    public event Action<Pathview, string, bool?, bool?, bool?, bool?>? BrowseLocationRequested;
     public event Action<string, string>? DirectoryRenamed;
 
+    /// <summary>Navigates this Pathview, optionally applying filter settings to the browsable view.</summary>
+    /// <param name="path">The destination path.</param>
+    /// <param name="hideSiblings">The browsable tree setting; null leaves its current value unchanged.</param>
+    /// <param name="hideInternalDirectories">The browsable directory-tree filter; null leaves its current value unchanged.</param>
+    /// <param name="hideInternalContentItems">The browsable content-item filter; null leaves its current value unchanged.</param>
     public void Navigate(
         string path,
         bool? hideSiblings = null,
@@ -548,7 +552,7 @@ public partial class Pathview : UserControl
         if (IsBrowsable)
             PinRequested?.Invoke(this, EventArgs.Empty);
         else
-            BrowseRequested?.Invoke(this, EventArgs.Empty);
+            RequestBrowseLocation(CurrentPath, preferFixedView: false);
     }
 
     private void PaneColorButton_Click(object sender, RoutedEventArgs e) =>
@@ -1458,13 +1462,14 @@ public partial class Pathview : UserControl
     private void ShellBrowserHost_FolderOpenRequested(object? sender, string path) =>
         RequestBrowseLocation(path);
 
-    private void RequestBrowseLocation(string path) =>
+    private void RequestBrowseLocation(string path, bool? preferFixedView = null) =>
         BrowseLocationRequested?.Invoke(
             this,
             path,
             true,
             HideInternalSubfoldersCheckBox.GetCheckBox().IsChecked,
-            HideInternalContentCheckBox.GetCheckBox().IsChecked);
+            HideInternalContentCheckBox.GetCheckBox().IsChecked,
+            preferFixedView);
 
     private void NavigateFromTree(TreeEntry entry)
     {
