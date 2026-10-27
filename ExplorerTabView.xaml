@@ -68,7 +68,19 @@
             </Setter>
         </Style>
         <HierarchicalDataTemplate DataType="{x:Type local:TreeEntry}" ItemsSource="{Binding Children}">
-            <TextBlock Text="{Binding Name}" />
+            <Grid>
+                <TextBlock x:Name="TreeName" Text="{Binding Name}" VerticalAlignment="Center" />
+                <TextBox x:Name="TreeNameEditor" Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}"
+                         Visibility="Collapsed" Padding="1,0" MinWidth="80"
+                         IsVisibleChanged="TreeNameEditor_IsVisibleChanged" KeyDown="TreeNameEditor_KeyDown"
+                         LostKeyboardFocus="TreeNameEditor_LostKeyboardFocus" />
+            </Grid>
+            <HierarchicalDataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                    <Setter TargetName="TreeName" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="TreeNameEditor" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </HierarchicalDataTemplate.Triggers>
         </HierarchicalDataTemplate>
         <Style x:Key="DirectoryTreeItemStyle" TargetType="TreeViewItem">
             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
@@ -265,10 +277,22 @@
                                                                   Content="{Binding}"
                                                                   ContentTemplate="{StaticResource ShellIconTemplate}"
                                                                   VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="1" Text="{Binding Name}" Margin="4,0,2,0"
+                                                <TextBlock x:Name="SubfolderName" Grid.Column="1" Text="{Binding Name}" Margin="4,0,2,0"
                                                            VerticalAlignment="Center" TextWrapping="NoWrap"
                                                            TextTrimming="CharacterEllipsis" />
+                                                <TextBox x:Name="SubfolderNameEditor" Grid.Column="1" Margin="4,0,2,0"
+                                                         Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}"
+                                                         Visibility="Collapsed" Padding="1,0"
+                                                         IsVisibleChanged="TreeNameEditor_IsVisibleChanged"
+                                                         KeyDown="TreeNameEditor_KeyDown"
+                                                         LostKeyboardFocus="TreeNameEditor_LostKeyboardFocus" />
                                             </Grid>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                                    <Setter TargetName="SubfolderName" Property="Visibility" Value="Collapsed" />
+                                                    <Setter TargetName="SubfolderNameEditor" Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
                                         </DataTemplate>
                                     </ListView.ItemTemplate>
                                 </ListView>

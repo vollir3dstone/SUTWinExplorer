@@ -185,6 +185,7 @@ public partial class MainWindow : Window
         view.PinRequested += Pathview_PinRequested;
         view.BrowseRequested += Pathview_BrowseRequested;
         view.BrowseLocationRequested += Pathview_BrowseLocationRequested;
+        view.DirectoryRenamed += Pathview_DirectoryRenamed;
 
         if (view.IsBrowsable)
         {
@@ -223,6 +224,21 @@ public partial class MainWindow : Window
             return;
 
         AddPaneview(view.CurrentPath, isBrowsable: false);
+    }
+
+    private void Pathview_DirectoryRenamed(string oldPath, string newPath)
+    {
+        foreach (var view in _tabsByPathview.Keys.ToArray())
+        {
+            try
+            {
+                view.ApplyDirectoryRename(oldPath, newPath);
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(this, exception.Message, "Cannot update renamed location", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
     }
 
     private void Pathview_BrowseRequested(object? sender, EventArgs e)

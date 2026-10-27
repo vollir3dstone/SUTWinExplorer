@@ -9,6 +9,8 @@ internal static class ShellContextMenu
     private const uint LastCommandId = 0x7FFF;
     private const uint PopupFlags = 0x0100 | 0x0002;
     private const uint MenuFlags = 0;
+    private const uint MenuCanRename = 0x00000010;
+    private const uint GetVerbUnicode = 0x00000004;
     private const uint InvokeUnicode = 0x00004000;
     private const uint ShellViewSelectEdit = 0x0003;
     private const string ShellIdListArrayFormat = "Shell IDList Array";
@@ -133,11 +135,11 @@ internal static class ShellContextMenu
         }
     }
 
-    public static void Show(string path, IntPtr owner) => ShowCore(path, owner, background: false);
+    public static void Show(string path, IntPtr owner, Action? rename = null) => ShowCore(path, owner, background: false, rename);
 
-    public static void ShowBackground(string folderPath, IntPtr owner) => ShowCore(folderPath, owner, background: true);
+    public static void ShowBackground(string folderPath, IntPtr owner) => ShowCore(folderPath, owner, background: true, rename: null);
 
-    private static void ShowCore(string path, IntPtr owner, bool background)
+    private static void ShowCore(string path, IntPtr owner, bool background, Action? rename)
     {
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
             throw new InvalidOperationException("The Windows Shell context menu must be opened from an STA thread.");
@@ -183,7 +185,8 @@ internal static class ShellContextMenu
             if (menu == IntPtr.Zero)
                 throw new InvalidOperationException("CreatePopupMenu failed.");
 
-            Marshal.ThrowExceptionForHR(contextMenu.QueryContextMenu(menu, 0, FirstCommandId, LastCommandId, MenuFlags));
+            Marshal.ThrowExceptionForHR(contextMenu.QueryContextMenu(menu, 0, FirstCommandId, LastCommandId,
+                rename is null ? MenuFlags : MenuFlags | MenuCanRename));
             InstallMenuMessageForwarder(owner, contextMenu, out subclassProc);
             subclassInstalled = true;
 
@@ -194,6 +197,12 @@ internal static class ShellContextMenu
 
             if (commandId != 0)
             {
+                if (rename is not null && IsRenameCommand(contextMenu, commandId - FirstCommandId))
+                {
+                    rename();
+                    return;
+                }
+
                 var invokeInfo = new CMINVOKECOMMANDINFOEX
                 {
                     Size = (uint)Marshal.SizeOf<CMINVOKECOMMANDINFOEX>(),
@@ -226,6 +235,61 @@ internal static class ShellContextMenu
                 Marshal.FreeCoTaskMem(childPidlArray);
             if (absolutePidl != IntPtr.Zero)
                 Marshal.FreeCoTaskMem(absolutePidl);
+        }
+    }
+
+    private static bool IsRenameCommand(IContextMenu contextMenu, uint commandOffset)
+    {
+        var buffer = Marshal.AllocHGlobal(256 * sizeof(char));
+        try
+        {
+            Marshal.WriteInt16(buffer, 0);
+            return contextMenu.GetCommandString((UIntPtr)commandOffset, GetVerbUnicode, IntPtr.Zero, buffer, 256) >= 0 &&
+                   string.Equals(Marshal.PtrToStringUni(buffer), "rename", StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    internal static string Rename(string path, string name, IntPtr owner)
+    {
+        IntPtr absolutePidl = IntPtr.Zero;
+        IntPtr renamedPidl = IntPtr.Zero;
+        IntPtr renamedAbsolutePidl = IntPtr.Zero;
+        IntPtr namePointer = IntPtr.Zero;
+        IntPtr resultPointer = IntPtr.Zero;
+        IShellFolder? desktop = null;
+        IShellFolder? parent = null;
+        try
+        {
+            Marshal.ThrowExceptionForHR(SHGetDesktopFolder(out desktop));
+            uint attributes = 0;
+            Marshal.ThrowExceptionForHR(desktop.ParseDisplayName(owner, IntPtr.Zero, path, out _, out absolutePidl, ref attributes));
+            var folderId = typeof(IShellFolder).GUID;
+            Marshal.ThrowExceptionForHR(SHBindToParent(absolutePidl, ref folderId, out parent, out var childPidl));
+            namePointer = Marshal.StringToCoTaskMemUni(name);
+            Marshal.ThrowExceptionForHR(parent.SetNameOf(owner, childPidl, namePointer, 1, out renamedPidl));
+            if (renamedPidl == IntPtr.Zero)
+                throw new InvalidOperationException("The Shell did not return the renamed folder.");
+            if (!ILRemoveLastID(absolutePidl))
+                throw new InvalidOperationException("Could not resolve the renamed folder's parent.");
+            renamedAbsolutePidl = ILCombine(absolutePidl, renamedPidl);
+            if (renamedAbsolutePidl == IntPtr.Zero)
+                throw new InvalidOperationException("Could not resolve the renamed folder.");
+            Marshal.ThrowExceptionForHR(SHGetNameFromIDList(renamedAbsolutePidl, 0x80058000, out resultPointer));
+            return Marshal.PtrToStringUni(resultPointer) ?? throw new InvalidOperationException("The renamed folder has no filesystem path.");
+        }
+        finally
+        {
+            if (resultPointer != IntPtr.Zero) Marshal.FreeCoTaskMem(resultPointer);
+            if (namePointer != IntPtr.Zero) Marshal.FreeCoTaskMem(namePointer);
+            if (renamedAbsolutePidl != IntPtr.Zero) Marshal.FreeCoTaskMem(renamedAbsolutePidl);
+            if (renamedPidl != IntPtr.Zero) Marshal.FreeCoTaskMem(renamedPidl);
+            if (absolutePidl != IntPtr.Zero) Marshal.FreeCoTaskMem(absolutePidl);
+            if (parent is not null && Marshal.IsComObject(parent)) _ = Marshal.ReleaseComObject(parent);
+            if (desktop is not null && Marshal.IsComObject(desktop)) _ = Marshal.ReleaseComObject(desktop);
         }
     }
 
@@ -274,6 +338,16 @@ internal static class ShellContextMenu
 
     [DllImport("shell32.dll", PreserveSig = true)]
     private static extern int SHBindToParent(IntPtr itemIdList, ref Guid interfaceId, out IShellFolder parent, out IntPtr childItemIdList);
+
+    [DllImport("shell32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ILRemoveLastID(IntPtr itemIdList);
+
+    [DllImport("shell32.dll")]
+    private static extern IntPtr ILCombine(IntPtr parent, IntPtr child);
+
+    [DllImport("shell32.dll", PreserveSig = true)]
+    private static extern int SHGetNameFromIDList(IntPtr itemIdList, uint nameType, out IntPtr name);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr CreatePopupMenu();

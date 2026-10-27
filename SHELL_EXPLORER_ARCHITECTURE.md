@@ -675,6 +675,12 @@ clipboard context-menu verbs, and drag/drop. The app still uses
 trees. That helper queries native Shell context menus and forwards required
 `IContextMenu2`/`IContextMenu3` menu messages.
 
+For tree and **Sub directories** items, the helper requests `CMF_CANRENAME` and
+dispatches the Shell's rename command to a WPF inline editor; committing calls
+the parent Shell folder's `SetNameOf`. Open Pathviews remap affected locations
+and history to the returned filesystem path. The virtual **This PC** tree root
+has no rename editor.
+
 The ExplorerBrowser spike verified context-menu New, context-menu Copy/Paste,
 Paste shortcut, clipboard interoperability with Windows Explorer, and
 right-button drag/drop. Its initial Ctrl+C/Ctrl+V keyboard test failed. The

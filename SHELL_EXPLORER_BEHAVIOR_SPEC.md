@@ -236,12 +236,15 @@ may show its requested row in light gray without changing the active selection.
 - [x] Right-clicking a file/folder shows its native Windows Shell context menu.
 - [x] Right-clicking empty content space shows the active folder's native
   background menu.
-- [x] Tree folders show their native Shell context menu.
+- [x] Tree folders show their native Shell context menu. Where the Shell permits
+  renaming, **Rename** starts an inline editor in the tree; Enter commits and
+  Escape cancels. Renamed active paths and open tabs are updated.
 - [x] In a fixed Pathview's **Sub directories** list, right-clicking a folder
   shows its native Shell context menu; right-clicking empty list space shows
   the active folder's native background menu. The Apps key and Shift+F10 show
   the selected folder's menu or, when no folder is selected, the background
-  menu.
+  menu. Where the Shell permits renaming, **Rename** starts an inline editor
+  in the list; Enter commits and Escape cancels.
 - [x] The native menu can execute common commands, including Properties,
   background New, context-menu Copy/Paste, and Paste shortcut as verified in
   the spike.

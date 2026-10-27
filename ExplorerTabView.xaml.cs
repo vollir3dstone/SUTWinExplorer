@@ -54,6 +54,7 @@ public partial class Pathview : UserControl
     private ShellExplorerBrowserHost? _shellBrowserHost;
     private bool _suppressTreeBringIntoView;
     private TreeEntry? _pendingTreeNavigationEntry;
+    private TreeEntry? _editingTreeEntry;
     private string? _pendingNavigationPath;
     private NavigationHistoryAction _pendingNavigationHistoryAction;
     private bool _fileSystemStateDirty = true;
@@ -119,6 +120,7 @@ public partial class Pathview : UserControl
     public event EventHandler? PinRequested;
     public event EventHandler? BrowseRequested;
     public event EventHandler<string>? BrowseLocationRequested;
+    public event Action<string, string>? DirectoryRenamed;
 
     public void Navigate(string path) => Navigate(path, NavigationHistoryAction.Normal);
 
@@ -135,6 +137,47 @@ public partial class Pathview : UserControl
             return;
 
         UpdateHistory(path, NavigationHistoryAction.Normal);
+    }
+
+    internal void ApplyDirectoryRename(string oldPath, string newPath)
+    {
+        foreach (var drive in _driveRoots)
+            drive.RefreshDisplayName();
+        _fileSystemStateDirty = true;
+        ScheduleFileSystemRefreshIfVisible();
+        RemapHistory(_backHistory, oldPath, newPath);
+        RemapHistory(_forwardHistory, oldPath, newPath);
+        _historyCurrentPath = RemapPath(_historyCurrentPath, oldPath, newPath);
+        var updatedPath = RemapPath(CurrentPath, oldPath, newPath);
+        if (string.Equals(updatedPath, CurrentPath, StringComparison.Ordinal))
+            return;
+
+        if (string.Equals(updatedPath, CurrentPath, StringComparison.OrdinalIgnoreCase))
+            CommitNavigation(updatedPath, NavigationHistoryAction.None);
+        else
+            Navigate(updatedPath, NavigationHistoryAction.None);
+    }
+
+    private static void RemapHistory(Stack<string> history, string oldPath, string newPath)
+    {
+        var paths = history.ToArray();
+        history.Clear();
+        for (var index = paths.Length - 1; index >= 0; index--)
+            history.Push(RemapPath(paths[index], oldPath, newPath));
+    }
+
+    private static string RemapPath(string path, string oldPath, string newPath)
+    {
+        if (string.IsNullOrEmpty(path) || IsTopPath(path))
+            return path;
+
+        var relative = Path.GetRelativePath(oldPath, path);
+        if (relative == ".")
+            return newPath;
+        if (Path.IsPathRooted(relative) || relative == ".." ||
+            relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            return path;
+        return Path.Combine(newPath, relative);
     }
 
     public void GoBack()
@@ -727,7 +770,7 @@ public partial class Pathview : UserControl
     private void FileSystemRefreshTimer_Tick(object? sender, EventArgs e)
     {
         _fileSystemRefreshTimer.Stop();
-        if (!IsLoaded || !IsVisible)
+        if (!IsLoaded || !IsVisible || _editingTreeEntry is not null)
             return;
 
         var refreshShellView = _shellViewNeedsRefresh;
@@ -1202,7 +1245,7 @@ public partial class Pathview : UserControl
         if (FindAncestor<ListViewItem>(source) is { DataContext: TreeEntry entry } && !entry.IsPlaceholder)
         {
             ActivePathSubfoldersList.SelectedItem = entry;
-            ShowNativeMenu(entry.Path);
+            ShowNativeMenu(entry.Path, () => BeginTreeRename(entry));
             e.Handled = true;
             return;
         }
@@ -1217,11 +1260,12 @@ public partial class Pathview : UserControl
 
     private void ActivePathSubfoldersList_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Apps && !(e.Key == Key.F10 && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)))
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key != Key.Apps && !(key == Key.F10 && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)))
             return;
 
         if (ActivePathSubfoldersList.SelectedItem is TreeEntry entry && !entry.IsPlaceholder)
-            ShowNativeMenu(entry.Path);
+            ShowNativeMenu(entry.Path, () => BeginTreeRename(entry));
         else
             ShowNativeBackgroundMenu();
 
@@ -1230,6 +1274,9 @@ public partial class Pathview : UserControl
 
     private void ActivePathSubfoldersList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        if (FindAncestor<TextBox>(e.OriginalSource as DependencyObject) is not null)
+            return;
+
         if (FindAncestor<ListViewItem>(e.OriginalSource as DependencyObject) is
             { DataContext: TreeEntry { IsPlaceholder: false } entry })
             BrowseLocationRequested?.Invoke(this, entry.Path);
@@ -1264,12 +1311,15 @@ public partial class Pathview : UserControl
             return;
 
         entry.IsSelected = true;
-        ShowNativeMenu(entry.Path);
+        ShowNativeMenu(entry.Path, !entry.IsTop ? () => BeginTreeRename(entry) : null);
         e.Handled = true;
     }
 
     private void Tree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (FindAncestor<TextBox>(e.OriginalSource as DependencyObject) is not null)
+            return;
+
         if (!IsBrowsable || sender is not TreeView tree ||
             FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { DataContext: TreeEntry entry } ||
             entry.IsPlaceholder || FindAncestor<ToggleButton>(e.OriginalSource as DependencyObject) is not null)
@@ -1304,6 +1354,9 @@ public partial class Pathview : UserControl
 
     private void Tree_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        if (FindAncestor<TextBox>(e.OriginalSource as DependencyObject) is not null)
+            return;
+
         if (!IsBrowsable && ReferenceEquals(sender, ActivePathTree))
         {
             if (FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is
@@ -1402,12 +1455,93 @@ public partial class Pathview : UserControl
             RestoreTreeSelection(child);
     }
 
-    private void ShowNativeMenu(string path)
+    private void BeginTreeRename(TreeEntry entry)
+    {
+        if (_editingTreeEntry is not null)
+            EndTreeRename(commit: false);
+
+        var editName = GetTreeEditName(entry.Path);
+        _editingTreeEntry = entry;
+        entry.EditName = editName;
+        entry.IsEditing = true;
+    }
+
+    private static string GetTreeEditName(string path)
+    {
+        var root = Path.GetPathRoot(path);
+        return root is not null && string.Equals(Path.TrimEndingDirectorySeparator(path),
+            Path.TrimEndingDirectorySeparator(root), StringComparison.OrdinalIgnoreCase)
+            ? new DriveInfo(root).VolumeLabel
+            : Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
+    }
+
+    private void TreeNameEditor_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (sender is TextBox { IsVisible: true } editor)
+        {
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+            {
+                if (editor.IsVisible)
+                {
+                    editor.Focus();
+                    editor.SelectAll();
+                }
+            }));
+        }
+    }
+
+    private void TreeNameEditor_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter || e.Key == Key.Escape)
+        {
+            EndTreeRename(commit: e.Key == Key.Enter);
+            e.Handled = true;
+        }
+    }
+
+    private void TreeNameEditor_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is TextBox { DataContext: TreeEntry entry } && ReferenceEquals(entry, _editingTreeEntry))
+            EndTreeRename(commit: true);
+    }
+
+    private void EndTreeRename(bool commit)
+    {
+        if (_editingTreeEntry is not { } entry)
+            return;
+
+        _editingTreeEntry = null;
+        entry.IsEditing = false;
+        try
+        {
+            if (commit && !string.Equals(entry.EditName, GetTreeEditName(entry.Path), StringComparison.Ordinal))
+            {
+                if (string.IsNullOrWhiteSpace(entry.EditName) || entry.EditName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
+                    entry.EditName is "." or "..")
+                    throw new ArgumentException("Enter a valid folder name.");
+
+                var owner = new WindowInteropHelper(Window.GetWindow(this)!).Handle;
+                var newPath = ShellContextMenu.Rename(entry.Path, entry.EditName, owner);
+                DirectoryRenamed?.Invoke(entry.Path, newPath);
+            }
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot rename folder", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            _fileSystemStateDirty = true;
+            ScheduleFileSystemRefreshIfVisible();
+        }
+    }
+
+    private void ShowNativeMenu(string path, Action? rename = null)
     {
         try
         {
             var owner = new WindowInteropHelper(Window.GetWindow(this)!).Handle;
-            ShellContextMenu.Show(path, owner);
+            ShellContextMenu.Show(path, owner, rename);
         }
         catch (Exception exception)
         {
@@ -1461,6 +1595,8 @@ public sealed class TreeEntry : INotifyPropertyChanged
     private bool _isSelected;
     private bool _isNavigationPending;
     private bool _hasSubdirectories;
+    private bool _isEditing;
+    private string _editName = string.Empty;
 
     private TreeEntry(string name, string path, bool isPlaceholder, bool isTop = false)
     {
@@ -1480,6 +1616,22 @@ public sealed class TreeEntry : INotifyPropertyChanged
     public bool IsPlaceholder { get; }
     public bool IsTop { get; }
     public bool IsLoaded { get; set; }
+    public bool IsEditing
+    {
+        get => _isEditing;
+        set => SetField(ref _isEditing, value);
+    }
+    public string EditName
+    {
+        get => _editName;
+        set
+        {
+            if (_editName == value)
+                return;
+            _editName = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(EditName)));
+        }
+    }
     public bool HasSubdirectories
     {
         get => _hasSubdirectories;
