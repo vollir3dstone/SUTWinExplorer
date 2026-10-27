@@ -17,6 +17,10 @@ namespace SUTWinExplorer;
 public partial class Pathview : UserControl
 {
     public const double DirectoryTreeRowHeight = 24;
+    internal const string TopPath = "::{20D04FE0-3AEA-1069-A2D8-08002B30309D}";
+    internal static bool IsTopPath(string? path) =>
+        string.Equals(path, TopPath, StringComparison.OrdinalIgnoreCase);
+
     public static readonly DependencyProperty PaneBackgroundProperty =
         DependencyProperty.Register(
             nameof(PaneBackground),
@@ -53,6 +57,7 @@ public partial class Pathview : UserControl
     private NavigationHistoryAction _pendingNavigationHistoryAction;
     private bool _fileSystemStateDirty = true;
     private bool _shellViewNeedsRefresh = true;
+    private readonly List<TreeEntry> _driveRoots = [];
 
     public Pathview(string initialPath, bool isBrowsable)
     {
@@ -134,6 +139,9 @@ public partial class Pathview : UserControl
 
     public void GoUp()
     {
+        if (IsTopPath(CurrentPath))
+            return;
+
         var parent = Directory.GetParent(CurrentPath)?.FullName;
         if (parent is not null)
             Navigate(parent);
@@ -144,7 +152,8 @@ public partial class Pathview : UserControl
         if (!IsBrowsable && historyAction != NavigationHistoryAction.None)
             return;
 
-        var fullPath = Path.GetFullPath(Environment.ExpandEnvironmentVariables(path.Trim().Trim('"')));
+        var trimmedPath = Environment.ExpandEnvironmentVariables(path.Trim().Trim('"'));
+        var fullPath = IsTopPath(trimmedPath) ? TopPath : Path.GetFullPath(trimmedPath);
         if (_pendingTreeNavigationEntry is { } pendingEntry &&
             !string.Equals(pendingEntry.Path, fullPath, StringComparison.OrdinalIgnoreCase))
         {
@@ -551,8 +560,18 @@ public partial class Pathview : UserControl
         if (ActivePathAndSiblingsTree.ItemsSource is not ObservableCollection<TreeEntry> roots)
             return;
 
+        if (IsTopPath(CurrentPath))
+        {
+            RefreshActivePathAndSiblingsTree();
+            return;
+        }
+
+        var top = roots.FirstOrDefault(root => root.IsTop);
+        if (top is null)
+            return;
+
         var rootPath = Path.GetPathRoot(CurrentPath);
-        var active = roots.FirstOrDefault(root => string.Equals(root.Path, rootPath, StringComparison.OrdinalIgnoreCase));
+        var active = top.Children.FirstOrDefault(root => string.Equals(root.Path, rootPath, StringComparison.OrdinalIgnoreCase));
         if (active is null)
             return;
 
@@ -588,6 +607,17 @@ public partial class Pathview : UserControl
             RefreshLoadedTree(root);
     }
 
+    private void HideSiblingsCheckBox_StateChanged(object sender, RoutedEventArgs e)
+    {
+        if (ActivePathAndSiblingsTree.ItemsSource is not ObservableCollection<TreeEntry> roots)
+            return;
+
+        RefreshActivePathAndSiblingsTree();
+        foreach (var root in roots)
+            RefreshLoadedTree(root);
+        RefreshActivePathAndSiblingsTree();
+    }
+
     private void HideInternalSubfoldersCheckBox_StateChanged(object sender, RoutedEventArgs e)
     {
         if (!IsBrowsable)
@@ -596,10 +626,12 @@ public partial class Pathview : UserControl
 
     private void RefreshLoadedTree(TreeEntry entry)
     {
-        if (entry.IsPlaceholder || !entry.IsLoaded)
+        if (entry.IsPlaceholder)
             return;
 
-        RefreshTreeChildren(entry);
+        if (!entry.IsTop && entry.IsLoaded)
+            RefreshTreeChildren(entry);
+
         foreach (var child in entry.Children.Where(child => !child.IsPlaceholder).ToArray())
             RefreshLoadedTree(child);
     }
@@ -677,6 +709,18 @@ public partial class Pathview : UserControl
 
     private void RefreshShellStatusCount()
     {
+        if (IsTopPath(CurrentPath))
+        {
+            var count = HideDirectoriesCheckBox.GetCheckBox().IsChecked == true
+                ? 0
+                : DriveInfo.GetDrives().Count(drive =>
+                    InternalItemFilter.MatchesName(drive.Name.TrimEnd(Path.DirectorySeparatorChar), NamePatternTextBox.Text) &&
+                    (HideInternalContentCheckBox.GetCheckBox().IsChecked != true ||
+                     !InternalItemFilter.IsInternal(drive.RootDirectory.FullName, true)));
+            StatusLabel.Text = $"{count} items";
+            return;
+        }
+
         try
         {
             var count = Directory.EnumerateFiles(CurrentPath)
@@ -697,7 +741,7 @@ public partial class Pathview : UserControl
 
     private void ShellBrowserHost_NavigationCompleted(object? sender, string path)
     {
-        var fullPath = Path.GetFullPath(path);
+        var fullPath = IsTopPath(path) ? TopPath : Path.GetFullPath(path);
         if (_pendingTreeNavigationEntry is { } pendingEntry &&
             string.Equals(pendingEntry.Path, fullPath, StringComparison.OrdinalIgnoreCase))
         {
@@ -776,15 +820,18 @@ public partial class Pathview : UserControl
 
     private void InitializeActivePathAndSiblingsTree()
     {
-        var drives = new ObservableCollection<TreeEntry>();
+        var top = TreeEntry.Top();
+        top.IsExpanded = true;
         foreach (var drive in DriveInfo.GetDrives())
         {
             var root = new TreeEntry(drive.Name, drive.RootDirectory.FullName);
             AddPlaceholder(root);
-            drives.Add(root);
+            top.Children.Add(root);
+            _driveRoots.Add(root);
         }
 
-        ActivePathAndSiblingsTree.ItemsSource = drives;
+        top.HasSubdirectories = top.Children.Count > 0;
+        ActivePathAndSiblingsTree.ItemsSource = new ObservableCollection<TreeEntry> { top };
     }
 
     private void RefreshActivePathTree()
@@ -821,20 +868,50 @@ public partial class Pathview : UserControl
         if (ActivePathAndSiblingsTree.ItemsSource is not ObservableCollection<TreeEntry> roots)
             return;
 
-        foreach (var root in roots)
-            CollapseLoadedNodes(root);
+        var top = roots.FirstOrDefault(root => root.IsTop);
+        if (top is null)
+            return;
 
-        var rootPath = Path.GetPathRoot(CurrentPath);
-        var active = roots.FirstOrDefault(root => string.Equals(root.Path, rootPath, StringComparison.OrdinalIgnoreCase));
+        var isTopPath = IsTopPath(CurrentPath);
+        var rootPath = isTopPath ? null : Path.GetPathRoot(CurrentPath);
+        if (!isTopPath && string.IsNullOrEmpty(rootPath))
+            return;
+
+        foreach (var driveRoot in _driveRoots)
+            CollapseLoadedNodes(driveRoot);
+
+        var visibleRoots = _driveRoots.Where(root =>
+            isTopPath || HideSiblingsCheckBox.IsChecked != true ||
+            string.Equals(root.Path, rootPath, StringComparison.OrdinalIgnoreCase)).ToArray();
+        for (var index = 0; index < visibleRoots.Length; index++)
+        {
+            var root = visibleRoots[index];
+            var currentIndex = top.Children.IndexOf(root);
+            if (currentIndex < 0)
+                top.Children.Insert(index, root);
+            else if (currentIndex != index)
+                top.Children.Move(currentIndex, index);
+        }
+
+        while (top.Children.Count > visibleRoots.Length)
+            top.Children.RemoveAt(top.Children.Count - 1);
+        top.HasSubdirectories = top.Children.Count > 0;
+        top.IsExpanded = true;
+        top.IsSelected = isTopPath;
+
+        if (isTopPath)
+            return;
+
+        var active = top.Children.FirstOrDefault(root => string.Equals(root.Path, rootPath, StringComparison.OrdinalIgnoreCase));
         if (active is null)
             return;
 
         var segments = GetPathSegments(rootPath!, CurrentPath);
-        var route = new List<TreeEntry> { active };
+        var route = new List<TreeEntry> { top, active };
 
         foreach (var segment in segments)
         {
-            LoadChildren(active);
+            RefreshTreeChildren(active);
             var childPath = Path.Combine(active.Path, segment);
             var child = active.Children.FirstOrDefault(candidate =>
                 !candidate.IsPlaceholder && string.Equals(candidate.Path, childPath, StringComparison.OrdinalIgnoreCase));
@@ -844,7 +921,7 @@ public partial class Pathview : UserControl
             route.Add(active);
         }
 
-        LoadChildren(active);
+        RefreshTreeChildren(active);
         active.IsSelected = true;
         foreach (var routeEntry in route)
             routeEntry.IsExpanded = true;
@@ -932,7 +1009,7 @@ public partial class Pathview : UserControl
 
     private void RefreshTreeChildren(TreeEntry entry, bool useSubfolderFilter = false)
     {
-        if (entry.IsPlaceholder)
+        if (entry.IsPlaceholder || entry.IsTop)
             return;
 
         try
@@ -940,9 +1017,11 @@ public partial class Pathview : UserControl
             var directories = Directory.EnumerateDirectories(entry.Path).ToArray();
             entry.HasSubdirectories = directories.Length > 0;
             directories = directories
-                .Where(directory => !(useSubfolderFilter
-                    ? ShouldHideSubfolderDirectory(directory)
-                    : ShouldHideTreeDirectory(directory)))
+                .Where(directory =>
+                    !(useSubfolderFilter
+                        ? ShouldHideSubfolderDirectory(directory)
+                        : ShouldHideTreeDirectory(directory)) &&
+                    (useSubfolderFilter || !ShouldHideSiblingDirectory(entry, directory)))
                 .ToArray();
             var existingChildren = entry.Children
                 .Where(child => !child.IsPlaceholder)
@@ -995,6 +1074,29 @@ public partial class Pathview : UserControl
         return HideInternalCheckBox.IsChecked == true &&
                !IsOnCurrentPath(directoryPath) &&
                InternalItemFilter.IsInternal(directoryPath, true);
+    }
+
+    private bool ShouldHideSiblingDirectory(TreeEntry parent, string directoryPath)
+    {
+        return HideSiblingsCheckBox.IsChecked == true &&
+               !string.Equals(parent.Path, CurrentPath, StringComparison.OrdinalIgnoreCase) &&
+               !IsActivePathChild(parent.Path, directoryPath);
+    }
+
+    private bool IsActivePathChild(string parentPath, string directoryPath)
+    {
+        try
+        {
+            var relativePath = Path.GetRelativePath(parentPath, directoryPath);
+            return !Path.IsPathRooted(relativePath) &&
+                   relativePath != "." &&
+                   !relativePath.Contains(Path.DirectorySeparatorChar) &&
+                   IsOnCurrentPath(directoryPath);
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or NotSupportedException)
+        {
+            return false;
+        }
     }
 
     private bool ShouldHideSubfolderDirectory(string directoryPath)
@@ -1321,13 +1423,14 @@ public sealed class TreeEntry : INotifyPropertyChanged
     private bool _isNavigationPending;
     private bool _hasSubdirectories;
 
-    private TreeEntry(string name, string path, bool isPlaceholder)
+    private TreeEntry(string name, string path, bool isPlaceholder, bool isTop = false)
     {
         Name = isPlaceholder ? name : ShellDisplayNameProvider.GetDisplayName(path) ?? name;
         Path = path;
         IsPlaceholder = isPlaceholder;
-        IsLoaded = isPlaceholder;
-        _hasSubdirectories = !isPlaceholder && ContainsSubdirectories(path);
+        IsTop = isTop;
+        IsLoaded = isPlaceholder || isTop;
+        _hasSubdirectories = isTop || (!isPlaceholder && ContainsSubdirectories(path));
         Icons = isPlaceholder ? null : ShellIconProvider.GetSmallIcons(path);
     }
 
@@ -1336,6 +1439,7 @@ public sealed class TreeEntry : INotifyPropertyChanged
     public string Name { get; private set; }
     public string Path { get; }
     public bool IsPlaceholder { get; }
+    public bool IsTop { get; }
     public bool IsLoaded { get; set; }
     public bool HasSubdirectories
     {
@@ -1362,6 +1466,7 @@ public sealed class TreeEntry : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public static TreeEntry Placeholder() => new("Loading", string.Empty, true);
+    public static TreeEntry Top() => new(string.Empty, Pathview.TopPath, false, true);
 
     private static bool ContainsSubdirectories(string path)
     {
@@ -1441,6 +1546,9 @@ internal static class ShellDisplayNameProvider
         if (string.IsNullOrWhiteSpace(path))
             return path;
 
+        if (Pathview.IsTopPath(path))
+            return "This PC";
+
         var fullPath = Path.GetFullPath(path);
         var rootPath = Path.GetPathRoot(fullPath);
         if (string.IsNullOrEmpty(rootPath))
@@ -1460,7 +1568,14 @@ internal static class ShellDisplayNameProvider
 
     public static string ResolvePath(string input)
     {
-        var fullPath = Path.GetFullPath(Environment.ExpandEnvironmentVariables(input.Trim().Trim('\"')));
+        var expandedInput = Environment.ExpandEnvironmentVariables(input.Trim().Trim('"'));
+        if (Pathview.IsTopPath(expandedInput) ||
+            string.Equals(expandedInput, "This PC", StringComparison.OrdinalIgnoreCase))
+        {
+            return Pathview.TopPath;
+        }
+
+        var fullPath = Path.GetFullPath(expandedInput);
         if (Directory.Exists(fullPath))
             return fullPath;
 
@@ -1531,6 +1646,7 @@ internal static class ShellIconProvider
     private const uint Icon = 0x00000100;
     private const uint SmallIcon = 0x00000001;
     private const uint SystemImageList = 0x00004000;
+    private const uint Pidl = 0x00000008;
     private const uint OverlayIndex = 0x00000040;
     private const uint AddOverlays = 0x00000020;
     private const uint DrawTransparent = 0x00000001;
@@ -1538,32 +1654,54 @@ internal static class ShellIconProvider
 
     public static ShellIconSet? GetSmallIcons(string path)
     {
-        var baseInfo = new ShellFileInfo();
-        if (SHGetFileInfo(path, 0, ref baseInfo, (uint)Marshal.SizeOf<ShellFileInfo>(), SystemImageList | SmallIcon) == IntPtr.Zero)
+        var isTopPath = Pathview.IsTopPath(path);
+        IntPtr itemIdList = IntPtr.Zero;
+        if (isTopPath &&
+            (SHParseDisplayName(path, IntPtr.Zero, out itemIdList, 0, out _) < 0 || itemIdList == IntPtr.Zero))
+        {
             return null;
+        }
 
-        var overlayInfo = new ShellFileInfo();
-        _ = SHGetFileInfo(path, 0, ref overlayInfo, (uint)Marshal.SizeOf<ShellFileInfo>(), Icon | SmallIcon | OverlayIndex | AddOverlays);
-        var overlaySlot = (int)(unchecked((uint)overlayInfo.IconIndex) >> 24);
-        if (overlayInfo.IconHandle != IntPtr.Zero)
-            _ = DestroyIcon(overlayInfo.IconHandle);
-
-        IImageList? imageList = null;
         try
         {
-            var interfaceId = typeof(IImageList).GUID;
-            Marshal.ThrowExceptionForHR(SHGetImageList(SmallShellImageList, ref interfaceId, out imageList));
-            var baseIcon = GetImage(imageList, baseInfo.IconIndex);
-            ImageSource? overlayIcon = null;
-            if (overlaySlot > 0 && imageList.GetOverlayImage(overlaySlot, out var overlayImageIndex) >= 0)
-                overlayIcon = GetImage(imageList, overlayImageIndex);
+            var baseInfo = new ShellFileInfo();
+            var baseInfoResult = isTopPath
+                ? SHGetFileInfo(itemIdList, 0, ref baseInfo, (uint)Marshal.SizeOf<ShellFileInfo>(), SystemImageList | SmallIcon | Pidl)
+                : SHGetFileInfo(path, 0, ref baseInfo, (uint)Marshal.SizeOf<ShellFileInfo>(), SystemImageList | SmallIcon);
+            if (baseInfoResult == IntPtr.Zero)
+                return null;
 
-            return new ShellIconSet(baseIcon, overlayIcon, GetOpacity(path));
+            var overlayInfo = new ShellFileInfo();
+            if (isTopPath)
+                _ = SHGetFileInfo(itemIdList, 0, ref overlayInfo, (uint)Marshal.SizeOf<ShellFileInfo>(), Icon | SmallIcon | OverlayIndex | AddOverlays | Pidl);
+            else
+                _ = SHGetFileInfo(path, 0, ref overlayInfo, (uint)Marshal.SizeOf<ShellFileInfo>(), Icon | SmallIcon | OverlayIndex | AddOverlays);
+            var overlaySlot = (int)(unchecked((uint)overlayInfo.IconIndex) >> 24);
+            if (overlayInfo.IconHandle != IntPtr.Zero)
+                _ = DestroyIcon(overlayInfo.IconHandle);
+
+            IImageList? imageList = null;
+            try
+            {
+                var interfaceId = typeof(IImageList).GUID;
+                Marshal.ThrowExceptionForHR(SHGetImageList(SmallShellImageList, ref interfaceId, out imageList));
+                var baseIcon = GetImage(imageList, baseInfo.IconIndex);
+                ImageSource? overlayIcon = null;
+                if (overlaySlot > 0 && imageList.GetOverlayImage(overlaySlot, out var overlayImageIndex) >= 0)
+                    overlayIcon = GetImage(imageList, overlayImageIndex);
+
+                return new ShellIconSet(baseIcon, overlayIcon, GetOpacity(path));
+            }
+            finally
+            {
+                if (imageList is not null && Marshal.IsComObject(imageList))
+                    _ = Marshal.FinalReleaseComObject(imageList);
+            }
         }
         finally
         {
-            if (imageList is not null && Marshal.IsComObject(imageList))
-                _ = Marshal.FinalReleaseComObject(imageList);
+            if (itemIdList != IntPtr.Zero)
+                Marshal.FreeCoTaskMem(itemIdList);
         }
     }
 
@@ -1600,6 +1738,12 @@ internal static class ShellIconProvider
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr SHGetFileInfo(string path, uint fileAttributes, ref ShellFileInfo fileInfo, uint fileInfoSize, uint flags);
+
+    [DllImport("shell32.dll", EntryPoint = "SHGetFileInfoW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr SHGetFileInfo(IntPtr itemIdList, uint fileAttributes, ref ShellFileInfo fileInfo, uint fileInfoSize, uint flags);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
+    private static extern int SHParseDisplayName(string name, IntPtr bindContext, out IntPtr itemIdList, uint attributesIn, out uint attributesOut);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool DestroyIcon(IntPtr iconHandle);

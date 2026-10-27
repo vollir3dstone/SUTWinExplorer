@@ -100,6 +100,19 @@ may show its requested row in light gray without changing the active selection.
   **Hide internal** setting.
 - [x] **Active path and siblings** shows the active route and each route node's
   immediate child directories. Off-route branches remain collapsed.
+- [x] The browsable **Active path and siblings** tree has a single **Top** root
+  whose immediate children are the available drives. Its displayed name is
+  the localized Shell name for **This PC**, with its Shell icon. Selecting it
+  navigates to that Shell location and makes **Top** the active path. When a
+  filesystem path expression is shown, omit **This PC** as a path component;
+  for example, the path remains `C:\Benutzer\Volker`, not
+  `This PC\C:\Benutzer\Volker`.
+- [x] The browsable **Active path and siblings** tree has a default-off
+  **Hide siblings** checkbox before **Hide internal**. When enabled, only the
+  active drive is shown under **Top**; along the route, each directory shows only the next
+  directory on the active path, while the active directory shows all of its
+  immediate subdirectories. **Hide internal** continues to filter those
+  displayed directories independently.
 - [x] Tree sibling lists and the fixed **Active path** subfolder list are sorted
   lexicographically by Shell-localized display name. The Shell content view
   retains its configured sort column and direction.
@@ -302,13 +315,20 @@ may show its requested row in light gray without changing the active selection.
   directory is hidden only when listing its contents is denied. Verify normal
   junctions remain visible, the active route remains visible, and the content
   view is unchanged.
-9. Toggle the content pane's **Hide internal** independently of the tree
+9. In the browsable Pathview, toggle **Hide siblings**. Verify that only the
+  active drive remains visible, only the active route is shown before the
+  current directory, and all immediate subdirectories of the current directory
+  remain visible. At a drive root, verify all of that drive's directories are
+  shown and other drives are hidden. Turn the option off and verify the full
+  drive list and sibling branches return. Verify **Hide internal** continues
+  to filter directories independently.
+10. Toggle the content pane's **Hide internal** independently of the tree
   checkbox. Verify dot-prefixed and dollar-prefixed files and directories are
   hidden, System files disappear only when reading them is denied, and System
   directories disappear only when listing them is denied. Verify normal
   junctions remain visible and **Hide directories** still controls directory
   visibility independently.
-10. Enter patterns such as `*.txt`, `file?.dat`, and `*.*`. Verify matching is
+11. Enter patterns such as `*.txt`, `file?.dat`, and `*.*`. Verify matching is
   case-insensitive, `?` matches exactly one character, `*` matches zero or more
   characters, `.` is literal, and a blank pattern removes only the pattern
   constraint. Verify both files and directories are filtered without

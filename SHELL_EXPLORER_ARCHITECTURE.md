@@ -36,7 +36,8 @@ and layout.
 **Decision:** Keep actual Windows filesystem paths as the app's internal
 navigation and identity values. Use Windows Shell normal display names only
 when presenting folders in the UI; never replace stored paths with translated
-labels.
+labels. The browsable tree's virtual **Top** location is the explicit
+non-filesystem exception described below.
 
 **Application:** Custom tree labels, the address field and its open-tab
 dropdown, the content-pane heading, and tab headers use Shell-provided display
@@ -50,6 +51,23 @@ configured sort column and direction.
 valid filesystem path components. Canonical paths remain suitable for
 navigation, history, tab state, and filesystem operations across Windows
 languages.
+
+### Virtual This PC root and path expressions
+
+The browsable tree's **Top** entry represents the Windows Shell **This PC**
+known folder, not a filesystem directory. `Pathview.TopPath` stores its Shell
+parsing name (`::{20D04FE0-3AEA-1069-A2D8-08002B30309D}`) as the internal
+navigation/history value. The Shell browser navigates to that parsing name and
+reports the virtual location back as `TopPath`; the tree's children are the
+available filesystem drives.
+
+The **Top** tree item gets its normal display name from the Shell and its icon
+from the Shell image list using the parsed PIDL. Both are therefore localized
+and follow the active Windows Shell configuration. They are presentation data,
+not filesystem path components. Any composed filesystem path expression must
+omit the **This PC** display label: for example, `C:\Benutzer\Volker` remains
+that filesystem path rather than `This PC\C:\Benutzer\Volker`. The Shell
+display name may still be shown in a location label such as the address field.
 
 ### Tab header label shortening
 
@@ -196,14 +214,23 @@ leading ellipsis prefix is omitted.
   behavior. Path get is enabled only for one selected item and copies that
   item's filesystem path; Delete remains selection-aware. The Shell view's
   native context-menu Copy and Cut commands continue to work normally.
-- The browsable **Active path and siblings** tree has a default-unchecked
-  **Hide internal** checkbox. When enabled, child directories whose filesystem
-  names begin with `.` or `$` are omitted; a directory with the Windows System
-  attribute is omitted only when enumerating its contents returns
-  access-denied. Hidden-only directories, accessible System directories, and
-  junctions are not excluded by those classifications alone. Active-path
-  ancestors remain visible. The filter is applied by the shared tree-child
-  refresh path, including filesystem-change reconciliation.
+- The browsable **Active path and siblings** tree has a **Top** root named with
+  the localized Shell display name for **This PC** and shown with its Shell
+  icon; its children are the available drives. Selecting it navigates the
+  Shell browser to **This PC** and makes **Top** the active path. The This PC
+  label is omitted from composed filesystem path expressions. The tree has a
+  default-unchecked **Hide siblings** checkbox before its default-unchecked
+  **Hide internal** checkbox. **Hide siblings** limits the displayed drives to
+  the active drive, shows only the next active-path directory at each ancestor,
+  and shows all immediate child directories of the active directory. When
+  disabled, the tree retains its normal active-path-and-siblings behavior.
+  **Hide internal** independently omits child directories whose filesystem
+  names begin with `.` or `$`; a directory with the Windows System attribute is
+  omitted only when enumerating its contents returns access-denied. Hidden-only
+  directories, accessible System directories, and junctions are not excluded
+  by those classifications alone. Active-path ancestors remain visible. The
+  filter is applied by the shared tree-child refresh path, including
+  filesystem-change reconciliation.
 - A fixed Pathview's **Active path** pane has its own default-checked
   **Hide internal** checkbox above the subfolder list. It applies the same
   internal-item predicate to that list's immediate children only; it does not
@@ -281,11 +308,8 @@ unit (currently `16` in the content-filter row).
   the prior successful path remains selected; completion commits and selects
   the new path, while failure preserves the prior selection. A browsable-tree
   click sets `TreeEntry.IsNavigationPending` before deferring the navigation
-  request to the Shell. Its row uses a light-gray background; this is separate
-  from `IsSelected`. The pending state clears on success, failure, synchronous
   request errors, or superseding navigation. At commit, the active route node is
   marked selected first; then its ancestors expand to reveal it, followed by
-  expansion of the active node itself.
 - The legacy WPF `ListView`, its filtering, icon binding, sizing, and menus are
   retained. `UseLegacyWpfFileList` in `ExplorerTabView.xaml.cs` is the explicit
   rollback switch: `false` selects the Shell view (production default); `true`
@@ -293,13 +317,11 @@ unit (currently `16` in the content-filter row).
 
 ### Custom Tree Templates
 
-**Success-gated active route:** `CurrentPath`, the selected tree node, and
 programmatic expansion to a requested destination are committed only after the
 Shell content view reports successful navigation. Until then, the previous
 committed path remains selected. A tree-originated request is shown separately
 through `TreeEntry.IsNavigationPending`; it is not WPF selection.
 
-Both directory trees in `ExplorerTabView.xaml` share
 `DirectoryTreeItemStyle`. Its templates provide the following behavior:
 
 - `ShellIconTemplate` displays each `TreeEntry`'s base shell icon and overlay.
@@ -308,19 +330,16 @@ Both directory trees in `ExplorerTabView.xaml` share
 - `DirectoryTreeItemStyle` binds each item's expanded and selected states to
   the `TreeEntry`, and supplies the custom `TreeViewItem` control template.
   The `TreeViewItem` control template puts a directional disclosure triangle,
-  the shell folder icon, and the entry header in separate columns, with
   expanded children below the header. Clicking any part of a row requests
   navigation; its directory becomes active and selected only after the Shell
   view successfully opens it. Only the triangle can collapse an expanded
   branch. If the collapsed directory is active, navigation to its parent must
   succeed before the parent becomes active and selected. The
-  triangle is based on the presence of immediate subdirectories before tree
   filtering, so internal and directory-link entries count. Hidden filesystem
   items retain their Shell icon and are rendered with reduced opacity. The
   template hides placeholder entries and applies a light-blue selected-row
   background.
 
-In a non-browsable Pathview, `ActivePathTab` contains a two-row grid. The
 `ActivePathTree` sits in a gray-framed `GroupBox` headed **Path**, whose height
 is set to the active route's row count times
 `Pathview.DirectoryTreeRowHeight`; both tree scrollbars are disabled. The
@@ -333,7 +352,6 @@ area and scrolls vertically; its item-container height uses the same
 `DirectoryTreeRowHeight` as the tree.
 The list remains selectable. Its item containers use the same light-blue row
 background for selection and hover. On every `MouseEnter` over a list item,
-the list clears `ActivePathSubfoldersList.SelectedItem`, removing the actual
 selection rather than only hiding its visual state. A later click or keyboard
 action can select an item again; the next mouse entry over any list item clears
 that selection again.

@@ -284,10 +284,16 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <CheckBox x:Name="HideInternalCheckBox" Grid.Row="0" Content="Hide internal"
-                              IsChecked="False" Margin="8,6,8,4"
-                              Checked="HideInternalCheckBox_StateChanged"
-                              Unchecked="HideInternalCheckBox_StateChanged" />
+                    <StackPanel Grid.Row="0" Orientation="Horizontal">
+                        <CheckBox x:Name="HideSiblingsCheckBox" Content="Hide siblings"
+                                  IsChecked="False" Margin="8,6,8,4"
+                                  Checked="HideSiblingsCheckBox_StateChanged"
+                                  Unchecked="HideSiblingsCheckBox_StateChanged" />
+                        <CheckBox x:Name="HideInternalCheckBox" Content="Hide internal"
+                                  IsChecked="False" Margin="8,6,8,4"
+                                  Checked="HideInternalCheckBox_StateChanged"
+                                  Unchecked="HideInternalCheckBox_StateChanged" />
+                    </StackPanel>
                     <TreeView x:Name="ActivePathAndSiblingsTree" Grid.Row="1"
                               ItemContainerStyle="{StaticResource DirectoryTreeItemStyle}"
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"

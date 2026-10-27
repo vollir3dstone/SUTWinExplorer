@@ -79,7 +79,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
     public void NavigateTo(string path)
     {
-        _programmaticNavigationPath = Path.GetFullPath(path);
+        _programmaticNavigationPath = Pathview.IsTopPath(path) ? Pathview.TopPath : Path.GetFullPath(path);
         _pendingPath = _programmaticNavigationPath;
         if (_initialized)
         {
@@ -547,6 +547,8 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     private void HandleNavigationCompleted(IntPtr itemIdList)
     {
         var path = TryGetFileSystemPath(itemIdList);
+        if (path is null && Pathview.IsTopPath(_programmaticNavigationPath))
+            path = Pathview.TopPath;
         if (path is null)
             return;
 
@@ -1337,7 +1339,18 @@ public sealed class ShellBrowserSite(
             return null;
 
         var childName = GetChildName(folder, childItemIdList, ShellDisplayNameInFolderForParsing);
-        return string.IsNullOrEmpty(childName) ? null : Path.Combine(currentPath, childName);
+        if (string.IsNullOrEmpty(childName))
+            return null;
+
+        if (Pathview.IsTopPath(currentPath))
+        {
+            var drive = DriveInfo.GetDrives().FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, childName, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(candidate.Name.TrimEnd(Path.DirectorySeparatorChar), childName.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase));
+            return drive?.RootDirectory.FullName;
+        }
+
+        return Path.Combine(currentPath, childName);
     }
 
     private static string? GetChildName(IShellFolder folder, IntPtr childItemIdList, uint displayNameFlags)
