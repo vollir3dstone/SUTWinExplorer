@@ -93,6 +93,13 @@ leading ellipsis prefix is omitted.
 ## Current Composition
 
 - `MainWindow` owns the WPF application toolbar and `TabControl`.
+- The outer application tabs set `TabItem.MinWidth` from the measured width of
+  sixteen lowercase `n` glyphs using the title `TextBlock`'s font properties
+  and DPI. Each header uses a two-column `Grid`: a stretching `*` title column
+  with centered text, and an `Auto` close-button column. The outer
+  `ExplorerTabs.HorizontalContentAlignment="Stretch"` lets that header Grid
+  occupy the tab's full width. These settings are applied when `MainWindow`
+  creates its browsable and fixed tabs; they do not affect nested Pathview tabs.
 - The application-wide implicit `TabItem` style, its Aero2 source, and the
   intentional corner-radius and border-overlap adaptations are documented in
   [TAB_ITEM_STYLE.md](TAB_ITEM_STYLE.md).

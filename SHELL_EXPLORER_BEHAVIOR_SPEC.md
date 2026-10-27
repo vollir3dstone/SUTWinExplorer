@@ -35,6 +35,11 @@ when it is created and cannot be changed by the user.
   the browsable Pathview to the fixed Pathview's location.
 - [x] Non-browsable Pathviews can be closed; the browsable Pathview remains
   open, so at least one tab is always present.
+- [x] The outer browsable and fixed tabs have a font-relative minimum width
+  based on sixteen lowercase **n** characters in the tab-title font. The title
+  is centered within its own area; the close button, when present, stays compact
+  at the far right. This sizing and alignment do not apply to nested Pathview
+  tabs.
 - [x] The browsable Pathview shows only the **Active path and siblings** tree
   tab. Each non-browsable Pathview shows only the **Active path** tree tab.
 - [x] Each Pathview shows its location row across the full width above the

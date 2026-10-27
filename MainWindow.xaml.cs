@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System.Globalization;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -127,7 +128,12 @@ public partial class MainWindow : Window
         };
         close.Click += CloseTab_Click;
 
-        var headerContent = new StackPanel { Orientation = Orientation.Horizontal };
+        var headerContent = new Grid();
+        headerContent.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        headerContent.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        title.TextAlignment = TextAlignment.Center;
+        Grid.SetColumn(title, 0);
+        Grid.SetColumn(close, 1);
         headerContent.Children.Add(title);
         headerContent.Children.Add(close);
         var tab = new TabItem { Header = headerContent, Content = view };
@@ -191,8 +197,24 @@ public partial class MainWindow : Window
         }
         _tabsByPathview.Add(view, tab);
         ExplorerTabs.Items.Insert(view.IsBrowsable ? 0 : ExplorerTabs.Items.Count, tab);
+        tab.MinWidth = GetMinimumTabWidth(title);
         ExplorerTabs.SelectedItem = tab;
         RefreshPathChoices();
+    }
+
+    private double GetMinimumTabWidth(TextBlock title)
+    {
+        var typeface = new Typeface(title.FontFamily, title.FontStyle, title.FontWeight, title.FontStretch);
+        var text = new FormattedText(
+            new string('n', 16),
+            CultureInfo.CurrentCulture,
+            title.FlowDirection,
+            typeface,
+            title.FontSize,
+            title.Foreground,
+            VisualTreeHelper.GetDpi(title).PixelsPerDip);
+
+        return text.WidthIncludingTrailingWhitespace;
     }
 
     private void Pathview_PinRequested(object? sender, EventArgs e)

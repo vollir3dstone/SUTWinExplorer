@@ -69,7 +69,7 @@
                       SelectionChanged="AddressBox_SelectionChanged" Margin="6,0" />
             <Button Grid.Column="5" Content="Go" Click="Go_Click" Padding="12,4" />
         </Grid>
-        <TabControl x:Name="ExplorerTabs" Padding="0"
+        <TabControl x:Name="ExplorerTabs" Padding="0" HorizontalContentAlignment="Stretch"
                 SelectionChanged="ExplorerTabs_SelectionChanged" />
     </DockPanel>
 </Window>
