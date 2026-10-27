@@ -73,9 +73,10 @@ display name may still be shown in a location label such as the address field.
 
 `MainWindow.GetTabLabelFromPath` builds tab labels from localized Shell display
 names and limits them to `MaxDisplayedPathLength` (currently 40 characters).
-Filesystem roots use the filesystem path root (for example, `C:\`), matching
-the address field and content-pane path display rather than the Shell's volume
-label. For other paths, the default label starts with an ellipsis and the
+Filesystem roots use the filesystem drive designator without a trailing
+separator (for example, `C:`), matching the address field and content-pane path
+display rather than the Shell's volume label. For other paths, the default
+label starts with an ellipsis and the
 current directory name. If that alone fills the limit, it is clipped to the
 limit with a trailing ellipsis and the parent is omitted.
 

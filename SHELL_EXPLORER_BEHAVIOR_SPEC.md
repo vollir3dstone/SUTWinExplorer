@@ -107,6 +107,7 @@ may show its requested row in light gray without changing the active selection.
   filesystem path expression is shown, omit **This PC** as a path component;
   for example, the path remains `C:\Benutzer\Volker`, not
   `This PC\C:\Benutzer\Volker`.
+  A drive root is displayed without a trailing backslash, for example `C:`.
 - [x] The browsable **Active path and siblings** tree has a default-off
   **Hide siblings** checkbox before **Hide internal**. When enabled, only the
   active drive is shown under **Top**; along the route, each directory shows only the next

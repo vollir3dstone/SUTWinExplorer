@@ -1554,6 +1554,9 @@ internal static class ShellDisplayNameProvider
         if (string.IsNullOrEmpty(rootPath))
             return path;
 
+        if (string.Equals(fullPath, rootPath, StringComparison.OrdinalIgnoreCase))
+            return rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
         var displayPath = rootPath;
         var currentPath = rootPath;
         var relativePath = Path.GetRelativePath(rootPath, fullPath);

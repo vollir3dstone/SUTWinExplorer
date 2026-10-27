@@ -427,7 +427,7 @@ public partial class MainWindow : Window
             : rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         if (!string.IsNullOrEmpty(rootPath) &&
             string.Equals(Path.GetFullPath(normalizedPath), Path.GetFullPath(rootPath), StringComparison.OrdinalIgnoreCase))
-            return rootPath;
+            return rootTerm;
 
         var parent = Directory.GetParent(normalizedPath);
         var parentIsRoot = parent is not null && !string.IsNullOrEmpty(rootPath) &&
