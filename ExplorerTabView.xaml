@@ -201,8 +201,7 @@
                                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                   ScrollViewer.VerticalScrollBarVisibility="Disabled"
                                   PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown"
-                                  PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
-                                  MouseDoubleClick="Tree_MouseDoubleClick" />
+                                  PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp" />
                     </GroupBox>
                     <GroupBox Grid.Row="1" Header="Sub directories"
                               BorderBrush="#A6A6A6" BorderThickness="1"
@@ -222,7 +221,7 @@
                                           ScrollViewer.VerticalScrollBarVisibility="Auto"
                                           PreviewMouseRightButtonDown="ActivePathSubfoldersList_PreviewMouseRightButtonDown"
                                           PreviewKeyDown="ActivePathSubfoldersList_PreviewKeyDown"
-                                          MouseDoubleClick="ActivePathSubfoldersList_MouseDoubleClick">
+                                          PreviewMouseLeftButtonUp="ActivePathSubfoldersList_PreviewMouseLeftButtonUp">
                                     <ListView.ItemContainerStyle>
                                         <Style TargetType="{x:Type ListViewItem}">
                                             <Setter Property="Height"

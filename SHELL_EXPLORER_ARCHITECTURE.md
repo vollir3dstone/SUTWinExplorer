@@ -139,8 +139,9 @@ leading ellipsis prefix is omitted.
   destination; this permits initialization and other explicit app navigation.
   Rejected Shell folder navigation does not disable the Shell pane or its other
   commands and file operations. Explicit folder opening is separate from
-  navigation of the fixed Pathview: double-clicking a directory in its Active
-  path tree, Sub directories list, or Shell content view requests that path in
+  navigation of the fixed Pathview: single-clicking a directory in its Active
+  path tree or Sub directories list, or double-clicking one in its Shell content
+  view, requests that path in
   the browsable Pathview, selects the browsable tab, and leaves the fixed
   Pathview's location unchanged. A Shell-view `.lnk` targeting a directory
   requests its resolved target path in the same way.
@@ -418,8 +419,8 @@ completed path, leaving the active location and history unchanged.
 Non-filesystem namespace locations do not become filesystem paths and are not
 fully integrated with the custom trees yet.
 
-For a non-browsable Pathview, double-clicking a directory in the Active path
-tree or Sub directories list raises an explicit open request instead of
+For a non-browsable Pathview, single-clicking a directory in the Active path tree
+or Sub directories list raises an explicit open request instead of
 navigating that Pathview. The Shell view routes its default open command through
 `ICommDlgBrowser.OnDefaultCommand`; the host reads the selected filesystem path
 and accepts the command only for a directory or a `.lnk` resolving to a

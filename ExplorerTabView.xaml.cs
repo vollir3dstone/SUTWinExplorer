@@ -1198,9 +1198,10 @@ public partial class Pathview : UserControl
         e.Handled = true;
     }
 
-    private void ActivePathSubfoldersList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    private void ActivePathSubfoldersList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (ActivePathSubfoldersList.SelectedItem is TreeEntry { IsPlaceholder: false } entry)
+        if (FindAncestor<ListViewItem>(e.OriginalSource as DependencyObject) is
+            { DataContext: TreeEntry { IsPlaceholder: false } entry })
             BrowseLocationRequested?.Invoke(this, entry.Path);
     }
 
@@ -1273,6 +1274,14 @@ public partial class Pathview : UserControl
 
     private void Tree_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        if (!IsBrowsable && ReferenceEquals(sender, ActivePathTree))
+        {
+            if (FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is
+                { DataContext: TreeEntry { IsPlaceholder: false } fixedEntry })
+                BrowseLocationRequested?.Invoke(this, fixedEntry.Path);
+            return;
+        }
+
         if (!IsBrowsable || ActiveTreeNavigationMode != TreeNavigationMode.SingleClick ||
             FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { DataContext: TreeEntry entry } item ||
             entry.IsPlaceholder)
