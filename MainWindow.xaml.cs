@@ -15,6 +15,7 @@ public partial class MainWindow : Window
     private static readonly string DisplayPathSeparator = Path.DirectorySeparatorChar.ToString();
     private static readonly string DefaultTabLabelPrefix = DisplayEllipsis + DisplayPathSeparator;
     private bool _updatingPathChoices;
+    private bool _selectingHistoryTab;
     private Pathview? _browsablePathview;
     private TabItem? _browsableTab;
     private readonly Dictionary<string, Pathview> _fixedPathviewsByPath = new(StringComparer.OrdinalIgnoreCase);
@@ -163,6 +164,8 @@ public partial class MainWindow : Window
             }
             else
             {
+                if (ReferenceEquals(CurrentPathview, view))
+                    _browsablePathview?.RecordVisitedLocation(currentPath);
                 RefreshPathChoices();
             }
         };
@@ -224,7 +227,7 @@ public partial class MainWindow : Window
 
         try
         {
-            ExplorerTabs.SelectedItem = _browsableTab;
+            SelectTabForNavigation(_browsableTab);
             _browsablePathview.Navigate(path);
         }
         catch (Exception exception)
@@ -301,6 +304,8 @@ public partial class MainWindow : Window
 
     private void ExplorerTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (!_selectingHistoryTab && ReferenceEquals(e.Source, ExplorerTabs) && CurrentPathview is { } view)
+            _browsablePathview?.RecordVisitedLocation(view.CurrentPath);
         RefreshPathChoices();
     }
 
@@ -364,18 +369,58 @@ public partial class MainWindow : Window
         }
     }
 
-    private void Back_Click(object sender, RoutedEventArgs e) => NavigateBrowsablePathview(pathview => pathview.GoBack());
+    private void Back_Click(object sender, RoutedEventArgs e) => NavigateHistory(isBack: true);
 
-    private void Forward_Click(object sender, RoutedEventArgs e) => NavigateBrowsablePathview(pathview => pathview.GoForward());
+    private void Forward_Click(object sender, RoutedEventArgs e) => NavigateHistory(isBack: false);
 
     private void Up_Click(object sender, RoutedEventArgs e) => NavigateBrowsablePathview(pathview => pathview.GoUp());
+
+    private void NavigateHistory(bool isBack)
+    {
+        if (_browsablePathview is null || _browsableTab is null)
+            return;
+
+        var path = isBack ? _browsablePathview.BackHistoryPath : _browsablePathview.ForwardHistoryPath;
+        if (path is null)
+            return;
+
+        if (!Pathview.IsTopPath(path) &&
+            _fixedPathviewsByPath.TryGetValue(GetPathKey(path), out var fixedView) &&
+            !string.IsNullOrWhiteSpace(fixedView.CurrentPath) &&
+            string.Equals(GetPathKey(fixedView.CurrentPath), GetPathKey(path), StringComparison.OrdinalIgnoreCase) &&
+            _tabsByPathview.TryGetValue(fixedView, out var fixedTab))
+        {
+            _browsablePathview.ActivateHistoryLocation(path, isBack);
+            SelectTabForNavigation(fixedTab);
+            return;
+        }
+
+        SelectTabForNavigation(_browsableTab);
+        if (isBack)
+            _browsablePathview.GoBack();
+        else
+            _browsablePathview.GoForward();
+    }
+
+    private void SelectTabForNavigation(TabItem tab)
+    {
+        _selectingHistoryTab = true;
+        try
+        {
+            ExplorerTabs.SelectedItem = tab;
+        }
+        finally
+        {
+            _selectingHistoryTab = false;
+        }
+    }
 
     private void NavigateBrowsablePathview(Action<Pathview> navigate)
     {
         if (_browsablePathview is null || _browsableTab is null)
             return;
 
-        ExplorerTabs.SelectedItem = _browsableTab;
+        SelectTabForNavigation(_browsableTab);
         navigate(_browsablePathview);
     }
 
@@ -402,7 +447,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            ExplorerTabs.SelectedItem = _browsableTab;
+            SelectTabForNavigation(_browsableTab);
             _browsablePathview.Navigate(path);
         }
         catch (Exception exception)

@@ -49,6 +49,7 @@ public partial class Pathview : UserControl
     private const TreeNavigationMode ActiveTreeNavigationMode = TreeNavigationMode.SingleClick;
     private readonly Stack<string> _backHistory = new();
     private readonly Stack<string> _forwardHistory = new();
+    private string _historyCurrentPath = string.Empty;
     private readonly DispatcherTimer _fileSystemRefreshTimer;
     private ShellExplorerBrowserHost? _shellBrowserHost;
     private bool _suppressTreeBringIntoView;
@@ -121,6 +122,21 @@ public partial class Pathview : UserControl
 
     public void Navigate(string path) => Navigate(path, NavigationHistoryAction.Normal);
 
+    internal string? BackHistoryPath => _backHistory.TryPeek(out var path) ? path : null;
+    internal string? ForwardHistoryPath => _forwardHistory.TryPeek(out var path) ? path : null;
+
+    internal void ActivateHistoryLocation(string path, bool isBack) =>
+        UpdateHistory(path, isBack ? NavigationHistoryAction.Back : NavigationHistoryAction.Forward);
+
+    internal void RecordVisitedLocation(string path)
+    {
+        if (!IsBrowsable || string.IsNullOrWhiteSpace(path) ||
+            string.Equals(_historyCurrentPath, path, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        UpdateHistory(path, NavigationHistoryAction.Normal);
+    }
+
     public void GoBack()
     {
         if (_backHistory.Count == 0)
@@ -164,7 +180,10 @@ public partial class Pathview : UserControl
             throw new DirectoryNotFoundException($"The directory does not exist or is not accessible: {fullPath}");
 
         if (string.Equals(CurrentPath, fullPath, StringComparison.OrdinalIgnoreCase))
+        {
+            UpdateHistory(fullPath, historyAction);
             return;
+        }
 
         if (IsLegacyWpfFileList)
         {
@@ -194,26 +213,7 @@ public partial class Pathview : UserControl
             ClearPendingTreeNavigation();
         }
 
-        switch (historyAction)
-        {
-            case NavigationHistoryAction.Normal:
-                if (!string.IsNullOrEmpty(CurrentPath))
-                    _backHistory.Push(CurrentPath);
-                _forwardHistory.Clear();
-                break;
-            case NavigationHistoryAction.Back:
-                if (_backHistory.Count > 0 && string.Equals(_backHistory.Peek(), path, StringComparison.OrdinalIgnoreCase))
-                    _backHistory.Pop();
-                if (!string.IsNullOrEmpty(CurrentPath))
-                    _forwardHistory.Push(CurrentPath);
-                break;
-            case NavigationHistoryAction.Forward:
-                if (_forwardHistory.Count > 0 && string.Equals(_forwardHistory.Peek(), path, StringComparison.OrdinalIgnoreCase))
-                    _forwardHistory.Pop();
-                if (!string.IsNullOrEmpty(CurrentPath))
-                    _backHistory.Push(CurrentPath);
-                break;
-        }
+        UpdateHistory(path, historyAction);
 
         CurrentPath = path;
         PinPathviewButton.IsEnabled = true;
@@ -225,6 +225,36 @@ public partial class Pathview : UserControl
         LocationChanged?.Invoke(this, CurrentPath);
         if (!IsLegacyWpfFileList)
             RefreshShellStatusCount();
+    }
+
+    private void UpdateHistory(string path, NavigationHistoryAction historyAction)
+    {
+        if (historyAction == NavigationHistoryAction.Normal &&
+            string.Equals(_historyCurrentPath, path, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        switch (historyAction)
+        {
+            case NavigationHistoryAction.Normal:
+                if (!string.IsNullOrEmpty(_historyCurrentPath) &&
+                    !string.Equals(_historyCurrentPath, path, StringComparison.OrdinalIgnoreCase))
+                    _backHistory.Push(_historyCurrentPath);
+                _forwardHistory.Clear();
+                break;
+            case NavigationHistoryAction.Back:
+                if (_backHistory.Count > 0 && string.Equals(_backHistory.Peek(), path, StringComparison.OrdinalIgnoreCase))
+                    _backHistory.Pop();
+                if (!string.IsNullOrEmpty(_historyCurrentPath))
+                    _forwardHistory.Push(_historyCurrentPath);
+                break;
+            case NavigationHistoryAction.Forward:
+                if (_forwardHistory.Count > 0 && string.Equals(_forwardHistory.Peek(), path, StringComparison.OrdinalIgnoreCase))
+                    _forwardHistory.Pop();
+                if (!string.IsNullOrEmpty(_historyCurrentPath))
+                    _backHistory.Push(_historyCurrentPath);
+                break;
+        }
+        _historyCurrentPath = path;
     }
 
     private void RefreshFiles()
@@ -600,7 +630,7 @@ public partial class Pathview : UserControl
 
     private void HideInternalCheckBox_StateChanged(object sender, RoutedEventArgs e)
     {
-        if (ActivePathAndSiblingsTree.ItemsSource is not ObservableCollection<TreeEntry> roots)
+        if (ActivePathAndSiblingsTree?.ItemsSource is not ObservableCollection<TreeEntry> roots)
             return;
 
         foreach (var root in roots)
@@ -609,7 +639,7 @@ public partial class Pathview : UserControl
 
     private void HideSiblingsCheckBox_StateChanged(object sender, RoutedEventArgs e)
     {
-        if (ActivePathAndSiblingsTree.ItemsSource is not ObservableCollection<TreeEntry> roots)
+        if (ActivePathAndSiblingsTree?.ItemsSource is not ObservableCollection<TreeEntry> roots)
             return;
 
         RefreshActivePathAndSiblingsTree();

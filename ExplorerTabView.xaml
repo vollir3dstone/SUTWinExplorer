@@ -285,11 +285,11 @@
                     </Grid.RowDefinitions>
                     <StackPanel Grid.Row="0" Orientation="Horizontal">
                         <CheckBox x:Name="HideSiblingsCheckBox" Content="Hide siblings"
-                                  IsChecked="False" Margin="8,6,8,4"
+                                  IsChecked="True" Margin="8,6,8,4"
                                   Checked="HideSiblingsCheckBox_StateChanged"
                                   Unchecked="HideSiblingsCheckBox_StateChanged" />
                         <CheckBox x:Name="HideInternalCheckBox" Content="Hide internal"
-                                  IsChecked="False" Margin="8,6,8,4"
+                                  IsChecked="True" Margin="8,6,8,4"
                                   Checked="HideInternalCheckBox_StateChanged"
                                   Unchecked="HideInternalCheckBox_StateChanged" />
                     </StackPanel>

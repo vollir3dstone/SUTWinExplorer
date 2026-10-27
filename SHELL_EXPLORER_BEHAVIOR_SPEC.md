@@ -63,8 +63,13 @@ when it is created and cannot be changed by the user.
   never a dropdown entry. Selecting a dropdown entry selects its associated tab.
   Typing a path selects an existing Pathview at that location, or navigates the
   browsable Pathview if none exists.
-- [x] Back, Forward, and Up always target the browsable Pathview and select its
-  tab.
+- [x] A single Back/Forward history records successfully activated paths across
+  browsable and fixed Pathviews, including tab selections. Consecutive
+  activations of the same path do not create duplicate entries. Back and
+  Forward select an open fixed Pathview for the destination path; otherwise they
+  navigate the browsable Pathview. History navigation does not add entries, and
+  failed navigation leaves the history unchanged. Up targets and selects the
+  browsable Pathview.
 - [x] A non-browsable Pathview does not change its own location through its
   tree, **Sub directories** list, or Shell content pane. Single-clicking a
   directory in the **Path** tree or **Sub directories** list, or double-clicking
@@ -109,7 +114,7 @@ may show its requested row in light gray without changing the active selection.
   for example, the path remains `C:\Benutzer\Volker`, not
   `This PC\C:\Benutzer\Volker`.
   A drive root is displayed without a trailing backslash, for example `C:`.
-- [x] The browsable **Active path and siblings** tree has a default-off
+- [x] The browsable **Active path and siblings** tree has a default-on
   **Hide siblings** checkbox before **Hide internal**. When enabled, only the
   active drive is shown under **Top**; along the route, each directory shows only the next
   directory on the active path, while the active directory shows all of its
@@ -123,7 +128,7 @@ may show its requested row in light gray without changing the active selection.
   address field, toolbar history, or Shell content view, when the scroll range
   permits. A requested destination is not selected while navigation is pending;
   failure preserves the last successfully opened directory and its selection.
-- [x] The browsable Pathview's default-off **Hide internal** checkbox filters
+- [x] The browsable Pathview's default-on **Hide internal** checkbox filters
   its directory tree: names beginning with `.` or `$` are hidden, as are directories that
   have the Windows System attribute and deny directory listing access. Normal
   directories and junctions remain visible. The active route stays visible
@@ -295,7 +300,11 @@ may show its requested row in light gray without changing the active selection.
   but is not offered in its dropdown. Use **Pin** repeatedly at one location
   and type that location into the address field. Verify the existing
   non-browsable tab is selected instead of creating a duplicate. Use a
-  dropdown entry to select its associated tab.
+  dropdown entry to select its associated tab. Activate several browsable and
+  fixed paths, then use Back and Forward to traverse them in order. Verify an
+  open fixed path selects its tab, a path without a fixed tab opens in BROWSE,
+  repeated activation of the same path adds no duplicate, and a new activation
+  after Back clears Forward.
 4. Open fixed Pathviews at different locations and verify the **Active path**
   tree shows the complete route without a scrollbar and only uses the height
   required for its rows. Verify the remaining pane space shows the active

@@ -98,7 +98,7 @@ leading ellipsis prefix is omitted.
   [TAB_ITEM_STYLE.md](TAB_ITEM_STYLE.md).
 - Each application tab contains one `Pathview`. A `Pathview` is the complete
   per-tab browsing unit for the displays and settings attached to that tab: it
-  owns the active path, back/forward history, left directory-tree pane, right
+  owns the active path, left directory-tree pane, right
   content pane, status display, and temporary view settings. The browsable
   Pathview shows only **Active path and siblings**; non-browsable Pathviews show
   only **Active path**. **Hide directories** and each pane's **Hide internal**
@@ -129,8 +129,12 @@ leading ellipsis prefix is omitted.
   same map key. If a fixed Pathview already owns that path, its tab is selected;
   otherwise the address request selects and navigates the browsable Pathview.
   Selecting an address dropdown entry remains a direct tab selection for the
-  associated Pathview. Back, Forward, and Up select and operate on the
-  browsable Pathview.
+  associated Pathview. The browsable Pathview stores the shared path history;
+  successful navigation and tab activation record paths in order. Back and
+  Forward select an open fixed Pathview for a matching path, or navigate the
+  browsable Pathview when no matching fixed Pathview is ready. Programmatic tab
+  selection during history navigation does not record another visit. Up selects
+  and operates on the browsable Pathview.
 - App-owned navigation is ignored by non-browsable Pathviews. For navigation
   initiated inside the hosted Shell view, its `IExplorerBrowserEvents.OnNavigationPending`
   callback returns `E_ABORT` for unapproved navigation on non-browsable
@@ -221,7 +225,7 @@ leading ellipsis prefix is omitted.
   icon; its children are the available drives. Selecting it navigates the
   Shell browser to **This PC** and makes **Top** the active path. The This PC
   label is omitted from composed filesystem path expressions. The tree has a
-  default-unchecked **Hide siblings** checkbox before its default-unchecked
+  default-checked **Hide siblings** checkbox before its default-checked
   **Hide internal** checkbox. **Hide siblings** limits the displayed drives to
   the active drive, shows only the next active-path directory at each ancestor,
   and shows all immediate child directories of the active directory. When
