@@ -1059,6 +1059,11 @@ public partial class Pathview : UserControl
         e.Handled = true;
     }
 
+    private void ActivePathSubfoldersListItem_MouseEnter(object sender, MouseEventArgs e)
+    {
+        ActivePathSubfoldersList.SelectedItem = null;
+    }
+
     private void ActivePathSubfoldersList_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
         var source = e.OriginalSource as DependencyObject;
