@@ -1547,7 +1547,7 @@ internal static class ShellDisplayNameProvider
             return path;
 
         if (Pathview.IsTopPath(path))
-            return "This PC";
+            return GetDisplayName(path) ?? "This PC";
 
         var fullPath = Path.GetFullPath(path);
         var rootPath = Path.GetPathRoot(fullPath);
@@ -1570,6 +1570,7 @@ internal static class ShellDisplayNameProvider
     {
         var expandedInput = Environment.ExpandEnvironmentVariables(input.Trim().Trim('"'));
         if (Pathview.IsTopPath(expandedInput) ||
+            string.Equals(expandedInput, GetDisplayName(Pathview.TopPath), StringComparison.OrdinalIgnoreCase) ||
             string.Equals(expandedInput, "This PC", StringComparison.OrdinalIgnoreCase))
         {
             return Pathview.TopPath;
