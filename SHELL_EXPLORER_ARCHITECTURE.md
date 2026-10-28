@@ -227,18 +227,32 @@ leading ellipsis prefix is omitted.
   resolved target path in the same way.
 - Each Pathview's location header spans the full width above its body. The
   visible **Browse** or **Pin** button is first; a non-browsable Pathview places
-  its **FIXED** badge next, and the path label is always last. The main area
-  below is split horizontally, with the role-specific directory-tree pane on
-  the left and the content pane on the right. **Hide directories** and content
-  **Hide internal** appear below the location header in the content pane. The
+  its **FIXED** badge next, followed by the current directory's Shell icon and
+  path expression. At the far right, every Pathview has a 28-by-28-DIP button
+  for opening the current location in Windows Explorer. The main area below is
+  split horizontally, with the role-specific directory-tree pane on the left
+  and the content pane on the right. **Hide directories** and content **Hide
+  internal** appear below the location header in the content pane. The
   location-row widget grid has a symmetric 10-DIP horizontal margin, and its
   outer border has a 36-DIP minimum height; inner widgets use 2-DIP vertical
   margins so the color-picker visibility does not change row height. The
   second row containing the sidebar, splitter, and content pane has a 4-DIP
   white inset; the outer `ExplorerTabs` has `Padding="0"`. Fixed Pathviews show a
-  right-aligned color-palette button. Their location header starts white;
-  choosing one of twelve light spectrum colors changes that header and the
-  matching application tab. The browsable Pathview has no palette button.
+  right-aligned color-palette button next to the Explorer button. Their location
+  header starts white; choosing one of twelve light spectrum colors changes
+  that header and the matching application tab. The browsable Pathview has no
+  palette button.
+  `LocationIconSlot` reserves a 24-by-24-DIP square before the path expression.
+  `ShellIconProvider.GetIconAtSize` requests its base image from
+  `IShellItemImageFactory.GetImage` at the equivalent physical-pixel size for
+  the current DPI. The Shell image-list icon remains the fallback; its overlay
+  and hidden-item opacity are composed separately. The Explorer button shows
+  the Shell icon for `%WINDIR%\\explorer.exe` at 16 DIP.
+  `OpenInExplorerButton_Click` starts `explorer.exe` using
+  `UseShellExecute=true` and the command-line convention
+  `/n, "<CurrentPath>"`; `/n,` requests a new window and the quoted current
+  path is its target. The button is enabled after the Pathview commits a
+  successful current path.
   `PaneColorPalette` contains the brushes, displayed by
   `PaneColorSwatchTemplate` in a six-column grid. The swatch click updates the
   Pathview's `PaneBackground`, then asks `MainWindow` to update the matching

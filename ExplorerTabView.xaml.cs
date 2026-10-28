@@ -67,6 +67,9 @@ public partial class Pathview : UserControl
     public Pathview(string initialPath, bool isBrowsable)
     {
         InitializeComponent();
+        var explorerPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+        OpenInExplorerIcon.Source = ShellIconProvider.GetIconAtSize(explorerPath, 16, 16) ??
+                                    ShellIconProvider.GetSmallIcons(explorerPath)?.BaseIcon;
         HideDirectoriesCheckBox.GetCheckBox().Checked += HideDirectoriesCheckBox_StateChanged;
         HideDirectoriesCheckBox.GetCheckBox().Unchecked += HideDirectoriesCheckBox_StateChanged;
         HideInternalContentCheckBox.GetCheckBox().Checked += HideInternalContentCheckBox_StateChanged;
@@ -302,6 +305,7 @@ public partial class Pathview : UserControl
         CurrentPath = path;
         PinPathviewButton.IsEnabled = true;
         BrowsePathviewButton.IsEnabled = true;
+        OpenInExplorerButton.IsEnabled = true;
         UpdateLocationIcon(path);
         LocationLabel.Text = ShellDisplayNameProvider.GetDisplayPath(path);
         RefreshActivePathAndSiblingsTree();
@@ -558,6 +562,26 @@ public partial class Pathview : UserControl
 
     private void PaneColorButton_Click(object sender, RoutedEventArgs e) =>
         PaneColorPopup.IsOpen = true;
+
+    private void OpenInExplorerButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(CurrentPath))
+            return;
+
+        try
+        {
+            var startInfo = new ProcessStartInfo("explorer.exe")
+            {
+                Arguments = $"/n, \"{CurrentPath}\"",
+                UseShellExecute = true
+            };
+            Process.Start(startInfo);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot open Windows Explorer", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
 
     private void PaneColorSwatch_Click(object sender, RoutedEventArgs e)
     {

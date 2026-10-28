@@ -44,10 +44,14 @@ when it is created and cannot be changed by the user.
   tab. Each non-browsable Pathview shows only the **Active path** tree tab.
 - [x] Each Pathview shows its location row across the full width above the
   side-by-side panes. The visible **Browse** or **Pin** button comes first; a
-  non-browsable Pathview then shows its bold **FIXED** badge, and the path is
-  always last. The browsable Pathview has no badge. Below this row, the tree
-  pane is on the left and the content pane is on the right; **Hide directories**
-  and **Hide internal** appear below the location row in the content pane.
+  non-browsable Pathview then shows its bold **FIXED** badge. The current
+  directory's Shell icon precedes its path expression. At the far right, every
+  Pathview has an **Open in Windows Explorer** button beside the fixed-view
+  color picker; it opens a new Explorer window at that Pathview's current path.
+  The browsable Pathview has no FIXED badge or color picker. Below this row, the
+  tree pane is on the left and the content pane is on the right; **Hide
+  directories** and **Hide internal** appear below the location row in the
+  content pane.
 - [x] The location-row widgets sit 10 DIP from both outer horizontal edges.
   Its outer row has a 36-DIP minimum height, independent of whether its color
   picker is visible; the widget group uses 2-DIP vertical margins. The

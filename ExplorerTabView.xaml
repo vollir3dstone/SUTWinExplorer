@@ -172,12 +172,20 @@
                        Padding="2,2" TextWrapping="NoWrap"
                        TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                 </StackPanel>
-                <Button x:Name="PaneColorButton" Grid.Column="1" Width="28" Height="28" Padding="0"
-                    Margin="8,0,0,0" ToolTip="Choose pane background color"
-                        AutomationProperties.Name="Choose pane background color"
-                        Click="PaneColorButton_Click">
-                    <Image Width="16" Height="16" Source="/Assets/ic_fluent_color_32_regular.png" />
-                </Button>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="PaneColorButton" Width="28" Height="28" Padding="0"
+                            Margin="8,0,0,0" ToolTip="Choose pane background color"
+                            AutomationProperties.Name="Choose pane background color"
+                            Click="PaneColorButton_Click">
+                        <Image Width="16" Height="16" Source="/Assets/ic_fluent_color_32_regular.png" />
+                    </Button>
+                    <Button x:Name="OpenInExplorerButton" Width="28" Height="28" Padding="0"
+                            Margin="4,0,0,0" ToolTip="Open in Windows Explorer"
+                            AutomationProperties.Name="Open current path in a new Windows Explorer window"
+                            IsEnabled="False" Click="OpenInExplorerButton_Click">
+                        <Image x:Name="OpenInExplorerIcon" Width="16" Height="16" Stretch="Uniform" />
+                    </Button>
+                </StackPanel>
                 <Popup x:Name="PaneColorPopup" PlacementTarget="{Binding ElementName=PaneColorButton}"
                        Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
                        PopupAnimation="Fade">
