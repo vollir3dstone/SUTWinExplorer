@@ -599,12 +599,21 @@
                           BorderThickness="1,1,0,1" BorderBrush="#646464" VirtualizingPanel.ScrollUnit="Pixel"
                           ScrollViewer.VerticalScrollBarVisibility="Hidden"
                           ScrollViewer.HorizontalScrollBarVisibility="Hidden">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="RenderTransform">
+                                <Setter.Value>
+                                    <TranslateTransform Y="{Binding PrivateTableTopGapOffset, RelativeSource={RelativeSource AncestorType={x:Type local:Pathview}}}" />
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListView.ItemContainerStyle>
                     <ListView.View>
                         <GridView>
                             <GridView.ColumnHeaderContainerStyle>
-                                <!-- Plain header like the Shell details header (measured at 96 DPI): text centered in the top 22 DIP, first row 30 DIP below the list top. -->
+                                <!-- The first-row gap is rendered separately so it can scroll away. -->
                                 <Style TargetType="GridViewColumnHeader">
-                                    <Setter Property="Height" Value="30" />
+                                    <Setter Property="Height" Value="24" />
                                     <Setter Property="Focusable" Value="False" />
                                     <Setter Property="Template">
                                         <Setter.Value>

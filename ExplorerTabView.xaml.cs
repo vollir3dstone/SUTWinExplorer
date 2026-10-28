@@ -28,6 +28,13 @@ public partial class Pathview : UserControl
             typeof(Pathview),
             new FrameworkPropertyMetadata(new SolidColorBrush(Colors.White)));
 
+    public static readonly DependencyProperty PrivateTableTopGapOffsetProperty =
+        DependencyProperty.Register(
+            nameof(PrivateTableTopGapOffset),
+            typeof(double),
+            typeof(Pathview),
+            new PropertyMetadata(PrivateTableTopGap));
+
     // Set true to reactivate the retained WPF ListView; false selects the Shell-hosted production view.
     private const bool UseLegacyWpfFileList = false;
     private static bool IsLegacyWpfFileList => UseLegacyWpfFileList;
@@ -47,6 +54,7 @@ public partial class Pathview : UserControl
     }
 
     private const TreeNavigationMode ActiveTreeNavigationMode = TreeNavigationMode.SingleClick;
+    private const double PrivateTableTopGap = 6;
     private readonly Stack<string> _backHistory = new();
     private readonly Stack<string> _forwardHistory = new();
     private string _historyCurrentPath = string.Empty;
@@ -130,6 +138,12 @@ public partial class Pathview : UserControl
     }
 
     public bool IsBrowsable { get; }
+    public double PrivateTableTopGapOffset
+    {
+        get => (double)GetValue(PrivateTableTopGapOffsetProperty);
+        private set => SetValue(PrivateTableTopGapOffsetProperty, value);
+    }
+
     public Brush PaneBackground
     {
         get => (Brush)GetValue(PaneBackgroundProperty);
@@ -939,27 +953,32 @@ public partial class Pathview : UserControl
         if (itemCount == 0)
             return;
 
+        var rowsScrolled = total > 0 ? (double)position * itemCount / total : 0;
+        // The Shell consumes its top gap over the first row; only the rendering moves,
+        // leaving the virtualized panel's uniform item sizes and scroll extent unchanged.
+        PrivateTableTopGapOffset = PrivateTableTopGap * Math.Max(0, 1 - rowsScrolled);
+
         // Row pitch, not ActualHeight: item containers have a margin/border that adds to the spacing.
         // Measured once from the first two realized rows, since virtualization recycles them while scrolling.
         if (_privateTableRowPitch == 0 &&
+            itemCount > 1 &&
+            PrivateFileTable.ItemContainerGenerator.ContainerFromIndex(1) is FrameworkElement secondRow &&
             PrivateFileTable.ItemContainerGenerator.ContainerFromIndex(0) is FrameworkElement firstRow)
         {
-            _privateTableRowPitch = itemCount > 1 &&
-                                    PrivateFileTable.ItemContainerGenerator.ContainerFromIndex(1) is FrameworkElement secondRow
-                ? secondRow.TranslatePoint(new Point(), firstRow).Y
-                : firstRow.ActualHeight;
+            _privateTableRowPitch = secondRow.TranslatePoint(new Point(), firstRow).Y;
         }
 
-        if (_privateTableRowPitch == 0)
-            return;
-
         var rowPitch = _privateTableRowPitch;
+        if (rowPitch == 0 && itemCount == 1 &&
+            PrivateFileTable.ItemContainerGenerator.ContainerFromIndex(0) is FrameworkElement singleRow)
+            rowPitch = singleRow.ActualHeight;
+        if (rowPitch == 0)
+            return;
 
         _privateTableScrollViewer ??= FindVisualChild<ScrollViewer>(PrivateFileTable);
         if (_privateTableScrollViewer is null)
             return;
 
-        var rowsScrolled = total > 0 ? (double)position * itemCount / total : 0;
         var offset = rowsScrolled * rowPitch;
         if (_lastShellScrollOffset == offset)
             return;
