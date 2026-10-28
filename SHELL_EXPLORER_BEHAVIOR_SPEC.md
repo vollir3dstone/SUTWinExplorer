@@ -129,6 +129,9 @@ may show its requested row in light gray without changing the active selection.
   **Hide internal** setting.
 - [x] **Active path and siblings** shows the active route and each route node's
   immediate child directories. Off-route branches remain collapsed.
+- [x] The browsable tree's filter row and framed tree have matching 4-DIP
+  horizontal insets and are separated by an 8-DIP Grid spacer. The frame uses
+  the same very light gray as the fixed **Sub directories** list.
 - [x] The browsable **Active path and siblings** tree has a single **Top** root
   whose immediate children are the available drives. Its displayed name is
   the localized Shell name for **This PC**, with its Shell icon. Selecting it

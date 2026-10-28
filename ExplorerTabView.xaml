@@ -351,9 +351,10 @@
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="8" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="8,2,8,2">
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="4,2,4,0">
                         <Border Height="24" Background="#E1E4E7" Padding="6,0"
                                 Margin="0,0,8,0" VerticalAlignment="Center">
                             <TextBlock Text="VIEW:" FontWeight="Bold" Foreground="#4E5963"
@@ -368,13 +369,17 @@
                                   Checked="HideInternalCheckBox_StateChanged"
                                   Unchecked="HideInternalCheckBox_StateChanged" />
                     </StackPanel>
-                    <TreeView x:Name="ActivePathAndSiblingsTree" Grid.Row="1"
-                              ItemContainerStyle="{StaticResource DirectoryTreeItemStyle}"
-                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                              PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown"
-                              PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"
-                              PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
-                              MouseDoubleClick="Tree_MouseDoubleClick" />
+                    <Border Grid.Row="2" BorderBrush="{StaticResource ViewFrameBrush}"
+                            BorderThickness="0.7" Margin="4,0,4,0">
+                        <TreeView x:Name="ActivePathAndSiblingsTree"
+                                  BorderThickness="0" Padding="0"
+                                  ItemContainerStyle="{StaticResource DirectoryTreeItemStyle}"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                  PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown"
+                                  PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"
+                                  PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
+                                  MouseDoubleClick="Tree_MouseDoubleClick" />
+                    </Border>
                 </Grid>
             </TabItem>
             </TabControl>
