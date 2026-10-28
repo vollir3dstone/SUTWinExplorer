@@ -13,6 +13,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     private static readonly Guid ExplorerBrowserClassId = new("71F96385-DDD6-48D3-A0C1-AE06E8B055FB");
     private const uint ClsctxInprocServer = 1;
     private const uint WindowStyle = 0x40000000 | 0x10000000 | 0x02000000 | 0x04000000;
+    private const uint ExplorerBrowserOptionNoBorder = 0x40;
     private const uint FolderViewDetails = 4;
     private const uint FolderFlagAutoArrange = 1;
     private const uint FolderFlagNoGrouping = 0x00100000;
@@ -343,6 +344,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             var classId = ExplorerBrowserClassId;
             var interfaceId = typeof(IExplorerBrowserNative).GUID;
             Marshal.ThrowExceptionForHR(CoCreateInstance(ref classId, IntPtr.Zero, ClsctxInprocServer, ref interfaceId, out _browser));
+            Marshal.ThrowExceptionForHR(_browser.SetOptions(ExplorerBrowserOptionNoBorder));
 
             _site = new ShellBrowserSite(
                 () => _showDirectories,

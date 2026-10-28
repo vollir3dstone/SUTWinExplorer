@@ -119,8 +119,8 @@ may show its requested row in light gray without changing the active selection.
   subdirectories in a gray-framed **Sub directories** section. Its vertically scrolling,
   single-line list has its own very light gray frame, aligned horizontally with
   the **VIEW:** badge above it. The list is inset 16 DIP from the frame on both
-  horizontal sides; each row shows only the folder's Shell icon (including
-  overlays) and name.
+  horizontal sides, with an 8-DIP Grid spacer below the filter row; each row
+  shows only the folder's Shell icon (including overlays) and name.
   The sections have a visible gap, and each subfolder row matches the tree's
   row height.
 - [x] The fixed **Active path** pane has a default-on **Hide internal** checkbox
@@ -189,6 +189,11 @@ may show its requested row in light gray without changing the active selection.
 ### Content listing
 
 - [x] The content view displays the active directory's files.
+- [x] The content pane separates its filter row, action row, and Shell view
+  with 8-DIP Grid spacer rows.
+- [x] The hosted Shell content view has a very light gray frame matching the
+  fixed **Sub directories** list frame. Its left edge aligns with the **VIEW:**
+  and **SELECTED:** badges above it.
 - [x] **Hide directories** controls whether directories appear in the content
   view. It defaults to on; unchecking it displays directories, and changing it
   updates the view without navigating.
