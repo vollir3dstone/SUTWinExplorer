@@ -9,6 +9,10 @@
                 <ResourceDictionary Source="Styles/InputControlStyles.xaml" />
                 <ResourceDictionary Source="Styles/TabItemStyle.xaml" />
             </ResourceDictionary.MergedDictionaries>
+            <SolidColorBrush x:Key="ItemHoverBrush" Color="#E5F3FF" />
+            <SolidColorBrush x:Key="ItemSelectionBrush" Color="#CCE8FF" />
+            <SolidColorBrush x:Key="ItemSelectionBorderBrush" Color="#0078D4" />
+            <SolidColorBrush x:Key="ItemRequestBrush" Color="#E6E6E6" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

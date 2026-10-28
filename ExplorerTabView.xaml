@@ -98,19 +98,26 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
-                            <ToggleButton x:Name="Expander" Grid.Row="0" Grid.Column="0"
-                                          Style="{StaticResource DirectoryTreeExpanderStyle}"
-                                          HorizontalAlignment="Center" VerticalAlignment="Center"
-                                          IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
-                                          />
-                            <ContentPresenter Grid.Row="0" Grid.Column="1" Width="16" Height="16"
-                                              Content="{Binding}" ContentTemplate="{StaticResource ShellIconTemplate}"
-                                              VerticalAlignment="Center" />
-                            <Border x:Name="HeaderBorder" Grid.Row="0" Grid.Column="2" Padding="6,0,1,0"
-                                    MinHeight="{x:Static local:Pathview.DirectoryTreeRowHeight}">
-                                <ContentPresenter x:Name="PART_Header" ContentSource="Header"
+                            <Grid x:Name="HeaderRow" Grid.Row="0" Grid.ColumnSpan="3" Background="Transparent">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="18" />
+                                    <ColumnDefinition Width="18" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border x:Name="HeaderBorder" Grid.ColumnSpan="3" IsHitTestVisible="False" />
+                                <ToggleButton x:Name="Expander" Grid.Column="0"
+                                              Style="{StaticResource DirectoryTreeExpanderStyle}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" />
+                                <ContentPresenter Grid.Column="1" Width="16" Height="16"
+                                                  Content="{Binding}" ContentTemplate="{StaticResource ShellIconTemplate}"
                                                   VerticalAlignment="Center" />
-                            </Border>
+                                <Border Grid.Column="2" Padding="6,0,1,0"
+                                        MinHeight="{x:Static local:Pathview.DirectoryTreeRowHeight}">
+                                    <ContentPresenter x:Name="PART_Header" ContentSource="Header"
+                                                      VerticalAlignment="Center" />
+                                </Border>
+                            </Grid>
                             <ItemsPresenter x:Name="ItemsHost" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"
                                             Visibility="Collapsed" />
                         </Grid>
@@ -124,11 +131,16 @@
                             <DataTrigger Binding="{Binding HasSubdirectories}" Value="False">
                                 <Setter TargetName="Expander" Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
+                            <Trigger SourceName="HeaderRow" Property="IsMouseOver" Value="True">
+                                <Setter TargetName="HeaderBorder" Property="Background" Value="{StaticResource ItemHoverBrush}" />
+                            </Trigger>
                             <DataTrigger Binding="{Binding IsNavigationPending}" Value="True">
-                                <Setter TargetName="HeaderBorder" Property="Background" Value="#E6E6E6" />
+                                <Setter TargetName="HeaderBorder" Property="Background" Value="{StaticResource ItemRequestBrush}" />
                             </DataTrigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="HeaderBorder" Property="Background" Value="#DCEBFA" />
+                                <Setter TargetName="HeaderBorder" Property="Background" Value="{StaticResource ItemSelectionBrush}" />
+                                <Setter TargetName="HeaderBorder" Property="BorderBrush" Value="{StaticResource ItemSelectionBorderBrush}" />
+                                <Setter TargetName="HeaderBorder" Property="BorderThickness" Value="1" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -268,18 +280,21 @@
                                             <Setter Property="Template">
                                                 <Setter.Value>
                                                     <ControlTemplate TargetType="ListViewItem">
-                                                        <Border x:Name="RowBackground" Background="Transparent">
+                                                        <Grid Background="Transparent">
+                                                            <Border x:Name="RowBackground" IsHitTestVisible="False" />
                                                             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                                                               Content="{TemplateBinding Content}"
                                                                               ContentTemplate="{TemplateBinding ContentTemplate}" />
-                                                        </Border>
+                                                        </Grid>
                                                         <ControlTemplate.Triggers>
-                                                            <Trigger Property="IsSelected" Value="True">
-                                                                <Setter TargetName="RowBackground" Property="Background" Value="#DCEBFA" />
-                                                            </Trigger>
                                                             <Trigger Property="IsMouseOver" Value="True">
-                                                                <Setter TargetName="RowBackground" Property="Background" Value="#DCEBFA" />
+                                                                <Setter TargetName="RowBackground" Property="Background" Value="{StaticResource ItemHoverBrush}" />
+                                                            </Trigger>
+                                                            <Trigger Property="IsSelected" Value="True">
+                                                                <Setter TargetName="RowBackground" Property="Background" Value="{StaticResource ItemSelectionBrush}" />
+                                                                <Setter TargetName="RowBackground" Property="BorderBrush" Value="{StaticResource ItemSelectionBorderBrush}" />
+                                                                <Setter TargetName="RowBackground" Property="BorderThickness" Value="1" />
                                                             </Trigger>
                                                         </ControlTemplate.Triggers>
                                                     </ControlTemplate>
@@ -479,6 +494,33 @@
                       MouseDoubleClick="FileList_MouseDoubleClick"
                       PreviewMouseRightButtonDown="FileList_PreviewMouseRightButtonDown"
                       PreviewKeyDown="FileList_PreviewKeyDown">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListViewItem">
+                                    <Grid Background="Transparent">
+                                        <Border x:Name="RowBackground" IsHitTestVisible="False" />
+                                        <GridViewRowPresenter Content="{TemplateBinding Content}"
+                                                              Columns="{TemplateBinding GridView.ColumnCollection}"
+                                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                    </Grid>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="RowBackground" Property="Background" Value="{StaticResource ItemHoverBrush}" />
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="RowBackground" Property="Background" Value="{StaticResource ItemSelectionBrush}" />
+                                            <Setter TargetName="RowBackground" Property="BorderBrush" Value="{StaticResource ItemSelectionBorderBrush}" />
+                                            <Setter TargetName="RowBackground" Property="BorderThickness" Value="1" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListView.ItemContainerStyle>
                 <ListView.View>
                     <GridView>
                         <GridViewColumn Header="" Width="34">

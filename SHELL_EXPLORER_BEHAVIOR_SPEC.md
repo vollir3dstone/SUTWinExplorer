@@ -177,6 +177,12 @@ may show its requested row in light gray without changing the active selection.
   its location.
 - [x] Expanding a tree node does not trigger navigation during application
   startup or other programmatic tree updates.
+- [x] Application-owned tree and list rows use `#E5F3FF` for hover and
+  `#CCE8FF` with a 1-pixel `#0078D4` border for selection. These are the
+  Windows Explorer colors in Windows 11 as of October 2026. Selection takes
+  precedence over hover. An application-specific pending tree request uses
+  `#E6E6E6` and takes precedence over hover without replacing the active
+  selection. The hosted Shell content view retains its native rendering.
 
 ### Content listing
 

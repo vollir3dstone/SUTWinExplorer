@@ -433,8 +433,13 @@ through `TreeEntry.IsNavigationPending`; it is not WPF selection.
   succeed before the parent becomes active and selected. The
   filtering, so internal and directory-link entries count. Hidden filesystem
   items retain their Shell icon and are rendered with reduced opacity. The
-  template hides placeholder entries and applies a light-blue selected-row
-  background.
+  template hides placeholder entries. Application resources `ItemHoverBrush`,
+  `ItemSelectionBrush`, `ItemSelectionBorderBrush`, and `ItemRequestBrush`
+  define the shared hover, selection, selection-border, and pending-request
+  colors. The tree and application-owned lists use these brushes; the hosted
+  Shell content view renders its own states. Tree hover applies to the header
+  row only, not its expanded descendants. Selection overrides hover, and a
+  pending request overrides hover without replacing the selected active path.
 
 `ActivePathTree` sits in a gray-framed `GroupBox` headed **Path**, whose height
 is set to the active route's row count times
@@ -446,8 +451,8 @@ It contains the default-checked
 inner list frame is `#646464` at 0.7 DIP. The `ListView` fills the remaining
 area and scrolls vertically; its item-container height uses the same
 `DirectoryTreeRowHeight` as the tree.
-The list remains selectable. Its item containers use the same light-blue row
-background for selection and hover. On every `MouseEnter` over a list item,
+The list remains selectable. Its item containers use the shared hover and
+selection brushes. On every `MouseEnter` over a list item,
 selection rather than only hiding its visual state. A later click or keyboard
 action can select an item again; the next mouse entry over any list item clears
 that selection again.
