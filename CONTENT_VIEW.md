@@ -203,6 +203,10 @@ not a documented Shell metric. At 96 DPI, the latest measured alignment was
 and Windows versions remain untested. See the
 [scroll-sync handoff](./SCROLL_SYNC_HANDOFF.md) for measurements and history.
 
+The visible delay between Shell rows and the private column is an open
+investigation; see [private column population latency](./CONTENT_VIEW_POPULATION_LATENCY.md)
+for the current hypotheses and measurement plan.
+
 ### Transfer and selection implementation
 
 `CopyWorkflowState.Shared` and `MoveWorkflowState.Shared` hold distinct prepared
