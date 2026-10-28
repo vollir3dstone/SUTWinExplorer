@@ -326,7 +326,10 @@ leading ellipsis prefix is omitted.
   directories, accessible System directories, and junctions are not excluded
   by those classifications alone. Active-path ancestors remain visible. The
   filter is applied by the shared tree-child refresh path, including
-  filesystem-change reconciliation.
+  filesystem-change reconciliation. In the browsable Pathview, the filter row
+  and tree occupy `Auto`, 8-DIP spacer, and `*` rows in a `Grid`. Both are inset
+  4 DIP horizontally; the tree is wrapped in a `Border` using the shared
+  `ViewFrameBrush`, with the TreeView's own border disabled.
 - A fixed Pathview's **Active path** pane has its own default-checked
   **Hide internal** checkbox above the subfolder list. It applies the same
   internal-item predicate to that list's immediate children only; it does not
