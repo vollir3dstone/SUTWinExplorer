@@ -23,6 +23,15 @@ displayed filesystem paths and follows Shell scrolling. The table and
 scroll-alignment measurements are a spike, not a replacement for the Shell
 view.
 
+When a different location is requested, the private column is cleared
+immediately instead of continuing to show rows from the previous directory.
+The Shell view and committed Pathview location remain Shell- and
+navigation-controlled. After a successful navigation, the private column
+shows the new view's available filesystem items and can update again as more
+items appear; it does not wait for the entire folder to finish loading. If
+navigation fails, the current location remains unchanged and the column is
+repopulated from the retained Shell view.
+
 The **VIEW** row controls the content's **Hide directories**, **Hide internal**,
 and **Name pattern** filters. These settings are local to the Pathview; the
 content **Hide internal** setting is independent of the tree filters. The
@@ -62,7 +71,7 @@ location/tree updates.
 | --- | --- |
 | `Initialize(isBrowsable)` | Called once after construction. Configures the content's browsable/fixed role and creates the Shell host in the default mode. A second call throws. |
 | `UsesSynchronousNavigation` | Indicates the retained legacy WPF mode. Pathview validates and commits that mode's directory navigation itself. |
-| `NavigateTo(path)` | Requests Shell-backed navigation; it does not commit the Pathview location. It throws if asynchronous content navigation is unavailable. |
+| `NavigateTo(path)` | Clears the private column and requests Shell-backed navigation; it does not commit the Pathview location. It throws if asynchronous content navigation is unavailable. |
 | `NavigationCompleted(path)` / `NavigationFailed(path)` | Report Shell navigation outcomes. Pathview handles pending requests and commits its location/history only on success; a failure path may be empty. |
 | `FolderOpenRequested(path)` | Reports a folder activation for Pathview to route according to its browsable/fixed role. |
 | `SetCurrentPath(path)` | Supplies the location committed by Pathview. It neither navigates nor refreshes the content by itself. |
@@ -82,10 +91,10 @@ the Shell host: ContentView handles them and uses the shared workflow state.
 `Initialize` creates one `ShellExplorerBrowserHost` in the default Shell mode
 and forwards its navigation, folder-open, and filesystem events. ContentView
 attaches the 30-ms scroll timer and workflow/selection notifications when
-loaded; on unload it stops its scroll and table-refresh timers and detaches
-those subscriptions. Pathview owns calculation and clearing of notification
-routes and retains its separate filesystem-refresh timer. The host manages its
-native window and COM lifetime.
+loaded; on unload it stops the scroll timer and detaches those subscriptions.
+Pathview owns calculation and clearing of notification routes and retains its
+separate filesystem-refresh timer. The host manages its native window, Shell
+view change monitor, and COM lifetime.
 
 The retained `UseLegacyWpfFileList` switch is in `ContentView.xaml.cs`:
 `false` selects the Shell view and private spike table; `true` selects the
@@ -99,12 +108,85 @@ filesystem path.
 
 ### Private table and scroll synchronization
 
-`RefreshShellStatusCount` restarts a 300-ms debounce timer in Shell mode. The
-timer queries the Shell view's displayed filesystem paths through
-`GetDisplayedFileSystemPaths` and fills the private table in Shell order, using
-the filesystem leaf names. The query goes through the displayed-items
-`IDataObject`/`CF_HDROP` path rather than independently enumerating the
-directory. COM or invalid-operation failures are written to debug output.
+#### Navigation and refresh lifecycle
+
+1. `ContentView.NavigateTo` records the pending destination and clears
+   `PrivateFileTable.ItemsSource` before calling the host. It also invalidates
+   the last synchronized scroll offset and restores the initial top-gap
+   offset. For navigation initiated inside the Shell, the host's internal
+   `NavigationStarting` event performs the same clearing when
+   `IExplorerBrowserEvents.OnNavigationPending` accepts the request.
+   `NavigationStarting` is internal to the component, not a Pathview event.
+   A fixed view rejects disallowed Shell navigation before raising it, so its
+   private column is not cleared for that rejected request.
+2. While a destination is pending, queued private-table refreshes do not query
+   or repopulate the table. On a matching completion or failure, or if either
+   pending or reported path is empty, the pending state is cleared and a
+   refresh is scheduled. Nonempty paths are compared case-insensitively;
+   a nonmatching outcome does not end the newer pending state. A synchronous
+   exception from `NavigateTo` also ends that request, schedules a refresh,
+   and is rethrown.
+3. `OnNavigationComplete` causes the host to reset its cached item count and
+   sized width, normalize the Shell view, and dispatch `NavigationCompleted`
+   at `DispatcherPriority.DataBind`. `OnNavigationFailed` dispatches
+   `NavigationFailed` at the same priority. ContentView ends its pending state
+   before forwarding the outcome to Pathview. Pathview still commits its
+   location and history only on success. A synchronous browse failure can
+   also report `NavigationFailed` directly.
+4. Navigation outcomes, filter changes, filesystem refreshes, reloading the
+   control, and the item-count event described below schedule a private-table
+   refresh at `DispatcherPriority.Background`. Duplicate pending requests are
+   coalesced. A queued refresh is skipped if the control is unloaded or
+   navigation is pending; a later load or navigation outcome schedules
+   another. The refresh reads `SVGIO_ALLVIEW` through
+   `GetDisplayedFileSystemPaths` using the Shell's `IDataObject`/`CF_HDROP`,
+   then displays filesystem leaf names in the order returned by the Shell.
+   It does not enumerate the directory independently. COM and
+   invalid-operation exceptions are written to debug output.
+
+#### Shell view and layout events
+
+Navigation completion does not guarantee that the Shell has finished
+populating or laying out its view. In particular, a first item query can be
+empty and a vertical scrollbar can appear later. The host therefore creates a
+[`ShellViewChangeMonitor`](./ShellViewChangeMonitor.cs) for its native host
+window. It installs two out-of-context `SetWinEventHook` subscriptions scoped
+to the current process and filters callbacks to descendant HWNDs of that host:
+
+| Native event | Value | Filter and reaction |
+| --- | --- | --- |
+| `EVENT_OBJECT_CREATE` | `0x8000` | For `DirectUIHWND` with a positive object ID, flag a possible item change; for a `ScrollBar` with object ID `0`, flag a possible layout change. |
+| `EVENT_OBJECT_DESTROY` | `0x8001` | Same filters and reactions, when the HWND still passes the descendant check. |
+| `EVENT_OBJECT_SHOW` | `0x8002` | Same filters and reactions. |
+| `EVENT_OBJECT_HIDE` | `0x8003` | Same filters and reactions. |
+| `EVENT_OBJECT_REORDER` | `0x8004` | Same filters and reactions. |
+| `EVENT_OBJECT_LOCATIONCHANGE` | `0x800B` | For a `ScrollBar` with object ID `0`, flag a possible layout change; DirectUI location changes are ignored. |
+
+These are Windows accessibility notifications, not a Shell enumeration-complete
+callback. The monitor coalesces item and layout flags into one
+`DispatcherPriority.ContextIdle` operation. For an item flag, the host queries
+the current `IFolderView2` through `IFolderView::ItemCount(SVGIO_ALLVIEW)`.
+Only a count different from its cached value raises the host's internal
+`DisplayedItemsChanged` event, which schedules the table refresh above. For a
+layout flag, the host remeasures the current Shell view's usable client width
+and recalculates the Name column only when that width differs from the last
+successfully sized width.
+
+This is incremental rather than a fixed-delay or enumeration-complete strategy.
+The observed `DirectUIHWND` class and positive accessible object IDs are not a
+documented Shell enumeration contract; other Windows versions and providers
+need runtime verification. An item notification with an unchanged count does
+not itself refresh the table, so it cannot by itself detect every same-count
+replacement or reorder. Filter changes and filesystem notifications have
+their own refresh routes: filter handlers refresh the Shell and status; the
+host forwards `SHChangeNotifyRegister` notifications as `FileSystemChanged`
+to Pathview, which coordinates its deferred refresh.
+
+The monitor's hooks are removed before the host window and browser are
+destroyed. Hook installation failures raise `Win32Exception`; item-count query
+failures are written to debug output. Neither the item refresh nor the
+scrollbar-width update uses a delay timer. The separate scroll-position
+synchronization still uses the existing 30-ms timer described below.
 
 The Shell view is DirectUI, so the spike polls its vertical scrollbar child
 using `GetScrollInfo`, not `LVM_*` or `GetVisibleItem`. The observed range is
@@ -156,7 +238,8 @@ hosts it on the WPF UI's STA thread.
 
 Initialization sequence:
 
-1. Create the child HWND in `HwndHost.BuildWindowCore`.
+1. Create the child HWND in `HwndHost.BuildWindowCore` and install the Shell
+   view change monitor.
 2. Create the `IExplorerBrowser` COM object.
 3. Create and attach `ShellBrowserSite` with `IObjectWithSite.SetSite`.
 4. Initialize in Details mode with `FOLDERSETTINGS`; do not enable
@@ -171,8 +254,8 @@ Initialization sequence:
 8. Update the Shell view's bounds with `SetRect` when the WPF host is resized,
    then use `IColumnManager` to size the visible Name column to the remaining
    width.
-9. On teardown, `Unadvise`, call `Destroy`, clear the site, release COM
-   references, and destroy the child HWND.
+9. On teardown, remove the change-monitor hooks, `Unadvise`, call `Destroy`,
+   clear the site, release COM references, and destroy the child HWND.
 
 Navigation uses `SHParseDisplayName` to obtain an absolute PIDL and
 `IExplorerBrowser.BrowseToIDList`; the allocated PIDL is freed after the call.
@@ -246,10 +329,11 @@ to identify Name. The target width is:
 
 The other widths are read with `GetColumnInfo`; the Name width is applied with
 `SetColumnInfo`. The width is recalculated after Shell navigation because the
-Shell may replace the current view. After **Hide directories** refreshes the
-view, a one-shot 250ms dispatcher timer allows Shell's scrollbar child windows
-to settle before measuring the visible vertical scrollbar and recalculating
-Name. `IColumnManager` widths are physical pixels. Its COM method declarations
+Shell may replace the current view. The host also observes its Shell scrollbar
+window's accessibility and location events and recalculates Name if the usable
+view width changed. This covers a vertical scrollbar appearing or disappearing
+after navigation or filtering, without a delayed sizing timer.
+`IColumnManager` widths are physical pixels. Its COM method declarations
 must follow the SDK vtable order (`SetColumnInfo`,
 `GetColumnInfo`, `GetColumnCount`, `GetColumns`, `SetColumns`); a different
 declaration order dispatches calls to the wrong native methods.
@@ -275,7 +359,7 @@ Name-width update.
 
 Unchecking **Hide directories** in a folder with enough entries to show the
 vertical bar left the Shell view 880px wide, but its visible vertical scrollbar
-was 17px wide, reducing usable width to 863px. The delayed recalculation
+was 17px wide, reducing usable width to 863px. The then-delayed recalculation
 reduced Name from 525px to 508px; Size stayed at its Shell-provided 80px, and
 UI Automation reported `HorizontallyScrollable = false`. The horizontal bar
 had appeared because the Shell's vertical bar consumed width without raising a

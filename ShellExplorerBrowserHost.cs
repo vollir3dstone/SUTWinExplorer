@@ -19,6 +19,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     private const uint FolderFlagNoGrouping = 0x00100000;
     private const uint FolderViewOptionCustomPosition = 2;
     private const uint ShellDisplayNameFileSystemPath = 0x80058000;
+    private const uint ShellViewAllItems = 2;
     private const uint ColumnEnumVisible = 2;
     private const uint ColumnMaskWidth = 1;
     private const uint ColumnMaskState = 0x10;
@@ -67,11 +68,16 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     private readonly bool _isBrowsable;
     private string? _programmaticNavigationPath;
     private string? _pendingPath;
+    private ShellViewChangeMonitor? _viewChangeMonitor;
+    private int? _lastDisplayedItemCount;
+    private int? _lastSizedViewWidth;
 
+    public event EventHandler<string>? NavigationStarting;
     public event EventHandler<string>? NavigationCompleted;
     public event EventHandler<string>? NavigationFailed;
     public event EventHandler<string>? FolderOpenRequested;
     public event EventHandler? FileSystemChanged;
+    public event EventHandler? DisplayedItemsChanged;
     public static event EventHandler? ToolbarOperationStateChanged;
 
     public bool HasSelection { get; private set; }
@@ -105,37 +111,28 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     {
         _showDirectories = showDirectories;
         _site?.SetShowDirectories(showDirectories);
-        RefreshAfterFilterChange($"Show directories refresh settled: {showDirectories}");
+        RefreshAfterFilterChange($"Show directories refresh requested: {showDirectories}");
     }
 
     public void SetHideInternal(bool hideInternal)
     {
         _hideInternal = hideInternal;
         _site?.SetHideInternal(hideInternal);
-        RefreshAfterFilterChange($"Hide internal refresh settled: {hideInternal}");
+        RefreshAfterFilterChange($"Hide internal refresh requested: {hideInternal}");
     }
 
     public void SetNamePattern(string namePattern)
     {
         _namePattern = namePattern;
         _site?.SetNamePattern(namePattern);
-        RefreshAfterFilterChange("Name pattern refresh settled");
+        RefreshAfterFilterChange("Name pattern refresh requested");
     }
 
     private void RefreshAfterFilterChange(string traceMessage)
     {
         RefreshCurrentView();
-        var refreshTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
-        {
-            Interval = TimeSpan.FromMilliseconds(250)
-        };
-        refreshTimer.Tick += (_, _) =>
-        {
-            refreshTimer.Stop();
-            TraceColumnSizing(traceMessage);
-            ApplyViewBounds();
-        };
-        refreshTimer.Start();
+        TraceColumnSizing(traceMessage);
+        ApplyViewBounds();
     }
 
     public void RefreshContents() => RefreshCurrentView();
@@ -159,6 +156,51 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
     public List<string> GetDisplayedFileSystemPaths() =>
         QueryCurrentView(ShellFileOperations.GetDisplayedFileSystemPaths);
+
+    private void HandleViewChanges(bool itemsChanged, bool layoutChanged)
+    {
+        if (_browser is null || !_initialized)
+            return;
+
+        if (layoutChanged && _hasViewBounds)
+        {
+            var width = GetShellViewClientWidth(_viewBounds.Right - _viewBounds.Left);
+            if (width != _lastSizedViewWidth)
+                UpdateNameColumnWidth(_viewBounds.Right - _viewBounds.Left);
+        }
+
+        if (!itemsChanged)
+            return;
+
+        IntPtr viewPointer = IntPtr.Zero;
+        IFolderView2Native? view = null;
+        try
+        {
+            var interfaceId = typeof(IFolderView2Native).GUID;
+            Marshal.ThrowExceptionForHR(_browser.GetCurrentView(ref interfaceId, out viewPointer));
+            if (viewPointer == IntPtr.Zero)
+                throw new InvalidOperationException("The Shell folder view is unavailable.");
+            view = (IFolderView2Native)Marshal.GetObjectForIUnknown(viewPointer);
+            Marshal.ThrowExceptionForHR(view.ItemCount(ShellViewAllItems, out var count));
+            TraceColumnSizing($"Change notification item count={count}, previous={_lastDisplayedItemCount}");
+            if (_lastDisplayedItemCount != count)
+            {
+                _lastDisplayedItemCount = count;
+                DisplayedItemsChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+        catch (Exception exception) when (exception is COMException or InvalidOperationException or InvalidCastException)
+        {
+            System.Diagnostics.Debug.WriteLine($"Shell view change query failed: {exception}");
+        }
+        finally
+        {
+            if (view is not null && Marshal.IsComObject(view))
+                _ = Marshal.ReleaseComObject(view);
+            if (viewPointer != IntPtr.Zero)
+                _ = Marshal.Release(viewPointer);
+        }
+    }
 
     private List<string> QueryCurrentView(Func<IShellView, List<string>> query)
     {
@@ -351,6 +393,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
         try
         {
+            _viewChangeMonitor = new ShellViewChangeMonitor(_hostWindow, Dispatcher, HandleViewChanges);
             var classId = ExplorerBrowserClassId;
             var interfaceId = typeof(IExplorerBrowserNative).GUID;
             Marshal.ThrowExceptionForHR(CoCreateInstance(ref classId, IntPtr.Zero, ClsctxInprocServer, ref interfaceId, out _browser));
@@ -610,6 +653,8 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             return;
 
         _currentPath = path;
+        _lastDisplayedItemCount = null;
+        _lastSizedViewWidth = null;
         _pendingPath = path;
         _programmaticNavigationPath = null;
         ApplyStandardFolderView();
@@ -802,6 +847,8 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             var nameColumnInfo = ShellColumnInfo.Create(ColumnMaskWidth);
             nameColumnInfo.Width = (uint)Math.Max(MinimumNameColumnWidth, availableWidth - otherColumnWidth - ShellColumnTrailingInset);
             var setResult = columnManager.SetColumnInfo(ref columns[nameColumnIndex], ref nameColumnInfo);
+            if (setResult >= 0)
+                _lastSizedViewWidth = availableWidth;
             TraceColumnSizing($"Set Name width={nameColumnInfo.Width} (view={availableWidth}, other={otherColumnWidth}) result=0x{setResult:X8}");
         }
         catch (Exception exception) when (exception is COMException or InvalidCastException)
@@ -932,6 +979,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         if (path is not null)
             _pendingPath = path;
 
+        NavigationStarting?.Invoke(this, path ?? _programmaticNavigationPath ?? string.Empty);
         return 0;
     }
 
@@ -976,6 +1024,10 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
     private void ReleaseBrowser()
     {
+        _viewChangeMonitor?.Dispose();
+        _viewChangeMonitor = null;
+        _lastDisplayedItemCount = null;
+        _lastSizedViewWidth = null;
         ClearChangeNotifications();
         if (_browser is not null)
         {
@@ -1122,7 +1174,7 @@ internal interface IFolderView2Native
     [PreserveSig] int SetCurrentViewMode(uint viewMode);
     [PreserveSig] int UnusedSlot02();
     [PreserveSig] int UnusedSlot03();
-    [PreserveSig] int UnusedSlot04();
+    [PreserveSig] int ItemCount(uint flags, out int count);
     [PreserveSig] int UnusedSlot05();
     [PreserveSig] int UnusedSlot06();
     [PreserveSig] int UnusedSlot07();

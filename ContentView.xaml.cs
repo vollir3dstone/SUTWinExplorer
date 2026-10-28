@@ -24,8 +24,9 @@ public partial class ContentView : UserControl
     private static bool IsLegacyWpfFileList => UseLegacyWpfFileList;
     private const double PrivateTableTopGap = 6;
 
-    private readonly DispatcherTimer _privateTableRefreshTimer;
     private readonly DispatcherTimer _scrollSyncTimer;
+    private bool _privateTableRefreshQueued;
+    private string? _privateTablePendingNavigation;
     private ScrollViewer? _privateTableScrollViewer;
     private double? _lastShellScrollOffset;
     private double _privateTableRowPitch;
@@ -39,11 +40,6 @@ public partial class ContentView : UserControl
         HideDirectoriesCheckBox.GetCheckBox().Unchecked += HideDirectoriesCheckBox_StateChanged;
         HideInternalContentCheckBox.GetCheckBox().Checked += HideInternalContentCheckBox_StateChanged;
         HideInternalContentCheckBox.GetCheckBox().Unchecked += HideInternalContentCheckBox_StateChanged;
-        _privateTableRefreshTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
-        {
-            Interval = TimeSpan.FromMilliseconds(300)
-        };
-        _privateTableRefreshTimer.Tick += PrivateTableRefreshTimer_Tick;
         _scrollSyncTimer = new DispatcherTimer(DispatcherPriority.Render, Dispatcher)
         {
             Interval = TimeSpan.FromMilliseconds(30)
@@ -84,10 +80,20 @@ public partial class ContentView : UserControl
         if (!IsLegacyWpfFileList)
         {
             _shellBrowserHost = new ShellExplorerBrowserHost(isBrowsable);
-            _shellBrowserHost.NavigationCompleted += (_, path) => NavigationCompleted?.Invoke(this, path);
-            _shellBrowserHost.NavigationFailed += (_, path) => NavigationFailed?.Invoke(this, path);
+            _shellBrowserHost.NavigationStarting += (_, path) => BeginPrivateTableNavigation(path);
+            _shellBrowserHost.NavigationCompleted += (_, path) =>
+            {
+                EndPrivateTableNavigation(path);
+                NavigationCompleted?.Invoke(this, path);
+            };
+            _shellBrowserHost.NavigationFailed += (_, path) =>
+            {
+                EndPrivateTableNavigation(path);
+                NavigationFailed?.Invoke(this, path);
+            };
             _shellBrowserHost.FolderOpenRequested += (_, path) => FolderOpenRequested?.Invoke(this, path);
             _shellBrowserHost.FileSystemChanged += (_, _) => FileSystemChanged?.Invoke(this, EventArgs.Empty);
+            _shellBrowserHost.DisplayedItemsChanged += (_, _) => SchedulePrivateTableRefresh();
             _shellBrowserHost.SetShowDirectories(HideDirectoriesCheckBox.GetCheckBox().IsChecked != true);
             _shellBrowserHost.SetHideInternal(HideInternalContentCheckBox.GetCheckBox().IsChecked == true);
             _shellBrowserHost.SetNamePattern(NamePatternTextBox.Text);
@@ -99,7 +105,16 @@ public partial class ContentView : UserControl
     {
         if (_shellBrowserHost is null)
             throw new InvalidOperationException("Asynchronous content navigation is unavailable.");
-        _shellBrowserHost.NavigateTo(path);
+        BeginPrivateTableNavigation(path);
+        try
+        {
+            _shellBrowserHost.NavigateTo(path);
+        }
+        catch
+        {
+            EndPrivateTableNavigation(path);
+            throw;
+        }
     }
 
     internal void SetCurrentPath(string path) => CurrentPath = path;
@@ -127,13 +142,14 @@ public partial class ContentView : UserControl
         CopyWorkflowState.Shared.Changed += CopyWorkflowState_Changed;
         MoveWorkflowState.Shared.Changed += MoveWorkflowState_Changed;
         _shellBrowserHost?.RefreshSelectionState();
+        if (!IsLegacyWpfFileList)
+            SchedulePrivateTableRefresh();
         UpdateToolbarOperationButtons();
     }
 
     private void ContentView_Unloaded(object sender, RoutedEventArgs e)
     {
         _scrollSyncTimer.Stop();
-        _privateTableRefreshTimer.Stop();
         ShellExplorerBrowserHost.ToolbarOperationStateChanged -= ShellExplorerBrowserHost_ToolbarOperationStateChanged;
         CopyWorkflowState.Shared.Changed -= CopyWorkflowState_Changed;
         MoveWorkflowState.Shared.Changed -= MoveWorkflowState_Changed;
@@ -387,10 +403,7 @@ public partial class ContentView : UserControl
     private void RefreshShellStatusCount()
     {
         if (!IsLegacyWpfFileList)
-        {
-            _privateTableRefreshTimer.Stop();
-            _privateTableRefreshTimer.Start();
-        }
+            SchedulePrivateTableRefresh();
 
         if (ShellLocations.IsTopPath(CurrentPath))
         {
@@ -422,9 +435,19 @@ public partial class ContentView : UserControl
         }
     }
 
-    private void PrivateTableRefreshTimer_Tick(object? sender, EventArgs e)
+    private void SchedulePrivateTableRefresh()
     {
-        _privateTableRefreshTimer.Stop();
+        if (_privateTableRefreshQueued || Dispatcher.HasShutdownStarted)
+            return;
+        _privateTableRefreshQueued = true;
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(RefreshPrivateTable));
+    }
+
+    private void RefreshPrivateTable()
+    {
+        _privateTableRefreshQueued = false;
+        if (!IsLoaded || _privateTablePendingNavigation is not null)
+            return;
         try
         {
             var paths = _shellBrowserHost?.GetDisplayedFileSystemPaths() ?? [];
@@ -434,6 +457,25 @@ public partial class ContentView : UserControl
         catch (Exception exception) when (exception is COMException or InvalidOperationException)
         {
             Debug.WriteLine($"Private table refresh failed: {exception}");
+        }
+    }
+
+    private void BeginPrivateTableNavigation(string path)
+    {
+        _privateTablePendingNavigation = path;
+        PrivateFileTable.ItemsSource = null;
+        _lastShellScrollOffset = null;
+        PrivateTableTopGapOffset = PrivateTableTopGap;
+    }
+
+    private void EndPrivateTableNavigation(string path)
+    {
+        if (_privateTablePendingNavigation is not null &&
+            (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(_privateTablePendingNavigation) ||
+             string.Equals(_privateTablePendingNavigation, path, StringComparison.OrdinalIgnoreCase)))
+        {
+            _privateTablePendingNavigation = null;
+            SchedulePrivateTableRefresh();
         }
     }
 
