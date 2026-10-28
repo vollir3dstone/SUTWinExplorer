@@ -162,8 +162,14 @@
                     Margin="10,0,8,0" VerticalAlignment="Center" Visibility="Collapsed">
                     <TextBlock Text="FIXED" FontWeight="Bold" Foreground="#4E5963" />
                 </Border>
+                <Grid x:Name="LocationIconSlot" Width="24" Height="24" Margin="8,0,2,0"
+                      VerticalAlignment="Center">
+                    <Image x:Name="LocationBaseIcon" Width="24" Height="24" Stretch="Uniform" />
+                    <Image x:Name="LocationOverlayIcon" Width="13" Height="13" Stretch="Uniform"
+                           HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+                </Grid>
                 <TextBlock x:Name="LocationLabel" Style="{StaticResource PathHeaderDisplayStyle}"
-                       Padding="12,2" TextWrapping="NoWrap"
+                       Padding="2,2" TextWrapping="NoWrap"
                        TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                 </StackPanel>
                 <Button x:Name="PaneColorButton" Grid.Column="1" Width="28" Height="28" Padding="0"

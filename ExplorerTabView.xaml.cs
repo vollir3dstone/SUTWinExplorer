@@ -302,6 +302,7 @@ public partial class Pathview : UserControl
         CurrentPath = path;
         PinPathviewButton.IsEnabled = true;
         BrowsePathviewButton.IsEnabled = true;
+        UpdateLocationIcon(path);
         LocationLabel.Text = ShellDisplayNameProvider.GetDisplayPath(path);
         RefreshActivePathAndSiblingsTree();
         RefreshActivePathTree();
@@ -574,13 +575,27 @@ public partial class Pathview : UserControl
         var fixedBadgeWidth = FixedPathBadge.Visibility == Visibility.Visible
             ? FixedPathBadge.ActualWidth + FixedPathBadge.Margin.Left + FixedPathBadge.Margin.Right
             : 0;
+        var locationIconWidth = LocationIconSlot.Visibility == Visibility.Visible
+            ? LocationIconSlot.Width + LocationIconSlot.Margin.Left + LocationIconSlot.Margin.Right
+            : 0;
         var actionButton = IsBrowsable ? PinPathviewButton : BrowsePathviewButton;
         var actionButtonWidth = actionButton.Visibility == Visibility.Visible
             ? actionButton.ActualWidth + actionButton.Margin.Left + actionButton.Margin.Right
             : 0;
         var titlePadding = LocationLabel.Padding.Left + LocationLabel.Padding.Right;
         LocationLabel.MaxWidth = Math.Max(0,
-            LocationHeaderPanel.ActualWidth - fixedBadgeWidth - actionButtonWidth - titlePadding);
+            LocationHeaderPanel.ActualWidth - fixedBadgeWidth - locationIconWidth - actionButtonWidth - titlePadding);
+    }
+
+    private void UpdateLocationIcon(string path)
+    {
+        var icons = ShellIconProvider.GetSmallIcons(path);
+        var dpi = VisualTreeHelper.GetDpi(LocationIconSlot);
+        var iconWidth = Math.Max(1, (int)Math.Round(LocationIconSlot.Width * dpi.DpiScaleX));
+        var iconHeight = Math.Max(1, (int)Math.Round(LocationIconSlot.Height * dpi.DpiScaleY));
+        LocationBaseIcon.Source = ShellIconProvider.GetIconAtSize(path, iconWidth, iconHeight) ?? icons?.BaseIcon;
+        LocationOverlayIcon.Source = icons?.OverlayIcon;
+        LocationIconSlot.Opacity = icons?.Opacity ?? 1;
     }
 
     private void ShellBrowserSlot_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -1936,7 +1951,43 @@ internal static class ShellIconProvider
     private const uint OverlayIndex = 0x00000040;
     private const uint AddOverlays = 0x00000020;
     private const uint DrawTransparent = 0x00000001;
+    private const uint ShellItemImageIconOnly = 0x00000004;
     private const int SmallShellImageList = 1;
+
+    public static ImageSource? GetIconAtSize(string path, int width, int height)
+    {
+        IShellItemImageFactory? imageFactory = null;
+        IntPtr bitmapHandle = IntPtr.Zero;
+        try
+        {
+            var interfaceId = typeof(IShellItemImageFactory).GUID;
+            if (SHCreateItemFromParsingName(path, IntPtr.Zero, ref interfaceId, out imageFactory) < 0 || imageFactory is null)
+                return null;
+
+            if (imageFactory.GetImage(new ShellImageSize(width, height), ShellItemImageIconOnly, out bitmapHandle) < 0 ||
+                bitmapHandle == IntPtr.Zero)
+                return null;
+
+            var bitmap = Imaging.CreateBitmapSourceFromHBitmap(
+                bitmapHandle,
+                IntPtr.Zero,
+                Int32Rect.Empty,
+                BitmapSizeOptions.FromEmptyOptions());
+            bitmap.Freeze();
+            return bitmap;
+        }
+        catch (ExternalException)
+        {
+            return null;
+        }
+        finally
+        {
+            if (bitmapHandle != IntPtr.Zero)
+                _ = DeleteObject(bitmapHandle);
+            if (imageFactory is not null && Marshal.IsComObject(imageFactory))
+                _ = Marshal.FinalReleaseComObject(imageFactory);
+        }
+    }
 
     public static ShellIconSet? GetSmallIcons(string path)
     {
@@ -2031,12 +2082,37 @@ internal static class ShellIconProvider
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
     private static extern int SHParseDisplayName(string name, IntPtr bindContext, out IntPtr itemIdList, uint attributesIn, out uint attributesOut);
 
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
+    private static extern int SHCreateItemFromParsingName(
+        string path,
+        IntPtr bindContext,
+        ref Guid interfaceId,
+        [MarshalAs(UnmanagedType.Interface)] out IShellItemImageFactory? imageFactory);
+
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool DestroyIcon(IntPtr iconHandle);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    private static extern bool DeleteObject(IntPtr handle);
 
     [DllImport("shell32.dll", PreserveSig = true)]
     private static extern int SHGetImageList(int imageList, ref Guid interfaceId, out IImageList result);
 
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal readonly struct ShellImageSize(int cx, int cy)
+{
+    public readonly int Cx = cx;
+    public readonly int Cy = cy;
+}
+
+[ComImport]
+[Guid("BCC18B79-BA16-442F-80C4-8A59C30C463B")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IShellItemImageFactory
+{
+    [PreserveSig] int GetImage(ShellImageSize size, uint flags, out IntPtr bitmap);
 }
 
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
