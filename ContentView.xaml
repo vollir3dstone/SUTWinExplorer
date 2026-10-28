@@ -179,8 +179,14 @@
                 </Grid.ColumnDefinitions>
                 <ListView x:Name="PrivateFileTable" Grid.Column="0" Visibility="Collapsed"
                           BorderThickness="1,1,0,1" BorderBrush="#646464" VirtualizingPanel.ScrollUnit="Pixel"
+                          IsTextSearchEnabled="False"
                           ScrollViewer.VerticalScrollBarVisibility="Hidden"
-                          ScrollViewer.HorizontalScrollBarVisibility="Hidden">
+                          ScrollViewer.HorizontalScrollBarVisibility="Hidden"
+                          ScrollViewer.PanningMode="None"
+                          PreviewMouseWheel="PrivateFileTable_PreviewMouseWheel"
+                          PreviewKeyDown="PrivateFileTable_PreviewKeyDown"
+                          RequestBringIntoView="PrivateFileTable_RequestBringIntoView"
+                          ScrollViewer.ScrollChanged="PrivateFileTable_ScrollChanged">
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
                             <Setter Property="RenderTransform">

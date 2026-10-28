@@ -23,6 +23,10 @@ displayed filesystem paths and follows Shell scrolling. The table and
 scroll-alignment measurements are a spike, not a replacement for the Shell
 view.
 
+The private column is not independently scrollable with the mouse wheel,
+keyboard navigation keys, or touch panning. Scroll the Shell view to move both
+columns together; input over the private column is not forwarded to the Shell.
+
 When a different location is requested, the private column is cleared
 immediately instead of continuing to show rows from the previous directory.
 The Shell view and committed Pathview location remain Shell- and
@@ -194,6 +198,15 @@ item count times 100. Every 30 ms, the table computes
 `rowsScrolled = position * itemCount / total` and scrolls its pixel-virtualized
 WPF viewer by `rowsScrolled * rowPitch`. The pitch is measured between the first
 two realized rows and cached; a single-row fallback is not cached.
+
+The private table consumes preview mouse-wheel events and the arrow, Page Up,
+Page Down, Home, and End keys, disables touch panning, and handles
+`RequestBringIntoView`. Text search is disabled because it can scroll to a
+matching row independently. Its horizontal and vertical scrollbars remain
+hidden. A `ScrollChanged` handler also restores the last Shell-derived offset
+if another action moves the private viewport, including row selection or
+accessibility scrolling. Programmatic `ScrollToVerticalOffset` calls from
+the Shell synchronization remain enabled.
 
 The private header is 24 DIP high. A render-only 6-DIP row translation decreases
 to zero over the first Shell row, approximating the Shell's initial gap without

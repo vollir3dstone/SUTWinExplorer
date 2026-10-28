@@ -479,6 +479,31 @@ public partial class ContentView : UserControl
         }
     }
 
+    private void PrivateFileTable_PreviewMouseWheel(object sender, MouseWheelEventArgs e) =>
+        e.Handled = true;
+
+    private void PrivateFileTable_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Up or Key.Down or Key.Left or Key.Right or Key.PageUp or Key.PageDown or Key.Home or Key.End)
+            e.Handled = true;
+    }
+
+    private void PrivateFileTable_RequestBringIntoView(object sender, RequestBringIntoViewEventArgs e) =>
+        e.Handled = true;
+
+    private void PrivateFileTable_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (e.OriginalSource is not ScrollViewer scrollViewer ||
+            !ReferenceEquals(scrollViewer, _privateTableScrollViewer) ||
+            _lastShellScrollOffset is not double shellOffset ||
+            _privateTablePendingNavigation is not null)
+            return;
+
+        var target = Math.Clamp(shellOffset, 0, scrollViewer.ScrollableHeight);
+        if (Math.Abs(scrollViewer.VerticalOffset - target) > 0.5)
+            scrollViewer.ScrollToVerticalOffset(target);
+    }
+
     private void ScrollSyncTimer_Tick(object? sender, EventArgs e)
     {
         if (_shellBrowserHost is null || !_shellBrowserHost.TryGetVerticalScrollRange(out var position, out var total))
