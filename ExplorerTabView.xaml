@@ -223,9 +223,16 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
-                            <local:CheckBoxWrapper x:Name="HideInternalSubfoldersCheckBox" Grid.Row="0"
-                                                   Label="Hide internal" Margin="8,6,8,4" />
-                                                <Border Grid.Row="1" BorderBrush="#646464" BorderThickness="0.7"
+                            <StackPanel Grid.Row="0" Orientation="Horizontal">
+                                <Border Height="24" Background="#E1E4E7" Padding="6,0"
+                                        Margin="0,0,8,0" VerticalAlignment="Center">
+                                    <TextBlock Text="VIEW:" FontWeight="Bold" Foreground="#4E5963"
+                                               VerticalAlignment="Center" />
+                                </Border>
+                                <local:CheckBoxWrapper x:Name="HideInternalSubfoldersCheckBox"
+                                                       Label="Hide internal" Margin="0,6,8,4" />
+                            </StackPanel>
+                            <Border Grid.Row="1" BorderBrush="#646464" BorderThickness="0.7"
                                     Margin="10,0,10,0">
                                 <ListView x:Name="ActivePathSubfoldersList"
                                           BorderThickness="0" Padding="0"
@@ -307,9 +314,14 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <StackPanel Grid.Row="0" Orientation="Horizontal">
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="8,2,8,2">
+                        <Border Height="24" Background="#E1E4E7" Padding="6,0"
+                                Margin="0,0,8,0" VerticalAlignment="Center">
+                            <TextBlock Text="VIEW:" FontWeight="Bold" Foreground="#4E5963"
+                                       VerticalAlignment="Center" />
+                        </Border>
                         <CheckBox x:Name="HideSiblingsCheckBox" Content="Hide siblings"
-                                  IsChecked="True" Margin="8,6,8,4"
+                                  IsChecked="True" Margin="0,6,8,4"
                                   Checked="HideSiblingsCheckBox_StateChanged"
                                   Unchecked="HideSiblingsCheckBox_StateChanged" />
                         <CheckBox x:Name="HideInternalCheckBox" Content="Hide internal"
