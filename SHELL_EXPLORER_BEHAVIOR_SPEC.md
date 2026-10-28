@@ -117,8 +117,10 @@ may show its requested row in light gray without changing the active selection.
   in a gray-framed **Path** section sized to its rows, with no tree scrollbars.
   The remaining pane space shows the active directory's immediate
   subdirectories in a gray-framed **Sub directories** section. Its vertically scrolling,
-  single-line list has its own black frame and is inset horizontally by 10 px;
-  each row shows only the folder's Shell icon (including overlays) and name.
+  single-line list has its own very light gray frame, aligned horizontally with
+  the **VIEW:** badge above it. The list is inset 16 DIP from the frame on both
+  horizontal sides; each row shows only the folder's Shell icon (including
+  overlays) and name.
   The sections have a visible gap, and each subfolder row matches the tree's
   row height.
 - [x] The fixed **Active path** pane has a default-on **Hide internal** checkbox

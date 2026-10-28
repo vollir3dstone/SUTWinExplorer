@@ -258,10 +258,10 @@
                                 <local:CheckBoxWrapper x:Name="HideInternalSubfoldersCheckBox"
                                                        Label="Hide internal" Margin="0,6,8,4" />
                             </StackPanel>
-                            <Border Grid.Row="1" BorderBrush="#646464" BorderThickness="0.7"
-                                    Margin="10,0,10,0">
+                            <Border Grid.Row="1" BorderBrush="#D8DDE3" BorderThickness="0.7"
+                                    Margin="0">
                                 <ListView x:Name="ActivePathSubfoldersList"
-                                          BorderThickness="0" Padding="0"
+                                          BorderThickness="0" Padding="0" Margin="16,0"
                                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                           ScrollViewer.VerticalScrollBarVisibility="Auto"
                                           PreviewMouseRightButtonDown="ActivePathSubfoldersList_PreviewMouseRightButtonDown"
