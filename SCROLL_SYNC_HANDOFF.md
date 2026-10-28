@@ -4,6 +4,10 @@
 
 Keep the native `IExplorerBrowser` Shell view as the real file list and mirror its first visible item index in the adjacent WPF `ListView` prototype. The earlier index-based version moved the WPF list along with the Shell view, with roughly a +/-1 item mismatch. Percentage-based `ScrollPattern` synchronization was rejected because the two lists advanced at different rates.
 
+## ContentView extraction (2026-10-28)
+
+The current implementation lives in `ContentView.xaml` and `ContentView.xaml.cs`: the filter and action rows, private table, Shell host, refresh and scroll synchronization are encapsulated together. `Pathview` communicates with the content view rather than accessing the Shell host. Copy/Move state remains shared across tabs, and common frame, button and icon resources are shared through `App.xaml`. See [CONTENT_VIEW.md](./CONTENT_VIEW.md) for the component's behavior, interface, and implementation. The historical file and method locations in the sections below describe the earlier implementations.
+
 ## Current Source State
 
 - `ExplorerTabView.xaml` contains the adjacent WPF file table and native Shell host.

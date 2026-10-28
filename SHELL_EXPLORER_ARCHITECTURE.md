@@ -95,7 +95,7 @@ languages.
 ### Virtual This PC root and path expressions
 
 The browsable tree's **Top** entry represents the Windows Shell **This PC**
-known folder, not a filesystem directory. `Pathview.TopPath` stores its Shell
+known folder, not a filesystem directory. `ShellLocations.TopPath` stores its Shell
 parsing name (`::{20D04FE0-3AEA-1069-A2D8-08002B30309D}`) as the internal
 navigation/history value. The Shell browser navigates to that parsing name and
 reports the virtual location back as `TopPath`; the tree's children are the
@@ -151,6 +151,17 @@ leading ellipsis prefix is omitted.
   only **Active path**. **Hide directories** and each pane's **Hide internal**
   setting are tab-local; sort parameters are captured from the Shell folder
   view rather than stored independently by the `Pathview`.
+- `ContentView` owns the content filter and action rows, the private spike
+  table, the hosted Shell view, and their refresh and scroll synchronization.
+  `Pathview` requests content navigation and passes committed locations and
+  directory-notification paths to it; navigation completion, failure, folder
+  activation, and filesystem changes are reported back as events. The Shell
+  host stays private to `ContentView`. `Pathview` continues to own navigation
+  history, success-gated tree selection, and notification-route calculation.
+  Copy and Move workflow state remains shared across Pathviews. Common frame,
+  button, and icon resources are defined once in `App.xaml` for both views.
+  See [CONTENT_VIEW.md](./CONTENT_VIEW.md) for the component's behavior,
+  interface, and implementation.
 - `Pathview.IsBrowsable` is immutable for the lifetime of a Pathview. `MainWindow`
   creates exactly one browsable Pathview as the `TabControl`'s first item; all
   subsequent Pathviews are non-browsable. The browsable tab is titled **BROWSE**
@@ -267,49 +278,10 @@ leading ellipsis prefix is omitted.
   selected overlay). `Browse` and `Pin` use `ContentPaneButtonStyle`, which
   suppresses the visible focus visual without making the buttons
   non-focusable.
-- Below the two visibility checkboxes, each Pathview has a five-group content
-  operations toolbar. Copy and Move have separate app-owned path state
-  machines, independent of the Shell clipboard. Each Get stages the selected
-  filesystem paths; Paste uses native `IFileOperation` to copy or move them to
-  the active folder; Abort clears the staged paths. A prepared workflow
-  disables the other workflow's entire group, while enabling only its own
-  Paste and Abort buttons. The app-owned workflow is independent of the Shell
-  clipboard and native context-menu Copy/Cut state; the optional integration
-  below is the only bridge from Shell Copy into the app-owned Copy state. The
-  staged data consists only of path strings: it holds no file handles and
-  creates no locks, reservations, or leases on source objects. At Paste, the
-  app checks that the destination is an accessible folder, reads filesystem
-  attributes for every source, then resolves all source Shell items before
-  queuing the native operation. A failed preflight starts no transfer and is
-  surfaced through the operation error dialog; staged state is retained.
-  Passing preflight does not prove all file contents are readable or all
-  required permissions are granted. This is a point-in-time check, not
-  protection against subsequent filesystem changes. If an object, its access
-  rights, or the destination changes after preflight, `IFileOperation` can
-  still fail. Multi-item operations are not transactional: a late failure may
-  occur after earlier items have completed, with no automatic rollback.
-  Optional Shell-copy integration lives in the
-  removable `ShellCopyIntegration` side path: toolbar Copy get invokes the
-  Shell Copy verb, while clipboard updates marked with the Shell Copy drop
-  effect stage copied file paths through the internal Copy state transition.
-  Shell clipboard state does not otherwise influence either workflow. Rename
-  is available only for a single selected item and starts the hosted view's
-  native inline editor. Do not invoke the selection `IContextMenu` with the
-  canonical `rename` verb: that context-menu implementation returns
-  `E_NOTIMPL` even though other verbs may work. Instead, obtain the selected
-  item's `IDataObject` with `IShellView.GetItemObject(SVGIO_SELECTION)`, request
-  the registered `Shell IDList Array` format as `TYMED_HGLOBAL`, and read its
-  CIDA structure. The selected child PIDL is relative to the parent PIDL in
-  that structure. The implementation requires exactly one child, then calls
-  `IShellView.SelectItem` with that child PIDL and `SVSI_EDIT` (`0x0003`) to
-  begin Shell inline editing. Keep the medium locked through that call, then
-  unlock it, release the `STGMEDIUM`, and release both managed and raw COM
-  references in `finally`. Selection-state refresh exposes whether exactly
-  one filesystem item is selected so the toolbar can gate Rename before
-  dispatch. The Shell owns edit validation, commit/cancel, and name-collision
-  behavior. Path get is enabled only for one selected item and copies that
-  item's filesystem path; Delete remains selection-aware. The Shell view's
-  native context-menu Copy and Cut commands continue to work normally.
+- Content operations are presented by each ContentView, but Copy and Move
+  prepared state is shared across tabs. `MainWindow` owns the optional
+  Shell-copy integration; its interaction with the shared workflows is
+  described in [CONTENT_VIEW.md](./CONTENT_VIEW.md#transfer-and-selection-implementation).
 - The browsable **Active path and siblings** tree has a **Top** root named with
   the localized Shell display name for **This PC** and shown with its Shell
   icon; its children are the available drives. Selecting it navigates the
@@ -395,8 +367,8 @@ unit (currently `16` in the content-filter row).
 
 - The content filtering row starts with a **VIEW:** badge styled like the
   **FOR SELECTED:** and **FIXED** badges.
-- The right content pane is a separate content view. Production creates one
-  `ShellExplorerBrowserHost` per `Pathview`; it derives from
+- The right content pane is a separate `ContentView`. Production creates one
+  `ShellExplorerBrowserHost` inside each `ContentView`; it derives from
   `HwndHost` and hosts one Shell `IExplorerBrowser` COM instance.
 - `ActivePathTree` shows only the current ancestor route.
 - `ActivePathAndSiblingsTree` additionally shows immediate child directories
@@ -410,7 +382,7 @@ unit (currently `16` in the content-filter row).
   request errors, or superseding navigation. At commit, the active route node is
   marked selected first; then its ancestors expand to reveal it, followed by
 - The legacy WPF `ListView`, its filtering, icon binding, sizing, and menus are
-  retained. `UseLegacyWpfFileList` in `ExplorerTabView.xaml.cs` is the explicit
+  retained. `UseLegacyWpfFileList` in `ContentView.xaml.cs` is the explicit
   rollback switch: `false` selects the Shell view (production default); `true`
   makes the WPF list active again.
 
@@ -494,61 +466,12 @@ distance between rows in both directory trees. Adjust this constant to change
 their row spacing; it does not affect the Shell content view or the retained
 WPF file list.
 
-## Shell View Host
+## ContentView and Shell host
 
-`ShellExplorerBrowserHost` creates a child host window with `CreateWindowExW`,
-activates the Shell's `CLSID_ExplorerBrowser` through `CoCreateInstance`, and
-hosts it on the WPF UI's STA thread.
-
-Initialization sequence:
-
-1. Create the child HWND in `HwndHost.BuildWindowCore`.
-2. Create the `IExplorerBrowser` COM object.
-3. Create and attach `ShellBrowserSite` with `IObjectWithSite.SetSite`.
-4. Initialize in Details mode with `FOLDERSETTINGS`; do not enable
-   `EBO_SHOWFRAMES`, so the Shell navigation pane/frame is not shown.
-5. Subscribe to `IExplorerBrowserEvents` using `Advise`.
-6. Defer the first `BrowseToIDList` until `DispatcherPriority.Loaded`.
-7. On navigation completion, capture the active `IFolderView2` sort columns,
-   set Details mode and `FWF_NOGROUPING`, replace the visible columns with
-   Name, Type, Size, and Date modified in that order, then restore the captured
-   sort. Folder-specific grouping, view mode, and columns are not used; then
-   recalculate the Name width for the new view.
-8. Update the Shell view's bounds with `SetRect` when the WPF host is resized,
-   then use `IColumnManager` to size the visible Name column to the remaining
-   width.
-9. On teardown, `Unadvise`, call `Destroy`, clear the site, release COM
-   references, and destroy the child HWND.
-
-Navigation uses `SHParseDisplayName` to obtain an absolute PIDL and
-`IExplorerBrowser.BrowseToIDList`; the allocated PIDL is freed after the call.
-`IExplorerBrowserEvents.OnNavigationPending` updates the filter's current path
-before item enumeration. `OnNavigationComplete` converts the PIDL with
-`SHGetNameFromIDList(SIGDN_FILESYSPATH)`, then dispatches the path update to WPF
-so the active path, trees, tab title, status, and address choices synchronize.
-Shell-backed navigation does not commit `CurrentPath` or history when the
-browse is requested; those values and displays change only after
-`OnNavigationComplete`. `OnNavigationFailed` restores the filter to the last
-completed path, leaving the active location and history unchanged.
-Non-filesystem namespace locations do not become filesystem paths and are not
-fully integrated with the custom trees yet.
-
-For a non-browsable Pathview, single-clicking a directory in the Active path tree
-or Sub directories list raises an explicit open request instead of
-navigating that Pathview. The Shell view routes its default open command through
-`ICommDlgBrowser.OnDefaultCommand`; the host reads the selected filesystem path
-and accepts the command only for a directory or a `.lnk` resolving to a
-directory. If Shell navigation for a folder or folder shortcut reaches
-`OnNavigationPending`, the fixed host still returns `E_ABORT`, but first
-resolves a filesystem folder target and raises the same open request. The WPF
-owner selects the browsable tab and calls its normal success-gated `Navigate`,
-so the browsable path and history commit only when its Shell view confirms
-success. The fixed Pathview's location and state are not changed.
-
-The initial browse must not run synchronously inside `BuildWindowCore`.
-`BrowseToIDList` can pump Windows messages; doing so during WPF's initial layout
-caused a dispatcher exception and prevented startup. Deferring the browse
-avoids that reentrancy.
+Pathview requests navigation through ContentView and commits location and history
+only after successful Shell navigation. ContentView encapsulates the host; its
+[implementation and navigation details](./CONTENT_VIEW.md#shell-view-host) are
+documented with the component.
 
 ## Shell Change Notifications
 
@@ -583,192 +506,10 @@ restarting the app. Creating a sibling under an ancestor on the current route
 updated the tree without registering that sibling's subtree. A directory
 created while its tab was hidden appeared in the tree after switching back.
 
-## Shell Details Column Sizing
+## ContentView sizing and filtering
 
-### Expected behavior
-
-The WPF content pane occupies the remaining width after the sidebar. The hosted
-ExplorerBrowser view must follow that pane on both window resize and sidebar
-splitter movement. In Details mode, the visible non-Name columns retain their
-Shell-provided widths and Name uses the remaining width. The standard column
-order is Name, Type, Size, and Date modified; the Shell's Size column provides
-the KB-formatted value. The resulting view
-must have no horizontal scroll range at the tested layout sizes. Enabling
-Unchecking **Hide directories** can create or remove a vertical Shell scrollbar
-without changing the WPF pane size, so that refresh also requires a width
-recalculation.
-
-`Pathview.ShellBrowserSlot_SizeChanged` converts the WPF size to physical
-pixels and calls `ShellExplorerBrowserHost.SetViewSize`. The host applies those
-bounds through `IExplorerBrowser.SetRect`. `OnWindowPositionChanged` is also
-retained as a native-host fallback. After a successful `SetRect`, the host
-queries the current view for `IColumnManager`, enumerates visible columns, and
-uses `PKEY_ItemNameDisplay` (`{B725F130-47EF-101A-A5F1-02608C9EEBAC}`, PID 10)
-to identify Name. The target width is:
-
-`UsableShellViewWidth = ShellViewClientWidth - VisibleVerticalScrollBarWidth`
-
-`NameWidth = max(80, UsableShellViewWidth - OtherVisibleColumnWidths - 11)`
-
-The other widths are read with `GetColumnInfo`; the Name width is applied with
-`SetColumnInfo`. The width is recalculated after Shell navigation because the
-Shell may replace the current view. After **Hide directories** refreshes the
-view, a one-shot 250ms dispatcher timer allows Shell's scrollbar child windows
-to settle before measuring the visible vertical scrollbar and recalculating
-Name. `IColumnManager` widths are physical pixels. Its COM method declarations
-must follow the SDK vtable order (`SetColumnInfo`,
-`GetColumnInfo`, `GetColumnCount`, `GetColumns`, `SetColumns`); a different
-declaration order dispatches calls to the wrong native methods.
-
-### Measured behavior
-
-The first implementation sized columns using the outer host width. HWND
-inspection showed the host was 1202px wide while the ExplorerBrowser child and
-Shell view were 1200px wide, a 2px difference at the tested window size. The
-code now gets the current `IShellView` window and uses its `GetClientRect`
-width, rather than assuming the HwndHost width is the Shell's usable width.
-
-Using the Shell client width alone still left a small horizontal scroll range.
-The Shell's `IColumnManager` reports column widths, but does not expose the
-view's complete horizontal content extent or a documented trailing-inset
-value. Runtime UI Automation on the Shell `DirectUIHWND` showed that an 8px
-allowance still left a small range (the view reported about 99.886% visible at
-an 880px client width). An 11px allowance made `HorizontallyScrollable` false
-and hid the Shell scrollbar at both the 880px startup view and the 1200px
-resized view. The host widths in those checks were 882px and 1202px
-respectively. A window-width increase also produced a matching `SetRect` and
-Name-width update.
-
-Unchecking **Hide directories** in a folder with enough entries to show the
-vertical bar left the Shell view 880px wide, but its visible vertical scrollbar
-was 17px wide, reducing usable width to 863px. The delayed recalculation
-reduced Name from 525px to 508px; Size stayed at its Shell-provided 80px, and
-UI Automation reported `HorizontallyScrollable = false`. The horizontal bar
-had appeared because the Shell's vertical bar consumed width without raising a
-WPF resize event.
-
-The 11px value is therefore an empirically derived Shell-specific allowance,
-not a documented Windows border metric. It was verified on this Windows build
-and at these two widths; different Windows versions, DPI settings, or column
-sets may require revalidation. `SUTWINEXPLORER_TRACE_COLUMNS=1` enables an
-opt-in per-process trace in `%TEMP%` named
-`SUTWinExplorer-column-sizing-<pid>.log`; it records WPF/native sizes, COM
-results, and computed widths.
-
-## Hide Directories Filter
-
-The **Hide directories** checkbox is WPF-owned and defaults to checked, which
-preserves the default-hidden directory behavior. The positive internal
-`_showDirectories` value is set to the inverse of the checkbox. The filter is
-implemented at the Shell view boundary, so the Shell still owns enumeration,
-icons, menus, and file operations.
-
-### Service registration
-
-`ShellBrowserSite` is a managed COM-visible object implementing `IServiceProvider`
-and `ICommDlgBrowser`. `IExplorerBrowser` is given this site through
-`IObjectWithSite.SetSite`.
-
-`IServiceProvider.QueryService` recognizes `SID_SExplorerBrowserFrame` with
-`IID_ICommDlgBrowser` and returns the site's COM interface pointer. The Shell
-then calls `ICommDlgBrowser.IncludeObject` for candidate child items.
-
-The callback interfaces must be managed COM-callable interfaces (`ComVisible`),
-not `[ComImport]` interfaces. Initially the callback was never useful because
-the site did not expose the service correctly; runtime tracing confirmed that
-service requests and `IncludeObject` calls were occurring after the COM
-visibility correction.
-
-### Content item filtering
-
-The **Name pattern** editor, when nonblank, requires the item's Shell display
-name (or filesystem leaf name if unavailable) to match its wildcard expression.
-When **Hide directories** is checked,
-`IncludeObject` excludes items classified as folders. The separate content
-**Hide internal** checkbox excludes items matching its rules. If the pattern is
-blank and neither hide filter is active, `IncludeObject` returns `S_OK` for
-every item. Otherwise it:
-
-The exclusion rules combine with OR: an item is excluded if any enabled rule
-matches. Inclusion is the AND of passing each enabled filter:
-
-```text
-hideByName = name starts with "." or "$"
-hideBySystemAccess = isSystem and accessDenied
-patternMatches = pattern is blank or wildcard-matches the display name
-exclude = not patternMatches
-  or (hideDirectories and isDirectory)
-  or (hideInternal and (hideByName or hideBySystemAccess))
-include = patternMatches and not (hideDirectories and isDirectory)
-  and not (hideInternal and (hideByName or hideBySystemAccess))
-```
-
-Equivalently, inclusion requires all of these conditions:
-
-```text
-(patternMatches)
-and (not hideDirectories or not isDirectory)
-and (not hideInternal or
-  (not hideByName and (not isSystem or accessAllowed)))
-```
-
-For a file, `accessDenied` means it cannot be opened for reading; for a
-directory, it means its entries cannot be listed. `isSystem` alone does not
-exclude an item. Junction status is not part of either rule.
-
-1. Reads the current folder path supplied by the `ShellExplorerBrowserHost`.
-   `OnNavigationPending` updates this path before the destination view
-   enumerates items.
-2. Binds that path to an `IShellFolder`: `SHParseDisplayName` creates the
-   absolute PIDL, `SHBindToParent` provides the parent and relative child PIDL,
-   and `IShellFolder.BindToObject` obtains the current folder. The bound folder
-   interface is cached by path and released when the path changes or the view
-   is destroyed.
-3. Places the callback's borrowed child PIDL into a one-element pointer array
-   and calls `IShellFolder.GetAttributesOf` with `SFGAO_FOLDER`.
-4. Returns `S_FALSE` for folder items when **Hide directories** is checked.
-5. When the pattern is nonblank or content **Hide internal** is checked, gets
-  the child item's parsing name and combines it with the current path. It
-  rejects names that do not match the pattern, then evaluates the shared
-  `InternalItemFilter` predicate when **Hide internal** is checked. Dot- and
-  dollar-prefixed names are excluded. A System item is excluded only when
-  opening a file for read or listing a directory returns access-denied.
-
-The child PIDL passed to `IncludeObject` is borrowed and is not freed. The child
-PIDL returned by `SHBindToParent` points into the absolute PIDL allocation and
-is also not freed separately. Only the pointer array allocated for
-`GetAttributesOf` and the absolute PIDL allocation are freed by this code.
-Folder-query and name-resolution failures fail open (`S_OK`) rather than
-accidentally hiding ordinary files. Access-denied is the only I/O failure used
-to exclude a System item; other I/O failures remain visible.
-
-Directory reparse points follow the same folder and internal-item rules when
-the Shell reports `SFGAO_FOLDER`; junction status alone is not a filter
-condition. Runtime testing verified ordinary directories; junction/reparse-
-point coverage remains a dedicated acceptance test.
-
-When either content checkbox changes, `ShellExplorerBrowserHost` updates the
-site state, obtains the current `IShellView` through
-`IExplorerBrowser.GetCurrentView`, and calls `IShellView.Refresh` to re-enumerate
-the active folder without navigation. `SetShowDirectories` receives the
-positive value derived from the inverse of **Hide directories**.
-
-### Filter debugging findings
-
-- `IShellFolder.GetUIObjectOf` does not support `cidl == 0`; use
-  `IShellView.GetItemObject(SVGIO_BACKGROUND, ...)` for folder-background
-  menus. That is separate from the directory-filter callback.
-- Trying to obtain the current folder with
-  `IShellView.GetItemObject(SVGIO_BACKGROUND, IID_IShellFolder)` returned
-  `E_NOINTERFACE`. The working filter instead binds the current path through
-  `SHParseDisplayName`, `SHBindToParent`, and `BindToObject`.
-- A temporary trace confirmed that `QueryService` and `IncludeObject` were
-  reached. The trace was removed after fixing folder binding.
-- Runtime UI Automation on the default profile observed 23 file rows with
-  **Hide directories** checked, 28 rows when unchecked, and 23 again when
-  checked. This proves
-  live checkbox refresh in that folder; it is not a complete reparse-point
-  test.
+Shell content sizing and filter internals are documented in
+[CONTENT_VIEW.md](./CONTENT_VIEW.md#shell-details-column-sizing).
 
 ## Native Context Menus and Operations
 
@@ -784,15 +525,8 @@ the parent Shell folder's `SetNameOf`. Open Pathviews remap affected locations
 and history to the returned filesystem path. The virtual **This PC** tree root
 has no rename editor.
 
-The ExplorerBrowser spike verified context-menu New, context-menu Copy/Paste,
-Paste shortcut, clipboard interoperability with Windows Explorer, and
-right-button drag/drop. Its initial Ctrl+C/Ctrl+V keyboard test failed. The
-host now overrides `HwndHost.TranslateAcceleratorCore` and forwards messages to
-the current view's `IInputObject.TranslateAcceleratorIO`; if that returns
-`S_FALSE`, it falls back to `IShellView.TranslateAccelerator`. Runtime tests
-with disposable files verified Ctrl+A selection, Ctrl+C copy, Ctrl+V paste,
-Ctrl+X cut, and Ctrl+Z undo. The Shell-hosted view remains responsible for
-common file operations; do not duplicate these as custom file-copy code.
+Shell keyboard routing and the corresponding spike checks are documented in
+[CONTENT_VIEW.md](./CONTENT_VIEW.md#shell-keyboard-routing).
 
 ## Build and Output
 

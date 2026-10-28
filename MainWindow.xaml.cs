@@ -60,11 +60,8 @@ public partial class MainWindow : Window
         _shellCopyIntegration = null;
     }
 
-    internal void InvokeToolbarShellCopy(ShellExplorerBrowserHost? shellHost)
-    {
-        if (shellHost is not null)
-            _shellCopyIntegration?.InvokeToolbarCopy(shellHost.InvokeShellCopyCommand);
-    }
+    internal void InvokeToolbarShellCopy(Action invokeShellCopy) =>
+        _shellCopyIntegration?.InvokeToolbarCopy(invokeShellCopy);
 
     private void HandleExternalShellCopy(IReadOnlyList<string> copiedPaths)
     {
@@ -316,7 +313,7 @@ public partial class MainWindow : Window
     private bool TryGetFixedPathview(string path, out Pathview fixedView)
     {
         fixedView = null!;
-        if (Pathview.IsTopPath(path))
+        if (ShellLocations.IsTopPath(path))
             return false;
 
         var pathKey = GetPathKey(path);
@@ -470,7 +467,7 @@ public partial class MainWindow : Window
     {
         if (_browsablePathview is null ||
             string.IsNullOrWhiteSpace(_browsablePathview.CurrentPath) ||
-            Pathview.IsTopPath(_browsablePathview.CurrentPath))
+            ShellLocations.IsTopPath(_browsablePathview.CurrentPath))
         {
             return;
         }

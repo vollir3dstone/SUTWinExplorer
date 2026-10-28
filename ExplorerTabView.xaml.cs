@@ -11,15 +11,14 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using static SUTWinExplorer.ShellLocations;
+using static SUTWinExplorer.ViewUtilities;
 
 namespace SUTWinExplorer;
 
 public partial class Pathview : UserControl
 {
     public const double DirectoryTreeRowHeight = 24;
-    internal const string TopPath = "::{20D04FE0-3AEA-1069-A2D8-08002B30309D}";
-    internal static bool IsTopPath(string? path) =>
-        string.Equals(path, TopPath, StringComparison.OrdinalIgnoreCase);
 
     public static readonly DependencyProperty PaneBackgroundProperty =
         DependencyProperty.Register(
@@ -27,17 +26,6 @@ public partial class Pathview : UserControl
             typeof(Brush),
             typeof(Pathview),
             new FrameworkPropertyMetadata(new SolidColorBrush(Colors.White)));
-
-    public static readonly DependencyProperty PrivateTableTopGapOffsetProperty =
-        DependencyProperty.Register(
-            nameof(PrivateTableTopGapOffset),
-            typeof(double),
-            typeof(Pathview),
-            new PropertyMetadata(PrivateTableTopGap));
-
-    // Set true to reactivate the retained WPF ListView; false selects the Shell-hosted production view.
-    private const bool UseLegacyWpfFileList = false;
-    private static bool IsLegacyWpfFileList => UseLegacyWpfFileList;
 
     private enum TreeNavigationMode
     {
@@ -54,17 +42,11 @@ public partial class Pathview : UserControl
     }
 
     private const TreeNavigationMode ActiveTreeNavigationMode = TreeNavigationMode.SingleClick;
-    private const double PrivateTableTopGap = 6;
+
     private readonly Stack<string> _backHistory = new();
     private readonly Stack<string> _forwardHistory = new();
     private string _historyCurrentPath = string.Empty;
     private readonly DispatcherTimer _fileSystemRefreshTimer;
-    private readonly DispatcherTimer _privateTableRefreshTimer;
-    private readonly DispatcherTimer _scrollSyncTimer;
-    private ScrollViewer? _privateTableScrollViewer;
-    private double? _lastShellScrollOffset;
-    private double _privateTableRowPitch;
-    private ShellExplorerBrowserHost? _shellBrowserHost;
     private bool _suppressTreeBringIntoView;
     private TreeEntry? _pendingTreeNavigationEntry;
     private TreeEntry? _editingTreeEntry;
@@ -74,7 +56,7 @@ public partial class Pathview : UserControl
     private bool? _pendingHideInternalDirectories;
     private bool? _pendingHideInternalContentItems;
     private bool _fileSystemStateDirty = true;
-    private bool _shellViewNeedsRefresh = true;
+    private bool _contentViewNeedsRefresh = true;
     private readonly List<TreeEntry> _driveRoots = [];
 
     public Pathview(string initialPath, bool isBrowsable)
@@ -83,10 +65,6 @@ public partial class Pathview : UserControl
         var explorerPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
         OpenInExplorerIcon.Source = ShellIconProvider.GetIconAtSize(explorerPath, 16, 16) ??
                                     ShellIconProvider.GetSmallIcons(explorerPath)?.BaseIcon;
-        HideDirectoriesCheckBox.GetCheckBox().Checked += HideDirectoriesCheckBox_StateChanged;
-        HideDirectoriesCheckBox.GetCheckBox().Unchecked += HideDirectoriesCheckBox_StateChanged;
-        HideInternalContentCheckBox.GetCheckBox().Checked += HideInternalContentCheckBox_StateChanged;
-        HideInternalContentCheckBox.GetCheckBox().Unchecked += HideInternalContentCheckBox_StateChanged;
         HideInternalSubfoldersCheckBox.GetCheckBox().Checked += HideInternalSubfoldersCheckBox_StateChanged;
         HideInternalSubfoldersCheckBox.GetCheckBox().Unchecked += HideInternalSubfoldersCheckBox_StateChanged;
         IsBrowsable = isBrowsable;
@@ -104,46 +82,19 @@ public partial class Pathview : UserControl
             Interval = TimeSpan.FromMilliseconds(200)
         };
         _fileSystemRefreshTimer.Tick += FileSystemRefreshTimer_Tick;
-        _privateTableRefreshTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
-        {
-            Interval = TimeSpan.FromMilliseconds(300)
-        };
-        _privateTableRefreshTimer.Tick += PrivateTableRefreshTimer_Tick;
-        _scrollSyncTimer = new DispatcherTimer(DispatcherPriority.Render, Dispatcher)
-        {
-            Interval = TimeSpan.FromMilliseconds(30)
-        };
-        _scrollSyncTimer.Tick += ScrollSyncTimer_Tick;
+        DirectoryContent.NavigationCompleted += ContentView_NavigationCompleted;
+        DirectoryContent.NavigationFailed += ContentView_NavigationFailed;
+        DirectoryContent.FolderOpenRequested += ContentView_FolderOpenRequested;
+        DirectoryContent.FileSystemChanged += ContentView_FileSystemChanged;
+        DirectoryContent.Initialize(IsBrowsable);
+        InitializeActivePathAndSiblingsTree();
         Loaded += Pathview_Loaded;
         Unloaded += Pathview_Unloaded;
         IsVisibleChanged += Pathview_IsVisibleChanged;
-        FileList.Visibility = IsLegacyWpfFileList ? Visibility.Visible : Visibility.Collapsed;
-        ShellBrowserSlot.Visibility = IsLegacyWpfFileList ? Visibility.Collapsed : Visibility.Visible;
-        PrivateFileTable.Visibility = ShellBrowserSlot.Visibility;
-        StatusLabel.Visibility = IsLegacyWpfFileList ? Visibility.Visible : Visibility.Collapsed;
-        InitializeActivePathAndSiblingsTree();
-        if (!IsLegacyWpfFileList)
-        {
-            _shellBrowserHost = new ShellExplorerBrowserHost(IsBrowsable);
-            _shellBrowserHost.NavigationCompleted += ShellBrowserHost_NavigationCompleted;
-            _shellBrowserHost.NavigationFailed += ShellBrowserHost_NavigationFailed;
-            _shellBrowserHost.FolderOpenRequested += ShellBrowserHost_FolderOpenRequested;
-            _shellBrowserHost.FileSystemChanged += ShellBrowserHost_FileSystemChanged;
-            _shellBrowserHost.SetShowDirectories(HideDirectoriesCheckBox.GetCheckBox().IsChecked != true);
-            _shellBrowserHost.SetHideInternal(HideInternalContentCheckBox.GetCheckBox().IsChecked == true);
-            _shellBrowserHost.SetNamePattern(NamePatternTextBox.Text);
-            ShellBrowserSlot.Content = _shellBrowserHost;
-        }
         Navigate(initialPath, NavigationHistoryAction.None);
     }
 
     public bool IsBrowsable { get; }
-    public double PrivateTableTopGapOffset
-    {
-        get => (double)GetValue(PrivateTableTopGapOffsetProperty);
-        private set => SetValue(PrivateTableTopGapOffsetProperty, value);
-    }
-
     public Brush PaneBackground
     {
         get => (Brush)GetValue(PaneBackgroundProperty);
@@ -269,7 +220,7 @@ public partial class Pathview : UserControl
             ClearPendingTreeNavigation();
         }
 
-        if (IsLegacyWpfFileList && !Directory.Exists(fullPath))
+        if (DirectoryContent.UsesSynchronousNavigation && !Directory.Exists(fullPath))
             throw new DirectoryNotFoundException($"The directory does not exist or is not accessible: {fullPath}");
 
         if (string.Equals(CurrentPath, fullPath, StringComparison.OrdinalIgnoreCase))
@@ -279,11 +230,11 @@ public partial class Pathview : UserControl
             return;
         }
 
-        if (IsLegacyWpfFileList)
+        if (DirectoryContent.UsesSynchronousNavigation)
         {
             CommitNavigation(fullPath, historyAction);
             ApplyNavigationOptions(hideSiblings, hideInternalDirectories, hideInternalContentItems);
-            RefreshFiles();
+            DirectoryContent.Refresh(true);
             return;
         }
 
@@ -294,7 +245,7 @@ public partial class Pathview : UserControl
         _pendingHideInternalContentItems = hideInternalContentItems;
         try
         {
-            _shellBrowserHost?.NavigateTo(fullPath);
+            DirectoryContent.NavigateTo(fullPath);
         }
         catch
         {
@@ -319,7 +270,7 @@ public partial class Pathview : UserControl
         if (hideInternalDirectories is { } hideInternalDirectoriesValue)
             HideInternalCheckBox.IsChecked = hideInternalDirectoriesValue;
         if (hideInternalContentItems is { } hideInternalContentItemsValue)
-            HideInternalContentCheckBox.GetCheckBox().IsChecked = hideInternalContentItemsValue;
+            DirectoryContent.HideInternalItems = hideInternalContentItemsValue;
     }
 
     private void CommitNavigation(string path, NavigationHistoryAction historyAction)
@@ -333,6 +284,7 @@ public partial class Pathview : UserControl
         UpdateHistory(path, historyAction);
 
         CurrentPath = path;
+        DirectoryContent.SetCurrentPath(path);
         PinPathviewButton.IsEnabled = true;
         BrowsePathviewButton.IsEnabled = true;
         OpenInExplorerButton.IsEnabled = true;
@@ -340,10 +292,10 @@ public partial class Pathview : UserControl
         LocationLabel.Text = ShellDisplayNameProvider.GetDisplayPath(path);
         RefreshActivePathAndSiblingsTree();
         RefreshActivePathTree();
-        SynchronizeShellChangeNotifications();
+        SynchronizeContentChangeNotifications();
         LocationChanged?.Invoke(this, CurrentPath);
-        if (!IsLegacyWpfFileList)
-            RefreshShellStatusCount();
+        if (!DirectoryContent.UsesSynchronousNavigation)
+            DirectoryContent.RefreshStatus();
     }
 
     private void UpdateHistory(string path, NavigationHistoryAction historyAction)
@@ -375,209 +327,6 @@ public partial class Pathview : UserControl
         }
         _historyCurrentPath = path;
     }
-
-    private void RefreshFiles()
-    {
-        var entries = new List<FileEntry>();
-        var showDirectories = HideDirectoriesCheckBox.GetCheckBox().IsChecked != true;
-        try
-        {
-            if (showDirectories)
-            {
-                foreach (var directory in Directory.EnumerateDirectories(CurrentPath))
-                {
-                    if (!InternalItemFilter.MatchesNamePattern(directory, NamePatternTextBox.Text))
-                        continue;
-
-                    if (HideInternalContentCheckBox.GetCheckBox().IsChecked == true && InternalItemFilter.IsInternal(directory, true))
-                        continue;
-
-                    try
-                    {
-                        var info = new DirectoryInfo(directory);
-                        var displayName = ShellDisplayNameProvider.GetDisplayName(directory) ?? info.Name;
-                        entries.Add(new FileEntry(displayName, directory, true, "Folder", "", info.LastWriteTime));
-                    }
-                    catch (UnauthorizedAccessException)
-                    {
-                    }
-                }
-            }
-
-            foreach (var file in Directory.EnumerateFiles(CurrentPath))
-            {
-                try
-                {
-                    var info = new FileInfo(file);
-                    var isDirectory = (info.Attributes & FileAttributes.Directory) != 0;
-                    if (!InternalItemFilter.MatchesNamePattern(file, NamePatternTextBox.Text))
-                        continue;
-
-                    if (HideInternalContentCheckBox.GetCheckBox().IsChecked == true && InternalItemFilter.IsInternal(file, isDirectory))
-                        continue;
-
-                    if (isDirectory)
-                    {
-                        if (showDirectories)
-                        {
-                            var displayName = ShellDisplayNameProvider.GetDisplayName(file) ?? info.Name;
-                            entries.Add(new FileEntry(displayName, file, true, "Folder", "", info.LastWriteTime));
-                        }
-                        continue;
-                    }
-
-                    var fileDisplayName = ShellDisplayNameProvider.GetDisplayName(file) ?? info.Name;
-                    entries.Add(new FileEntry(fileDisplayName, file, false, info.Extension, FormatSize(info.Length), info.LastWriteTime));
-                }
-                catch (UnauthorizedAccessException)
-                {
-                }
-            }
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            StatusLabel.Text = exception.Message;
-        }
-
-        FileList.ItemsSource = entries.OrderByDescending(entry => entry.IsDirectory)
-            .ThenBy(entry => entry.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
-        StatusLabel.Text = $"{entries.Count} items";
-    }
-
-    private void HideDirectoriesCheckBox_StateChanged(object sender, RoutedEventArgs e)
-    {
-        if (string.IsNullOrWhiteSpace(CurrentPath))
-            return;
-
-        if (IsLegacyWpfFileList)
-        {
-            RefreshFiles();
-            return;
-        }
-
-        _shellBrowserHost?.SetShowDirectories(HideDirectoriesCheckBox.GetCheckBox().IsChecked != true);
-        RefreshShellStatusCount();
-    }
-
-    private void HideInternalContentCheckBox_StateChanged(object sender, RoutedEventArgs e)
-    {
-        if (string.IsNullOrWhiteSpace(CurrentPath))
-            return;
-
-        if (IsLegacyWpfFileList)
-            RefreshFiles();
-        else
-            _shellBrowserHost?.SetHideInternal(HideInternalContentCheckBox.GetCheckBox().IsChecked == true);
-
-        RefreshShellStatusCount();
-    }
-
-    private void NamePatternTextBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (string.IsNullOrWhiteSpace(CurrentPath))
-            return;
-
-        if (IsLegacyWpfFileList)
-            RefreshFiles();
-        else
-            _shellBrowserHost?.SetNamePattern(NamePatternTextBox.Text);
-
-        RefreshShellStatusCount();
-    }
-
-    private void ClearNamePatternButton_Click(object sender, RoutedEventArgs e)
-    {
-        NamePatternTextBox.Clear();
-    }
-
-    private void ContentOperationButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { Tag: string action })
-            return;
-
-        try
-        {
-            switch (action)
-            {
-                case "CopyGet":
-                    if (MoveWorkflowState.Shared.IsPrepared)
-                        throw new InvalidOperationException("Abort or complete the prepared Move before starting a Copy.");
-
-                    var copyPaths = IsLegacyWpfFileList
-                        ? FileList.SelectedItems.OfType<FileEntry>().Select(entry => entry.FullPath).ToList()
-                        : _shellBrowserHost?.GetSelectedFileSystemPaths() ?? [];
-                    CopyWorkflowState.Shared.Prepare(copyPaths);
-                    (Window.GetWindow(this) as MainWindow)?.InvokeToolbarShellCopy(_shellBrowserHost);
-                    break;
-                case "CopyPaste":
-                    var preparedPaths = CopyWorkflowState.Shared.PreparedPaths;
-                    if (string.IsNullOrWhiteSpace(CurrentPath))
-                        throw new InvalidOperationException("The destination folder is not ready.");
-
-                    var owner = Window.GetWindow(this) is { } window
-                        ? new System.Windows.Interop.WindowInteropHelper(window).Handle
-                        : IntPtr.Zero;
-                    ShellFileOperations.Copy(preparedPaths, CurrentPath, owner);
-                    CopyWorkflowState.Shared.CompletePaste();
-                    _shellBrowserHost?.RefreshContents();
-                    break;
-                case "CopyAbort":
-                    CopyWorkflowState.Shared.Abort();
-                    break;
-                case "MoveGet":
-                    if (CopyWorkflowState.Shared.IsPrepared)
-                        throw new InvalidOperationException("Abort or complete the prepared Copy before starting a Move.");
-
-                    var movePaths = IsLegacyWpfFileList
-                        ? FileList.SelectedItems.OfType<FileEntry>().Select(entry => entry.FullPath).ToList()
-                        : _shellBrowserHost?.GetSelectedFileSystemPaths() ?? [];
-                    MoveWorkflowState.Shared.Prepare(movePaths);
-                    break;
-                case "MovePaste":
-                    var preparedMovePaths = MoveWorkflowState.Shared.PreparedPaths;
-                    if (string.IsNullOrWhiteSpace(CurrentPath))
-                        throw new InvalidOperationException("The destination folder is not ready.");
-
-                    var moveOwner = Window.GetWindow(this) is { } moveWindow
-                        ? new System.Windows.Interop.WindowInteropHelper(moveWindow).Handle
-                        : IntPtr.Zero;
-                    ShellFileOperations.Move(preparedMovePaths, CurrentPath, moveOwner);
-                    MoveWorkflowState.Shared.CompletePaste();
-                    _shellBrowserHost?.RefreshContents();
-                    _shellBrowserHost?.RefreshSelectionState();
-                    break;
-                case "MoveAbort":
-                    MoveWorkflowState.Shared.Abort();
-                    break;
-                case "Rename":
-                    if (_shellBrowserHost is null)
-                        throw new InvalidOperationException("Rename requires the Shell content view.");
-
-                    _shellBrowserHost.RenameSelection();
-                    break;
-                case "PathGet":
-                    var selectedPaths = IsLegacyWpfFileList
-                        ? FileList.SelectedItems.OfType<FileEntry>().Select(entry => entry.FullPath).ToList()
-                        : _shellBrowserHost?.GetSelectedFileSystemPaths() ?? [];
-                    if (selectedPaths.Count != 1)
-                        throw new InvalidOperationException("Select exactly one item before using Path get.");
-
-                    Clipboard.SetText(selectedPaths[0]);
-                    break;
-                case "Delete":
-                    _shellBrowserHost?.DeleteSelection();
-                    break;
-            }
-        }
-        catch (Exception exception)
-        {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Shell operation failed",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-    }
-
-    private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
-        UpdateToolbarOperationButtons();
 
     private void PathviewActionButton_Click(object sender, RoutedEventArgs e)
     {
@@ -652,69 +401,20 @@ public partial class Pathview : UserControl
         LocationIconSlot.Opacity = icons?.Opacity ?? 1;
     }
 
-    private void ShellBrowserSlot_SizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        var dpi = VisualTreeHelper.GetDpi(ShellBrowserSlot);
-        _shellBrowserHost?.SetViewSize(
-            (int)Math.Round(e.NewSize.Width * dpi.DpiScaleX),
-            (int)Math.Round(e.NewSize.Height * dpi.DpiScaleY));
-    }
-
     private void Pathview_Loaded(object sender, RoutedEventArgs e)
     {
-        ShellExplorerBrowserHost.ToolbarOperationStateChanged += ShellExplorerBrowserHost_ToolbarOperationStateChanged;
-        _scrollSyncTimer.Start();
-        CopyWorkflowState.Shared.Changed += CopyWorkflowState_Changed;
-        MoveWorkflowState.Shared.Changed += MoveWorkflowState_Changed;
-        _shellBrowserHost?.RefreshSelectionState();
-        UpdateToolbarOperationButtons();
         _fileSystemStateDirty = true;
-        _shellViewNeedsRefresh = true;
-        SynchronizeShellChangeNotifications();
+        _contentViewNeedsRefresh = true;
+        SynchronizeContentChangeNotifications();
         ScheduleFileSystemRefreshIfVisible();
     }
 
     private void Pathview_Unloaded(object sender, RoutedEventArgs e)
     {
-        _scrollSyncTimer.Stop();
-        ShellExplorerBrowserHost.ToolbarOperationStateChanged -= ShellExplorerBrowserHost_ToolbarOperationStateChanged;
-        CopyWorkflowState.Shared.Changed -= CopyWorkflowState_Changed;
-        MoveWorkflowState.Shared.Changed -= MoveWorkflowState_Changed;
         _fileSystemRefreshTimer.Stop();
         _fileSystemStateDirty = true;
-        _shellViewNeedsRefresh = true;
-        _shellBrowserHost?.ClearChangeNotifications();
-    }
-
-    private void ShellExplorerBrowserHost_ToolbarOperationStateChanged(object? sender, EventArgs e) =>
-        UpdateToolbarOperationButtons();
-
-    private void CopyWorkflowState_Changed(object? sender, EventArgs e) =>
-        UpdateToolbarOperationButtons();
-
-    private void MoveWorkflowState_Changed(object? sender, EventArgs e) =>
-        UpdateToolbarOperationButtons();
-
-    private void UpdateToolbarOperationButtons()
-    {
-        var hasSelection = IsLegacyWpfFileList
-            ? FileList.SelectedItems.Count > 0
-            : _shellBrowserHost?.HasSelection == true;
-        var hasSingleSelection = IsLegacyWpfFileList
-            ? FileList.SelectedItems.Count == 1
-            : _shellBrowserHost?.HasSingleSelection == true;
-        RenameButton.IsEnabled = hasSingleSelection;
-        PathGetButton.IsEnabled = hasSingleSelection;
-        DeleteButton.IsEnabled = hasSelection;
-        var copyPrepared = CopyWorkflowState.Shared.IsPrepared;
-        var movePrepared = MoveWorkflowState.Shared.IsPrepared;
-        var canStartOperation = !copyPrepared && !movePrepared;
-        CopyGetButton.IsEnabled = hasSelection && canStartOperation;
-        CopyPasteButton.IsEnabled = copyPrepared;
-        CopyAbortButton.IsEnabled = copyPrepared;
-        MoveGetButton.IsEnabled = hasSelection && canStartOperation;
-        MovePasteButton.IsEnabled = movePrepared;
-        MoveAbortButton.IsEnabled = movePrepared;
+        _contentViewNeedsRefresh = true;
+        DirectoryContent.ClearObservedDirectories();
     }
 
     private void Pathview_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -722,20 +422,15 @@ public partial class Pathview : UserControl
         if (IsVisible)
         {
             _fileSystemStateDirty = true;
-            _shellViewNeedsRefresh = true;
-            SynchronizeShellChangeNotifications();
+            _contentViewNeedsRefresh = true;
+            SynchronizeContentChangeNotifications();
             ScheduleFileSystemRefreshIfVisible();
         }
     }
 
-    private void RefreshCurrentFileSystemState(bool refreshShellView)
+    private void RefreshCurrentFileSystemState(bool refreshContentView)
     {
-        if (IsLegacyWpfFileList)
-            RefreshFiles();
-        else if (refreshShellView)
-            _shellBrowserHost?.RefreshContents();
-
-        RefreshShellStatusCount();
+        DirectoryContent.Refresh(refreshContentView);
         RefreshActivePathTree();
         RefreshCurrentRouteTree();
     }
@@ -821,7 +516,7 @@ public partial class Pathview : UserControl
             RefreshLoadedTree(child);
     }
 
-    private void SynchronizeShellChangeNotifications()
+    private void SynchronizeContentChangeNotifications()
     {
         if (!IsLoaded)
             return;
@@ -829,7 +524,7 @@ public partial class Pathview : UserControl
         var desiredPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         AddCurrentPathNotificationPaths(desiredPaths);
 
-        _shellBrowserHost?.SynchronizeChangeNotifications(desiredPaths);
+        DirectoryContent.SetObservedDirectories(desiredPaths);
     }
 
     private void AddCurrentPathNotificationPaths(HashSet<string> paths)
@@ -862,10 +557,10 @@ public partial class Pathview : UserControl
         }
     }
 
-    private void ShellBrowserHost_FileSystemChanged(object? sender, EventArgs e)
+    private void ContentView_FileSystemChanged(object? sender, EventArgs e)
     {
         _fileSystemStateDirty = true;
-        _shellViewNeedsRefresh = false;
+        _contentViewNeedsRefresh = false;
         ScheduleFileSystemRefreshIfVisible();
     }
 
@@ -885,109 +580,14 @@ public partial class Pathview : UserControl
         if (!IsLoaded || !IsVisible || _editingTreeEntry is not null)
             return;
 
-        var refreshShellView = _shellViewNeedsRefresh;
+        var refreshContentView = _contentViewNeedsRefresh;
         _fileSystemStateDirty = false;
-        _shellViewNeedsRefresh = false;
-        RefreshCurrentFileSystemState(refreshShellView);
-        SynchronizeShellChangeNotifications();
+        _contentViewNeedsRefresh = false;
+        RefreshCurrentFileSystemState(refreshContentView);
+        SynchronizeContentChangeNotifications();
     }
 
-    private void RefreshShellStatusCount()
-    {
-        if (!IsLegacyWpfFileList)
-        {
-            _privateTableRefreshTimer.Stop();
-            _privateTableRefreshTimer.Start();
-        }
-
-        if (IsTopPath(CurrentPath))
-        {
-            var count = HideDirectoriesCheckBox.GetCheckBox().IsChecked == true
-                ? 0
-                : DriveInfo.GetDrives().Count(drive =>
-                    InternalItemFilter.MatchesName(drive.Name.TrimEnd(Path.DirectorySeparatorChar), NamePatternTextBox.Text) &&
-                    (HideInternalContentCheckBox.GetCheckBox().IsChecked != true ||
-                     !InternalItemFilter.IsInternal(drive.RootDirectory.FullName, true)));
-            StatusLabel.Text = $"{count} items";
-            return;
-        }
-
-        try
-        {
-            var count = Directory.EnumerateFiles(CurrentPath)
-                .Count(path => (File.GetAttributes(path) & FileAttributes.Directory) == 0 &&
-                               InternalItemFilter.MatchesNamePattern(path, NamePatternTextBox.Text) &&
-                               (HideInternalContentCheckBox.GetCheckBox().IsChecked != true || !InternalItemFilter.IsInternal(path, false)));
-            if (HideDirectoriesCheckBox.GetCheckBox().IsChecked != true)
-                count += Directory.EnumerateDirectories(CurrentPath)
-                    .Count(path => InternalItemFilter.MatchesNamePattern(path, NamePatternTextBox.Text) &&
-                                   (HideInternalContentCheckBox.GetCheckBox().IsChecked != true || !InternalItemFilter.IsInternal(path, true)));
-            StatusLabel.Text = $"{count} items";
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            StatusLabel.Text = exception.Message;
-        }
-    }
-
-    private void PrivateTableRefreshTimer_Tick(object? sender, EventArgs e)
-    {
-        _privateTableRefreshTimer.Stop();
-        try
-        {
-            var paths = _shellBrowserHost?.GetDisplayedFileSystemPaths() ?? [];
-            PrivateFileTable.ItemsSource = paths.Select(Path.GetFileName).ToList();
-            _lastShellScrollOffset = null;
-        }
-        catch (Exception exception) when (exception is COMException or InvalidOperationException)
-        {
-        }
-    }
-
-    private void ScrollSyncTimer_Tick(object? sender, EventArgs e)
-    {
-        if (_shellBrowserHost is null || !_shellBrowserHost.TryGetVerticalScrollRange(out var position, out var total))
-            return;
-
-        var itemCount = PrivateFileTable.Items.Count;
-        if (itemCount == 0)
-            return;
-
-        var rowsScrolled = total > 0 ? (double)position * itemCount / total : 0;
-        // The Shell consumes its top gap over the first row; only the rendering moves,
-        // leaving the virtualized panel's uniform item sizes and scroll extent unchanged.
-        PrivateTableTopGapOffset = PrivateTableTopGap * Math.Max(0, 1 - rowsScrolled);
-
-        // Row pitch, not ActualHeight: item containers have a margin/border that adds to the spacing.
-        // Measured once from the first two realized rows, since virtualization recycles them while scrolling.
-        if (_privateTableRowPitch == 0 &&
-            itemCount > 1 &&
-            PrivateFileTable.ItemContainerGenerator.ContainerFromIndex(1) is FrameworkElement secondRow &&
-            PrivateFileTable.ItemContainerGenerator.ContainerFromIndex(0) is FrameworkElement firstRow)
-        {
-            _privateTableRowPitch = secondRow.TranslatePoint(new Point(), firstRow).Y;
-        }
-
-        var rowPitch = _privateTableRowPitch;
-        if (rowPitch == 0 && itemCount == 1 &&
-            PrivateFileTable.ItemContainerGenerator.ContainerFromIndex(0) is FrameworkElement singleRow)
-            rowPitch = singleRow.ActualHeight;
-        if (rowPitch == 0)
-            return;
-
-        _privateTableScrollViewer ??= FindVisualChild<ScrollViewer>(PrivateFileTable);
-        if (_privateTableScrollViewer is null)
-            return;
-
-        var offset = rowsScrolled * rowPitch;
-        if (_lastShellScrollOffset == offset)
-            return;
-
-        _lastShellScrollOffset = offset;
-        _privateTableScrollViewer.ScrollToVerticalOffset(offset);
-    }
-
-    private void ShellBrowserHost_NavigationCompleted(object? sender, string path)
+    private void ContentView_NavigationCompleted(object? sender, string path)
     {
         var fullPath = IsTopPath(path) ? TopPath : Path.GetFullPath(path);
         if (_pendingTreeNavigationEntry is { } pendingEntry &&
@@ -1024,7 +624,7 @@ public partial class Pathview : UserControl
         ApplyNavigationOptions(hideSiblings, hideInternalDirectories, hideInternalContentItems);
     }
 
-    private void ShellBrowserHost_NavigationFailed(object? sender, string path)
+    private void ContentView_NavigationFailed(object? sender, string path)
     {
         var isCurrentFailure = string.IsNullOrEmpty(path) ||
             string.Equals(_pendingNavigationPath, path, StringComparison.OrdinalIgnoreCase);
@@ -1046,41 +646,6 @@ public partial class Pathview : UserControl
         RefreshActivePathTree();
         if (isCurrentFailure)
             NavigationFailed?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void FileList_SizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        if (FileList.View is not GridView gridView || gridView.Columns.Count < 5)
-            return;
-
-        const double iconColumnWidth = 34;
-        const double typeColumnWidth = 130;
-        const double sizeColumnWidth = 110;
-        const double modifiedColumnWidth = 170;
-        const double minimumNameWidth = 80;
-
-        var scrollViewer = FindVisualChild<ScrollViewer>(FileList);
-        var scrollbarWidth = scrollViewer?.ComputedVerticalScrollBarVisibility == Visibility.Visible
-            ? SystemParameters.VerticalScrollBarWidth
-            : 0;
-        var fixedColumnWidths = iconColumnWidth + typeColumnWidth + sizeColumnWidth + modifiedColumnWidth;
-        var availableNameWidth = FileList.ActualWidth - fixedColumnWidths - scrollbarWidth - 8;
-        gridView.Columns[1].Width = Math.Max(minimumNameWidth, availableNameWidth);
-    }
-
-    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
-    {
-        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
-        {
-            var child = VisualTreeHelper.GetChild(parent, index);
-            if (child is T match)
-                return match;
-
-            if (FindVisualChild<T>(child) is { } descendant)
-                return descendant;
-        }
-
-        return null;
     }
 
     private void InitializeActivePathAndSiblingsTree()
@@ -1259,7 +824,7 @@ public partial class Pathview : UserControl
             if (!ReferenceEquals(tree, ActivePathTree))
             {
                 LoadChildren(entry);
-                SynchronizeShellChangeNotifications();
+                SynchronizeContentChangeNotifications();
             }
         }
     }
@@ -1387,45 +952,6 @@ public partial class Pathview : UserControl
 
     private static void AddPlaceholder(TreeEntry entry) => entry.Children.Add(TreeEntry.Placeholder());
 
-    private void FileList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
-    {
-        if (FileList.SelectedItem is not FileEntry entry)
-            return;
-
-        try
-        {
-            if (entry.IsDirectory && IsBrowsable)
-                Navigate(entry.FullPath);
-            else if (entry.IsDirectory)
-                RequestBrowseLocation(entry.FullPath);
-            else
-                Process.Start(new ProcessStartInfo(entry.FullPath) { UseShellExecute = true });
-        }
-        catch (Exception exception)
-        {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot open item", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-    }
-
-    private void FileList_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        var source = e.OriginalSource as DependencyObject;
-        if (FindAncestor<ListViewItem>(source) is { DataContext: FileEntry entry })
-        {
-            FileList.SelectedItem = entry;
-            ShowNativeMenu(entry.FullPath);
-            e.Handled = true;
-            return;
-        }
-
-        if (IsListChrome(source))
-            return;
-
-        FileList.SelectedItem = null;
-        ShowNativeBackgroundMenu();
-        e.Handled = true;
-    }
-
     private void ActivePathSubfoldersListItem_MouseEnter(object sender, MouseEventArgs e)
     {
         ActivePathSubfoldersList.SelectedItem = null;
@@ -1446,7 +972,7 @@ public partial class Pathview : UserControl
             return;
 
         ActivePathSubfoldersList.SelectedItem = null;
-        ShowNativeBackgroundMenu();
+        ShowNativeBackgroundMenu(this, CurrentPath);
         e.Handled = true;
     }
 
@@ -1459,7 +985,7 @@ public partial class Pathview : UserControl
         if (ActivePathSubfoldersList.SelectedItem is TreeEntry entry && !entry.IsPlaceholder)
             ShowSubfolderNativeMenu(entry);
         else
-            ShowNativeBackgroundMenu();
+            ShowNativeBackgroundMenu(this, CurrentPath);
 
         e.Handled = true;
     }
@@ -1468,7 +994,7 @@ public partial class Pathview : UserControl
     {
         try
         {
-            ShowNativeMenu(entry.Path, () => BeginTreeRename(entry));
+            ShowNativeMenu(this, entry.Path, () => BeginTreeRename(entry));
         }
         finally
         {
@@ -1486,36 +1012,13 @@ public partial class Pathview : UserControl
             RequestBrowseLocation(entry.Path);
     }
 
-    private void FileList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        var source = e.OriginalSource as DependencyObject;
-        if (FindAncestor<ListViewItem>(source) is null && !IsListChrome(source))
-            FileList.SelectedItem = null;
-    }
-
-    private void FileList_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key != Key.Apps && !(e.Key == Key.F10 && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)))
-            return;
-
-        if (FileList.SelectedItem is FileEntry entry)
-            ShowNativeMenu(entry.FullPath);
-        else
-            ShowNativeBackgroundMenu();
-
-        e.Handled = true;
-    }
-
-    private static bool IsListChrome(DependencyObject? source) =>
-        FindAncestor<GridViewColumnHeader>(source) is not null || FindAncestor<ScrollBar>(source) is not null;
-
     private void Tree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (sender is not TreeView || FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { DataContext: TreeEntry entry } || entry.IsPlaceholder)
             return;
 
         entry.IsSelected = true;
-        ShowNativeMenu(entry.Path, !entry.IsTop ? () => BeginTreeRename(entry) : null);
+        ShowNativeMenu(this, entry.Path, !entry.IsTop ? () => BeginTreeRename(entry) : null);
         e.Handled = true;
     }
 
@@ -1605,8 +1108,13 @@ public partial class Pathview : UserControl
         }
     }
 
-    private void ShellBrowserHost_FolderOpenRequested(object? sender, string path) =>
-        RequestBrowseLocation(path);
+    private void ContentView_FolderOpenRequested(object? sender, string path)
+    {
+        if (IsBrowsable)
+            Navigate(path);
+        else
+            RequestBrowseLocation(path);
+    }
 
     private void RequestBrowseLocation(string path, bool? preferFixedView = null) =>
         BrowseLocationRequested?.Invoke(
@@ -1614,7 +1122,7 @@ public partial class Pathview : UserControl
             path,
             true,
             HideInternalSubfoldersCheckBox.GetCheckBox().IsChecked,
-            HideInternalContentCheckBox.GetCheckBox().IsChecked,
+            DirectoryContent.HideInternalItems,
             preferFixedView);
 
     private void NavigateFromTree(TreeEntry entry)
@@ -1749,57 +1257,6 @@ public partial class Pathview : UserControl
         }
     }
 
-    private void ShowNativeMenu(string path, Action? rename = null)
-    {
-        try
-        {
-            var owner = new WindowInteropHelper(Window.GetWindow(this)!).Handle;
-            ShellContextMenu.Show(path, owner, rename);
-        }
-        catch (Exception exception)
-        {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Shell context menu failed", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
-    private void ShowNativeBackgroundMenu()
-    {
-        try
-        {
-            var owner = new WindowInteropHelper(Window.GetWindow(this)!).Handle;
-            ShellContextMenu.ShowBackground(CurrentPath, owner);
-        }
-        catch (Exception exception)
-        {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Shell context menu failed", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
-    private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject
-    {
-        while (current is not null)
-        {
-            if (current is T match)
-                return match;
-            current = VisualTreeHelper.GetParent(current);
-        }
-
-        return null;
-    }
-
-    private static string FormatSize(long bytes)
-    {
-        string[] units = ["B", "KB", "MB", "GB", "TB"];
-        var value = (double)bytes;
-        var unit = 0;
-        while (value >= 1024 && unit < units.Length - 1)
-        {
-            value /= 1024;
-            unit++;
-        }
-
-        return $"{value:0.#} {units[unit]}";
-    }
 }
 
 public sealed class TreeEntry : INotifyPropertyChanged
@@ -1870,7 +1327,7 @@ public sealed class TreeEntry : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public static TreeEntry Placeholder() => new("Loading", string.Empty, true);
-    public static TreeEntry Top() => new(string.Empty, Pathview.TopPath, false, true);
+    public static TreeEntry Top() => new(string.Empty, ShellLocations.TopPath, false, true);
 
     private static bool ContainsSubdirectories(string path)
     {
@@ -1916,29 +1373,6 @@ public sealed class TreeEntry : INotifyPropertyChanged
     }
 }
 
-public sealed class FileEntry
-{
-    public FileEntry(string name, string fullPath, bool isDirectory, string type, string sizeText, DateTime modified)
-    {
-        Name = name;
-        FullPath = fullPath;
-        IsDirectory = isDirectory;
-        Type = type;
-        SizeText = sizeText;
-        Modified = modified;
-        Icons = ShellIconProvider.GetSmallIcons(fullPath);
-    }
-
-    public string Name { get; }
-    public string FullPath { get; }
-    public bool IsDirectory { get; }
-    public string Type { get; }
-    public string SizeText { get; }
-    public DateTime Modified { get; }
-    public ShellIconSet? Icons { get; }
-    public string ModifiedText => Modified.ToString("g");
-}
-
 public sealed record ShellIconSet(ImageSource? BaseIcon, ImageSource? OverlayIcon, double Opacity);
 
 internal static class ShellDisplayNameProvider
@@ -1951,7 +1385,7 @@ internal static class ShellDisplayNameProvider
         if (string.IsNullOrWhiteSpace(path))
             return path;
 
-        if (Pathview.IsTopPath(path))
+        if (ShellLocations.IsTopPath(path))
             return GetDisplayName(path) ?? "This PC";
 
         var fullPath = Path.GetFullPath(path);
@@ -1977,11 +1411,11 @@ internal static class ShellDisplayNameProvider
     public static string ResolvePath(string input)
     {
         var expandedInput = Environment.ExpandEnvironmentVariables(input.Trim().Trim('"'));
-        if (Pathview.IsTopPath(expandedInput) ||
-            string.Equals(expandedInput, GetDisplayName(Pathview.TopPath), StringComparison.OrdinalIgnoreCase) ||
+        if (ShellLocations.IsTopPath(expandedInput) ||
+            string.Equals(expandedInput, GetDisplayName(ShellLocations.TopPath), StringComparison.OrdinalIgnoreCase) ||
             string.Equals(expandedInput, "This PC", StringComparison.OrdinalIgnoreCase))
         {
-            return Pathview.TopPath;
+            return ShellLocations.TopPath;
         }
 
         var fullPath = Path.GetFullPath(expandedInput);
@@ -2122,7 +1556,7 @@ internal static class ShellIconProvider
 
     public static ShellIconSet? GetSmallIcons(string path)
     {
-        var isTopPath = Pathview.IsTopPath(path);
+        var isTopPath = ShellLocations.IsTopPath(path);
         IntPtr itemIdList = IntPtr.Zero;
         if (isTopPath &&
             (SHParseDisplayName(path, IntPtr.Zero, out itemIdList, 0, out _) < 0 || itemIdList == IntPtr.Zero))

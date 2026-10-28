@@ -84,7 +84,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
     public void NavigateTo(string path)
     {
-        _programmaticNavigationPath = Pathview.IsTopPath(path) ? Pathview.TopPath : Path.GetFullPath(path);
+        _programmaticNavigationPath = ShellLocations.IsTopPath(path) ? ShellLocations.TopPath : Path.GetFullPath(path);
         _pendingPath = _programmaticNavigationPath;
         if (_initialized)
         {
@@ -604,8 +604,8 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     private void HandleNavigationCompleted(IntPtr itemIdList)
     {
         var path = TryGetFileSystemPath(itemIdList);
-        if (path is null && Pathview.IsTopPath(_programmaticNavigationPath))
-            path = Pathview.TopPath;
+        if (path is null && ShellLocations.IsTopPath(_programmaticNavigationPath))
+            path = ShellLocations.TopPath;
         if (path is null)
             return;
 
@@ -1417,7 +1417,7 @@ public sealed class ShellBrowserSite(
         if (string.IsNullOrEmpty(childName))
             return null;
 
-        if (Pathview.IsTopPath(currentPath))
+        if (ShellLocations.IsTopPath(currentPath))
         {
             var drive = DriveInfo.GetDrives().FirstOrDefault(candidate =>
                 string.Equals(candidate.Name, childName, StringComparison.OrdinalIgnoreCase) ||

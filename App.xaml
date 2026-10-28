@@ -13,6 +13,23 @@
             <SolidColorBrush x:Key="ItemSelectionBrush" Color="#CCE8FF" />
             <SolidColorBrush x:Key="ItemSelectionBorderBrush" Color="#0078D4" />
             <SolidColorBrush x:Key="ItemRequestBrush" Color="#E6E6E6" />
+            <SolidColorBrush x:Key="ViewFrameBrush" Color="#D8DDE3" />
+            <Thickness x:Key="ViewFrameThickness">0.7</Thickness>
+            <Style x:Key="ContentPaneButtonStyle" TargetType="{x:Type Button}"
+                   BasedOn="{StaticResource {x:Type Button}}">
+                <Setter Property="Height" Value="24" />
+                <Setter Property="MinHeight" Value="24" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            </Style>
+            <DataTemplate x:Key="ShellIconTemplate">
+                <Grid Width="16" Height="16" ClipToBounds="False"
+                      Opacity="{Binding Icons.Opacity, TargetNullValue=1, FallbackValue=1}">
+                    <Image Width="16" Height="16" Source="{Binding Icons.BaseIcon}" Stretch="None" />
+                    <Image Width="9" Height="9" Source="{Binding Icons.OverlayIcon}" Stretch="Uniform"
+                           HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+                </Grid>
+            </DataTemplate>
         </ResourceDictionary>
     </Application.Resources>
 </Application>
