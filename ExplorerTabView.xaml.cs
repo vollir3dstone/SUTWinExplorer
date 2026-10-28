@@ -1342,7 +1342,7 @@ public partial class Pathview : UserControl
         if (FindAncestor<ListViewItem>(source) is { DataContext: TreeEntry entry } && !entry.IsPlaceholder)
         {
             ActivePathSubfoldersList.SelectedItem = entry;
-            ShowNativeMenu(entry.Path, () => BeginTreeRename(entry));
+            ShowSubfolderNativeMenu(entry);
             e.Handled = true;
             return;
         }
@@ -1362,11 +1362,23 @@ public partial class Pathview : UserControl
             return;
 
         if (ActivePathSubfoldersList.SelectedItem is TreeEntry entry && !entry.IsPlaceholder)
-            ShowNativeMenu(entry.Path, () => BeginTreeRename(entry));
+            ShowSubfolderNativeMenu(entry);
         else
             ShowNativeBackgroundMenu();
 
         e.Handled = true;
+    }
+
+    private void ShowSubfolderNativeMenu(TreeEntry entry)
+    {
+        try
+        {
+            ShowNativeMenu(entry.Path, () => BeginTreeRename(entry));
+        }
+        finally
+        {
+            ActivePathSubfoldersList.SelectedItem = null;
+        }
     }
 
     private void ActivePathSubfoldersList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)

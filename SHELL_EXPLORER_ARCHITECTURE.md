@@ -452,10 +452,10 @@ inner list frame is `#646464` at 0.7 DIP. The `ListView` fills the remaining
 area and scrolls vertically; its item-container height uses the same
 `DirectoryTreeRowHeight` as the tree.
 The list remains selectable. Its item containers use the shared hover and
-selection brushes. On every `MouseEnter` over a list item,
-selection rather than only hiding its visual state. A later click or keyboard
-action can select an item again; the next mouse entry over any list item clears
-that selection again.
+selection brushes. On every `MouseEnter` over a list item, the selection is
+cleared. Closing a folder's context menu also clears selection, whether the
+menu was opened by mouse or keyboard. A later click or keyboard action can
+select an item again.
 
 The `Pathview` root enables `UseLayoutRounding` and `SnapsToDevicePixels`, so
 the layout and rendered edges throughout the pane use WPF's device-pixel

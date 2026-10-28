@@ -271,8 +271,9 @@ may show its requested row in light gray without changing the active selection.
   shows its native Shell context menu; right-clicking empty list space shows
   the active folder's native background menu. The Apps key and Shift+F10 show
   the selected folder's menu or, when no folder is selected, the background
-  menu. Where the Shell permits renaming, **Rename** starts an inline editor
-  in the list; Enter commits and Escape cancels.
+  menu. Closing a folder's context menu clears the list selection. Where the
+  Shell permits renaming, **Rename** starts an inline editor in the list; Enter
+  commits and Escape cancels.
 - [x] The native menu can execute common commands, including Properties,
   background New, context-menu Copy/Paste, and Paste shortcut as verified in
   the spike.
