@@ -114,15 +114,22 @@ may show its requested row in light gray without changing the active selection.
 - [x] **Active path** shows only the route from the drive root to the active
   directory.
 - [x] In a non-browsable Pathview, the **Active path** pane places that route
-  in a gray-framed **Path** section sized to its rows, with no tree scrollbars.
+  in a **Path** section sized to its rows. **Path** and **Sub directories**
+  remain GroupBox groups with their headers; only their outer frames are
+  omitted, and each title is flanked by horizontal rules. The route tree has a
+  thin light-gray frame matching the other application-owned trees and lists,
+  and no tree scrollbars.
   The remaining pane space shows the active directory's immediate
-  subdirectories in a gray-framed **Sub directories** section. Its vertically scrolling,
+  subdirectories in a **Sub directories** section with the same header treatment. Its vertically scrolling,
   single-line list has its own very light gray frame, aligned horizontally with
   the **VIEW:** badge above it. The list is inset 16 DIP from the frame on both
   horizontal sides, with an 8-DIP Grid spacer below the filter row; each row
   shows only the folder's Shell icon (including overlays) and name.
   The sections have a visible gap, and each subfolder row matches the tree's
   row height.
+- [x] The **Active path** tab page insets its two-section layout 8 DIP from
+  the tab-page edges. The sidebar tabs leave a 4-DIP gap before the horizontal
+  GridSplitter; the surrounding two-pane layout retains its 4-DIP margin.
 - [x] The fixed **Active path** pane has a default-on **Hide internal** checkbox
   above its subfolder list. It uses the content pane's internal-item rules but
   filters only that subfolder list; it is independent from the content pane's
@@ -196,7 +203,7 @@ may show its requested row in light gray without changing the active selection.
   with 8-DIP Grid spacer rows.
 - [x] The hosted Shell content view has a very light gray frame matching the
   fixed **Sub directories** list frame. Its left edge aligns with the **VIEW:**
-  and **SELECTED:** badges above it.
+  and **FOR SELECTED:** badges above it.
 - [x] **Hide directories** controls whether directories appear in the content
   view. It defaults to on; unchecking it displays directories, and changing it
   updates the view without navigating.

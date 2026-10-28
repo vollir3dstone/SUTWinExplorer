@@ -394,7 +394,7 @@ wrapper's XAML `Margin` to control the gap after the complete checkbox-label
 unit (currently `16` in the content-filter row).
 
 - The content filtering row starts with a **VIEW:** badge styled like the
-  **SELECTED:** and **FIXED** badges.
+  **FOR SELECTED:** and **FIXED** badges.
 - The right content pane is a separate content view. Production creates one
   `ShellExplorerBrowserHost` per `Pathview`; it derives from
   `HwndHost` and hosts one Shell `IExplorerBrowser` COM instance.
@@ -444,21 +444,33 @@ through `TreeEntry.IsNavigationPending`; it is not WPF selection.
   row only, not its expanded descendants. Selection overrides hover, and a
   pending request overrides hover without replacing the selected active path.
 
-`ActivePathTree` sits in a gray-framed `GroupBox` headed **Path**, whose height
-is set to the active route's row count times
-`Pathview.DirectoryTreeRowHeight`; both tree scrollbars are disabled. The
-lower star-sized row is a gray-framed `GroupBox` headed **Sub directories**.
-It contains the default-checked
+`ActivePathTree` sits in a `GroupBox` headed **Path**. Its height is set to
+the active route's row count times `Pathview.DirectoryTreeRowHeight`; both tree
+scrollbars are disabled. The tree is wrapped in a `Border` using the shared
+`ViewFrameBrush` and `ViewFrameThickness` resources, matching the other framed
+application-owned trees and lists. `ViewFrameThickness` is 0.7 DIP and applies
+to all borders using `ViewFrameBrush`, including the hosted Shell view. Both
+active-path sections remain actual WPF `GroupBox`es, so their
+grouping, headers, and content are preserved. `HeaderLineGroupBoxStyle`
+replaces only the usual outer frame: its template places each header between
+two horizontal rules that remain 1 DIP high, with 8-DIP gaps beside the title,
+and presents the GroupBox content below it using the control's `Padding`. The lower star-sized
+row is headed **Sub directories** and contains the default-checked
 `HideInternalSubfoldersCheckBox` and a `ListView` inside its own frame, with
-10px horizontal margins. The outer `GroupBox` frame is `#A6A6A6` at 1 DIP; the
-inner list frame is `#646464` at 0.7 DIP. The `ListView` fills the remaining
-area and scrolls vertically; its item-container height uses the same
+16-DIP horizontal margins. The header rules use the shared `ViewFrameBrush`;
+the inner list frame uses the same brush at 0.7 DIP. The `ListView` fills the
+remaining area and scrolls vertically; its item-container height uses the same
 `DirectoryTreeRowHeight` as the tree.
 The list remains selectable. Its item containers use the shared hover and
 selection brushes. On every `MouseEnter` over a list item, the selection is
 cleared. Closing a folder's context menu also clears selection, whether the
 menu was opened by mouse or keyboard. A later click or keyboard action can
 select an item again.
+
+The **Active path** tab page's two-section Grid has an 8-DIP margin to the
+tab-page edges. The sidebar `TabControl` has a 4-DIP right margin to separate
+it from the horizontal `GridSplitter`; the containing two-pane Grid retains a
+4-DIP margin.
 
 The `Pathview` root enables `UseLayoutRounding` and `SnapsToDevicePixels`, so
 the layout and rendered edges throughout the pane use WPF's device-pixel
