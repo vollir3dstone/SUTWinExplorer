@@ -112,6 +112,11 @@ filesystem path.
 
 ### Private table and scroll synchronization
 
+In Shell mode, a single light-gray `ViewFrameBrush` / `ViewFrameThickness`
+border surrounds a two-column grid containing both the private table and the
+Shell host. Neither child has a separate WPF border. The shared frame is
+collapsed with the Shell view when the legacy WPF list is active.
+
 #### Navigation and refresh lifecycle
 
 1. `ContentView.NavigateTo` records the pending destination and clears
@@ -208,7 +213,7 @@ if another action moves the private viewport, including row selection or
 accessibility scrolling. Programmatic `ScrollToVerticalOffset` calls from
 the Shell synchronization remain enabled.
 
-The private header is 24 DIP high. A render-only 6-DIP row translation decreases
+The private header is 25 DIP high. A render-only 6-DIP row translation decreases
 to zero over the first Shell row, approximating the Shell's initial gap without
 changing virtualized item sizes or scroll extent. This is empirically derived,
 not a documented Shell metric. At 96 DPI, the latest measured alignment was

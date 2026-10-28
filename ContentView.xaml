@@ -172,13 +172,17 @@
                     </GridView>
                 </ListView.View>
             </ListView>
-            <Grid Grid.Row="4" Grid.Column="0" Margin="10,0,0,0">
+            <Border Grid.Row="4" Grid.Column="0" Margin="10,0,0,0"
+                    BorderBrush="{StaticResource ViewFrameBrush}"
+                    BorderThickness="{StaticResource ViewFrameThickness}"
+                    Visibility="{Binding Visibility, ElementName=ShellBrowserSlot}">
+            <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="200" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <ListView x:Name="PrivateFileTable" Grid.Column="0" Visibility="Collapsed"
-                          BorderThickness="1,1,0,1" BorderBrush="#646464" VirtualizingPanel.ScrollUnit="Pixel"
+                          BorderThickness="0" VirtualizingPanel.ScrollUnit="Pixel"
                           IsTextSearchEnabled="False"
                           ScrollViewer.VerticalScrollBarVisibility="Hidden"
                           ScrollViewer.HorizontalScrollBarVisibility="Hidden"
@@ -201,7 +205,7 @@
                             <GridView.ColumnHeaderContainerStyle>
                                 <!-- The first-row gap is rendered separately so it can scroll away. -->
                                 <Style TargetType="GridViewColumnHeader">
-                                    <Setter Property="Height" Value="24" />
+                                    <Setter Property="Height" Value="25" />
                                     <Setter Property="Focusable" Value="False" />
                                     <Setter Property="Template">
                                         <Setter.Value>
@@ -224,13 +228,10 @@
                         </GridView>
                     </ListView.View>
                 </ListView>
-                <Border Grid.Column="1" BorderBrush="{StaticResource ViewFrameBrush}"
-                        BorderThickness="{StaticResource ViewFrameThickness}"
-                        Visibility="{Binding Visibility, ElementName=ShellBrowserSlot}">
-                    <ContentControl x:Name="ShellBrowserSlot" Visibility="Collapsed"
-                                    SizeChanged="ShellBrowserSlot_SizeChanged" />
-                </Border>
+                <ContentControl x:Name="ShellBrowserSlot" Grid.Column="1" Visibility="Collapsed"
+                                SizeChanged="ShellBrowserSlot_SizeChanged" />
             </Grid>
+            </Border>
             <Border Grid.Row="4" Grid.Column="1" BorderBrush="#E0E4E8" BorderThickness="1,0,0,0"
                     Background="#F6F7F8" VerticalAlignment="Stretch">
                 <TextBlock x:Name="StatusLabel" Padding="8,6" Foreground="#596675"
