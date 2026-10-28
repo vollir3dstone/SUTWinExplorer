@@ -189,10 +189,14 @@
                           ScrollViewer.PanningMode="None"
                           PreviewMouseWheel="PrivateFileTable_PreviewMouseWheel"
                           PreviewKeyDown="PrivateFileTable_PreviewKeyDown"
+                          SelectionChanged="PrivateFileTable_SelectionChanged"
                           RequestBringIntoView="PrivateFileTable_RequestBringIntoView"
                           ScrollViewer.ScrollChanged="PrivateFileTable_ScrollChanged">
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
+                            <Setter Property="Focusable" Value="False" />
+                            <Setter Property="IsTabStop" Value="False" />
+                            <Setter Property="IsHitTestVisible" Value="False" />
                             <Setter Property="RenderTransform">
                                 <Setter.Value>
                                     <TranslateTransform Y="{Binding PrivateTableTopGapOffset, RelativeSource={RelativeSource AncestorType={x:Type local:ContentView}}}" />

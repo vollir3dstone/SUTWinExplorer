@@ -488,6 +488,12 @@ public partial class ContentView : UserControl
             e.Handled = true;
     }
 
+    private void PrivateFileTable_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ReferenceEquals(e.Source, PrivateFileTable) && PrivateFileTable.SelectedIndex >= 0)
+            PrivateFileTable.UnselectAll();
+    }
+
     private void PrivateFileTable_RequestBringIntoView(object sender, RequestBringIntoViewEventArgs e) =>
         e.Handled = true;
 
