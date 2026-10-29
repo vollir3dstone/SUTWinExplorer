@@ -7,6 +7,7 @@ internal enum MediaType
 {
     None,
     Executable,
+    LinesText,
     Book,
     StructuredData,
     Image,
@@ -39,6 +40,7 @@ internal static class MediaTypeMap
     {
         MediaType.None => string.Empty,
         MediaType.Executable => "executable",
+        MediaType.LinesText => "lines-text",
         MediaType.Book => "book",
         MediaType.StructuredData => "structured-data",
         MediaType.Image => "image",
@@ -66,6 +68,7 @@ internal static class MediaTypeMap
             var type = typeName switch
             {
                 "executable" => MediaType.Executable,
+                "lines-text" => MediaType.LinesText,
                 "book" => MediaType.Book,
                 "structured-data" => MediaType.StructuredData,
                 "image" => MediaType.Image,

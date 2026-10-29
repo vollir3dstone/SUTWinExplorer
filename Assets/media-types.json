@@ -5,8 +5,12 @@
 			"extensions": [".exe", ".dll"]
 		},
 		{
+			"type": "lines-text",
+			"extensions": [".txt", ".text"]
+		},
+		{
 			"type": "book",
-			"extensions": [".txt", ".text", ".doc", ".docx", ".odt", ".rtf", ".pdf", ".html", ".htm", ".md", ".pptx", ".ppt"]
+			"extensions": [".doc", ".docx", ".odt", ".rtf", ".pdf", ".html", ".htm", ".md", ".pptx", ".ppt"]
 		},
 		{
 			"type": "structured-data",

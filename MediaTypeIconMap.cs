@@ -19,6 +19,7 @@ internal static class MediaTypeIconMap
     private static Dictionary<MediaType, ImageSource> CreateIcons() => new()
     {
         [MediaType.Executable] = LoadAsset("type_exe 16.png"),
+        [MediaType.LinesText] = LoadAsset("type_lines_text 16.png"),
         [MediaType.Book] = LoadAsset("type_book 16.png"),
         [MediaType.StructuredData] = LoadAsset("type_structured_data 16.png"),
         [MediaType.Image] = LoadAsset("type_image 16.png"),
@@ -26,7 +27,7 @@ internal static class MediaTypeIconMap
         [MediaType.Video] = LoadAsset("type_video 16.png"),
         [MediaType.CommandData] = LoadAsset("type_command_data 16.png"),
         [MediaType.Directory] = LoadFolderIcon(),
-        [MediaType.ShellLink] = LoadAsset("ic_fluent_arrow_right_16_regular.png"),
+        [MediaType.ShellLink] = LoadAsset("type_shell_link 16.png"),
         [MediaType.Ambiguous] = CreateWarningIcon()
     };
 

@@ -233,8 +233,8 @@ may show its requested row in light gray without changing the active selection.
 - [x] The adjacent private column is headed `MT`, is 16 DIP wide with 8 DIP
   of space to its left, and displays a 16-by-16 DIP media type icon for each
   filesystem item, in Shell view order.
-  Directories use the standard folder icon, `.lnk` files use a right-pointing
-  arrow, and conflicting media type assignments use a warning triangle. Other
+  Directories use the standard folder icon, `.lnk` files use the Shell-link
+  icon asset, and conflicting media type assignments use a warning triangle. Other
   extensions are matched case-insensitively against `Assets/media-types.json`;
   unknown extensions are blank. The manually maintained JSON is embedded at
   build time; media type names remain available to accessibility tools.

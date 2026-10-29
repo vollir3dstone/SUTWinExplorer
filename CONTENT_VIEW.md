@@ -139,6 +139,7 @@ assigns each type one of the existing 16-by-16 assets:
 | Media type | Icon asset |
 | --- | --- |
 | `executable` | [type_exe 16.png](./Assets/type_exe%2016.png) |
+| `lines-text` | [type_lines_text 16.png](./Assets/type_lines_text%2016.png) |
 | `book` | [type_book 16.png](./Assets/type_book%2016.png) |
 | `structured-data` | [type_structured_data 16.png](./Assets/type_structured_data%2016.png) |
 | `image` | [type_image 16.png](./Assets/type_image%2016.png) |
@@ -152,12 +153,11 @@ JSON mapping:
 | Special type | Meaning | Icon |
 | --- | --- | --- |
 | `directory` | A filesystem directory, including a directory junction. | Windows standard folder icon. |
-| `shell-link` | A `.lnk` file, including a shortcut to a directory. | Right-pointing arrow. |
+| `shell-link` | A `.lnk` file, including a shortcut to a directory. | [type_shell_link 16.png](./Assets/type_shell_link%2016.png). |
 | `ambiguous` | A file extension mapped to different media type names. | Warning triangle. |
 | `None` (internal only) | No extension or no matching media type. | None; the cell is empty. |
 
-The arrow is [ic_fluent_arrow_right_16_regular.png](./Assets/ic_fluent_arrow_right_16_regular.png);
-the warning triangle is drawn in the application. Icons are loaded once and
+The warning triangle is drawn in the application. Icons are loaded once and
 shared across rows.
 
 The JSON is embedded in the application at build time and is loaded once per
