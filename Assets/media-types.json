@@ -10,7 +10,7 @@
 		},
 		{
 			"type": "book",
-			"extensions": [".doc", ".docx", ".odt", ".rtf", ".pdf", ".html", ".htm", ".mhtm", ".mhtml", ".chm", ".md", ".pptx", ".ppt"]
+			"extensions": [".doc", ".docx", ".odt", ".rtf", ".pdf", ".html", ".htm", ".mht", ".mhtm", ".mhtml", ".chm", ".md", ".pptx", ".ppt"]
 		},
 		{
 			"type": "structured-data",
