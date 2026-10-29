@@ -11,8 +11,9 @@ The private column is intentionally cleared as soon as navigation starts.
 ## Current understanding
 
 The private column does not render directly from the Shell's data. It first
-queries the current Shell view for displayed filesystem paths through
-`IDataObject` / `CF_HDROP`, then assigns the resulting names to the WPF list.
+queries the current Shell view for displayed filesystem paths by view index
+using `IFolderView2::GetItem`, then assigns the resulting names to the WPF list
+when their order or contents have changed.
 WPF must subsequently lay out and render those rows.
 
 There are two relevant update paths:

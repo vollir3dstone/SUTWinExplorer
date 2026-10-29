@@ -451,7 +451,12 @@ public partial class ContentView : UserControl
         try
         {
             var paths = _shellBrowserHost?.GetDisplayedFileSystemPaths() ?? [];
-            PrivateFileTable.ItemsSource = paths.Select(Path.GetFileName).ToList();
+            var names = paths.Select(Path.GetFileName).ToList();
+            if (PrivateFileTable.ItemsSource is IEnumerable<string?> currentNames &&
+                currentNames.SequenceEqual(names, StringComparer.Ordinal))
+                return;
+
+            PrivateFileTable.ItemsSource = names;
             _lastShellScrollOffset = null;
         }
         catch (Exception exception) when (exception is COMException or InvalidOperationException)

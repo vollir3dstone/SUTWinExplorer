@@ -148,11 +148,16 @@ collapsed with the Shell view when the legacy WPF list is active.
    refresh at `DispatcherPriority.Background`. Duplicate pending requests are
    coalesced. A queued refresh is skipped if the control is unloaded or
    navigation is pending; a later load or navigation outcome schedules
-   another. The refresh reads `SVGIO_ALLVIEW` through
-   `GetDisplayedFileSystemPaths` using the Shell's `IDataObject`/`CF_HDROP`,
-   then displays filesystem leaf names in the order returned by the Shell.
-   It does not enumerate the directory independently. COM and
-   invalid-operation exceptions are written to debug output.
+   another. `GetDisplayedFileSystemPaths` obtains the number of items through
+   `IFolderView::ItemCount(SVGIO_ALLVIEW)` and retrieves each item by its
+   view index with `IFolderView2::GetItem`. Filesystem items are resolved with
+   `IShellItem::GetDisplayName(SIGDN_FILESYSPATH)` and their leaf names are
+   displayed in that order; non-filesystem items are skipped. The refresh does
+   not enumerate the directory independently. COM and invalid-operation
+   exceptions are written to debug output.
+   If the ordered names have not changed, the existing WPF `ItemsSource` is
+   retained. Replacing it unnecessarily can itself cause further Shell
+   accessibility reorder notifications, producing a refresh loop.
 
 #### Shell view and layout events
 
@@ -169,34 +174,74 @@ to the current process and filters callbacks to descendant HWNDs of that host:
 | `EVENT_OBJECT_DESTROY` | `0x8001` | Same filters and reactions, when the HWND still passes the descendant check. |
 | `EVENT_OBJECT_SHOW` | `0x8002` | Same filters and reactions. |
 | `EVENT_OBJECT_HIDE` | `0x8003` | Same filters and reactions. |
-| `EVENT_OBJECT_REORDER` | `0x8004` | Same filters and reactions. |
+| `EVENT_OBJECT_REORDER` | `0x8004` | For `DirectUIHWND` with any object ID, flag an item reorder; for a `ScrollBar` with object ID `0`, flag a possible layout change. |
 | `EVENT_OBJECT_LOCATIONCHANGE` | `0x800B` | For a `ScrollBar` with object ID `0`, flag a possible layout change; DirectUI location changes are ignored. |
 
 These are Windows accessibility notifications, not a Shell enumeration-complete
-callback. The monitor coalesces item and layout flags into one
-`DispatcherPriority.ContextIdle` operation. For an item flag, the host queries
-the current `IFolderView2` through `IFolderView::ItemCount(SVGIO_ALLVIEW)`.
-Only a count different from its cached value raises the host's internal
-`DisplayedItemsChanged` event, which schedules the table refresh above. For a
-layout flag, the host remeasures the current Shell view's usable client width
-and recalculates the Name column only when that width differs from the last
-successfully sized width.
+callback. The monitor coalesces item, reorder, and layout flags into one
+`DispatcherPriority.ContextIdle` operation. A DirectUI reorder always raises
+the host's internal `DisplayedItemsChanged` event and schedules a refresh,
+regardless of the number of items. For other item flags, the host queries the
+current `IFolderView2` through `IFolderView::ItemCount(SVGIO_ALLVIEW)` and
+raises the event only if the count differs from its cached value. If both flags
+arrive together, the host raises the event once and still updates the cached
+count. For a layout flag, the host remeasures the current Shell view's usable
+client width and recalculates the Name column only when that width differs from
+the last successfully sized width.
 
 This is incremental rather than a fixed-delay or enumeration-complete strategy.
 The observed `DirectUIHWND` class and positive accessible object IDs are not a
 documented Shell enumeration contract; other Windows versions and providers
-need runtime verification. An item notification with an unchanged count does
-not itself refresh the table, so it cannot by itself detect every same-count
-replacement or reorder. Filter changes and filesystem notifications have
+need runtime verification. Except for reorder, an item notification with an
+unchanged count does not itself refresh the table, so it cannot by itself
+detect every same-count replacement. Receipt of a reorder notification after
+every possible Shell sort is not guaranteed by this implementation.
+Filter changes and filesystem notifications have
 their own refresh routes: filter handlers refresh the Shell and status; the
 host forwards `SHChangeNotifyRegister` notifications as `FileSystemChanged`
 to Pathview, which coordinates its deferred refresh.
+
+`ShellBrowserSite` also handles `ICommDlgBrowser.OnStateChange` with
+`CDBOSC_RENAME` (`0x00000003`) by raising `DisplayedItemsChanged` independently
+of the item-count check. ContentView then schedules the same Shell-backed
+table refresh. This is a targeted rename notification, not a general
+view-changed event; whether the hosted Shell sends it at the right time for a
+particular rename remains to be verified in use. With column sizing tracing
+enabled, the host logs when this callback occurs.
 
 The monitor's hooks are removed before the host window and browser are
 destroyed. Hook installation failures raise `Win32Exception`; item-count query
 failures are written to debug output. Neither the item refresh nor the
 scrollbar-width update uses a delay timer. The separate scroll-position
 synchronization still uses the existing 30-ms timer described below.
+
+#### Sorting and reorder investigation
+
+The Shell owns header interaction and sorting; the accessibility hook observes
+notifications and does not consume header input. In a disposable three-file
+folder, a mouse message sent to the native Name header changed the Shell
+order. Accessibility-invoked Name, Size, and Date modified sorting was also
+checked in both directions. The private order matched the Shell after each
+tested sort, and an external rename and name-pattern filter were checked.
+The user subsequently confirmed that the result looked good in manual use.
+These observations do not establish which condition caused the originally
+reported unresponsive header, nor do they guarantee notifications for every
+Shell provider or sort.
+
+Two problems were found while investigating:
+
+- Reading `SVGIO_ALLVIEW` through `IShellView::GetItemObject` and
+  `IDataObject`/`CF_HDROP` did not reliably return the visible sort order.
+  The private table now reads items by `IFolderView2::GetItem` view index,
+  as described above. The selection and file-operation paths are separate.
+- Unconditionally replacing the private table's `ItemsSource` after every
+  reorder produced further DirectUI reorder notifications, followed by more
+  refreshes even when idle. Each coalesced reorder batch still schedules a
+  Shell-backed synchronization, but the table is replaced only if the
+  resulting ordered names differ. In the controlled test, idle notifications
+  then settled instead of continuing, including after sorting and filtering.
+
+#### Scroll synchronization
 
 The Shell view is DirectUI, so the spike polls its vertical scrollbar child
 using `GetScrollInfo`, not `LVM_*` or `GetVisibleItem`. The observed range is

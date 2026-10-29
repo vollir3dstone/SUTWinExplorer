@@ -53,13 +53,8 @@ internal static class ShellFileOperations
         }
     }
 
-    private const uint ShellViewAllItems = 2;
-
     public static List<string> GetSelectedFileSystemPaths(IShellView shellView) =>
         GetFileSystemPaths(shellView, ShellContextMenu.ShellViewSelection);
-
-    public static List<string> GetDisplayedFileSystemPaths(IShellView shellView) =>
-        GetFileSystemPaths(shellView, ShellViewAllItems);
 
     private static List<string> GetFileSystemPaths(IShellView shellView, uint selectionKind)
     {

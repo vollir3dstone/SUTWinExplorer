@@ -12,16 +12,17 @@ internal sealed class ShellViewChangeMonitor : IDisposable
     private const uint ObjectLocationChange = 0x800B;
     private readonly IntPtr _parentWindow;
     private readonly Dispatcher _dispatcher;
-    private readonly Action<bool, bool> _changed;
+    private readonly Action<bool, bool, bool> _changed;
     private readonly WinEventCallback _callback;
     private IntPtr _objectHook;
     private IntPtr _locationHook;
     private bool _itemsChanged;
+    private bool _itemsReordered;
     private bool _layoutChanged;
     private bool _queued;
     private bool _disposed;
 
-    public ShellViewChangeMonitor(IntPtr parentWindow, Dispatcher dispatcher, Action<bool, bool> changed)
+    public ShellViewChangeMonitor(IntPtr parentWindow, Dispatcher dispatcher, Action<bool, bool, bool> changed)
     {
         _parentWindow = parentWindow;
         _dispatcher = dispatcher;
@@ -52,8 +53,10 @@ internal sealed class ShellViewChangeMonitor : IDisposable
             return;
 
         var className = name.ToString();
-        // The Shell's DirectUI view reports its accessible child changes with positive object IDs.
-        if (className == "DirectUIHWND" && objectId > 0 && eventType <= ObjectReorder)
+        if (className == "DirectUIHWND" && eventType == ObjectReorder)
+            _itemsReordered = true;
+        // The Shell's DirectUI view reports other accessible child changes with positive object IDs.
+        else if (className == "DirectUIHWND" && objectId > 0 && eventType < ObjectReorder)
             _itemsChanged = true;
         else if (className == "ScrollBar" && objectId == 0)
             _layoutChanged = true;
@@ -72,10 +75,12 @@ internal sealed class ShellViewChangeMonitor : IDisposable
         if (_disposed)
             return;
         var itemsChanged = _itemsChanged;
+        var itemsReordered = _itemsReordered;
         var layoutChanged = _layoutChanged;
         _itemsChanged = false;
+        _itemsReordered = false;
         _layoutChanged = false;
-        _changed(itemsChanged, layoutChanged);
+        _changed(itemsChanged, itemsReordered, layoutChanged);
     }
 
     public void Dispose()

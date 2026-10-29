@@ -154,10 +154,68 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     public List<string> GetSelectedFileSystemPaths() =>
         QueryCurrentView(ShellFileOperations.GetSelectedFileSystemPaths);
 
-    public List<string> GetDisplayedFileSystemPaths() =>
-        QueryCurrentView(ShellFileOperations.GetDisplayedFileSystemPaths);
+    public List<string> GetDisplayedFileSystemPaths()
+    {
+        const uint shellAttributeFileSystem = 0x40000000;
+        if (_browser is null || !_initialized)
+            throw new InvalidOperationException("The Shell content view is not ready.");
 
-    private void HandleViewChanges(bool itemsChanged, bool layoutChanged)
+        IntPtr viewPointer = IntPtr.Zero;
+        IFolderView2Native? view = null;
+        try
+        {
+            var viewId = typeof(IFolderView2Native).GUID;
+            Marshal.ThrowExceptionForHR(_browser.GetCurrentView(ref viewId, out viewPointer));
+            if (viewPointer == IntPtr.Zero)
+                throw new InvalidOperationException("The Shell folder view is unavailable.");
+
+            view = (IFolderView2Native)Marshal.GetObjectForIUnknown(viewPointer);
+            Marshal.ThrowExceptionForHR(view.ItemCount(ShellViewAllItems, out var count));
+            var paths = new List<string>(count);
+            var itemId = typeof(IShellViewItemNative).GUID;
+            for (var index = 0; index < count; index++)
+            {
+                IntPtr itemPointer = IntPtr.Zero;
+                IShellViewItemNative? item = null;
+                IntPtr pathPointer = IntPtr.Zero;
+                try
+                {
+                    Marshal.ThrowExceptionForHR(view.GetItem(index, ref itemId, out itemPointer));
+                    if (itemPointer == IntPtr.Zero)
+                        throw new InvalidOperationException($"The Shell item at index {index} is unavailable.");
+                    item = (IShellViewItemNative)Marshal.GetObjectForIUnknown(itemPointer);
+                    Marshal.ThrowExceptionForHR(item.GetAttributes(shellAttributeFileSystem, out var attributes));
+                    if ((attributes & shellAttributeFileSystem) == 0)
+                        continue;
+                    Marshal.ThrowExceptionForHR(item.GetDisplayName(ShellDisplayNameFileSystemPath, out pathPointer));
+                    var path = Marshal.PtrToStringUni(pathPointer);
+                    if (string.IsNullOrEmpty(path))
+                        throw new InvalidOperationException($"The Shell item at index {index} has no filesystem path.");
+                    paths.Add(path);
+                }
+                finally
+                {
+                    if (pathPointer != IntPtr.Zero)
+                        Marshal.FreeCoTaskMem(pathPointer);
+                    if (item is not null && Marshal.IsComObject(item))
+                        _ = Marshal.ReleaseComObject(item);
+                    if (itemPointer != IntPtr.Zero)
+                        _ = Marshal.Release(itemPointer);
+                }
+            }
+
+            return paths;
+        }
+        finally
+        {
+            if (view is not null && Marshal.IsComObject(view))
+                _ = Marshal.ReleaseComObject(view);
+            if (viewPointer != IntPtr.Zero)
+                _ = Marshal.Release(viewPointer);
+        }
+    }
+
+    private void HandleViewChanges(bool itemsChanged, bool itemsReordered, bool layoutChanged)
     {
         if (_browser is null || !_initialized)
             return;
@@ -167,6 +225,12 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             var width = GetShellViewClientWidth(_viewBounds.Right - _viewBounds.Left);
             if (width != _lastSizedViewWidth)
                 UpdateNameColumnWidth(_viewBounds.Right - _viewBounds.Left);
+        }
+
+        if (itemsReordered)
+        {
+            TraceColumnSizing("Shell view reorder notification");
+            DisplayedItemsChanged?.Invoke(this, EventArgs.Empty);
         }
 
         if (!itemsChanged)
@@ -186,7 +250,8 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             if (_lastDisplayedItemCount != count)
             {
                 _lastDisplayedItemCount = count;
-                DisplayedItemsChanged?.Invoke(this, EventArgs.Empty);
+                if (!itemsReordered)
+                    DisplayedItemsChanged?.Invoke(this, EventArgs.Empty);
             }
         }
         catch (Exception exception) when (exception is COMException or InvalidOperationException or InvalidCastException)
@@ -405,6 +470,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
                 () => _namePattern,
                 () => _pendingPath,
                 ScheduleSelectionStateRefresh,
+                NotifyItemRenamed,
                 HandleShellDefaultCommand);
             _browserSite = (IObjectWithSiteNative)_browser;
             _browserSite.SetSite(_site);
@@ -437,6 +503,12 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         }
 
         return new HandleRef(this, _hostWindow);
+    }
+
+    private void NotifyItemRenamed()
+    {
+        TraceColumnSizing("ICommDlgBrowser reported an item rename");
+        DisplayedItemsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     protected override void DestroyWindowCore(HandleRef hwnd)
@@ -1196,6 +1268,18 @@ internal interface IFolderView2Native
     [PreserveSig] int GetSortColumnCount(out int columnCount);
     [PreserveSig] int SetSortColumns([In, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] ShellSortColumn[] columns, int columnCount);
     [PreserveSig] int GetSortColumns([Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] ShellSortColumn[] columns, int columnCount);
+    [PreserveSig] int GetItem(int index, ref Guid interfaceId, out IntPtr item);
+}
+
+[ComImport]
+[Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IShellViewItemNative
+{
+    [PreserveSig] int BindToHandler(IntPtr bindContext, ref Guid handlerId, ref Guid interfaceId, out IntPtr result);
+    [PreserveSig] int GetParent(out IntPtr parent);
+    [PreserveSig] int GetDisplayName(uint displayNameType, out IntPtr name);
+    [PreserveSig] int GetAttributes(uint mask, out uint attributes);
 }
 
 [ComImport]
@@ -1353,6 +1437,7 @@ public sealed class ShellBrowserSite(
     Func<string?> namePattern,
     Func<string?> currentPath,
     Action selectionChanged,
+    Action itemRenamed,
     Func<IShellView, bool> defaultCommand) : IServiceProviderNative, ICommDlgBrowserNative, IDisposable
 {
     private static readonly Guid CommDlgBrowserServiceId = new("000214F1-0000-0000-C000-000000000046");
@@ -1363,11 +1448,13 @@ public sealed class ShellBrowserSite(
     private const uint ShellDisplayNameInFolder = 0x0001;
     private const int ShellStringReturnSize = 272;
     private const uint CommDlgBrowserSelectionChanged = 2;
+    private const uint CommDlgBrowserRename = 3;
     private const int S_OK = 0;
     private const int S_FALSE = 1;
     private const int E_NOINTERFACE = unchecked((int)0x80004002);
     private readonly Func<string?> _currentPath = currentPath;
     private readonly Action _selectionChanged = selectionChanged;
+    private readonly Action _itemRenamed = itemRenamed;
     private readonly Func<IShellView, bool> _defaultCommand = defaultCommand;
     private string? _cachedFolderPath;
     private IShellFolder? _cachedFolder;
@@ -1397,6 +1484,8 @@ public sealed class ShellBrowserSite(
     {
         if (change == CommDlgBrowserSelectionChanged)
             _selectionChanged();
+        else if (change == CommDlgBrowserRename)
+            _itemRenamed();
         return S_OK;
     }
 
