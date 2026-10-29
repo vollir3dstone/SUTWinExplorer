@@ -10,9 +10,10 @@ using static SUTWinExplorer.ViewUtilities;
 
 namespace SUTWinExplorer;
 
-internal sealed record PrivateTableItem(string Path, string MediaType)
+internal sealed record PrivateTableItem(string Path, MediaType MediaType, ImageSource? Icon)
 {
-    public override string ToString() => MediaType;
+    public string AccessibleName => MediaTypeMap.GetName(MediaType);
+    public override string ToString() => AccessibleName;
 }
 
 public partial class ContentView : UserControl
@@ -457,7 +458,10 @@ public partial class ContentView : UserControl
         {
             var items = _shellBrowserHost?.GetDisplayedFileSystemItems() ?? [];
             var rows = items.Select(item =>
-                new PrivateTableItem(item.Path, MediaTypeMap.GetMediaType(item.Path, item.IsDirectory))).ToList();
+            {
+                var mediaType = MediaTypeMap.GetMediaType(item.Path, item.IsDirectory);
+                return new PrivateTableItem(item.Path, mediaType, MediaTypeIconMap.GetIcon(mediaType));
+            }).ToList();
             if (PrivateFileTable.ItemsSource is IEnumerable<PrivateTableItem> currentRows &&
                 currentRows.SequenceEqual(rows))
                 return;

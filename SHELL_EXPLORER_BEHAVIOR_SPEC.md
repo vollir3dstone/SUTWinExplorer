@@ -230,12 +230,14 @@ may show its requested row in light gray without changing the active selection.
   Date modified columns in that order. Size is shown in KB. The active sort
   column and direction come from the folder's configured view; other
   folder-specific view settings are ignored.
-- [x] The adjacent private column is headed `MT` and displays the media type
-  for each filesystem item, in Shell view order. Directories display
-  `directory`; `.lnk` files display `shell-link`. Other extensions are matched
-  case-insensitively against `Assets/media-types.json`; unknown extensions are
-  blank and conflicting media type assignments display `ambiguous`. The
-  manually maintained JSON is embedded at build time.
+- [x] The adjacent private column is headed `MT`, is 16 DIP wide with 8 DIP
+  of space to its left, and displays a 16-by-16 DIP media type icon for each
+  filesystem item, in Shell view order.
+  Directories use the standard folder icon, `.lnk` files use a right-pointing
+  arrow, and conflicting media type assignments use a warning triangle. Other
+  extensions are matched case-insensitively against `Assets/media-types.json`;
+  unknown extensions are blank. The manually maintained JSON is embedded at
+  build time; media type names remain available to accessibility tools.
 - [x] The WPF application chrome keeps the app's custom tabs, address field,
   directory trees, and item-count status area.
 - [x] Below the two visibility checkboxes, the content pane provides five

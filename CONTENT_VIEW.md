@@ -118,25 +118,53 @@ border surrounds a two-column grid containing both the private table and the
 Shell host. Neither child has a separate WPF border. The shared frame is
 collapsed with the Shell view when the legacy WPF list is active.
 
-The private column is headed `MT`. Its special values are:
+#### Media type and icon mapping
 
-| Value | Meaning |
-| --- | --- |
-| `directory` | A filesystem directory, including a directory junction. |
-| `shell-link` | A `.lnk` file, including a shortcut to a directory. |
-| `ambiguous` | A file extension mapped to different media type names. |
+The private column is headed `MT` and is 16 DIP wide, with an 8-DIP space
+between it and the shared frame on the left. Each mapped item shows one
+16-by-16 DIP icon instead of the media type name.
 
 Directories are classified first, followed by `.lnk` files. For all other
 files, the extension is matched case-insensitively against the manually
 maintained [media-types.json](./Assets/media-types.json), which is the source
-of the media type names and extension mapping. A match displays the name
-defined there; no match or no extension displays an empty cell. Repeating an
-extension for the same type does not make it ambiguous.
+of the media type names and extension mapping. No match or no extension
+displays an empty cell. Repeating an extension for the same type does not make
+it ambiguous. The media type name remains available as the row's accessibility
+name.
+
+The supported media types are fixed by the internal `MediaType` enum. Their
+names below are the exact identifiers used in the JSON; the second mapping
+assigns each type one of the existing 16-by-16 assets:
+
+| Media type | Icon asset |
+| --- | --- |
+| `executable` | [type_exe 16.png](./Assets/type_exe%2016.png) |
+| `book` | [type_book 16.png](./Assets/type_book%2016.png) |
+| `structured-data` | [type_structured_data 16.png](./Assets/type_structured_data%2016.png) |
+| `image` | [type_image 16.png](./Assets/type_image%2016.png) |
+| `audio` | [type_audio 16.png](./Assets/type_audio%2016.png) |
+| `video` | [type_video 16.png](./Assets/type_video%2016.png) |
+| `command-data` | [type_command_data 16.png](./Assets/type_command_data%2016.png) |
+
+The enum also contains these special types, which do not need entries in the
+JSON mapping:
+
+| Special type | Meaning | Icon |
+| --- | --- | --- |
+| `directory` | A filesystem directory, including a directory junction. | Windows standard folder icon. |
+| `shell-link` | A `.lnk` file, including a shortcut to a directory. | Right-pointing arrow. |
+| `ambiguous` | A file extension mapped to different media type names. | Warning triangle. |
+| `None` (internal only) | No extension or no matching media type. | None; the cell is empty. |
+
+The arrow is [ic_fluent_arrow_right_16_regular.png](./Assets/ic_fluent_arrow_right_16_regular.png);
+the warning triangle is drawn in the application. Icons are loaded once and
+shared across rows.
 
 The JSON is embedded in the application at build time and is loaded once per
 process. Changes to the source file require a new build; the application does
-not modify the mapping file. A missing or malformed embedded mapping is an
-error, not an empty mapping.
+not modify the mapping file. A missing or malformed embedded mapping or an
+unsupported JSON media type is an error, not an empty mapping. Introducing a
+new media type requires updating the enum and icon mapping as well as the JSON.
 
 #### Navigation and refresh lifecycle
 
