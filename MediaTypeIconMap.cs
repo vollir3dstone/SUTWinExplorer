@@ -28,6 +28,7 @@ internal static class MediaTypeIconMap
         [MediaType.CommandData] = LoadAsset("type_command_data 16.png"),
         [MediaType.Directory] = LoadFolderIcon(),
         [MediaType.ShellLink] = LoadAsset("type_shell_link 16.png"),
+        [MediaType.Url] = LoadAsset("type_url 16.png"),
         [MediaType.Ambiguous] = CreateWarningIcon()
     };
 

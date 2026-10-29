@@ -2,7 +2,7 @@
 	"types": [
 		{
 			"type": "executable",
-			"extensions": [".exe", ".dll"]
+			"extensions": [".exe", ".dll", ".msi"]
 		},
 		{
 			"type": "lines-text",
@@ -10,15 +10,17 @@
 		},
 		{
 			"type": "book",
-			"extensions": [".doc", ".docx", ".odt", ".rtf", ".pdf", ".html", ".htm", ".md", ".pptx", ".ppt"]
+			"extensions": [".doc", ".docx", ".odt", ".rtf", ".pdf", ".html", ".htm", ".mhtm", ".mhtml", ".md", ".pptx", ".ppt"]
 		},
 		{
 			"type": "structured-data",
-			"extensions": [".xml", ".json", ".csv", ".tsv", ".xlsx", ".xls", ".ods", ".yaml", ".yml"]
+			"extensions": [".xml", ".json", ".csv", ".tsv", ".xlsx", ".xls", ".ods", ".yaml", ".yml", ".ini", ".cfg", 
+				".mdb", ".accdb", ".sqlite", ".db", ".mdf", ".parquet"]
 		},
 		{
 			"type": "image",
-			"extensions": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".avif", ".heic", ".svg", ".ico"]
+			"extensions": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".avif", ".heic", ".svg", ".ico", 
+				".psd", ".eps", ".vsd", ".vsdx", ".odg", ".xcf"]
 		},
 		{
 			"type": "audio",

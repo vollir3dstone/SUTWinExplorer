@@ -124,7 +124,7 @@ The private column is headed `MT` and is 16 DIP wide, with an 8-DIP space
 between it and the shared frame on the left. Each mapped item shows one
 16-by-16 DIP icon instead of the media type name.
 
-Directories are classified first, followed by `.lnk` files. For all other
+Directories are classified first, followed by `.lnk` and `.url` files. For all other
 files, the extension is matched case-insensitively against the manually
 maintained [media-types.json](./Assets/media-types.json), which is the source
 of the media type names and extension mapping. No match or no extension
@@ -154,6 +154,7 @@ JSON mapping:
 | --- | --- | --- |
 | `directory` | A filesystem directory, including a directory junction. | Windows standard folder icon. |
 | `shell-link` | A `.lnk` file, including a shortcut to a directory. | [type_shell_link 16.png](./Assets/type_shell_link%2016.png). |
+| `url` | A `.url` file, providing a link to an internet resource. | [type_url 16.png](./Assets/type_url%2016.png). |
 | `ambiguous` | A file extension mapped to different media type names. | Warning triangle. |
 | `None` (internal only) | No extension or no matching media type. | None; the cell is empty. |
 
@@ -161,10 +162,14 @@ The warning triangle is drawn in the application. Icons are loaded once and
 shared across rows.
 
 The JSON is embedded in the application at build time and is loaded once per
-process. Changes to the source file require a new build; the application does
-not modify the mapping file. A missing or malformed embedded mapping or an
-unsupported JSON media type is an error, not an empty mapping. Introducing a
-new media type requires updating the enum and icon mapping as well as the JSON.
+process. Changes to the source file require a new build. The JSON is maintained
+manually and must never be modified autonomously by the application, tooling,
+or an AI assistant. An AI assistant may edit it only when the user explicitly
+requests that change; adding types, resolving conflicts, or formatting it are
+not implicit permission to edit the file. A missing or malformed embedded
+mapping or an unsupported JSON media type is an error, not an empty mapping.
+Introducing a new media type requires updating the enum and icon mapping as
+well as the JSON.
 
 #### Navigation and refresh lifecycle
 

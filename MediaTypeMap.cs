@@ -16,6 +16,7 @@ internal enum MediaType
     CommandData,
     Directory,
     ShellLink,
+    Url,
     Ambiguous
 }
 
@@ -32,6 +33,8 @@ internal static class MediaTypeMap
         var extension = Path.GetExtension(path);
         if (string.Equals(extension, ".lnk", StringComparison.OrdinalIgnoreCase))
             return MediaType.ShellLink;
+        else if (string.Equals(extension, ".url", StringComparison.OrdinalIgnoreCase))
+            return MediaType.Url;
 
         return TypesByExtension.TryGetValue(extension, out var type) ? type : MediaType.None;
     }
@@ -41,6 +44,7 @@ internal static class MediaTypeMap
         MediaType.None => string.Empty,
         MediaType.Executable => "executable",
         MediaType.LinesText => "lines-text",
+        MediaType.Url => "url",
         MediaType.Book => "book",
         MediaType.StructuredData => "structured-data",
         MediaType.Image => "image",
