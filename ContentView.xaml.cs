@@ -10,6 +10,11 @@ using static SUTWinExplorer.ViewUtilities;
 
 namespace SUTWinExplorer;
 
+internal sealed record PrivateTableItem(string Path, string MediaType)
+{
+    public override string ToString() => MediaType;
+}
+
 public partial class ContentView : UserControl
 {
     public static readonly DependencyProperty PrivateTableTopGapOffsetProperty =
@@ -450,16 +455,17 @@ public partial class ContentView : UserControl
             return;
         try
         {
-            var paths = _shellBrowserHost?.GetDisplayedFileSystemPaths() ?? [];
-            var names = paths.Select(Path.GetFileName).ToList();
-            if (PrivateFileTable.ItemsSource is IEnumerable<string?> currentNames &&
-                currentNames.SequenceEqual(names, StringComparer.Ordinal))
+            var items = _shellBrowserHost?.GetDisplayedFileSystemItems() ?? [];
+            var rows = items.Select(item =>
+                new PrivateTableItem(item.Path, MediaTypeMap.GetMediaType(item.Path, item.IsDirectory))).ToList();
+            if (PrivateFileTable.ItemsSource is IEnumerable<PrivateTableItem> currentRows &&
+                currentRows.SequenceEqual(rows))
                 return;
 
-            PrivateFileTable.ItemsSource = names;
+            PrivateFileTable.ItemsSource = rows;
             _lastShellScrollOffset = null;
         }
-        catch (Exception exception) when (exception is COMException or InvalidOperationException)
+        catch (Exception exception) when (exception is COMException or InvalidOperationException or IOException or UnauthorizedAccessException)
         {
             Debug.WriteLine($"Private table refresh failed: {exception}");
         }

@@ -1,7 +1,7 @@
 {
 	"types": [
 		{
-			"type": "exe",
+			"type": "executable",
 			"extensions": [".exe", ".dll"]
 		},
 		{
@@ -10,7 +10,7 @@
 		},
 		{
 			"type": "structured-data",
-			"extensions": [".xml", ".json", ".csv", ".tsv", ".xlsx", ".xls", ".ods", ".yaml", ".yml", ".css"]
+			"extensions": [".xml", ".json", ".csv", ".tsv", ".xlsx", ".xls", ".ods", ".yaml", ".yml"]
 		},
 		{
 			"type": "image",
@@ -18,7 +18,7 @@
 		},
 		{
 			"type": "audio",
-			"extensions": [".wav", ".mp3", ".aac", ".flac", ".aiff", ".aif", ".m4a", ".m4b", ".weba", ".opus", ".wma"]
+			"extensions": [".wav", ".mp3", ".aac", ".flac", ".aiff", ".aif", ".m4a", ".m4b", ".weba", ".opus", ".wma", ".mid", ".midi"]
 		},
 		{
 			"type": "video",

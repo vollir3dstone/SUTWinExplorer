@@ -12,8 +12,8 @@ The private column is intentionally cleared as soon as navigation starts.
 
 The private column does not render directly from the Shell's data. It first
 queries the current Shell view for displayed filesystem paths by view index
-using `IFolderView2::GetItem`, then assigns the resulting names to the WPF list
-when their order or contents have changed.
+using `IFolderView2::GetItem`, maps them to media types, and assigns the
+resulting rows to the WPF list when their ordered paths or values have changed.
 WPF must subsequently lay out and render those rows.
 
 There are two relevant update paths:
@@ -22,9 +22,10 @@ There are two relevant update paths:
    `DispatcherPriority.Background`.
 2. If the first query is empty or incomplete and the Shell subsequently
    produces a relevant accessibility notification, the change monitor
-   coalesces notifications at `DispatcherPriority.ContextIdle`. The host
-   checks the current Shell item count and, if it changed, schedules the
-   private-column refresh at `DispatcherPriority.Background`.
+   coalesces notifications at `DispatcherPriority.ContextIdle`. A reorder
+   schedules a refresh regardless of count; for other item notifications the
+   host checks the Shell item count and schedules a refresh if it changed.
+   The private-column refresh runs at `DispatcherPriority.Background`.
 
 These are dispatcher priorities, not fixed waiting periods. Both are below
 WPF rendering priority, so other UI work can run before the queued update.

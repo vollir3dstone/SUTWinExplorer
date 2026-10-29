@@ -154,9 +154,12 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     public List<string> GetSelectedFileSystemPaths() =>
         QueryCurrentView(ShellFileOperations.GetSelectedFileSystemPaths);
 
-    public List<string> GetDisplayedFileSystemPaths()
+    public List<ShellDisplayedItem> GetDisplayedFileSystemItems()
     {
         const uint shellAttributeFileSystem = 0x40000000;
+        const uint shellAttributeFolder = 0x20000000;
+        const uint shellAttributeStream = 0x00400000;
+        const uint shellAttributeLink = 0x00010000;
         if (_browser is null || !_initialized)
             throw new InvalidOperationException("The Shell content view is not ready.");
 
@@ -171,7 +174,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
             view = (IFolderView2Native)Marshal.GetObjectForIUnknown(viewPointer);
             Marshal.ThrowExceptionForHR(view.ItemCount(ShellViewAllItems, out var count));
-            var paths = new List<string>(count);
+            var items = new List<ShellDisplayedItem>(count);
             var itemId = typeof(IShellViewItemNative).GUID;
             for (var index = 0; index < count; index++)
             {
@@ -184,14 +187,19 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
                     if (itemPointer == IntPtr.Zero)
                         throw new InvalidOperationException($"The Shell item at index {index} is unavailable.");
                     item = (IShellViewItemNative)Marshal.GetObjectForIUnknown(itemPointer);
-                    Marshal.ThrowExceptionForHR(item.GetAttributes(shellAttributeFileSystem, out var attributes));
+                    Marshal.ThrowExceptionForHR(item.GetAttributes(
+                        shellAttributeFileSystem | shellAttributeFolder | shellAttributeStream | shellAttributeLink,
+                        out var attributes));
                     if ((attributes & shellAttributeFileSystem) == 0)
                         continue;
                     Marshal.ThrowExceptionForHR(item.GetDisplayName(ShellDisplayNameFileSystemPath, out pathPointer));
                     var path = Marshal.PtrToStringUni(pathPointer);
                     if (string.IsNullOrEmpty(path))
                         throw new InvalidOperationException($"The Shell item at index {index} has no filesystem path.");
-                    paths.Add(path);
+                    var isDirectory = (attributes & shellAttributeFolder) != 0;
+                    if (isDirectory && (attributes & (shellAttributeStream | shellAttributeLink)) != 0)
+                        isDirectory = (File.GetAttributes(path) & FileAttributes.Directory) != 0;
+                    items.Add(new ShellDisplayedItem(path, isDirectory));
                 }
                 finally
                 {
@@ -204,7 +212,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
                 }
             }
 
-            return paths;
+            return items;
         }
         finally
         {
@@ -1202,6 +1210,8 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
     private delegate bool EnumWindowsProc(IntPtr window, IntPtr parameter);
 }
+
+internal readonly record struct ShellDisplayedItem(string Path, bool IsDirectory);
 
 [ComImport]
 [Guid("dfd3b6b5-c10c-4be9-85f6-a66969f402f6")]

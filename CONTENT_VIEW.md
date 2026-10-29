@@ -18,10 +18,10 @@ document describes the component boundary and its current implementation.
 
 Each ContentView presents the current directory's Shell content and the
 adjacent experimental private column. The Shell remains authoritative for
-items, their order, selection, and native commands; the private table mirrors
-displayed filesystem paths and follows Shell scrolling. The table and
-scroll-alignment measurements are a spike, not a replacement for the Shell
-view.
+items, their order, selection, and native commands; the private table shows
+the media type of each displayed filesystem item and follows Shell scrolling.
+The table and scroll-alignment measurements are a spike, not a replacement
+for the Shell view.
 
 The private column remains enabled and normally rendered, but its rows do not
 show hover or retain an independent selection. It cannot be scrolled
@@ -118,6 +118,26 @@ border surrounds a two-column grid containing both the private table and the
 Shell host. Neither child has a separate WPF border. The shared frame is
 collapsed with the Shell view when the legacy WPF list is active.
 
+The private column is headed `MT`. Its special values are:
+
+| Value | Meaning |
+| --- | --- |
+| `directory` | A filesystem directory, including a directory junction. |
+| `shell-link` | A `.lnk` file, including a shortcut to a directory. |
+| `ambiguous` | A file extension mapped to different media type names. |
+
+Directories are classified first, followed by `.lnk` files. For all other
+files, the extension is matched case-insensitively against the manually
+maintained [media-types.json](./Assets/media-types.json), which is the source
+of the media type names and extension mapping. A match displays the name
+defined there; no match or no extension displays an empty cell. Repeating an
+extension for the same type does not make it ambiguous.
+
+The JSON is embedded in the application at build time and is loaded once per
+process. Changes to the source file require a new build; the application does
+not modify the mapping file. A missing or malformed embedded mapping is an
+error, not an empty mapping.
+
 #### Navigation and refresh lifecycle
 
 1. `ContentView.NavigateTo` records the pending destination and clears
@@ -148,16 +168,21 @@ collapsed with the Shell view when the legacy WPF list is active.
    refresh at `DispatcherPriority.Background`. Duplicate pending requests are
    coalesced. A queued refresh is skipped if the control is unloaded or
    navigation is pending; a later load or navigation outcome schedules
-   another. `GetDisplayedFileSystemPaths` obtains the number of items through
+   another. `GetDisplayedFileSystemItems` obtains the number of items through
    `IFolderView::ItemCount(SVGIO_ALLVIEW)` and retrieves each item by its
    view index with `IFolderView2::GetItem`. Filesystem items are resolved with
-   `IShellItem::GetDisplayName(SIGDN_FILESYSPATH)` and their leaf names are
-   displayed in that order; non-filesystem items are skipped. The refresh does
-   not enumerate the directory independently. COM and invalid-operation
+   `IShellItem::GetDisplayName(SIGDN_FILESYSPATH)` and classified using Shell
+   item attributes and the mapping above; non-filesystem items are skipped.
+   For an item the Shell identifies as both a folder and a stream or link,
+   filesystem attributes distinguish a directory junction from a file such as
+   a directory shortcut or compressed archive. The refresh does not enumerate
+   the directory independently. COM, filesystem and invalid-operation
    exceptions are written to debug output.
-   If the ordered names have not changed, the existing WPF `ItemsSource` is
-   retained. Replacing it unnecessarily can itself cause further Shell
-   accessibility reorder notifications, producing a refresh loop.
+   Each row retains its path as an identity as well as its displayed media
+   type, so equal media type values remain distinct rows. If the ordered paths
+   and media types have not changed, the existing WPF `ItemsSource` is retained.
+   Replacing it unnecessarily can itself cause further Shell accessibility
+   reorder notifications, producing a refresh loop.
 
 #### Shell view and layout events
 
@@ -232,13 +257,13 @@ Two problems were found while investigating:
 
 - Reading `SVGIO_ALLVIEW` through `IShellView::GetItemObject` and
   `IDataObject`/`CF_HDROP` did not reliably return the visible sort order.
-  The private table now reads items by `IFolderView2::GetItem` view index,
+    The private table now reads items by `IFolderView2::GetItem` view index,
   as described above. The selection and file-operation paths are separate.
 - Unconditionally replacing the private table's `ItemsSource` after every
   reorder produced further DirectUI reorder notifications, followed by more
   refreshes even when idle. Each coalesced reorder batch still schedules a
   Shell-backed synchronization, but the table is replaced only if the
-  resulting ordered names differ. In the controlled test, idle notifications
+  resulting ordered rows differ. In the controlled test, idle notifications
   then settled instead of continuing, including after sorting and filtering.
 
 #### Scroll synchronization
