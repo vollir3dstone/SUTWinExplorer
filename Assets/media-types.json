@@ -18,11 +18,11 @@
 		},
 		{
 			"type": "image",
-			"extensions": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".avif", ".heic", ".svg"]
+			"extensions": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".avif", ".heic", ".svg", ".ico"]
 		},
 		{
 			"type": "audio",
-			"extensions": [".wav", ".mp3", ".aac", ".flac", ".aiff", ".aif", ".m4a", ".m4b", ".weba", ".opus", ".wma", ".mid", ".midi"]
+			"extensions": [".wav", ".mp3", ".aac", ".flac", ".aiff", ".aif", ".m4a", ".m4b", ".weba", ".opus", ".wma", ".ogg", ".mid", ".midi"]
 		},
 		{
 			"type": "video",

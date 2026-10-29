@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="1024"
+   height="1024"
+   viewBox="0 0 270.93333 270.93333"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.4 (dcaf3e7, 2026-05-05)"
+   sodipodi:docname="eye star.svg"
+   inkscape:export-filename="eye star.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="0.64"
+     inkscape:cx="529.6875"
+     inkscape:cy="521.09375"
+     inkscape:window-width="1920"
+     inkscape:window-height="1129"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs1" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <path
+       sodipodi:type="star"
+       style="display:inline;fill:#000000;fill-opacity:1;stroke-width:0.0759354;stroke-linecap:square"
+       id="path3"
+       inkscape:flatsided="false"
+       sodipodi:sides="5"
+       sodipodi:cx="133.23051"
+       sodipodi:cy="130.88136"
+       sodipodi:r1="129.95953"
+       sodipodi:r2="64.979767"
+       sodipodi:arg1="0.96345516"
+       sodipodi:arg2="1.5917737"
+       inkscape:rounded="0"
+       inkscape:randomized="0"
+       d="M 207.39662,237.60001 131.86751,195.84683 54.653637,234.39539 71.023489,149.6605 10.50123,88.137906 96.147463,77.522039 135.95652,0.95042251 172.51895,79.124348 257.64457,93.323082 194.59516,152.25309 Z"
+       inkscape:transform-center-x="-0.84238293"
+       inkscape:transform-center-y="-11.606147"
+       transform="translate(0.33559322,15.437288)" />
+    <ellipse
+       style="display:inline;fill:#ffffff;fill-opacity:1;stroke-width:0.0565781;stroke-linecap:square"
+       id="path4"
+       cx="132.55931"
+       cy="140.11015"
+       rx="45.640678"
+       ry="25.337288" />
+    <circle
+       style="fill:#000000;fill-opacity:1;stroke-width:0.0759354;stroke-linecap:square"
+       id="path1"
+       cx="132.49838"
+       cy="139.52637"
+       r="16.743164" />
+  </g>
+</svg>
