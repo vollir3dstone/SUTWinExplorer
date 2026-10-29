@@ -25,6 +25,7 @@ internal static class MediaTypeIconMap
         [MediaType.Image] = LoadAsset("type_image 16.png"),
         [MediaType.Audio] = LoadAsset("type_audio 16.png"),
         [MediaType.Video] = LoadAsset("type_video 16.png"),
+        [MediaType.Box] = LoadAsset("type_box 16.png"),
         [MediaType.CommandData] = LoadAsset("type_command_data 16.png"),
         [MediaType.Directory] = LoadFolderIcon(),
         [MediaType.ShellLink] = LoadAsset("type_shell_link 16.png"),

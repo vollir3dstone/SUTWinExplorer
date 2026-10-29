@@ -10,7 +10,7 @@
 		},
 		{
 			"type": "book",
-			"extensions": [".doc", ".docx", ".odt", ".rtf", ".pdf", ".html", ".htm", ".mhtm", ".mhtml", ".md", ".pptx", ".ppt"]
+			"extensions": [".doc", ".docx", ".odt", ".rtf", ".pdf", ".html", ".htm", ".mhtm", ".mhtml", ".chm", ".md", ".pptx", ".ppt"]
 		},
 		{
 			"type": "structured-data",
@@ -29,6 +29,10 @@
 		{
 			"type": "video",
 			"extensions": [".mp4", ".m4v", ".mov", ".avi", ".wmv", ".mpg", ".mpeg", ".mkv", ".webm", ".ogv", ".ts", ".m2ts", ".3gp", ".flv"]
+		},
+		{
+			"type": "box",
+			"extensions": [".zip", ".7z", ".rar", ".tar", ".gz"]
 		},
 		{
 			"type": "command-data",

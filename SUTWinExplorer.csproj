@@ -23,13 +23,14 @@
     <Resource Include="Assets\ic_fluent_color_32_regular.png" />
     <Resource Include="Assets\type_audio 16.png" />
     <Resource Include="Assets\type_book 16.png" />
+    <Resource Include="Assets\type_box 16.png" />
     <Resource Include="Assets\type_command_data 16.png" />
     <Resource Include="Assets\type_exe 16.png" />
     <Resource Include="Assets\type_image 16.png" />
     <Resource Include="Assets\type_lines_text 16.png" />
     <Resource Include="Assets\type_shell_link 16.png" />
-    <Resource Include="Assets\type_url 16.png" />
     <Resource Include="Assets\type_structured_data 16.png" />
+    <Resource Include="Assets\type_url 16.png" />
     <Resource Include="Assets\type_video 16.png" />
   </ItemGroup>
 

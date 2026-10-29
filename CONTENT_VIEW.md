@@ -145,6 +145,7 @@ assigns each type one of the existing 16-by-16 assets:
 | `image` | [type_image 16.png](./Assets/type_image%2016.png) |
 | `audio` | [type_audio 16.png](./Assets/type_audio%2016.png) |
 | `video` | [type_video 16.png](./Assets/type_video%2016.png) |
+| `box` | [type_box 16.png](./Assets/type_box%2016.png) |
 | `command-data` | [type_command_data 16.png](./Assets/type_command_data%2016.png) |
 
 The enum also contains these special types, which do not need entries in the

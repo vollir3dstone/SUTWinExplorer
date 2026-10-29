@@ -13,6 +13,7 @@ internal enum MediaType
     Image,
     Audio,
     Video,
+    Box,
     CommandData,
     Directory,
     ShellLink,
@@ -53,6 +54,7 @@ internal static class MediaTypeMap
         MediaType.CommandData => "command-data",
         MediaType.Directory => "directory",
         MediaType.ShellLink => "shell-link",
+        MediaType.Box => "box",
         MediaType.Ambiguous => "ambiguous",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unsupported media type.")
     };
@@ -78,6 +80,7 @@ internal static class MediaTypeMap
                 "image" => MediaType.Image,
                 "audio" => MediaType.Audio,
                 "video" => MediaType.Video,
+                "box" => MediaType.Box,
                 "command-data" => MediaType.CommandData,
                 _ => throw new InvalidDataException($"Unsupported media type '{typeName}'.")
             };
