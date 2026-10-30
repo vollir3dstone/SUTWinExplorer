@@ -1453,7 +1453,8 @@ public sealed class ShellBrowserSite(
     private static readonly Guid CommDlgBrowserServiceId = new("000214F1-0000-0000-C000-000000000046");
     private static readonly Guid CommDlgBrowserInterfaceId = new("000214F1-0000-0000-C000-000000000046");
     private const uint ShellViewBackground = 0;
-    private const uint ShellAttributeFolder = 0x20000000;
+    private const uint ShellAttributeFolder = 0x20000000; // SFGAO_FOLDER
+    private const uint ShellAttributeStream = 0x00400000; // SFGAO_STREAM
     private const uint ShellDisplayNameInFolderForParsing = 0x8001;
     private const uint ShellDisplayNameInFolder = 0x0001;
     private const int ShellStringReturnSize = 272;
@@ -1518,12 +1519,16 @@ public sealed class ShellBrowserSite(
 
             childArray = Marshal.AllocCoTaskMem(IntPtr.Size);
             Marshal.WriteIntPtr(childArray, childItemIdList);
-            var attributes = ShellAttributeFolder;
+            
+            // Mask both flags for the query
+            var attributes = ShellAttributeFolder | ShellAttributeStream;
             var attributeResult = folder.GetAttributesOf(1, childArray, ref attributes);
             if (attributeResult < 0)
                 return S_OK;
 
-            var isDirectory = (attributes & ShellAttributeFolder) != 0;
+            // A real directory has the Folder flag, but NOT the Stream flag
+            var isDirectory = (attributes & ShellAttributeFolder) != 0 && (attributes & ShellAttributeStream) == 0;
+
             if (!_showDirectories && isDirectory)
                 return S_FALSE;
 
