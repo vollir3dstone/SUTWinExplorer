@@ -10,7 +10,8 @@
 		},
 		{
 			"type": "book",
-			"extensions": [".doc", ".docx", ".odt", ".rtf", ".pdf", ".html", ".htm", ".mht", ".mhtm", ".mhtml", ".chm", ".md", ".pptx", ".ppt"]
+			"extensions": [".doc", ".docx", ".odt", ".rtf", ".pdf", ".ps", ".html", ".htm", ".mht", ".mhtm", ".mhtml", ".chm", ".msg", ".md", ".pptx", ".ppt", 
+				".eps", ".vsd", ".vsdx", ".odg"]
 		},
 		{
 			"type": "structured-data",
@@ -20,7 +21,7 @@
 		{
 			"type": "image",
 			"extensions": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".avif", ".heic", ".svg", ".ico", 
-				".psd", ".eps", ".vsd", ".vsdx", ".odg", ".xcf"]
+				".psd", ".xcf"]
 		},
 		{
 			"type": "audio",
