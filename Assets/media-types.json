@@ -20,8 +20,8 @@
 		},
 		{
 			"type": "image",
-			"extensions": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".avif", ".heic", ".svg", ".ico", 
-				".psd", ".xcf"]
+			"extensions": [".jpg", ".jpeg", ".jpe", ".jp2", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".avif", ".heic", ".ico", 
+				".svg", ".psd", ".xcf", ".wmf", ".emf", ".tga"]
 		},
 		{
 			"type": "audio",
