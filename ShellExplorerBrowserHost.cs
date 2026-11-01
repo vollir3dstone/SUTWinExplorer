@@ -683,12 +683,14 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         IntPtr itemIdList = IntPtr.Zero;
         try
         {
-            Marshal.ThrowExceptionForHR(SHParseDisplayName(_pendingPath, IntPtr.Zero, out itemIdList, 0, out _));
-            var result = _browser.BrowseToIDList(itemIdList, 0);
+            var result = SHParseDisplayName(_pendingPath, IntPtr.Zero, out itemIdList, 0, out _);
+            if (result >= 0)
+                result = _browser.BrowseToIDList(itemIdList, 0);
             if (result < 0)
             {
                 var failedPath = _pendingPath;
                 _pendingPath = _currentPath;
+                _programmaticNavigationPath = null;
                 NavigationFailed?.Invoke(this, failedPath);
             }
         }

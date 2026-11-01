@@ -1,0 +1,87 @@
+$ErrorActionPreference = 'Stop'
+
+function Assert-True([bool] $condition, [string] $message) {
+    if (-not $condition) { throw $message }
+}
+
+function Invoke-Store($store, [string] $method, [object[]] $arguments = @()) {
+    return $store.GetType().GetMethod($method).Invoke($store, $arguments)
+}
+
+$assemblyPath = Join-Path $PSScriptRoot '..\bin\Debug\net10.0-windows\SUTWinExplorer.dll'
+$assembly = [System.Reflection.Assembly]::Load([System.IO.File]::ReadAllBytes($assemblyPath))
+$storeType = $assembly.GetType('SUTWinExplorer.ProfileStore', $true)
+$entryType = $assembly.GetType('SUTWinExplorer.ProfilePathview', $true)
+$directory = Join-Path ([System.IO.Path]::GetTempPath()) ('kis-profile-test-' + [guid]::NewGuid().ToString('N'))
+$filePath = Join-Path $directory "Profile $([char]0x201e)default$([char]0x201c).kisexplorer.json"
+
+try {
+    $constructor = $storeType.GetConstructor([type[]] @([string], [string]))
+    $store = $constructor.Invoke([object[]] @([string] $directory, 'default'))
+    $profile = Invoke-Store $store 'LoadOrCreate'
+    Assert-True (Test-Path -LiteralPath $filePath) 'Default profile file was not created.'
+    $json = Get-Content -LiteralPath $filePath -Raw | ConvertFrom-Json -AsHashtable
+    Assert-True ($json._type -eq 'KIS Explorer profile' -and $json.ProfileName -eq 'default' -and $json.Pathviews.Count -eq 0) 'Invalid default profile.'
+
+    $entry = [Activator]::CreateInstance($entryType, $true)
+    $entry.Type = 'Pathview'
+    $entryType.GetProperty('Name').SetValue($entry, $null)
+    $entry.Path = Join-Path $directory 'first'
+    $entry.ActionOnProfileActivation = 'open'
+    $profile.Pathviews.Add($entry)
+    Invoke-Store $store 'Save' @($profile)
+    $profile = Invoke-Store $store 'LoadOrCreate'
+    Assert-True ($profile.Pathviews.Count -eq 1 -and $null -eq $profile.Pathviews[0].Name) 'Pathview did not round-trip with a null name.'
+
+    $profile.Pathviews[0].Path = Join-Path $directory 'renamed'
+    Invoke-Store $store 'Save' @($profile)
+    Assert-True ((Invoke-Store $store 'LoadOrCreate').Pathviews[0].Path -eq (Join-Path $directory 'renamed')) 'Renamed path was not saved.'
+
+    $json = Get-Content -LiteralPath $filePath -Raw | ConvertFrom-Json -AsHashtable
+    $json['FutureSetting'] = @{ value = 42 }
+    $json.Pathviews[0]['FuturePathviewSetting'] = 'kept'
+    $json | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $filePath -Encoding utf8
+    $profile = Invoke-Store $store 'LoadOrCreate'
+    Invoke-Store $store 'Save' @($profile)
+    $json = Get-Content -LiteralPath $filePath -Raw | ConvertFrom-Json -AsHashtable
+    Assert-True ($json.FutureSetting.value -eq 42 -and $json.Pathviews[0].FuturePathviewSetting -eq 'kept') 'Unknown properties were lost.'
+
+    $locked = [System.IO.File]::Open($filePath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::None)
+    try {
+        $failed = $false
+        try { Invoke-Store $store 'Save' @($profile) } catch { $failed = $true }
+        Assert-True $failed 'A locked profile unexpectedly saved.'
+    } finally { $locked.Dispose() }
+    Assert-True ((Invoke-Store $store 'LoadOrCreate').Pathviews.Count -eq 1) 'Save failure damaged the previous profile.'
+
+    $profile.Pathviews.Clear()
+    Invoke-Store $store 'Save' @($profile)
+    Assert-True ((Invoke-Store $store 'LoadOrCreate').Pathviews.Count -eq 0) 'Removed Pathview returned.'
+
+    $otherStore = $constructor.Invoke([object[]] @([string] $directory, 'other'))
+    $otherProfile = Invoke-Store $otherStore 'LoadOrCreate'
+    Assert-True ($otherProfile.ProfileName -eq 'other' -and (Test-Path -LiteralPath (Join-Path $directory "Profile $([char]0x201e)other$([char]0x201c).kisexplorer.json"))) 'A second profile could not be stored independently.'
+
+    $savedPath = $json.Pathviews[0].Path
+    $json.Pathviews[0].Path = '::{20D04FE0-3AEA-1069-A2D8-08002B30309D}'
+    $json | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $filePath -Encoding utf8
+    $failed = $false
+    try { Invoke-Store $store 'LoadOrCreate' } catch { $failed = $true }
+    Assert-True $failed 'A virtual This PC location was accepted as a filesystem path.'
+    $json.Pathviews[0].Path = $savedPath
+
+    $json.Pathviews += $json.Pathviews[0]
+    $json | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $filePath -Encoding utf8
+    $before = [System.IO.File]::ReadAllText($filePath)
+    $failed = $false
+    try { Invoke-Store $store 'LoadOrCreate' } catch { $failed = $true }
+    Assert-True ($failed -and [System.IO.File]::ReadAllText($filePath) -ceq $before) 'Duplicate paths were accepted or overwritten.'
+
+    [System.IO.File]::WriteAllText($filePath, '{invalid json')
+    $failed = $false
+    try { Invoke-Store $store 'LoadOrCreate' } catch { $failed = $true }
+    Assert-True ($failed -and [System.IO.File]::ReadAllText($filePath) -ceq '{invalid json') 'Malformed profile was accepted or overwritten.'
+    Write-Output 'Profile configuration tests passed.'
+} finally {
+    if (Test-Path -LiteralPath $directory) { Remove-Item -LiteralPath $directory -Recurse -Force }
+}

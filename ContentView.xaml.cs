@@ -127,6 +127,9 @@ public partial class ContentView : UserControl
 
     internal void Refresh(bool refreshView)
     {
+        if (string.IsNullOrWhiteSpace(CurrentPath))
+            return;
+
         if (IsLegacyWpfFileList)
             RefreshFiles();
         else if (refreshView)
@@ -408,6 +411,12 @@ public partial class ContentView : UserControl
 
     private void RefreshShellStatusCount()
     {
+        if (string.IsNullOrWhiteSpace(CurrentPath))
+        {
+            StatusLabel.Text = string.Empty;
+            return;
+        }
+
         if (!IsLegacyWpfFileList)
             SchedulePrivateTableRefresh();
 

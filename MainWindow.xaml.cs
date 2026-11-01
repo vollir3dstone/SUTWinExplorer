@@ -22,14 +22,22 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, Pathview> _fixedPathviewsByPath = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<Pathview, string> _pathsByFixedPathview = new();
     private readonly Dictionary<Pathview, TabItem> _tabsByPathview = new();
+    private readonly Dictionary<Pathview, ProfilePathview> _profileEntriesByPathview = new();
+    private readonly ProfileConfiguration _activeProfile;
+    private readonly ProfileStore _profileStore;
     private ShellCopyIntegration? _shellCopyIntegration;
 
     public MainWindow()
     {
         InitializeComponent();
+        var application = (App)Application.Current;
+        _activeProfile = application.ActiveProfile;
+        _profileStore = application.ProfileStore;
         SourceInitialized += MainWindow_SourceInitialized;
         Closed += MainWindow_Closed;
         AddPaneview(GetInitialDirectory(), isBrowsable: true);
+        foreach (var entry in _activeProfile.Pathviews.ToArray())
+            AddPaneview(entry.Path, isBrowsable: false, profileEntry: entry, select: false);
     }
 
     private static string GetInitialDirectory()
@@ -82,8 +90,11 @@ public partial class MainWindow : Window
         }
     }
 
-    private void AddPaneview(string path, bool isBrowsable)
+    private void AddPaneview(string path, bool isBrowsable, ProfilePathview? profileEntry = null, bool select = true)
     {
+        if (!isBrowsable && ShellLocations.IsTopPath(path))
+            throw new InvalidOperationException("This PC cannot be opened as a fixed Pathview.");
+
         var pathKey = GetPathKey(path);
         if (!isBrowsable && _fixedPathviewsByPath.TryGetValue(pathKey, out var existingPathview))
         {
@@ -95,19 +106,21 @@ public partial class MainWindow : Window
             throw new InvalidOperationException("The browsable Pathview must be the first and only browsable tab.");
 
         var view = new Pathview(path, isBrowsable);
+        if (profileEntry is not null)
+            _profileEntriesByPathview.Add(view, profileEntry);
         var hasCurrentPath = !string.IsNullOrWhiteSpace(view.CurrentPath);
         var title = new TextBlock
         {
             Text = view.IsBrowsable
                 ? "BROWSE"
-                : hasCurrentPath ? GetTabLabelFromPath(view.CurrentPath) : "Loading...",
+                : GetTabLabelFromPath(hasCurrentPath ? view.CurrentPath : path),
             FontSize = 13,
             FontWeight = FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center
         };
         var tooltipText = new TextBlock
         {
-            Text = hasCurrentPath ? ShellDisplayNameProvider.GetDisplayPath(view.CurrentPath) : string.Empty,
+            Text = ShellDisplayNameProvider.GetDisplayPath(hasCurrentPath ? view.CurrentPath : path),
             TextWrapping = TextWrapping.NoWrap
         };
 
@@ -156,9 +169,15 @@ public partial class MainWindow : Window
         tab.ToolTipOpening += (_, _) => ConfigurePathToolTip(pathToolTip, tooltipText);
         view.LocationChanged += (_, currentPath) =>
         {
+            if (!_tabsByPathview.ContainsKey(view))
+                return;
             if (!view.IsBrowsable)
+            {
                 RegisterFixedPathview(view, currentPath);
+                UpdateProfilePathview(view, currentPath);
+            }
             title.Text = view.IsBrowsable ? "BROWSE" : GetTabLabelFromPath(currentPath);
+            title.ClearValue(TextBlock.ForegroundProperty);
             tooltipText.Text = ShellDisplayNameProvider.GetDisplayPath(currentPath);
             if (view.IsBrowsable)
             {
@@ -174,8 +193,14 @@ public partial class MainWindow : Window
         };
         view.NavigationFailed += (_, _) =>
         {
+            if (!_tabsByPathview.ContainsKey(view))
+                return;
             if (!view.IsBrowsable && string.IsNullOrWhiteSpace(view.CurrentPath))
-                RemoveFixedPathview(view);
+            {
+                title.Text = "! " + GetTabLabelFromPath(path);
+                title.Foreground = Brushes.Firebrick;
+                tooltipText.Text = $"Cannot open location: {path}";
+            }
             if (ReferenceEquals(CurrentPathview, view))
                 RefreshPathChoices();
         };
@@ -195,8 +220,56 @@ public partial class MainWindow : Window
         _tabsByPathview.Add(view, tab);
         ExplorerTabs.Items.Insert(view.IsBrowsable ? 0 : ExplorerTabs.Items.Count, tab);
         tab.MinWidth = GetMinimumTabWidth(title);
-        ExplorerTabs.SelectedItem = tab;
+        if (profileEntry is not null && !Directory.Exists(path))
+        {
+            title.Text = "! " + GetTabLabelFromPath(path);
+            title.Foreground = Brushes.Firebrick;
+            tooltipText.Text = $"Cannot open location: {path}";
+        }
+        if (!view.IsBrowsable && hasCurrentPath)
+            UpdateProfilePathview(view, view.CurrentPath);
+        if (select)
+            ExplorerTabs.SelectedItem = tab;
         RefreshPathChoices();
+    }
+
+    private void UpdateProfilePathview(Pathview view, string path)
+    {
+        if (!_tabsByPathview.ContainsKey(view))
+            return;
+
+        if (_profileEntriesByPathview.TryGetValue(view, out var entry))
+        {
+            if (string.Equals(entry.Path, path, StringComparison.Ordinal))
+                return;
+            entry.Path = path;
+        }
+        else
+        {
+            entry = new ProfilePathview
+            {
+                Type = "Pathview",
+                Name = null,
+                Path = path,
+                ActionOnProfileActivation = "open"
+            };
+            _activeProfile.Pathviews.Add(entry);
+            _profileEntriesByPathview.Add(view, entry);
+        }
+        SaveActiveProfile();
+    }
+
+    private void SaveActiveProfile()
+    {
+        try
+        {
+            _profileStore.Save(_activeProfile);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, $"Cannot save the active profile: {exception.Message}",
+                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private double GetMinimumTabWidth(TextBlock title)
@@ -216,7 +289,8 @@ public partial class MainWindow : Window
 
     private void Pathview_PinRequested(object? sender, EventArgs e)
     {
-        if (sender is not Pathview { IsBrowsable: true } view || string.IsNullOrWhiteSpace(view.CurrentPath))
+        if (sender is not Pathview { IsBrowsable: true } view || string.IsNullOrWhiteSpace(view.CurrentPath) ||
+            ShellLocations.IsTopPath(view.CurrentPath))
             return;
 
         AddPaneview(view.CurrentPath, isBrowsable: false);
@@ -313,9 +387,6 @@ public partial class MainWindow : Window
     private bool TryGetFixedPathview(string path, out Pathview fixedView)
     {
         fixedView = null!;
-        if (ShellLocations.IsTopPath(path))
-            return false;
-
         var pathKey = GetPathKey(path);
         if (!_fixedPathviewsByPath.TryGetValue(pathKey, out var candidate) ||
             string.IsNullOrWhiteSpace(candidate.CurrentPath) ||
@@ -358,7 +429,7 @@ public partial class MainWindow : Window
     }
 
     private static string GetPathKey(string path) =>
-        Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        ShellLocations.IsTopPath(path) ? ShellLocations.TopPath : Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
 
     private void ConfigurePathToolTip(ToolTip toolTip, TextBlock pathText)
     {
@@ -388,6 +459,11 @@ public partial class MainWindow : Window
             ExplorerTabs.Items.Remove(tab);
             _tabsByPathview.Remove(view);
             RemoveFixedPathview(view);
+            if (_profileEntriesByPathview.Remove(view, out var entry))
+            {
+                _activeProfile.Pathviews.Remove(entry);
+                SaveActiveProfile();
+            }
             RefreshPathChoices();
         }
     }
@@ -430,7 +506,7 @@ public partial class MainWindow : Window
         {
             choices.AddRange(ExplorerTabs.Items.Cast<TabItem>()
                 .Select((item, index) => new { View = (Pathview)item.Content, TabIndex = index })
-                .Where(entry => !entry.View.IsBrowsable)
+                .Where(entry => !entry.View.IsBrowsable && !string.IsNullOrWhiteSpace(entry.View.CurrentPath))
                 .Select(entry => new TabPathChoice(entry.TabIndex, entry.View.CurrentPath))
                 .OrderBy(choice => choice.DisplayPath, StringComparer.OrdinalIgnoreCase));
             AddressBox.ItemsSource = choices;
@@ -551,6 +627,9 @@ public partial class MainWindow : Window
 
     private static string GetTabLabelFromPath(string path)
     {
+        if (ShellLocations.IsTopPath(path))
+            return ShellDisplayNameProvider.GetDisplayName(path) ?? "This PC";
+
         var normalizedPath = Path.TrimEndingDirectorySeparator(path);
         var currentDir = ShellDisplayNameProvider.GetDisplayName(path);
         if (string.IsNullOrWhiteSpace(currentDir))

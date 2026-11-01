@@ -46,6 +46,12 @@ when it is created and cannot be changed by the user.
   [SHELL_EXPLORER_ARCHITECTURE.md](SHELL_EXPLORER_ARCHITECTURE.md#2026-11-01-separate-product-name-from-internal-identity).
 
 ### Navigation and tabs
+- [x] One active `default` profile restores its stored filesystem Pathviews as
+  Fixed tabs. Fixed tabs are saved on successful opening and removed from the
+  profile on explicit close; unavailable locations remain marked and stored.
+  BROWSE stays selected at startup, and virtual **This PC** cannot be pinned.
+  Only one KIS Explorer instance runs on the machine. Profile configuration
+  and acceptance checks are specified in [Configuration.md](Configuration.md).
 - [x] The application starts with exactly one browsable Pathview in the first
   tab. Its tab title is **BROWSE**, independent of its current location, and it
   cannot be closed.
@@ -53,7 +59,8 @@ when it is created and cannot be changed by the user.
   command is absent; a fixed Pathview is created with **Pin**.
 - [x] **Pin** creates a non-browsable Pathview at the browsable Pathview's
   current location. If that location already has an open non-browsable
-  Pathview, **Pin** selects that tab instead of creating a duplicate.
+  Pathview, **Pin** selects that tab instead of creating a duplicate. **Pin**
+  is disabled at the virtual **This PC** location.
 - [x] **Browse** on a non-browsable Pathview selects the first tab and navigates
   the browsable Pathview to the fixed Pathview's location.
 - [x] Non-browsable Pathviews can be closed; the browsable Pathview remains

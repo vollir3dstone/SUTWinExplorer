@@ -205,12 +205,20 @@ leading ellipsis prefix is omitted.
   reverse Pathview-to-key map supports cleanup, and a Pathview-to-`TabItem` map
   supports selection without searching the tab collection. A fixed Pathview is
   first registered with its requested initial path, then its key is reconciled
-  after each successful location commit. Entries are removed when a fixed tab
-  closes or its initial navigation fails.
+  after each successful location commit. Entries remain indexed after an
+  initial navigation failure and are removed when a fixed tab closes.
+- `App` owns a machine-wide named mutex and loads the active `default` profile
+  before creating `MainWindow`. `ProfileStore` validates and saves the profile
+  under roaming application data; `MainWindow` associates fixed Pathviews with
+  their profile entries and synchronizes successful location changes and
+  explicit closes. Startup restores tabs without selecting them. Failed
+  locations remain associated and marked. See [Configuration.md](Configuration.md).
 - **Pin** looks up the browsable Pathview's current path in the fixed-path map.
   It selects the mapped tab when present, otherwise it creates a fixed
   Pathview, registers it, adds the tab after the first item, and selects it.
-  This prevents duplicate fixed Pathviews at the same normalized path.
+  This prevents duplicate fixed Pathviews at the same normalized path. The
+  button is disabled for **This PC**, and `MainWindow` also rejects requests
+  to create a fixed Pathview for that virtual location.
 - Typed address input is resolved to a filesystem path and normalized to the
 - Typed address input is resolved to a filesystem path and normalized to the
   same map key, then uses `MainWindow.NavigateWithHistory`. The **Browse**

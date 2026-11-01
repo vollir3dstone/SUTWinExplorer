@@ -285,7 +285,7 @@ public partial class Pathview : UserControl
 
         CurrentPath = path;
         DirectoryContent.SetCurrentPath(path);
-        PinPathviewButton.IsEnabled = true;
+        PinPathviewButton.IsEnabled = !IsTopPath(path);
         BrowsePathviewButton.IsEnabled = true;
         OpenInExplorerButton.IsEnabled = true;
         UpdateLocationIcon(path);
