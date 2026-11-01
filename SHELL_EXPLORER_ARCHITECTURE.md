@@ -4,6 +4,36 @@
 
 ## Decision Record
 
+### 2026-11-01: Separate product name from internal identity
+
+**Decision owner:** Volker.
+
+**Decision:** Use `KIS Explorer` for the user-facing product name and `SUT`
+for the publisher, as specified in
+[SHELL_EXPLORER_BEHAVIOR_SPEC.md](SHELL_EXPLORER_BEHAVIOR_SPEC.md#product-identity).
+Keep `SUTWinExplorer` as the development and internal identity. The project
+file, .NET assembly, namespaces, XAML class and namespace references, embedded
+resource names, diagnostic environment variables and log names, and the
+internal folder-context-menu registry key retain their existing names. These
+technical identifiers are not to be renamed merely to match the product name.
+
+The Debug app host and both published application executables are named
+`KIS Explorer.exe` without renaming the internal `SUTWinExplorer.dll` assembly.
+The EXE's Windows product and description fields use `KIS Explorer` and its
+company field uses `SUT`; technical `OriginalFilename` and `InternalName`
+fields continue to identify `SUTWinExplorer.dll`. The project configures
+the Debug host and development run command separately from the assembly and
+renames the completed single-file Release output.
+
+The installer uses the new application ID
+`C49BDCBD-2354-49FC-A4F3-287C7C1E2E9E`, distinct from the old SUTWinExplorer
+installer ID `7A143DD2-DB42-4ED7-A92E-8D9DB4656FC9`. Keep the new ID stable
+for subsequent KIS Explorer releases. There is no migration or automatic
+upgrade from the old installation; uninstall it manually first. In particular,
+the context-menu registry key remains an internal identifier shared with the
+old installer, so the two installations must not be treated as independent
+coexisting installations.
+
 ### 2026-10-13: Use the Shell IExplorerBrowser view in production
 
 **Decision owner:** Volker.

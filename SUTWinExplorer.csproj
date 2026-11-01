@@ -7,12 +7,33 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <AssemblyTitle>KIS Explorer</AssemblyTitle>
+    <Product>KIS Explorer</Product>
+    <Company>SUT</Company>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <OutputPath>bin\Release\net10.0-raw\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
+
+  <Target Name="NameApplicationHost" AfterTargets="_ComputeNETCoreBuildOutputFiles" BeforeTargets="AssignTargetPaths" Condition="'$(AppHostIntermediatePath)' != '' and '$(PublishSingleFile)' != 'true'">
+    <ItemGroup>
+      <None Update="$(AppHostIntermediatePath)">
+        <Link>KIS Explorer.exe</Link>
+      </None>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="SetApplicationRunCommand" BeforeTargets="ComputeRunArguments" Condition="'$(UseAppHost)' == 'true' and '$(StartAction)' != 'Program'">
+    <PropertyGroup>
+      <RunCommand>$(TargetDir)KIS Explorer.exe</RunCommand>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="NamePublishedApplication" AfterTargets="Publish" Condition="'$(PublishSingleFile)' == 'true' and Exists('$(PublishedSingleFilePath)')">
+    <Move SourceFiles="$(PublishedSingleFilePath)" DestinationFiles="$(PublishDir)KIS Explorer.exe" />
+  </Target>
 
   <ItemGroup>
     <EmbeddedResource Include="Assets\media-types.json" LogicalName="SUTWinExplorer.MediaTypes.json" />

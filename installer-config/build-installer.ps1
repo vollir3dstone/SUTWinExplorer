@@ -12,6 +12,7 @@ $issPath = Join-Path $PSScriptRoot "installer.iss"
 $installerRoot = Join-Path $repositoryRoot "installer"
 $outputDirectory = Join-Path $installerRoot "Release"
 $temporaryDirectory = Join-Path $installerRoot "Temp"
+$executableName = "KIS Explorer.exe"
 
 $config = Get-Content -Raw -Path $ConfigPath | ConvertFrom-Json
 if ($config._type -ne "installer_profiles") {
@@ -65,8 +66,8 @@ foreach ($profile in $profiles) {
     }
 
     $publishDirectory = $publishDirectories[$publishProfile]
-    $executablePath = Join-Path $publishDirectory "SUTWinExplorer.exe"
-    $runningProcesses = Get-Process -Name "SUTWinExplorer" -ErrorAction SilentlyContinue | Where-Object {
+    $executablePath = Join-Path $publishDirectory $executableName
+    $runningProcesses = Get-Process -Name ([System.IO.Path]::GetFileNameWithoutExtension($executableName)) -ErrorAction SilentlyContinue | Where-Object {
         try {
             [string]::Equals($_.Path, $executablePath, [StringComparison]::OrdinalIgnoreCase)
         }
@@ -76,7 +77,7 @@ foreach ($profile in $profiles) {
     }
     if ($runningProcesses) {
         $processIds = ($runningProcesses | ForEach-Object { $_.Id }) -join ", "
-        throw "Close SUTWinExplorer.exe from '$publishDirectory' before building (process ID(s): $processIds)."
+        throw "Close $executableName from '$publishDirectory' before building (process ID(s): $processIds)."
     }
 
     Write-Host "Publishing profile '$($profile.profileId)' using '$publishProfile'..."
@@ -93,6 +94,7 @@ foreach ($profile in $profiles) {
         "#define AppName `"$($config.appName)`""
         "#define AppVersion `"$($config.appVersion)`""
         "#define AppPublisher `"$($config.publisher)`""
+        "#define AppExeName `"$executableName`""
         "#define ProfileId `"$($profile.profileId)`""
         "#define PublishDir `"$publishDirectory`""
         "#define InstallerOutputDir `"$outputDirectory`""

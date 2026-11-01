@@ -6,6 +6,8 @@
 - .NET 10 SDK
 
 The application targets `net10.0-windows` and uses WPF. The publish profiles target `win-x64`.
+The user-facing product name is `KIS Explorer`, and its publisher is `SUT`.
+The project and internal assembly retain the `SUTWinExplorer` name.
 
 ## Build
 
@@ -14,6 +16,8 @@ From the repository root, build the application in Debug configuration:
 ```powershell
 dotnet build .\SUTWinExplorer.csproj -c Debug
 ```
+
+The Debug application is `bin\Debug\net10.0-windows\KIS Explorer.exe`.
 
 Do not run a standard Release build with `dotnet build -c Release`. The only Release builds are the `Included` and `Dependent` publish profiles below.
 
@@ -46,7 +50,7 @@ Profile: `Properties\PublishProfiles\Dependent.pubxml`
 - Output directory: `bin\Release\net10.0-dependent`
 - The executable is much smaller because it uses the installed .NET runtime.
 
-Both profiles enable native-library self-extraction. The publish output includes the application executable and a `.pdb` symbols file.
+Both profiles enable native-library self-extraction. The publish output includes `KIS Explorer.exe` and a `.pdb` symbols file.
 
 ## Release Checklist
 
@@ -80,9 +84,9 @@ Example:
 ```json
 {
 	"_type": "installer_profiles",
-	"appName": "SUTWinExplorer",
+	"appName": "KIS Explorer",
 	"appVersion": "1.0.0",
-	"publisher": "SUTWinExplorer",
+	"publisher": "SUT",
 	"profiles": [
 		{
 			"_type": "profile",
@@ -129,11 +133,13 @@ To select multiple profiles in one run:
 For each selected profile, the script performs these steps:
 
 1. Validates the configuration and resolves `publishProfile` to its publish output directory.
-2. Checks that the corresponding `SUTWinExplorer.exe` is not running. If it is, the script stops with an instruction to close it; it does not terminate the application.
+2. Checks that the corresponding `KIS Explorer.exe` is not running. If it is, the script stops with an instruction to close it; it does not terminate the application.
 3. Runs `dotnet publish` for that profile. `Included` publishes to `bin\Release\net10.0-included`; `Dependent` publishes to `bin\Release\net10.0-dependent`.
 4. Prepends the shared metadata, profile ID, publish directory, installer output directory, and context-menu option as `#define` directives to the ISS template. The resulting complete per-profile ISS file is written under `installer\Temp`.
 5. Runs Inno Setup's command-line compiler (`ISCC.exe`) on that generated ISS file.
 
 The setup executable is written to `installer\Release` as `<appName>-<profileId>-Setup-<appVersion>.exe`. The installer installs per-user under `%LOCALAPPDATA%\Programs\<appName>`, creates a Start Menu shortcut, excludes `.pdb` files, and optionally adds the Explorer folder context-menu entry under the current user's registry hive. Inno Setup removes that entry during uninstall.
+
+KIS Explorer uses a new installer ID. Uninstall any earlier SUTWinExplorer installation before installing it; migration of old installations is not supported.
 
 `installer\Release` contains distributable installer artifacts. `installer\Temp` contains generated ISS scripts and Inno Setup's temporary build data. Both directories are ignored by Git; the JSON, template, and build script remain versioned. Re-running the script recreates or replaces the generated scripts and installer files for the selected profiles. Outputs for unselected profiles are not removed.

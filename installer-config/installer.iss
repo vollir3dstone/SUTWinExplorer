@@ -1,11 +1,11 @@
 [Setup]
-AppId={{7A143DD2-DB42-4ED7-A92E-8D9DB4656FC9}
+AppId={{C49BDCBD-2354-49FC-A4F3-287C7C1E2E9E}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
 DefaultDirName={localappdata}\Programs\{#AppName}
 DefaultGroupName={#AppName}
-UninstallDisplayIcon={app}\SUTWinExplorer.exe
+UninstallDisplayIcon={app}\{#AppExeName}
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
@@ -19,11 +19,11 @@ WizardStyle=modern
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Excludes: "*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\{#AppName}"; Filename: "{app}\SUTWinExplorer.exe"
+Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"
 
 #if AddFolderContextMenu
 [Registry]
-Root: HKCU; Subkey: "Software\Classes\Directory\shell\SUTWinExplorer"; ValueType: string; ValueName: ""; ValueData: "SUTWinExplorer hier öffnen"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\Directory\shell\SUTWinExplorer"; ValueType: string; ValueName: "Icon"; ValueData: "{app}\SUTWinExplorer.exe"
-Root: HKCU; Subkey: "Software\Classes\Directory\shell\SUTWinExplorer\command"; ValueType: string; ValueName: ""; ValueData: """{app}\SUTWinExplorer.exe"" ""%V"""; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\Directory\shell\SUTWinExplorer"; ValueType: string; ValueName: ""; ValueData: "KIS Explorer hier öffnen"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\Directory\shell\SUTWinExplorer"; ValueType: string; ValueName: "Icon"; ValueData: "{app}\{#AppExeName}"
+Root: HKCU; Subkey: "Software\Classes\Directory\shell\SUTWinExplorer\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" ""%V"""; Flags: uninsdeletekey
 #endif

@@ -1,8 +1,8 @@
 {
   "_type": "installer_profiles",
-  "appName": "SUTWinExplorer",
+  "appName": "KIS Explorer",
   "appVersion": "1.0.0",
-  "publisher": "SUTWinExplorer",
+  "publisher": "SUT",
   "profiles": [
     {
       "_type": "profile",

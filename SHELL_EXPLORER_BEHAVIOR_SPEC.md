@@ -22,6 +22,29 @@ when it is created and cannot be changed by the user.
 
 ## P0: Core Behavior
 
+### Product identity
+
+- The user-facing product name is **KIS Explorer**; the publisher is **SUT**,
+  not the product name. Use the product name wherever the application itself
+  is named for the user, including the main window, installer UI, Windows
+  installed-app listing, Start Menu shortcut, and folder context-menu command
+  **KIS Explorer hier öffnen**. Names of Windows components, user files, and
+  third-party applications are not product names and remain unchanged.
+- The application executable is `KIS Explorer.exe` in Debug and both Release
+  profiles. Installer executable names begin with `KIS Explorer` and include
+  the profile and version. The default installation folder is
+  `%LOCALAPPDATA%\Programs\KIS Explorer`.
+- Windows file properties for the application show **KIS Explorer** as the
+  product name and file description and **SUT** as the company. Installer
+  properties show **KIS Explorer** as the product and **SUT** as the company;
+  the installer description may add **Setup**. The application's technical
+  `OriginalFilename` and `InternalName` fields retain the internal
+  `SUTWinExplorer.dll` name.
+- Earlier SUTWinExplorer installations are not migrated or upgraded. Users
+  must uninstall them manually before installing KIS Explorer.
+  Internal naming and installer identity are defined in
+  [SHELL_EXPLORER_ARCHITECTURE.md](SHELL_EXPLORER_ARCHITECTURE.md#2026-11-01-separate-product-name-from-internal-identity).
+
 ### Navigation and tabs
 - [x] The application starts with exactly one browsable Pathview in the first
   tab. Its tab title is **BROWSE**, independent of its current location, and it
@@ -346,6 +369,13 @@ may show its requested row in light gray without changing the active selection.
 - [ ] Persist the user's selected sort across application sessions.
 
 ## Acceptance Checks
+
+Product identity: Verify the application window, installer, installed-app
+listing, Start Menu shortcut, and folder context menu use **KIS Explorer**, and
+the publisher is **SUT**. Check the Debug executable and both published
+executables are named `KIS Explorer.exe`, and check their Windows file
+properties, including the retained internal-name fields. Uninstall any old
+SUTWinExplorer installation before testing a new installation.
 
 1. With **Hide directories** on, ordinary folders and directory reparse points
   are absent from the content view; unchecking it displays them, and checking
