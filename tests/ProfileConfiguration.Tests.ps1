@@ -33,6 +33,25 @@ try {
     $profile = Invoke-Store $store 'LoadOrCreate'
     Assert-True ($profile.Pathviews.Count -eq 1 -and $null -eq $profile.Pathviews[0].Name) 'Pathview did not round-trip with a null name.'
 
+    $json = Get-Content -LiteralPath $filePath -Raw | ConvertFrom-Json -AsHashtable
+    Assert-True ($json.Pathviews[0].ContainsKey('TabColor') -and $null -eq $json.Pathviews[0].TabColor) 'Default TabColor was not saved as null.'
+    $json.Pathviews[0].Remove('TabColor')
+    $json | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $filePath -Encoding utf8
+    $profile = Invoke-Store $store 'Load'
+    Assert-True ($null -eq $profile.Pathviews[0].TabColor) 'A legacy Pathview without TabColor did not load.'
+    $profile.Pathviews[0].TabColor = '#FF85ADE9'
+    Invoke-Store $store 'Save' @($profile)
+    $profile = Invoke-Store $store 'Load'
+    Assert-True ($profile.Pathviews[0].TabColor -ceq '#FF85ADE9') 'Pathview color did not round-trip.'
+    $json = Get-Content -LiteralPath $filePath -Raw | ConvertFrom-Json -AsHashtable
+    $json.Pathviews[0].TabColor = '#invalid'
+    $json | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $filePath -Encoding utf8
+    $before = [System.IO.File]::ReadAllText($filePath)
+    $failed = $false
+    try { Invoke-Store $store 'Load' } catch { $failed = $true }
+    Assert-True ($failed -and [System.IO.File]::ReadAllText($filePath) -ceq $before) 'Invalid TabColor was accepted or overwritten.'
+    Invoke-Store $store 'Save' @($profile)
+
     $profile.Pathviews[0].Name = 'Custom name'
     Invoke-Store $store 'Save' @($profile)
     $profile = Invoke-Store $store 'Load'

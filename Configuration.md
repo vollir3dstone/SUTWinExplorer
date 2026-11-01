@@ -32,6 +32,7 @@ The filename consists of `Profile `, the profile name enclosed in `„` and
     {
       "_type": "Pathview",
       "Name": null,
+      "TabColor": "#FF85ADE9",
       "Path": "C:\\Example\\Folder",
       "ActionOnProfileActivation": "open"
     }
@@ -39,11 +40,21 @@ The filename consists of `Profile `, the profile name enclosed in `„` and
 }
 ```
 
+`TabColor` is the Fixed Pathview header and tab background color in
+`#AARRGGBB` hexadecimal format. `null` or an absent property uses the default
+appearance, so existing profiles remain compatible. Selecting a color saves it
+to the active profile; it is restored when the profile is activated, including
+for unavailable paths. A color chosen before initial navigation completes is
+included when the Pathview entry is created. Invalid color values make the
+profile invalid and are not overwritten.
+
 `Name` is the optional custom Pathview name; JSON `null` means undefined.
 ProfilesView displays undefined names as empty cells without changing them.
 The Fixed Pathview header displays `(Undefined custom name)` as a placeholder
-when undefined. Enter or leaving the editor commits the name to the active
-profile; Enter moves keyboard focus to the Shell content when available. On
+when undefined. Enter, focus loss, or a click outside the editor commits the
+name to the active profile. Enter moves keyboard focus to the Shell content
+when available; an outside click preserves the target's focus and action, or
+focuses Shell content when the target does not take focus. On
 opening a Fixed tab, the name editor is not initially focused; focus is moved
 to the Shell content when available. An empty editor stores `null`, while
 Escape restores the last committed name. Non-empty names are not trimmed.
@@ -88,7 +99,7 @@ the previous active profile can be saved.
   location updates, including affected descendants. As with existing history
   behavior, external renames are not tracked as internal renames.
 - The virtual Shell location **This PC** cannot be pinned as a Fixed tab.
-  BROWSE is never stored. Colors, filter settings, sort settings, selected tab,
+  BROWSE is never stored. Filter settings, sort settings, selected tab,
   and navigation history are not profile fields.
 - Changes are serialized to a temporary file in the same directory and then
   replace the profile file. Save errors are reported; the in-memory change
@@ -121,13 +132,18 @@ the previous active profile can be saved.
   editor on opening, and Shell-content focus when available. Enter a long
   custom name and press Enter; confirm the entire name labels the tab, the
   profile stores it, and Shell content receives focus. Verify Escape cancels
-  an uncommitted edit and clicking another control commits without stealing
-  focus from that control.
+  an uncommitted edit, clicking another control commits without stealing its
+  focus, and clicking a non-focusable area commits and leaves the editor.
 9. Clear the name and confirm JSON `null`, the placeholder, and the shortened
   path label return. Switch profiles and reactivate the original profile to
   verify saved names and nulls are restored. Confirm ProfilesView shows null
   names as empty cells, BROWSE has no name editor, and an unavailable path
   retains its `!` marker before either a custom-name or path label.
+10. Set different colors on Fixed tabs and confirm `TabColor` is saved for each.
+  Switch profiles and reactivate the original, then restart; the header and
+  selected and unselected tab backgrounds retain their colors. Check that an
+  unavailable path retains its color and that a legacy entry without
+  `TabColor` keeps the default appearance.
 
 `tests/ProfileConfiguration.Tests.ps1` exercises the profile store in an
 isolated temporary directory; the tab, Shell, and instance checks above still

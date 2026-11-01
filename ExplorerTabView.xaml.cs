@@ -59,13 +59,20 @@ public partial class Pathview : UserControl
     private bool _contentViewNeedsRefresh = true;
     private readonly List<TreeEntry> _driveRoots = [];
     private readonly Action<string?>? _customNameChanged;
+    private readonly Action<Color>? _tabColorChanged;
     private string? _customName;
+    private Window? _inputWindow;
 
-    public Pathview(string initialPath, bool isBrowsable, string? customName, Action<string?>? customNameChanged)
+    public Pathview(string initialPath, bool isBrowsable, string? customName, Action<string?>? customNameChanged,
+        Color? tabColor, Action<Color>? tabColorChanged)
     {
         InitializeComponent();
         _customName = customName;
         _customNameChanged = customNameChanged;
+        _tabColorChanged = tabColorChanged;
+        TabColor = tabColor;
+        if (tabColor is Color color)
+            PaneBackground = new SolidColorBrush(color);
         CustomNameEditor.Text = customName ?? string.Empty;
         var explorerPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
         OpenInExplorerIcon.Source = ShellIconProvider.GetIconAtSize(explorerPath, 16, 16) ??
@@ -109,6 +116,7 @@ public partial class Pathview : UserControl
 
     public string CurrentPath { get; private set; } = string.Empty;
     internal string? CustomName => _customName;
+    internal Color? TabColor { get; private set; }
     public event EventHandler<string>? LocationChanged;
     public event EventHandler? NavigationFailed;
     public event EventHandler? PinRequested;
@@ -132,6 +140,23 @@ public partial class Pathview : UserControl
 
     private void CustomNameEditor_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) =>
         CommitCustomName();
+
+    private void InputWindow_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!CustomNameEditor.IsKeyboardFocusWithin || CustomNameEditor.IsMouseOver)
+            return;
+
+        CommitCustomName();
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+        {
+            if (!CustomNameEditor.IsKeyboardFocusWithin)
+                return;
+            if (IsVisible)
+                DirectoryContent.FocusContent();
+            if (CustomNameEditor.IsKeyboardFocusWithin)
+                Keyboard.ClearFocus();
+        });
+    }
 
     private void CommitCustomName()
     {
@@ -402,8 +427,8 @@ public partial class Pathview : UserControl
             return;
 
         PaneBackground = selectedBrush;
-        if (Window.GetWindow(this) is MainWindow mainWindow)
-            mainWindow.SetPathviewTabBackground(this, selectedBrush);
+        TabColor = selectedBrush.Color;
+        _tabColorChanged?.Invoke(selectedBrush.Color);
         PaneColorPopup.IsOpen = false;
     }
 
@@ -440,6 +465,8 @@ public partial class Pathview : UserControl
 
     private void Pathview_Loaded(object sender, RoutedEventArgs e)
     {
+        _inputWindow = Window.GetWindow(this);
+        _inputWindow?.AddHandler(Mouse.PreviewMouseDownEvent, new MouseButtonEventHandler(InputWindow_PreviewMouseDown), true);
         _fileSystemStateDirty = true;
         _contentViewNeedsRefresh = true;
         SynchronizeContentChangeNotifications();
@@ -448,6 +475,8 @@ public partial class Pathview : UserControl
 
     private void Pathview_Unloaded(object sender, RoutedEventArgs e)
     {
+        _inputWindow?.RemoveHandler(Mouse.PreviewMouseDownEvent, new MouseButtonEventHandler(InputWindow_PreviewMouseDown));
+        _inputWindow = null;
         _fileSystemRefreshTimer.Stop();
         _fileSystemStateDirty = true;
         _contentViewNeedsRefresh = true;

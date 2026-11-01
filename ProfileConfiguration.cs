@@ -19,6 +19,7 @@ internal sealed class ProfilePathview
     [JsonPropertyName("_type")]
     public required string Type { get; set; }
     public required string? Name { get; set; }
+    public string? TabColor { get; set; }
     public required string Path { get; set; }
     public required string ActionOnProfileActivation { get; set; }
     [JsonExtensionData]
@@ -75,6 +76,8 @@ internal sealed class ProfileStore
             if (view is null || view.Type != "Pathview" || string.IsNullOrWhiteSpace(view.Path) ||
                 !System.IO.Path.IsPathFullyQualified(view.Path) ||
                 view.ActionOnProfileActivation != "open" ||
+                (view.TabColor is not null &&
+                 (view.TabColor.Length != 9 || view.TabColor[0] != '#' || !view.TabColor[1..].All(Uri.IsHexDigit))) ||
                 !paths.Add(System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(view.Path))))
                 throw new InvalidDataException("The profile contains an invalid or duplicate Pathview.");
         }

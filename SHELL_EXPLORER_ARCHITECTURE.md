@@ -325,8 +325,11 @@ leading ellipsis prefix is omitted.
   successful current path.
   `PaneColorPalette` contains the brushes, displayed by
   `PaneColorSwatchTemplate` in a six-column grid. The swatch click updates the
-  Pathview's `PaneBackground`, then asks `MainWindow` to update the matching
-  `TabItem`.
+  Pathview's `PaneBackground` and reports the color through a callback.
+  `MainWindow` updates the matching `TabItem` and saves the color in the
+  associated profile entry. The constructor receives the initial color;
+  `null` preserves the default appearance. A color selected before an entry
+  exists is included when initial navigation creates that entry.
 
   Tab coloring has a separate selected-state brush because the tab template's
   selected overlay would otherwise cover the `TabItem.Background`. Each tab's

@@ -261,7 +261,7 @@ public partial class MainWindow : Window
 
     private Pathview? CurrentPathview => (ExplorerTabs.SelectedItem as TabItem)?.Content as Pathview;
 
-    internal void SetPathviewTabBackground(Pathview view, Brush background)
+    private void SetPathviewTabBackground(Pathview view, Brush background)
     {
         if (_tabsByPathview.TryGetValue(view, out var tab))
         {
@@ -287,11 +287,18 @@ public partial class MainWindow : Window
 
         Pathview? view = null;
         Action? updateTabTitle = null;
+        var tabColor = profileEntry?.TabColor is string savedColor
+            ? (Color?)ColorConverter.ConvertFromString(savedColor)
+            : null;
         view = new Pathview(path, isBrowsable, profileEntry?.Name, isBrowsable ? null : name =>
         {
             updateTabTitle?.Invoke();
             if (view is not null)
                 Pathview_CustomNameChanged(view, name);
+        }, tabColor, isBrowsable ? null : color =>
+        {
+            if (view is not null)
+                Pathview_TabColorChanged(view, color);
         });
         if (profileEntry is not null)
             _profileEntriesByPathview.Add(view, profileEntry);
@@ -414,6 +421,8 @@ public partial class MainWindow : Window
             RegisterFixedPathview(view, string.IsNullOrWhiteSpace(view.CurrentPath) ? path : view.CurrentPath);
         }
         _tabsByPathview.Add(view, tab);
+        if (view.TabColor is not null)
+            SetPathviewTabBackground(view, view.PaneBackground);
         ExplorerTabs.Items.Insert(view.IsBrowsable ? 0 : ExplorerTabs.Items.Count, tab);
         tab.MinWidth = GetMinimumTabWidth(title);
         if (navigationFailed)
@@ -445,6 +454,7 @@ public partial class MainWindow : Window
             {
                 Type = "Pathview",
                 Name = view.CustomName,
+                TabColor = view.TabColor?.ToString(),
                 Path = path,
                 ActionOnProfileActivation = "open"
             };
@@ -461,6 +471,18 @@ public partial class MainWindow : Window
             string.Equals(entry.Name, name, StringComparison.Ordinal))
             return;
         entry.Name = name;
+        _activeProfileDirty = true;
+        SaveActiveProfile();
+    }
+
+    private void Pathview_TabColorChanged(Pathview view, Color color)
+    {
+        SetPathviewTabBackground(view, view.PaneBackground);
+        var tabColor = color.ToString();
+        if (!_profileEntriesByPathview.TryGetValue(view, out var entry) ||
+            string.Equals(entry.TabColor, tabColor, StringComparison.Ordinal))
+            return;
+        entry.TabColor = tabColor;
         _activeProfileDirty = true;
         SaveActiveProfile();
     }

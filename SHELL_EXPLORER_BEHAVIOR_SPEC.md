@@ -84,10 +84,12 @@ when it is created and cannot be changed by the user.
   side-by-side panes. The visible **Browse** or **Pin** button comes first; a
   non-browsable Pathview then shows its bold **FIXED** badge and custom-name
   editor. An undefined name displays `(Undefined custom name)`; entering an
-  empty name stores `null`. Enter or focus loss saves changes, and Escape
-  restores the last committed name. Opening a Fixed tab and confirming its
-  name with Enter place keyboard focus in its Shell content when available,
-  not the editor; a click elsewhere keeps focus on its target. Names are stored
+  empty name stores `null`. Enter, focus loss, or a click outside the editor
+  saves changes, and Escape restores the last committed name. Opening a Fixed
+  tab and confirming its name with Enter place keyboard focus in its Shell
+  content when available, not the editor. An outside click preserves the
+  target's action and focus; if the target does not take focus, the Shell
+  content receives it when available. Names are stored
   in the active profile. The editor uses the path display's font and color;
   only the undefined-name placeholder uses a lighter gray.
   The Fixed tab label shows the complete custom name when set; otherwise it
@@ -105,11 +107,13 @@ when it is created and cannot be changed by the user.
   picker is visible; the widget group uses 2-DIP vertical margins. The
   second-row split area (sidebar, splitter, and content pane) has a 4-DIP white
   inset; the outer tab content has no additional padding.
-- [x] Each fixed Pathview's location row starts with a white background. Its
-  right-aligned palette offers twelve light colors distributed across the
-  spectrum; choosing one changes only that Pathview's location row and tab
-  header. Until a color is chosen, tab headers retain their normal selected or
-  unselected appearance. The browsable Pathview has no color-selection button.
+- [x] Each fixed Pathview's location row starts with a white background unless
+  a profile color is saved. Its right-aligned palette offers twelve light colors
+  distributed across the spectrum; choosing one changes only that Pathview's
+  location row and tab header and saves the color in the active profile. The
+  saved color is restored on profile activation and application restart. Until
+  a color is chosen, tab headers retain their normal selected or unselected
+  appearance. The browsable Pathview has no color-selection button.
   **Browse** and **Pin** remain keyboard-operable without a visible focus ring.
 - [x] Each Pathview retains its own location, **Hide directories**, and
   content **Hide internal** settings
