@@ -76,6 +76,7 @@ location/tree updates.
 | --- | --- |
 | `Initialize(isBrowsable)` | Called once after construction. Configures the content's browsable/fixed role and creates the Shell host in the default mode. A second call throws. |
 | `UsesSynchronousNavigation` | Indicates the retained legacy WPF mode. Pathview validates and commits that mode's directory navigation itself. |
+| `FocusContent()` | Requests keyboard focus in the native Shell content, or in the file list in legacy mode. Returns whether the request could be made. |
 | `NavigateTo(path)` | Clears the private column and requests Shell-backed navigation; it does not commit the Pathview location. It throws if asynchronous content navigation is unavailable. |
 | `NavigationCompleted(path)` / `NavigationFailed(path)` | Report Shell navigation outcomes. Pathview handles pending requests and commits its location/history only on success; a failure path may be empty. |
 | `FolderOpenRequested(path)` | Reports a folder activation for Pathview to route according to its browsable/fixed role. |

@@ -190,6 +190,38 @@
                     Margin="10,0,8,0" VerticalAlignment="Center" Visibility="Collapsed">
                     <TextBlock Text="FIXED" FontWeight="Bold" Foreground="#4E5963" />
                 </Border>
+                <Grid x:Name="CustomNameContainer" Width="200" Margin="0,0,8,0"
+                      VerticalAlignment="Center" Visibility="Collapsed">
+                                        <TextBox x:Name="CustomNameEditor" Height="28" Padding="4,1"
+                                                         FontFamily="{Binding FontFamily, ElementName=LocationLabel}"
+                                                         FontSize="{Binding FontSize, ElementName=LocationLabel}"
+                                                         FontWeight="{Binding FontWeight, ElementName=LocationLabel}"
+                                                         FontStyle="{Binding FontStyle, ElementName=LocationLabel}"
+                                                         FontStretch="{Binding FontStretch, ElementName=LocationLabel}"
+                                                         Foreground="{Binding Foreground, ElementName=LocationLabel}"
+                             AutomationProperties.Name="Custom Pathview name"
+                             PreviewKeyDown="CustomNameEditor_PreviewKeyDown"
+                             LostKeyboardFocus="CustomNameEditor_LostKeyboardFocus" />
+                    <TextBlock Text="(Undefined custom name)" Margin="5,0" VerticalAlignment="Center"
+                                                             FontFamily="{Binding FontFamily, ElementName=CustomNameEditor}"
+                                                             FontSize="{Binding FontSize, ElementName=CustomNameEditor}"
+                                                             FontWeight="{Binding FontWeight, ElementName=CustomNameEditor}"
+                                                             FontStyle="{Binding FontStyle, ElementName=CustomNameEditor}"
+                                                             FontStretch="{Binding FontStretch, ElementName=CustomNameEditor}"
+                                                             Foreground="#87919A"
+                                                             IsHitTestVisible="False">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Text, ElementName=CustomNameEditor}" Value="">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
                 <Grid x:Name="LocationIconSlot" Width="24" Height="24" Margin="8,0,2,0"
                       VerticalAlignment="Center">
                     <Image x:Name="LocationBaseIcon" Width="24" Height="24" Stretch="Uniform" />

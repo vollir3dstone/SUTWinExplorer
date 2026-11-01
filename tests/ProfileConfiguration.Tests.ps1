@@ -33,6 +33,15 @@ try {
     $profile = Invoke-Store $store 'LoadOrCreate'
     Assert-True ($profile.Pathviews.Count -eq 1 -and $null -eq $profile.Pathviews[0].Name) 'Pathview did not round-trip with a null name.'
 
+    $profile.Pathviews[0].Name = 'Custom name'
+    Invoke-Store $store 'Save' @($profile)
+    $profile = Invoke-Store $store 'Load'
+    Assert-True ($profile.Pathviews[0].Name -eq 'Custom name') 'Custom Pathview name did not round-trip.'
+    $entryType.GetProperty('Name').SetValue($profile.Pathviews[0], $null)
+    Invoke-Store $store 'Save' @($profile)
+    $profile = Invoke-Store $store 'Load'
+    Assert-True ($null -eq $profile.Pathviews[0].Name) 'Cleared Pathview name did not round-trip as null.'
+
     $profile.Pathviews[0].Path = Join-Path $directory 'renamed'
     Invoke-Store $store 'Save' @($profile)
     Assert-True ((Invoke-Store $store 'LoadOrCreate').Pathviews[0].Path -eq (Join-Path $directory 'renamed')) 'Renamed path was not saved.'

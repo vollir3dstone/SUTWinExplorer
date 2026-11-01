@@ -285,19 +285,33 @@ public partial class MainWindow : Window
         if (isBrowsable != (ExplorerTabs.Items.Count == 0))
             throw new InvalidOperationException("The browsable Pathview must be the first and only browsable tab.");
 
-        var view = new Pathview(path, isBrowsable);
+        Pathview? view = null;
+        Action? updateTabTitle = null;
+        view = new Pathview(path, isBrowsable, profileEntry?.Name, isBrowsable ? null : name =>
+        {
+            updateTabTitle?.Invoke();
+            if (view is not null)
+                Pathview_CustomNameChanged(view, name);
+        });
         if (profileEntry is not null)
             _profileEntriesByPathview.Add(view, profileEntry);
         var hasCurrentPath = !string.IsNullOrWhiteSpace(view.CurrentPath);
+        var navigationFailed = profileEntry is not null && !Directory.Exists(path);
         var title = new TextBlock
         {
-            Text = view.IsBrowsable
-                ? "BROWSE"
-                : GetTabLabelFromPath(hasCurrentPath ? view.CurrentPath : path),
             FontSize = 13,
             FontWeight = FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center
         };
+        updateTabTitle = () =>
+        {
+            var label = view.IsBrowsable ? "BROWSE" :
+                string.IsNullOrEmpty(view.CustomName)
+                    ? GetTabLabelFromPath(string.IsNullOrWhiteSpace(view.CurrentPath) ? path : view.CurrentPath)
+                    : view.CustomName;
+            title.Text = navigationFailed ? "! " + label : label;
+        };
+        updateTabTitle();
         var tooltipText = new TextBlock
         {
             Text = ShellDisplayNameProvider.GetDisplayPath(hasCurrentPath ? view.CurrentPath : path),
@@ -356,7 +370,8 @@ public partial class MainWindow : Window
                 RegisterFixedPathview(view, currentPath);
                 UpdateProfilePathview(view, currentPath);
             }
-            title.Text = view.IsBrowsable ? "BROWSE" : GetTabLabelFromPath(currentPath);
+            navigationFailed = false;
+            updateTabTitle();
             title.ClearValue(TextBlock.ForegroundProperty);
             tooltipText.Text = ShellDisplayNameProvider.GetDisplayPath(currentPath);
             if (view.IsBrowsable)
@@ -377,7 +392,8 @@ public partial class MainWindow : Window
                 return;
             if (!view.IsBrowsable && string.IsNullOrWhiteSpace(view.CurrentPath))
             {
-                title.Text = "! " + GetTabLabelFromPath(path);
+                navigationFailed = true;
+                updateTabTitle();
                 title.Foreground = Brushes.Firebrick;
                 tooltipText.Text = $"Cannot open location: {path}";
             }
@@ -400,9 +416,8 @@ public partial class MainWindow : Window
         _tabsByPathview.Add(view, tab);
         ExplorerTabs.Items.Insert(view.IsBrowsable ? 0 : ExplorerTabs.Items.Count, tab);
         tab.MinWidth = GetMinimumTabWidth(title);
-        if (profileEntry is not null && !Directory.Exists(path))
+        if (navigationFailed)
         {
-            title.Text = "! " + GetTabLabelFromPath(path);
             title.Foreground = Brushes.Firebrick;
             tooltipText.Text = $"Cannot open location: {path}";
         }
@@ -429,13 +444,23 @@ public partial class MainWindow : Window
             entry = new ProfilePathview
             {
                 Type = "Pathview",
-                Name = null,
+                Name = view.CustomName,
                 Path = path,
                 ActionOnProfileActivation = "open"
             };
             _activeProfile.Pathviews.Add(entry);
             _profileEntriesByPathview.Add(view, entry);
         }
+        _activeProfileDirty = true;
+        SaveActiveProfile();
+    }
+
+    private void Pathview_CustomNameChanged(Pathview view, string? name)
+    {
+        if (!_profileEntriesByPathview.TryGetValue(view, out var entry) ||
+            string.Equals(entry.Name, name, StringComparison.Ordinal))
+            return;
+        entry.Name = name;
         _activeProfileDirty = true;
         SaveActiveProfile();
     }

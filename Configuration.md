@@ -39,9 +39,16 @@ The filename consists of `Profile `, the profile name enclosed in `„` and
 }
 ```
 
-`Name` is the optional Pathview name; JSON `null` means undefined. ProfilesView
-displays undefined names as empty cells without changing them. `Path` is an absolute Windows filesystem path,
-not a localized display name. The only supported activation action is `open`.
+`Name` is the optional custom Pathview name; JSON `null` means undefined.
+ProfilesView displays undefined names as empty cells without changing them.
+The Fixed Pathview header displays `(Undefined custom name)` as a placeholder
+when undefined. Enter or leaving the editor commits the name to the active
+profile; Enter moves keyboard focus to the Shell content when available. On
+opening a Fixed tab, the name editor is not initially focused; focus is moved
+to the Shell content when available. An empty editor stores `null`, while
+Escape restores the last committed name. Non-empty names are not trimmed.
+BROWSE has no custom-name editor. `Path` is an absolute Windows filesystem
+path, not a localized display name. The only supported activation action is `open`.
 Required properties must be present, types and values must match the example,
 and normalized paths must not be duplicated case-insensitively. Additional
 JSON properties are retained when the profile is saved. Invalid or unreadable
@@ -72,6 +79,11 @@ the previous active profile can be saved.
   Pinning an already open location selects its tab and does not add a duplicate.
   Closing a Fixed tab removes its associated entry immediately. Closing the
   application does not remove its tabs from the profile.
+- Committing a Fixed Pathview's custom name updates its associated entry in
+  the active profile and immediately updates the tab title without changing
+  its path. A name entered before the initial navigation completes is included
+  when the entry is created. If the name is undefined, the tab title falls
+  back to the shortened path.
 - Internal folder renames update associated profile paths after successful
   location updates, including affected descendants. As with existing history
   behavior, external renames are not tracked as internal renames.
@@ -105,6 +117,17 @@ the previous active profile can be saved.
 7. Test malformed JSON, invalid or duplicate entries, an unreadable profile,
    and a failed save. Check the error is visible and the existing file is not
    silently overwritten. Confirm unknown JSON fields survive a successful save.
+8. For a Fixed tab, verify the gray undefined-name placeholder, an unfocused
+  editor on opening, and Shell-content focus when available. Enter a long
+  custom name and press Enter; confirm the entire name labels the tab, the
+  profile stores it, and Shell content receives focus. Verify Escape cancels
+  an uncommitted edit and clicking another control commits without stealing
+  focus from that control.
+9. Clear the name and confirm JSON `null`, the placeholder, and the shortened
+  path label return. Switch profiles and reactivate the original profile to
+  verify saved names and nulls are restored. Confirm ProfilesView shows null
+  names as empty cells, BROWSE has no name editor, and an unavailable path
+  retains its `!` marker before either a custom-name or path label.
 
 `tests/ProfileConfiguration.Tests.ps1` exercises the profile store in an
 isolated temporary directory; the tab, Shell, and instance checks above still

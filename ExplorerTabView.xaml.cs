@@ -58,10 +58,15 @@ public partial class Pathview : UserControl
     private bool _fileSystemStateDirty = true;
     private bool _contentViewNeedsRefresh = true;
     private readonly List<TreeEntry> _driveRoots = [];
+    private readonly Action<string?>? _customNameChanged;
+    private string? _customName;
 
-    public Pathview(string initialPath, bool isBrowsable)
+    public Pathview(string initialPath, bool isBrowsable, string? customName, Action<string?>? customNameChanged)
     {
         InitializeComponent();
+        _customName = customName;
+        _customNameChanged = customNameChanged;
+        CustomNameEditor.Text = customName ?? string.Empty;
         var explorerPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
         OpenInExplorerIcon.Source = ShellIconProvider.GetIconAtSize(explorerPath, 16, 16) ??
                                     ShellIconProvider.GetSmallIcons(explorerPath)?.BaseIcon;
@@ -72,6 +77,7 @@ public partial class Pathview : UserControl
         ActivePathAndSiblingsTab.Visibility = IsBrowsable ? Visibility.Visible : Visibility.Collapsed;
         SidebarTabs.SelectedItem = IsBrowsable ? ActivePathAndSiblingsTab : ActivePathTab;
         FixedPathBadge.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
+        CustomNameContainer.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
         BrowsePathviewButton.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
         PinPathviewButton.Visibility = IsBrowsable ? Visibility.Visible : Visibility.Collapsed;
         PaneColorButton.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
@@ -102,11 +108,39 @@ public partial class Pathview : UserControl
     }
 
     public string CurrentPath { get; private set; } = string.Empty;
+    internal string? CustomName => _customName;
     public event EventHandler<string>? LocationChanged;
     public event EventHandler? NavigationFailed;
     public event EventHandler? PinRequested;
     public event Action<Pathview, string, bool?, bool?, bool?, bool?>? BrowseLocationRequested;
     public event Action<string, string>? DirectoryRenamed;
+
+    private void CustomNameEditor_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            CommitCustomName();
+            DirectoryContent.FocusContent();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            CustomNameEditor.Text = _customName ?? string.Empty;
+            e.Handled = true;
+        }
+    }
+
+    private void CustomNameEditor_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) =>
+        CommitCustomName();
+
+    private void CommitCustomName()
+    {
+        var name = CustomNameEditor.Text.Length == 0 ? null : CustomNameEditor.Text;
+        if (string.Equals(name, _customName, StringComparison.Ordinal))
+            return;
+        _customName = name;
+        _customNameChanged?.Invoke(name);
+    }
 
     /// <summary>Navigates this Pathview, optionally applying filter settings to the browsable view.</summary>
     /// <param name="path">The destination path.</param>
@@ -378,6 +412,9 @@ public partial class Pathview : UserControl
         var fixedBadgeWidth = FixedPathBadge.Visibility == Visibility.Visible
             ? FixedPathBadge.ActualWidth + FixedPathBadge.Margin.Left + FixedPathBadge.Margin.Right
             : 0;
+        var customNameWidth = CustomNameContainer.Visibility == Visibility.Visible
+            ? CustomNameContainer.Width + CustomNameContainer.Margin.Left + CustomNameContainer.Margin.Right
+            : 0;
         var locationIconWidth = LocationIconSlot.Visibility == Visibility.Visible
             ? LocationIconSlot.Width + LocationIconSlot.Margin.Left + LocationIconSlot.Margin.Right
             : 0;
@@ -387,7 +424,7 @@ public partial class Pathview : UserControl
             : 0;
         var titlePadding = LocationLabel.Padding.Left + LocationLabel.Padding.Right;
         LocationLabel.MaxWidth = Math.Max(0,
-            LocationHeaderPanel.ActualWidth - fixedBadgeWidth - locationIconWidth - actionButtonWidth - titlePadding);
+            LocationHeaderPanel.ActualWidth - fixedBadgeWidth - customNameWidth - locationIconWidth - actionButtonWidth - titlePadding);
     }
 
     private void UpdateLocationIcon(string path)
@@ -425,6 +462,12 @@ public partial class Pathview : UserControl
             _contentViewNeedsRefresh = true;
             SynchronizeContentChangeNotifications();
             ScheduleFileSystemRefreshIfVisible();
+            if (!IsBrowsable)
+                Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+                {
+                    if (IsVisible)
+                        DirectoryContent.FocusContent();
+                });
         }
     }
 

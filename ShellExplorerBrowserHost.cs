@@ -137,6 +137,34 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
     public void RefreshContents() => RefreshCurrentView();
 
+    public bool FocusContents()
+    {
+        if (!Focus())
+            return false;
+        return TryFocusCurrentShellView();
+    }
+
+    private bool TryFocusCurrentShellView()
+    {
+        try
+        {
+            var focused = false;
+            InvokeCurrentView(view =>
+            {
+                if (view.GetWindow(out var window) >= 0 && window != IntPtr.Zero)
+                {
+                    _ = SetFocus(window);
+                    focused = true;
+                }
+            });
+            return focused;
+        }
+        catch (Exception exception) when (exception is COMException or InvalidOperationException or NotImplementedException or InvalidCastException)
+        {
+            return false;
+        }
+    }
+
     public void DeleteSelection()
     {
         InvokeCurrentViewCommand(ShellContextMenu.ShellViewSelection, "delete");
@@ -744,6 +772,8 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         {
             NavigationCompleted?.Invoke(this, path);
             ApplyViewBounds();
+            if (IsKeyboardFocusWithin)
+                TryFocusCurrentShellView();
         }));
     }
 
@@ -1158,6 +1188,9 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool DestroyWindow(IntPtr window);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SetFocus(IntPtr window);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool GetClientRect(IntPtr window, out NativeRect rectangle);

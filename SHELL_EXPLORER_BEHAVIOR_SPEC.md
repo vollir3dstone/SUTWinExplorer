@@ -82,11 +82,21 @@ when it is created and cannot be changed by the user.
   tab. Each non-browsable Pathview shows only the **Active path** tree tab.
 - [x] Each Pathview shows its location row across the full width above the
   side-by-side panes. The visible **Browse** or **Pin** button comes first; a
-  non-browsable Pathview then shows its bold **FIXED** badge. The current
-  directory's Shell icon precedes its path expression. At the far right, every
-  Pathview has an **Open in Windows Explorer** button beside the fixed-view
-  color picker; it opens a new Explorer window at that Pathview's current path.
-  The browsable Pathview has no FIXED badge or color picker. Below this row, the
+  non-browsable Pathview then shows its bold **FIXED** badge and custom-name
+  editor. An undefined name displays `(Undefined custom name)`; entering an
+  empty name stores `null`. Enter or focus loss saves changes, and Escape
+  restores the last committed name. Opening a Fixed tab and confirming its
+  name with Enter place keyboard focus in its Shell content when available,
+  not the editor; a click elsewhere keeps focus on its target. Names are stored
+  in the active profile. The editor uses the path display's font and color;
+  only the undefined-name placeholder uses a lighter gray.
+  The Fixed tab label shows the complete custom name when set; otherwise it
+  uses the shortened path. An unavailable path retains its `!` marker.
+  The current directory's Shell icon precedes its path expression. At the far
+  right, every Pathview has an **Open in Windows Explorer** button beside the
+  fixed-view color picker; it opens a new Explorer window at that Pathview's
+  current path. The browsable Pathview has no FIXED badge, name editor, or
+  color picker. Below this row, the
   tree pane is on the left and the content pane is on the right; **Hide
   directories** and **Hide internal** appear below the location row in the
   content pane.
@@ -137,8 +147,8 @@ when it is created and cannot be changed by the user.
   navigating the browsable Pathview. The **Browse** button uses the same
   activation and filter metadata but always navigates the browsable Pathview.
   Other navigation, including history, does not supply these filter values.
-- [x] Navigation in the browsable Pathview updates the address, tab title,
-  custom directory tree, and its own content view.
+- [x] Navigation in the browsable Pathview updates the address, custom
+  directory tree, and its own content view; the tab title remains **BROWSE**.
 
 ### Directory trees
 

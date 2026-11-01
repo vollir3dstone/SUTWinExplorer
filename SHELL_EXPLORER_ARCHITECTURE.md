@@ -141,8 +141,12 @@ display name may still be shown in a location label such as the address field.
 
 ### Tab header label shortening
 
-`MainWindow.GetTabLabelFromPath` builds tab labels from localized Shell display
-names and limits them to `MaxDisplayedPathLength` (currently 40 characters).
+Fixed tabs use their complete custom name as the tab label when one is set.
+Without a custom name, `MainWindow.GetTabLabelFromPath` builds the label from
+localized Shell display names and normally targets `MaxDisplayedPathLength`
+(currently 40 characters), subject to the minimum-current-name exception
+below. An unavailable path retains its `!` marker before either label. The
+tooltip continues to show the path or its failure message.
 Filesystem roots use the filesystem drive designator without a trailing
 separator (for example, `C:`), matching the address field and content-pane path
 display rather than the Shell's volume label. For other paths, the default
@@ -286,8 +290,15 @@ leading ellipsis prefix is omitted.
   resolved target path in the same way.
 - Each Pathview's location header spans the full width above its body. The
   visible **Browse** or **Pin** button is first; a non-browsable Pathview places
-  its **FIXED** badge next, followed by the current directory's Shell icon and
-  path expression. At the far right, every Pathview has a 28-by-28-DIP button
+  its **FIXED** badge and custom-name editor next, followed by the current
+  directory's Shell icon and path expression. The Pathview constructor receives
+  the initial nullable name and a name-change callback; `MainWindow` owns the
+  profile entry and saves changes. The name editor is 28 DIP high and uses the
+  path display's font and foreground. Its placeholder uses the same font with a
+  lighter gray foreground. Opening a Fixed tab or confirming its name with
+  Enter requests focus on the native Shell content when available; the host
+  retries after delayed navigation only while it still has focus. BROWSE has
+  no name editor. At the far right, every Pathview has a 28-by-28-DIP button
   for opening the current location in Windows Explorer. The main area below is
   split horizontally, with the role-specific directory-tree pane on the left
   and the content pane on the right. **Hide directories** and content **Hide

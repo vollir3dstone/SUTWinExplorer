@@ -62,6 +62,7 @@ public partial class ContentView : UserControl
     }
 
     internal bool UsesSynchronousNavigation => IsLegacyWpfFileList;
+    internal bool FocusContent() => IsLegacyWpfFileList ? FileList.Focus() : _shellBrowserHost?.FocusContents() == true;
     internal bool? HideInternalItems
     {
         get => HideInternalContentCheckBox.GetCheckBox().IsChecked;
