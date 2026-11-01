@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -31,6 +32,9 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        var version = typeof(MainWindow).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        if (!string.IsNullOrEmpty(version))
+            Title = $"{Title} v{version}";
         var application = (App)Application.Current;
         _activeProfile = application.ActiveProfile;
         _profileStore = application.ProfileStore;
