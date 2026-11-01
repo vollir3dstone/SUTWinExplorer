@@ -2,10 +2,10 @@
 param()
 
 $ErrorActionPreference = 'Stop'
-$descriptionPath = Join-Path $PSScriptRoot 'ReleaseDesription.txt'
+$descriptionPath = Join-Path $PSScriptRoot 'ReleaseDescription.txt'
 $releasePath = Join-Path $PSScriptRoot 'RELEASES.html'
 $legacyPath = Join-Path $PSScriptRoot 'RELEASES.md'
-if (-not (Test-Path -LiteralPath $descriptionPath -PathType Leaf)) { throw 'ReleaseDesription.txt was not found.' }
+if (-not (Test-Path -LiteralPath $descriptionPath -PathType Leaf)) { throw 'ReleaseDescription.txt was not found.' }
 $description = [System.IO.File]::ReadAllText($descriptionPath)
 $parts = [regex]::new("\r\n|\n|\r").Split($description, 2)
 $Version = $parts[0]

@@ -13,15 +13,15 @@ $installerRoot = Join-Path $repositoryRoot "installer"
 $outputDirectory = Join-Path $installerRoot "Release"
 $temporaryDirectory = Join-Path $installerRoot "Temp"
 $executableName = "KIS Explorer.exe"
-$versionPath = Join-Path $repositoryRoot "ReleaseDesription.txt"
+$versionPath = Join-Path $repositoryRoot "ReleaseDescription.txt"
 
 if (-not (Test-Path -LiteralPath $versionPath)) {
-    throw "ReleaseDesription.txt is missing. Add the version on its first line."
+    throw "ReleaseDescription.txt is missing. Add the version on its first line."
 }
 $versionReader = [System.IO.File]::OpenText($versionPath)
 try { $appVersion = $versionReader.ReadLine() } finally { $versionReader.Dispose() }
 if ([string]::IsNullOrWhiteSpace($appVersion)) {
-    throw "ReleaseDesription.txt must have a version on its first line."
+    throw "ReleaseDescription.txt must have a version on its first line."
 }
 $appVersion = $appVersion.Trim()
 $invalidFilenameCharacters = [System.IO.Path]::GetInvalidFileNameChars() + [char[]]"%{}"

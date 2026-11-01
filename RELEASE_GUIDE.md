@@ -6,7 +6,7 @@ Use PowerShell and Git in a Git working directory with at least one commit. Run 
 
 ## Release Description
 
-Edit [ReleaseDesription.txt](ReleaseDesription.txt) by hand. The first line is the version; all following lines are the release comment:
+Edit [ReleaseDescription.txt](ReleaseDescription.txt) by hand. The first line is the version; all following lines are the release comment:
 
 ```text
 1.2.0
@@ -20,7 +20,7 @@ Editing this file does not publish a release. Application builds and installer b
 
 ## Publish a Release
 
-1. Set the version and comment in [ReleaseDesription.txt](ReleaseDesription.txt).
+1. Set the version and comment in [ReleaseDescription.txt](ReleaseDescription.txt).
 2. Build the application and, if needed, installers as described in [BUILD_AND_RELEASE.md](BUILD_AND_RELEASE.md). Commit the description and the intended build changes.
 3. Publish the release list by running `./release.ps1` in PowerShell. The script takes no arguments and reads the current description file.
 4. Commit [RELEASES.html](RELEASES.html).

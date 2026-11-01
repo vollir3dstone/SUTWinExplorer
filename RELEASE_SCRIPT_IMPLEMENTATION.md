@@ -5,7 +5,7 @@ This document describes the implementation. For usage, see [RELEASE_GUIDE.md](RE
 ## Files and Responsibilities
 
 - [release.ps1](release.ps1) reads the release description and Git history and maintains releases and comments without modifying the description file.
-- [ReleaseDesription.txt](ReleaseDesription.txt) is edited by hand; its first line is the shared version and the remaining text is the release comment.
+- [ReleaseDescription.txt](ReleaseDescription.txt) is edited by hand; its first line is the shared version and the remaining text is the release comment.
 - [RELEASES.html](RELEASES.html) contains both the stored release data and its browser presentation.
 - [SUTWinExplorer.csproj](SUTWinExplorer.csproj) reads the version as `InformationalVersion`, suppresses the automatically appended source revision, and fails the build if the version file is missing or empty. The numeric Windows file version remains `1.0.0.0`.
 - [installer-config/build-installer.ps1](installer-config/build-installer.ps1) reads the same version for Inno Setup metadata and encodes filename-prohibited characters for the output filename.
@@ -13,7 +13,7 @@ This document describes the implementation. For usage, see [RELEASE_GUIDE.md](RE
 
 ## Release Processing
 
-The script takes no parameters. It reads [ReleaseDesription.txt](ReleaseDesription.txt) as text, splits at the first line ending, and uses the remainder as the comment, preserving subsequent line endings. A missing file, blank version, leading or trailing version whitespace, control characters, or characters that cannot be represented in XML are rejected. The comment must also contain valid XML characters. Versions are compared case-sensitively.
+The script takes no parameters. It reads [ReleaseDescription.txt](ReleaseDescription.txt) as text, splits at the first line ending, and uses the remainder as the comment, preserving subsequent line endings. A missing file, blank version, leading or trailing version whitespace, control characters, or characters that cannot be represented in XML are rejected. The comment must also contain valid XML characters. Versions are compared case-sensitively.
 
 For a new list, `git log --topo-order` reads all commits reachable from `HEAD`. If a list exists, the script reads it with `XmlDocument`, validates its release rows, and uses the first commit ID of the top release as the boundary. The ID must be a full 40- or 64-character hexadecimal hash and an ancestor of `HEAD`. Git then enumerates `<boundary>..HEAD` in topological order. Uncommitted changes and Git tags are not used.
 

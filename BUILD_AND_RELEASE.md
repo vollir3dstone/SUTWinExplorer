@@ -8,7 +8,7 @@
 The application targets `net10.0-windows` and uses WPF. The publish profiles target `win-x64`.
 The user-facing product name is `KIS Explorer`, and its publisher is `SUT`.
 The project and internal assembly retain the `SUTWinExplorer` name.
-The product version is read from the first line of [ReleaseDesription.txt](ReleaseDesription.txt). Edit the file before building; see [RELEASE_GUIDE.md](RELEASE_GUIDE.md).
+The product version is read from the first line of [ReleaseDescription.txt](ReleaseDescription.txt). Edit the file before building; see [RELEASE_GUIDE.md](RELEASE_GUIDE.md).
 
 ## Build
 
@@ -67,7 +67,7 @@ Running `dotnet publish` directly creates application builds only. It does not c
 
 - Windows x64, the .NET 10 SDK, and Inno Setup 6.
 - `ISCC.exe` must be available on `PATH` or installed in the standard Inno Setup 6 directory under `Program Files`.
-- `installer-config\installer.json` is the versioned configuration: it contains shared product metadata and a list of installer profiles. The version comes from the first line of `ReleaseDesription.txt`.
+- `installer-config\installer.json` is the versioned configuration: it contains shared product metadata and a list of installer profiles. The version comes from the first line of `ReleaseDescription.txt`.
 - `installer-config\installer.iss` is the versioned Inno Setup template. It contains the installer behavior and layout, such as the destination directory, application files, Start Menu shortcut, and optional shell integration. It is not generated from the JSON.
 - `installer-config\build-installer.ps1` orchestrates publishing, creates one complete temporary ISS script per selected profile, and invokes `ISCC.exe`.
 
@@ -138,7 +138,7 @@ For each selected profile, the script performs these steps:
 4. Prepends the shared metadata, profile ID, publish directory, installer output directory, and context-menu option as `#define` directives to the ISS template. The resulting complete per-profile ISS file is written under `installer\Temp`.
 5. Runs Inno Setup's command-line compiler (`ISCC.exe`) on that generated ISS file.
 
-The setup executable is written to `installer\Release` as `<appName> v <version> Installer <profileId>.exe`. Characters not allowed in Windows filenames are encoded in the filename; the installer metadata retains the original version. The installer installs per-user under `%LOCALAPPDATA%\Programs\<appName>`, creates a Start Menu shortcut, excludes `.pdb` files, and optionally adds the Explorer folder context-menu entry under the current user's registry hive. Inno Setup removes that entry during uninstall.
+The setup executable is written to `installer\Release` as `<appName> v<version> Installer <profileId>.exe`. Characters not allowed in Windows filenames are encoded in the filename; the installer metadata retains the original version. The installer installs per-user under `%LOCALAPPDATA%\Programs\<appName>`, creates a Start Menu shortcut, excludes `.pdb` files, and optionally adds the Explorer folder context-menu entry under the current user's registry hive. Inno Setup removes that entry during uninstall.
 
 KIS Explorer uses a new installer ID. Uninstall any earlier SUTWinExplorer installation before installing it; migration of old installations is not supported.
 

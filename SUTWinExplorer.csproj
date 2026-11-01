@@ -10,14 +10,14 @@
     <AssemblyTitle>KIS Explorer</AssemblyTitle>
     <Product>KIS Explorer</Product>
     <Company>SUT</Company>
-    <VersionFile>$(MSBuildProjectDirectory)\ReleaseDesription.txt</VersionFile>
+    <VersionFile>$(MSBuildProjectDirectory)\ReleaseDescription.txt</VersionFile>
     <InformationalVersion Condition="Exists('$(VersionFile)')">$([System.Text.RegularExpressions.Regex]::Replace($([System.IO.File]::ReadAllText('$(VersionFile)')), '[\r\n][\s\S]*$', '').Trim())</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
   <Target Name="ValidateReleaseVersion" BeforeTargets="PrepareForBuild">
-    <Error Condition="!Exists('$(VersionFile)')" Text="ReleaseDesription.txt is missing. Add the version on its first line." />
-    <Error Condition="'$(InformationalVersion)' == ''" Text="ReleaseDesription.txt must have a version on its first line." />
+    <Error Condition="!Exists('$(VersionFile)')" Text="ReleaseDescription.txt is missing. Add the version on its first line." />
+    <Error Condition="'$(InformationalVersion)' == ''" Text="ReleaseDescription.txt must have a version on its first line." />
   </Target>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">

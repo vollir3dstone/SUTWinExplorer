@@ -22,7 +22,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Could not initialize test repository.' }
     Copy-Item (Join-Path $PSScriptRoot '..\release.ps1') $directory
     $script = Join-Path $directory 'release.ps1'
-    $descriptionPath = Join-Path $directory 'ReleaseDesription.txt'
+    $descriptionPath = Join-Path $directory 'ReleaseDescription.txt'
     $releasePath = Join-Path $directory 'RELEASES.html'
     Add-TestCommit $directory 'First & <commit>'
     $longLine = 'x' * 300
@@ -70,7 +70,7 @@ try {
     $buildFixture = Join-Path $directory 'build-fixture'
     $installerFixture = Join-Path $buildFixture 'installer-config'
     New-Item -ItemType Directory -Path $installerFixture -Force | Out-Null
-    $buildDescription = Join-Path $buildFixture 'ReleaseDesription.txt'
+    $buildDescription = Join-Path $buildFixture 'ReleaseDescription.txt'
     [System.IO.File]::WriteAllText($buildDescription, "9.87`r`nRelease & <notes>`r`nSecond line")
     $dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
     if ($dotnet) {
@@ -96,6 +96,7 @@ try {
     }
     $generatedInstaller = [System.IO.File]::ReadAllText((Join-Path $buildFixture 'installer\Temp\net-included.iss'))
     Assert-True ($generatedInstaller -match '(?m)^#define AppVersion "9\.87"\r?$' -and $generatedInstaller -match '(?m)^#define FilenameVersion "9\.87"\r?$' -and $generatedInstaller -notmatch 'Release & <notes>') 'Installer did not use only the first description line.'
+    Assert-True ($generatedInstaller -match '(?m)^OutputBaseFilename=\{#AppName\} v\{#FilenameVersion\} Installer \{#ProfileId\}\r?$') 'Installer filename has unexpected version formatting.'
 
     $node = Get-Command node -ErrorAction SilentlyContinue
     if ($node) {
