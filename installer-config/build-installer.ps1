@@ -13,15 +13,17 @@ $installerRoot = Join-Path $repositoryRoot "installer"
 $outputDirectory = Join-Path $installerRoot "Release"
 $temporaryDirectory = Join-Path $installerRoot "Temp"
 $executableName = "KIS Explorer.exe"
-$versionPath = Join-Path $repositoryRoot "VERSION_READONLY"
+$versionPath = Join-Path $repositoryRoot "ReleaseDesription.txt"
 
 if (-not (Test-Path -LiteralPath $versionPath)) {
-    throw "VERSION_READONLY is missing. Set the version using the release script."
+    throw "ReleaseDesription.txt is missing. Add the version on its first line."
 }
-$appVersion = [System.IO.File]::ReadAllText($versionPath).Trim()
+$versionReader = [System.IO.File]::OpenText($versionPath)
+try { $appVersion = $versionReader.ReadLine() } finally { $versionReader.Dispose() }
 if ([string]::IsNullOrWhiteSpace($appVersion)) {
-    throw "VERSION_READONLY is empty. Set the version using the release script."
+    throw "ReleaseDesription.txt must have a version on its first line."
 }
+$appVersion = $appVersion.Trim()
 $invalidFilenameCharacters = [System.IO.Path]::GetInvalidFileNameChars() + [char[]]"%{}"
 $filenameVersion = -join @($appVersion.ToCharArray() | ForEach-Object {
     if ($_ -in $invalidFilenameCharacters) { '%' + ([int]$_).ToString('X4') } else { $_ }

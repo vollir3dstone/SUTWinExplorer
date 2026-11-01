@@ -4,36 +4,36 @@
 
 Use PowerShell and Git in a Git working directory with at least one commit. Run the commands from the project directory. A browser with JavaScript enabled can open [RELEASES.html](RELEASES.html) directly; no server is required.
 
-## Prepare a Release
+## Release Description
 
-```powershell
-.\release.ps1 "1.2.0"
+Edit [ReleaseDesription.txt](ReleaseDesription.txt) by hand. The first line is the version; all following lines are the release comment:
+
+```text
+1.2.0
+Improved profile management.
+Updated navigation.
 ```
 
-The version is a complete text string, such as `1.01` or `Preview 1`. It must be nonempty, fit on one line, and have no control characters or leading or trailing whitespace. Quote values containing spaces. Version matching is case-sensitive.
+The version is a complete text string, such as `1.01` or `Preview 1`. It must be nonempty, fit on one line, have no control characters or leading or trailing whitespace, and be valid XML text. Matching is case-sensitive. The comment may be empty and may contain multiple lines and XML-compatible special characters. It appears in the colored separator under **Commit Message**; removing it from the file clears it on the next publication.
 
-The script writes the version to `VERSION_READONLY` and updates the release list. Do not edit `VERSION_READONLY` manually: it supplies the application product version and installer version. The separate numeric Windows file version remains `1.0.0.0`.
+Editing this file does not publish a release. Application builds and installer builds use only its first line as the product version. The separate numeric Windows file version remains `1.0.0.0`.
 
-The first release includes all commits reachable from `HEAD`. Later releases include commits reachable from `HEAD` since the first commit in the top release. The previous boundary must still be an ancestor of `HEAD`. Commits follow Git's topological order, and full commit IDs identify the boundary; Git tags are neither required nor created.
+## Publish a Release
 
-Running the script with an existing version adds new commits to that release. It moves to the top, even if it was previously an older entry, and becomes the active version. A new release cannot be created without new commits. Uncommitted changes are not included; a subsequent commit containing the version file and release list appears in a later release. Commit both files together with the release.
+1. Set the version and comment in [ReleaseDesription.txt](ReleaseDesription.txt).
+2. Build the application and, if needed, installers as described in [BUILD_AND_RELEASE.md](BUILD_AND_RELEASE.md). Commit the description and the intended build changes.
+3. Publish the release list by running `./release.ps1` in PowerShell. The script takes no arguments and reads the current description file.
+4. Commit [RELEASES.html](RELEASES.html).
+5. Run `./release.ps1` again with the same description. The new list commit is added to the same version.
+6. Commit the updated release list.
 
-## Release Comments
+The last commit cannot appear in the list contained in that same commit: changing the list would change the commit itself. It is included in the next release, assuming it remains in the history. Additional commits between publications are included too. Only committed changes appear as commit entries; the script reads the description from the working tree, so commit it before publication to keep the published version and comment traceable.
 
-Add an optional description as the second argument, or use named parameters:
+The first release includes all commits reachable from `HEAD`. Later publications include commits reachable from `HEAD` since the first commit in the top release. The previous boundary must still be an ancestor of `HEAD`. Commits follow Git's topological order, and full commit IDs identify the boundary; Git tags are neither required nor created. Reusing an existing version extends that release and moves it to the top, even if it was previously an older entry.
 
-```powershell
-.\release.ps1 "1.2.0" "Improved profile management and navigation"
-.\release.ps1 -Version "1.2.0" -Comment "Release overview"
-```
+Without new commits, a changed comment can still update an existing release without reordering it. A new version cannot be published without new commits, and a repeated run with no new commits or comment change stops with an error. The script never modifies the description file.
 
-The comment appears in the colored separator under **Commit Message**. It may contain line breaks and special characters. When extending a release, omitting the comment preserves the existing one; supplying a comment replaces it. Pass an empty string to clear it:
-
-```powershell
-.\release.ps1 "1.2.0" ""
-```
-
-If there are no new commits, supplying a comment updates an existing release without changing the active version or release order. If new commits are available, the same command adds them to the specified release and makes that version active. Without new commits, omitting the comment or specifying a new version is an error.
+An installer built in step 2 cannot contain the release list produced in steps 3-6. The current installer packages the published application, not the repository's release list; distribute the list separately if needed.
 
 ## Release List
 
@@ -41,15 +41,9 @@ Each commit shows its local ISO timestamp, full message, and commit ID. The time
 
 The page title and two-row column header remain fixed at the top, and a horizontal scrollbar remains at the bottom. Each commit row repeats its version and has an alternating arrow button. Up arrows jump to the beginning of that release; down arrows jump to the beginning of the next older release and are disabled when none exists.
 
-## Migration
+## Legacy Lists
 
-If an older `RELEASES.md` exists and `RELEASES.html` does not, migrate before preparing another release:
-
-```powershell
-.\release.ps1 -Migrate
-```
-
-Migration rebuilds the list from the stored commit IDs, so the commits must still be available in Git. It does not change `VERSION_READONLY` or delete `RELEASES.md`, and it refuses to overwrite an existing HTML list.
+The parameterless script does not migrate an older `RELEASES.md`. If that file exists without `RELEASES.html`, it stops instead of silently creating a new list. Migrate the old list with the earlier migration-capable script before using this workflow.
 
 ## Build and Installers
 

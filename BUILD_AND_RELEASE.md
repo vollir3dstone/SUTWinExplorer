@@ -8,7 +8,7 @@
 The application targets `net10.0-windows` and uses WPF. The publish profiles target `win-x64`.
 The user-facing product name is `KIS Explorer`, and its publisher is `SUT`.
 The project and internal assembly retain the `SUTWinExplorer` name.
-The product version is read from `VERSION_READONLY`. Change it only with `release.ps1`; see [RELEASE_GUIDE.md](RELEASE_GUIDE.md).
+The product version is read from the first line of [ReleaseDesription.txt](ReleaseDesription.txt). Edit the file before building; see [RELEASE_GUIDE.md](RELEASE_GUIDE.md).
 
 ## Build
 
@@ -67,7 +67,7 @@ Running `dotnet publish` directly creates application builds only. It does not c
 
 - Windows x64, the .NET 10 SDK, and Inno Setup 6.
 - `ISCC.exe` must be available on `PATH` or installed in the standard Inno Setup 6 directory under `Program Files`.
-- `installer-config\installer.json` is the versioned configuration: it contains shared product metadata and a list of installer profiles. The version comes from `VERSION_READONLY`.
+- `installer-config\installer.json` is the versioned configuration: it contains shared product metadata and a list of installer profiles. The version comes from the first line of `ReleaseDesription.txt`.
 - `installer-config\installer.iss` is the versioned Inno Setup template. It contains the installer behavior and layout, such as the destination directory, application files, Start Menu shortcut, and optional shell integration. It is not generated from the JSON.
 - `installer-config\build-installer.ps1` orchestrates publishing, creates one complete temporary ISS script per selected profile, and invokes `ISCC.exe`.
 

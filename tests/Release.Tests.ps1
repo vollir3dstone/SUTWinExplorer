@@ -11,6 +11,10 @@ function Add-TestCommit([string]$directory, [string]$message, [string]$body = ''
     if ($LASTEXITCODE -ne 0) { throw 'Could not create test commit.' }
 }
 
+function Set-TestDescription([string]$path, [string]$version, [string]$comment = '') {
+    [System.IO.File]::WriteAllText($path, $version + "`n" + $comment, [System.Text.UTF8Encoding]::new($false))
+}
+
 $directory = Join-Path ([System.IO.Path]::GetTempPath()) ('kis-release-test-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $directory | Out-Null
 try {
@@ -18,7 +22,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Could not initialize test repository.' }
     Copy-Item (Join-Path $PSScriptRoot '..\release.ps1') $directory
     $script = Join-Path $directory 'release.ps1'
-    $versionPath = Join-Path $directory 'VERSION_READONLY'
+    $descriptionPath = Join-Path $directory 'ReleaseDesription.txt'
     $releasePath = Join-Path $directory 'RELEASES.html'
     Add-TestCommit $directory 'First & <commit>'
     $longLine = 'x' * 300
@@ -28,7 +32,10 @@ try {
     $seconds = [long](& git -C $directory show -s '--format=%ct' HEAD)
     $timestamp = [DateTimeOffset]::FromUnixTimeSeconds($seconds).ToLocalTime().ToString("yyyy-MM-dd'T'HH:mm:sszzz", [System.Globalization.CultureInfo]::InvariantCulture)
     $initialComment = "First release <safe> & details`nSecond line"
-    & $script '1.01' $initialComment
+    Set-TestDescription $descriptionPath '1.01' $initialComment
+    $descriptionBefore = [System.IO.File]::ReadAllText($descriptionPath)
+    & $script
+    Assert-True ([System.IO.File]::ReadAllText($descriptionPath) -ceq $descriptionBefore) 'Publishing modified the description file.'
     [xml]$list = Get-Content -LiteralPath $releasePath -Raw
     $styles = $list.SelectSingleNode('/html/head/style').InnerText
     Assert-True ($styles -match '\.commits \.message\s*\{[^}]*min-width:\s*calc\(122ch \+ 25px\)') 'Message column does not reserve 122 character widths.'
@@ -43,31 +50,52 @@ try {
     Assert-True ($list.SelectSingleNode("$root[1]/td[2]/table/tbody/tr[1]/td[2]").InnerText -ceq $message) 'Multiline commit message did not round-trip.'
     Assert-True ($list.SelectSingleNode("$root[1]/td[2]/table/tbody/tr[1]/td[3]").InnerText -ceq $firstHead) 'Newest commit must be first.'
     Assert-True ($list.SelectSingleNode("$root[1]/td[2]/table/tbody/tr[2]/td[2]").InnerText -ceq "First & <commit>`n") 'Commit message did not round-trip.'
-    & $script '1.01' 'Updated comment without commits'
+    Set-TestDescription $descriptionPath '1.01' 'Updated comment without commits'
+    & $script
     [xml]$list = Get-Content -LiteralPath $releasePath -Raw
     Assert-True ($list.SelectSingleNode("$root[1]").GetAttribute('data-release-comment') -ceq 'Updated comment without commits') 'Comment-only update failed.'
-    & $script '1.01' ''
+    Set-TestDescription $descriptionPath '1.01'
+    & $script
     [xml]$list = Get-Content -LiteralPath $releasePath -Raw
     Assert-True ($list.SelectSingleNode("$root[1]").GetAttribute('data-release-comment') -ceq '') 'Empty comment did not clear the comment.'
 
-    $legacy = [System.Xml.XmlDocument]::new()
-    $legacy.LoadXml('<table><tbody><tr><td>1.01</td><td><table><tbody></tbody></table></td></tr></tbody></table>')
-    $legacyBody = $legacy.SelectSingleNode('/table/tbody/tr/td[2]/table/tbody')
-    foreach ($commitCell in $list.SelectNodes("$root[1]/td[2]/table/tbody/tr/td[3]")) {
-        $row = $legacy.CreateElement('tr')
-        $cell = $legacy.CreateElement('td')
-        $cell.InnerText = $commitCell.InnerText
-        [void]$row.AppendChild($cell)
-        [void]$legacyBody.AppendChild($row)
-    }
-    $legacyPath = Join-Path $directory 'RELEASES.md'
-    $legacy.Save($legacyPath)
-    Remove-Item -LiteralPath $releasePath
-    & $script -Migrate
+    & git -C $directory add RELEASES.html
+    & git -C $directory -c user.name=Test -c user.email=test@example.com commit -q -m 'First release list'
+    $listCommit = (& git -C $directory rev-parse HEAD).Trim()
+    & $script
     [xml]$list = Get-Content -LiteralPath $releasePath -Raw
-    Assert-True ($list.SelectSingleNode("$root[1]/td[2]/table/tbody/tr[1]/td[2]").InnerText -ceq $message) 'Migration did not recover the full commit message.'
-    Assert-True ($list.SelectSingleNode("$root[1]/td[2]/table/tbody/tr[1]/td[3]").InnerText -ceq $firstHead) 'Migration changed the release boundary.'
-    Assert-True ((Get-Content -LiteralPath $versionPath -Raw).Trim() -ceq '1.01') 'Migration changed the version.'
+    Assert-True ($list.SelectNodes($root).Count -eq 1 -and $list.SelectSingleNode("$root[1]/td[2]/table/tbody/tr[1]/td[3]").InnerText -ceq $listCommit) 'Second publication did not add the first list commit to the same release.'
+    Assert-True ($list.SelectSingleNode("$root[1]/td[2]/table/tbody/tr[2]/td[2]").InnerText -ceq $message) 'Second publication changed the original commit message.'
+
+    $buildFixture = Join-Path $directory 'build-fixture'
+    $installerFixture = Join-Path $buildFixture 'installer-config'
+    New-Item -ItemType Directory -Path $installerFixture -Force | Out-Null
+    $buildDescription = Join-Path $buildFixture 'ReleaseDesription.txt'
+    [System.IO.File]::WriteAllText($buildDescription, "9.87`r`nRelease & <notes>`r`nSecond line")
+    $dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
+    if ($dotnet) {
+        $project = Join-Path $PSScriptRoot '..\SUTWinExplorer.csproj'
+        $buildVersion = (& $dotnet.Source msbuild $project '-getProperty:InformationalVersion' "-p:VersionFile=$buildDescription" | Out-String).Trim()
+        Assert-True ($LASTEXITCODE -eq 0 -and $buildVersion -ceq '9.87') 'MSBuild did not use only the first description line.'
+    }
+    Copy-Item (Join-Path $PSScriptRoot '..\installer-config\build-installer.ps1'), (Join-Path $PSScriptRoot '..\installer-config\installer.iss'), (Join-Path $PSScriptRoot '..\installer-config\installer.json') $installerFixture
+    & {
+        function Get-Command {
+            param([string]$Name, $ErrorAction)
+            if ($Name -eq 'ISCC.exe') { [pscustomobject]@{ Source = 'Invoke-TestCompiler' } }
+            else { Microsoft.PowerShell.Core\Get-Command @PSBoundParameters }
+        }
+        function Invoke-TestCompiler { param($Path) $script:LASTEXITCODE = 0 }
+        function dotnet {
+            $output = Join-Path $buildFixture 'bin\Release\net10.0-included'
+            New-Item -ItemType Directory -Path $output -Force | Out-Null
+            [System.IO.File]::WriteAllText((Join-Path $output 'KIS Explorer.exe'), 'test')
+            $script:LASTEXITCODE = 0
+        }
+        & (Join-Path $installerFixture 'build-installer.ps1') -ProfileId net-included
+    }
+    $generatedInstaller = [System.IO.File]::ReadAllText((Join-Path $buildFixture 'installer\Temp\net-included.iss'))
+    Assert-True ($generatedInstaller -match '(?m)^#define AppVersion "9\.87"\r?$' -and $generatedInstaller -match '(?m)^#define FilenameVersion "9\.87"\r?$' -and $generatedInstaller -notmatch 'Release & <notes>') 'Installer did not use only the first description line.'
 
     $node = Get-Command node -ErrorAction SilentlyContinue
     if ($node) {
@@ -118,68 +146,91 @@ if (scrolls.length !== 2 || scrolls[0].top !== 381 || scrolls[1].top !== 1031) p
     if ($LASTEXITCODE -ne 0) { throw 'Generated HTML did not render the header or wrap long messages correctly.' }
     }
 
+    & git -C $directory add RELEASES.html
+    & git -C $directory -c user.name=Test -c user.email=test@example.com commit -q -m 'Final release list'
+    $finalListCommit = (& git -C $directory rev-parse HEAD).Trim()
     Add-TestCommit $directory 'Third commit'
     $secondHead = (& git -C $directory rev-parse HEAD).Trim()
     $version = 'Preview "A" & <B> / 2'
     $releaseComment = 'Preview release & <details>'
-    & $script $version $releaseComment
+    Set-TestDescription $descriptionPath $version $releaseComment
+    & $script
     [xml]$list = Get-Content -LiteralPath $releasePath -Raw
     Assert-True ($list.SelectNodes($root).Count -eq 2) 'Second release missing.'
     Assert-True ($list.SelectSingleNode("$root[1]/td[1]").InnerText -ceq $version) 'Version did not round-trip.'
     Assert-True ($list.SelectSingleNode("$root[1]").GetAttribute('data-release-comment') -ceq $releaseComment) 'Second release comment was not saved.'
-    Assert-True ($list.SelectNodes("$root[1]/td[2]/table/tbody/tr").Count -eq 1) 'Second release included the wrong commits.'
+    Assert-True ($list.SelectNodes("$root[1]/td[2]/table/tbody/tr").Count -eq 2) 'Second release included the wrong commits.'
     Assert-True ($list.SelectSingleNode("$root[1]/td[2]/table/tbody/tr[1]/td[3]").InnerText -ceq $secondHead) 'Second release has the wrong boundary.'
-    Assert-True ((Get-Content -LiteralPath $versionPath -Raw).Trim() -ceq $version) 'Version file has the wrong contents.'
+    Assert-True ($list.SelectSingleNode("$root[1]/td[2]/table/tbody/tr[2]/td[3]").InnerText -ceq $finalListCommit) 'The final list commit was not included in the next release.'
+    Assert-True ([System.IO.File]::ReadAllText($descriptionPath) -ceq ($version + "`n" + $releaseComment)) 'Publishing changed the description file.'
 
     Add-TestCommit $directory 'Fourth commit'
     $fourthHead = (& git -C $directory rev-parse HEAD).Trim()
     Add-TestCommit $directory 'Fifth commit'
     $fifthHead = (& git -C $directory rev-parse HEAD).Trim()
-    & $script $version
+    & $script
     [xml]$list = Get-Content -LiteralPath $releasePath -Raw
     Assert-True ($list.SelectNodes($root).Count -eq 2) 'Extending a version created a duplicate release.'
     $extendedIds = @($list.SelectNodes("$root[1]/td[2]/table/tbody/tr/td[3]") | ForEach-Object { $_.InnerText })
-    Assert-True (($extendedIds -join ',') -ceq (@($fifthHead, $fourthHead, $secondHead) -join ',')) 'New commits were not prepended in order or existing commits changed.'
-    Assert-True ($list.SelectSingleNode("$root[1]").GetAttribute('data-release-comment') -ceq $releaseComment) 'Extending without a comment did not preserve the previous comment.'
+    Assert-True (($extendedIds -join ',') -ceq (@($fifthHead, $fourthHead, $secondHead, $finalListCommit) -join ',')) 'New commits were not prepended in order or existing commits changed.'
+    Assert-True ($list.SelectSingleNode("$root[1]").GetAttribute('data-release-comment') -ceq $releaseComment) 'Extending changed the release comment.'
 
-    & $script '1.01' 'Older release comment'
+    Set-TestDescription $descriptionPath '1.01' 'Older release comment'
+    & $script
     [xml]$list = Get-Content -LiteralPath $releasePath -Raw
     Assert-True ($list.SelectSingleNode("$root[1]/td[1]").InnerText -ceq $version -and $list.SelectSingleNode("$root[2]").GetAttribute('data-release-comment') -ceq 'Older release comment') 'Comment-only update reordered releases or did not update the older release.'
-    Assert-True ((Get-Content -LiteralPath $versionPath -Raw).Trim() -ceq $version) 'Comment-only update changed the active version.'
+    Assert-True ([System.IO.File]::ReadAllText($descriptionPath) -ceq "1.01`nOlder release comment") 'Comment-only update changed the description file.'
 
     Add-TestCommit $directory 'Sixth commit'
     $sixthHead = (& git -C $directory rev-parse HEAD).Trim()
-    & $script '1.01'
+    & $script
     [xml]$list = Get-Content -LiteralPath $releasePath -Raw
     Assert-True ($list.SelectNodes($root).Count -eq 2) 'Extending an older version created a duplicate release.'
     Assert-True ($list.SelectSingleNode("$root[1]/td[1]").InnerText -ceq '1.01') 'Extended older version did not move to the top.'
     $olderIds = @($list.SelectNodes("$root[1]/td[2]/table/tbody/tr/td[3]") | ForEach-Object { $_.InnerText })
-    Assert-True ($olderIds.Count -eq 3 -and $olderIds[0] -ceq $sixthHead -and $olderIds[1] -ceq $firstHead) 'Older version did not retain its commits.'
+    Assert-True ($olderIds.Count -eq 4 -and $olderIds[0] -ceq $sixthHead -and $olderIds[1] -ceq $listCommit -and $olderIds[2] -ceq $firstHead) 'Older version did not retain its commits.'
     Assert-True ($list.SelectSingleNode("$root[1]").GetAttribute('data-release-comment') -ceq 'Older release comment') 'Extending an older version lost its comment.'
     Assert-True ($list.SelectSingleNode("$root[2]/td[1]").InnerText -ceq $version) 'Another release changed when extending an older version.'
-    Assert-True ((Get-Content -LiteralPath $versionPath -Raw).Trim() -ceq '1.01') 'Version file was not updated when extending an older version.'
+    Assert-True ([System.IO.File]::ReadAllText($descriptionPath) -ceq "1.01`nOlder release comment") 'Extending modified the description file.'
 
     Add-TestCommit $directory 'Seventh commit'
     $seventhHead = (& git -C $directory rev-parse HEAD).Trim()
     $version = 'next'
-    & $script $version
+    Set-TestDescription $descriptionPath $version
+    & $script
     [xml]$list = Get-Content -LiteralPath $releasePath -Raw
     $newIds = @($list.SelectNodes("$root[1]/td[2]/table/tbody/tr/td[3]") | ForEach-Object { $_.InnerText })
     Assert-True ($newIds.Count -eq 1 -and $newIds[0] -ceq $seventhHead) 'The next release reused commits from an extended release.'
 
     $before = [System.IO.File]::ReadAllText($releasePath)
     foreach ($invalidVersion in @('another', '1.01', 'next')) {
+        Set-TestDescription $descriptionPath $invalidVersion $(if ($invalidVersion -ceq '1.01') { 'Older release comment' } else { '' })
+        $descriptionBefore = [System.IO.File]::ReadAllText($descriptionPath)
         $failed = $false
-        try { & $script $invalidVersion } catch { $failed = $true }
+        try { & $script } catch { $failed = $true }
         Assert-True $failed 'A release with no new commits was accepted.'
         Assert-True ([System.IO.File]::ReadAllText($releasePath) -ceq $before) 'Failed release changed the list.'
-        Assert-True ((Get-Content -LiteralPath $versionPath -Raw).Trim() -ceq $version) 'Failed release changed the version.'
+        Assert-True ([System.IO.File]::ReadAllText($descriptionPath) -ceq $descriptionBefore) 'Failed release changed the description.'
     }
+
+    Set-TestDescription $descriptionPath '' 'A comment cannot replace the first-line version'
+    $failed = $false
+    try { & $script } catch { $failed = $true }
+    Assert-True $failed 'A description with an empty first line was accepted.'
+    $failed = $false
+    try { & $script -Version '1.01' } catch { $failed = $true }
+    Assert-True $failed 'A release parameter was accepted.'
+    Remove-Item -LiteralPath $descriptionPath
+    $failed = $false
+    try { & $script } catch { $failed = $true }
+    Assert-True $failed 'A missing description file was accepted.'
+    Assert-True ([System.IO.File]::ReadAllText($releasePath) -ceq $before) 'Invalid descriptions changed the release list.'
 
     & git -C $directory checkout --orphan unrelated -q
     Add-TestCommit $directory 'Unrelated history'
     $failed = $false
-    try { & $script 'unrelated' } catch { $failed = $true }
+    Set-TestDescription $descriptionPath 'unrelated'
+    try { & $script } catch { $failed = $true }
     Assert-True $failed 'A release with an unrelated previous commit was accepted.'
     Assert-True ([System.IO.File]::ReadAllText($releasePath) -ceq $before) 'Unrelated history changed the list.'
     Write-Host 'Release tests passed.'

@@ -1,31 +1,22 @@
-[CmdletBinding(DefaultParameterSetName = 'Release')]
-param(
-    [Parameter(Mandatory = $true, Position = 0, ParameterSetName = 'Release')]
-    [string]$Version,
-    [Parameter(Position = 1, ParameterSetName = 'Release')]
-    [AllowEmptyString()]
-    [string]$Comment,
-    [Parameter(Mandatory = $true, ParameterSetName = 'Migrate')]
-    [switch]$Migrate
-)
+[CmdletBinding()]
+param()
 
 $ErrorActionPreference = 'Stop'
-$versionPath = Join-Path $PSScriptRoot 'VERSION_READONLY'
+$descriptionPath = Join-Path $PSScriptRoot 'ReleaseDesription.txt'
 $releasePath = Join-Path $PSScriptRoot 'RELEASES.html'
 $legacyPath = Join-Path $PSScriptRoot 'RELEASES.md'
-$commentSpecified = $PSBoundParameters.ContainsKey('Comment')
-
-if (-not $Migrate) {
-    if ([string]::IsNullOrWhiteSpace($Version) -or $Version -cne $Version.Trim() -or $Version -match '[\x00-\x1f\x7f]') {
-        throw 'The version must be a non-empty, single-line string without leading or trailing whitespace or control characters.'
-    }
-    try { [void][System.Xml.XmlConvert]::VerifyXmlChars($Version) }
-    catch { throw 'The version contains characters that cannot be stored in the release list.' }
-    if ($commentSpecified) {
-        try { [void][System.Xml.XmlConvert]::VerifyXmlChars($Comment) }
-        catch { throw 'The comment contains characters that cannot be stored in the release list.' }
-    }
+if (-not (Test-Path -LiteralPath $descriptionPath -PathType Leaf)) { throw 'ReleaseDesription.txt was not found.' }
+$description = [System.IO.File]::ReadAllText($descriptionPath)
+$parts = [regex]::new("\r\n|\n|\r").Split($description, 2)
+$Version = $parts[0]
+$Comment = if ($parts.Count -gt 1) { $parts[1] } else { '' }
+if ([string]::IsNullOrWhiteSpace($Version) -or $Version -cne $Version.Trim() -or $Version -match '[\x00-\x1f\x7f]') {
+    throw 'The version must be a non-empty, single-line string without leading or trailing whitespace or control characters.'
 }
+try { [void][System.Xml.XmlConvert]::VerifyXmlChars($Version) }
+catch { throw 'The version contains characters that cannot be stored in the release list.' }
+try { [void][System.Xml.XmlConvert]::VerifyXmlChars($Comment) }
+catch { throw 'The comment contains characters that cannot be stored in the release list.' }
 
 function Get-CommitDetails([string]$commitId) {
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
@@ -263,23 +254,7 @@ function New-ReleaseRow($document, [string]$releaseVersion, [string[]]$commitIds
 }
 
 $existingRelease = $null
-$updateVersion = $false
-if ($Migrate) {
-    if (Test-Path -LiteralPath $releasePath) { throw 'RELEASES.html already exists; migration would overwrite it.' }
-    if (-not (Test-Path -LiteralPath $legacyPath)) { throw 'RELEASES.md was not found.' }
-    $legacy = Read-ReleaseXml $legacyPath
-    $legacyReleases = @($legacy.SelectNodes('/table/tbody/tr'))
-    if ($legacyReleases.Count -eq 0) { throw 'RELEASES.md has an invalid or empty release table.' }
-    $document = New-ReleaseDocument
-    $body = $document.SelectSingleNode('/html/body/main/div/table/tbody')
-    foreach ($legacyRelease in $legacyReleases) {
-        $cells = @($legacyRelease.SelectNodes('./td'))
-        $commitCells = @($legacyRelease.SelectNodes('./td[2]/table/tbody/tr/td[1]'))
-        if ($cells.Count -ne 2 -or $commitCells.Count -eq 0) { throw 'RELEASES.md has an invalid release entry.' }
-        $commitIds = @($commitCells | ForEach-Object { $_.InnerText })
-        [void]$body.AppendChild((New-ReleaseRow $document $cells[0].InnerText $commitIds))
-    }
-} elseif (Test-Path -LiteralPath $releasePath) {
+if (Test-Path -LiteralPath $releasePath) {
     $document = Read-ReleaseXml $releasePath
     $body = $document.SelectSingleNode('/html/body/main/div/table/tbody')
     $releases = @($document.SelectNodes('/html/body/main/div/table/tbody/tr'))
@@ -298,35 +273,34 @@ if ($Migrate) {
     if ($LASTEXITCODE -ne 0) { throw 'The latest release commit is not an ancestor of HEAD.' }
     $range = "$previousCommit..HEAD"
 } else {
-    if (Test-Path -LiteralPath $legacyPath) { throw 'RELEASES.md exists. Run release.ps1 -Migrate before preparing a new release.' }
+    if (Test-Path -LiteralPath $legacyPath) { throw 'RELEASES.md exists but RELEASES.html is missing; migrate the legacy list before publishing.' }
     $document = New-ReleaseDocument
     $body = $document.SelectSingleNode('/html/body/main/div/table/tbody')
     $range = 'HEAD'
 }
 
-if (-not $Migrate) {
-    $lines = @(& git -C $PSScriptRoot log --topo-order '--format=%H' $range)
-    if ($LASTEXITCODE -ne 0) { throw 'Could not read the Git history.' }
-    if ($lines.Count -eq 0) {
-        if (-not $existingRelease -or -not $commentSpecified) { throw 'There are no new commits to include in a release.' }
+$lines = @(& git -C $PSScriptRoot log --topo-order '--format=%H' $range)
+if ($LASTEXITCODE -ne 0) { throw 'Could not read the Git history.' }
+if ($lines.Count -eq 0) {
+    if (-not $existingRelease -or $existingRelease.GetAttribute('data-release-comment') -ceq $Comment) {
+        throw 'There are no new commits or comment changes to publish.'
+    }
+    $targetRelease = $existingRelease
+} else {
+    $newRelease = New-ReleaseRow $document $Version $lines
+    if ($existingRelease) {
+        $existingCommits = $existingRelease.SelectSingleNode('./td[2]/table/tbody')
+        $newCommits = @($newRelease.SelectNodes('./td[2]/table/tbody/tr'))
+        for ($index = $newCommits.Count - 1; $index -ge 0; $index--) {
+            [void]$existingCommits.PrependChild($newCommits[$index])
+        }
         $targetRelease = $existingRelease
     } else {
-        $newRelease = New-ReleaseRow $document $Version $lines
-        if ($existingRelease) {
-            $existingCommits = $existingRelease.SelectSingleNode('./td[2]/table/tbody')
-            $newCommits = @($newRelease.SelectNodes('./td[2]/table/tbody/tr'))
-            for ($index = $newCommits.Count - 1; $index -ge 0; $index--) {
-                [void]$existingCommits.PrependChild($newCommits[$index])
-            }
-            $targetRelease = $existingRelease
-        } else {
-            $targetRelease = $newRelease
-        }
-        [void]$body.PrependChild($targetRelease)
-        $updateVersion = $true
+        $targetRelease = $newRelease
     }
-    if ($commentSpecified) { $targetRelease.SetAttribute('data-release-comment', $Comment) }
+    [void]$body.PrependChild($targetRelease)
 }
+$targetRelease.SetAttribute('data-release-comment', $Comment)
 
 $writerSettings = [System.Xml.XmlWriterSettings]::new()
 $writerSettings.OmitXmlDeclaration = $true
@@ -337,31 +311,14 @@ $output = [System.Text.StringBuilder]::new()
 $writer = [System.Xml.XmlWriter]::Create($output, $writerSettings)
 try { $document.Save($writer) } finally { $writer.Dispose() }
 $encoding = [System.Text.UTF8Encoding]::new($false)
-$previousVersion = if (Test-Path -LiteralPath $versionPath) { [System.IO.File]::ReadAllBytes($versionPath) } else { $null }
-$temporaryVersion = Join-Path $PSScriptRoot ('.version-' + [guid]::NewGuid().ToString('N') + '.tmp')
 $temporaryRelease = Join-Path $PSScriptRoot ('.releases-' + [guid]::NewGuid().ToString('N') + '.tmp')
-$versionBackup = $temporaryVersion + '.bak'
 $releaseBackup = $temporaryRelease + '.bak'
-$versionUpdated = $false
 try {
     [System.IO.File]::WriteAllText($temporaryRelease, $output.ToString() + "`n", $encoding)
-    if ($updateVersion) {
-        [System.IO.File]::WriteAllText($temporaryVersion, $Version + "`n", $encoding)
-        if (Test-Path -LiteralPath $versionPath) { [System.IO.File]::Replace($temporaryVersion, $versionPath, $versionBackup) }
-        else { [System.IO.File]::Move($temporaryVersion, $versionPath) }
-        $versionUpdated = $true
-    }
     if (Test-Path -LiteralPath $releasePath) { [System.IO.File]::Replace($temporaryRelease, $releasePath, $releaseBackup) }
     else { [System.IO.File]::Move($temporaryRelease, $releasePath) }
-} catch {
-    if ($versionUpdated) {
-        if ($null -ne $previousVersion) { [System.IO.File]::WriteAllBytes($versionPath, $previousVersion) }
-        else { Remove-Item -LiteralPath $versionPath -ErrorAction SilentlyContinue }
-    }
-    throw
 } finally {
-    Remove-Item -LiteralPath $temporaryVersion, $temporaryRelease, $versionBackup, $releaseBackup -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $temporaryRelease, $releaseBackup -ErrorAction SilentlyContinue
 }
-if ($Migrate) { Write-Host "Migrated $($legacyReleases.Count) release(s) to RELEASES.html." }
-elseif ($updateVersion) { Write-Host "Prepared version '$Version' with $($lines.Count) commit(s)." }
+if ($lines.Count -gt 0) { Write-Host "Published version '$Version' with $($lines.Count) commit(s)." }
 else { Write-Host "Updated the comment for version '$Version'." }
