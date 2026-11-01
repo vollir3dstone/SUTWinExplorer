@@ -79,7 +79,8 @@ table { border-collapse: collapse; }
 .releases { width: max-content; min-width: 100%; table-layout: auto; background: white; }
 .releases th, .releases td { border: 1px solid #d5dfdb; text-align: left; vertical-align: top; }
 .releases th { background: #e5eeea; color: #304c46; font-size: 13px; padding: 10px 12px; }
-.releases > thead { display: none; }
+.releases thead { display: none; }
+.releases .commits thead { display: table-header-group; }
 .releases .version { width: 65px; overflow-wrap: anywhere; font-weight: 600; padding: 12px; }
 .releases .changes { padding: 0; }
 .commits { width: max-content; min-width: 100%; table-layout: fixed; }
@@ -127,7 +128,7 @@ document.querySelectorAll('.commits thead th').forEach(function (cell) { cell.te
 const surface = document.getElementById('table-scroll');
 const scrollbar = document.getElementById('bottom-scroll');
 const scrollWidth = document.getElementById('scroll-width');
-const pageTitle = document.querySelector('body > header');
+const pageTitle = document.querySelector('body header');
 const stickyHeader = document.createElement('div');
 stickyHeader.id = 'sticky-header';
 const headerTrack = document.createElement('div');
@@ -256,6 +257,10 @@ function New-ReleaseRow($document, [string]$releaseVersion, [string[]]$commitIds
 $existingRelease = $null
 if (Test-Path -LiteralPath $releasePath) {
     $document = Read-ReleaseXml $releasePath
+    $style = $document.SelectSingleNode('/html/head/style')
+    $script = $document.SelectSingleNode('/html/body/script')
+    if ($style) { $style.InnerText = $style.InnerText.Replace('.releases > thead { display: none; }', ".releases thead { display: none; }`n.releases .commits thead { display: table-header-group; }") }
+    if ($script) { $script.InnerText = $script.InnerText.Replace("document.querySelector('body > header')", "document.querySelector('body header')") }
     $body = $document.SelectSingleNode('/html/body/main/div/table/tbody')
     $releases = @($document.SelectNodes('/html/body/main/div/table/tbody/tr'))
     if (-not $body -or $releases.Count -eq 0) { throw 'RELEASES.html has an invalid or empty release table.' }

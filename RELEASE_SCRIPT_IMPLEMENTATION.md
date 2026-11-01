@@ -29,6 +29,8 @@ The saved document is both browser-renderable HTML and XML. DTD processing is pr
 
 The template, CSS, and JavaScript live in `New-ReleaseDocument`. Existing HTML is read and extended rather than replaced with the current template, so presentation changes must be applied to both the template and an existing release list. Template line endings are normalized before XML parsing; the XML writer entitizes newlines where necessary to preserve embedded text and attributes.
 
+Browsers do not decode XML entities inside `style` and `script` elements. The embedded selectors therefore avoid characters that the XML writer escapes. When an older list is updated, the script replaces the former affected selectors so they remain usable after serialization. Tests compare the browser-visible raw text with the XML text for both blocks.
+
 In the browser, JavaScript clears the per-release table headings, then copies the comment into the colored separator's `Commit Message` cell using `textContent`. This displays literal text, including line breaks, rather than interpreting HTML. A release without a comment has an empty separator.
 
 JavaScript also wraps commit messages for display only. It preserves existing line breaks and limits each displayed line, including markers, to 120 Unicode code points. Inserted breaks have an ellipsis at the end of one line and the beginning of the next. The message column reserves at least 122 monospace character widths plus cell padding and borders; the stored message is unchanged.

@@ -15,6 +15,15 @@ function Set-TestDescription([string]$path, [string]$version, [string]$comment =
     [System.IO.File]::WriteAllText($path, $version + "`n" + $comment, [System.Text.UTF8Encoding]::new($false))
 }
 
+function Assert-BrowserContent([string]$path) {
+    $html = [System.IO.File]::ReadAllText($path)
+    [xml]$document = $html
+    foreach ($entry in @(@('style', '/html/head/style'), @('script', '/html/body/script'))) {
+        $match = [regex]::Match($html, '(?s)<' + $entry[0] + '>(.*?)</' + $entry[0] + '>')
+        Assert-True ($match.Success -and $match.Groups[1].Value -ceq $document.SelectSingleNode($entry[1]).InnerText) "Embedded $($entry[0]) contains XML escapes that browsers do not decode."
+    }
+}
+
 $directory = Join-Path ([System.IO.Path]::GetTempPath()) ('kis-release-test-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $directory | Out-Null
 try {
@@ -36,6 +45,7 @@ try {
     $descriptionBefore = [System.IO.File]::ReadAllText($descriptionPath)
     & $script
     Assert-True ([System.IO.File]::ReadAllText($descriptionPath) -ceq $descriptionBefore) 'Publishing modified the description file.'
+    Assert-BrowserContent $releasePath
     [xml]$list = Get-Content -LiteralPath $releasePath -Raw
     $styles = $list.SelectSingleNode('/html/head/style').InnerText
     Assert-True ($styles -match '\.commits \.message\s*\{[^}]*min-width:\s*calc\(122ch \+ 25px\)') 'Message column does not reserve 122 character widths.'
@@ -59,11 +69,18 @@ try {
     [xml]$list = Get-Content -LiteralPath $releasePath -Raw
     Assert-True ($list.SelectSingleNode("$root[1]").GetAttribute('data-release-comment') -ceq '') 'Empty comment did not clear the comment.'
 
+    $legacyStyle = $list.SelectSingleNode('/html/head/style')
+    $legacyStyle.InnerText = $legacyStyle.InnerText.Replace(".releases thead { display: none; }`n.releases .commits thead { display: table-header-group; }", '.releases > thead { display: none; }')
+    $legacyScript = $list.SelectSingleNode('/html/body/script')
+    $legacyScript.InnerText = $legacyScript.InnerText.Replace("document.querySelector('body header')", "document.querySelector('body > header')")
+    $list.Save($releasePath)
     & git -C $directory add RELEASES.html
     & git -C $directory -c user.name=Test -c user.email=test@example.com commit -q -m 'First release list'
     $listCommit = (& git -C $directory rev-parse HEAD).Trim()
     & $script
+    Assert-BrowserContent $releasePath
     [xml]$list = Get-Content -LiteralPath $releasePath -Raw
+    Assert-True ($list.SelectSingleNode('/html/head/style').InnerText.Contains('.releases .commits thead { display: table-header-group; }') -and $list.SelectSingleNode('/html/body/script').InnerText.Contains("document.querySelector('body header')")) 'Existing release presentation was not repaired.'
     Assert-True ($list.SelectNodes($root).Count -eq 1 -and $list.SelectSingleNode("$root[1]/td[2]/table/tbody/tr[1]/td[3]").InnerText -ceq $listCommit) 'Second publication did not add the first list commit to the same release.'
     Assert-True ($list.SelectSingleNode("$root[1]/td[2]/table/tbody/tr[2]/td[2]").InnerText -ceq $message) 'Second publication changed the original commit message.'
 
@@ -127,7 +144,7 @@ const table = { tBodies: [{ rows: releases }], querySelectorAll: () => heading.c
 let fixedHeader;
 const surface = { scrollWidth: 1580, clientWidth: 900, scrollLeft: 0, addEventListener() {}, querySelector: () => table, getBoundingClientRect: () => ({ left: 24, width: 900 }), parentNode: { insertBefore: header => { fixedHeader = header; } } };
 const elements = { 'table-scroll': surface, 'bottom-scroll': { clientWidth: 900, scrollLeft: 0, addEventListener() {} }, 'scroll-width': { style: {} } };
-const document = { body: { style: {} }, querySelector: () => ({ offsetHeight: 93 }), querySelectorAll: selector => selector === '.commits tbody .message' ? [cell] : headings, getElementById: name => elements[name], createElement: element };
+const document = { body: { style: {} }, querySelector: selector => { if (selector !== 'body header') throw new Error('Invalid page title selector: ' + selector); return { offsetHeight: 93 }; }, querySelectorAll: selector => selector === '.commits tbody .message' ? [cell] : headings, getElementById: name => elements[name], createElement: element };
 const scrolls = [];
 vm.runInNewContext(script, { document, window: { addEventListener() {}, scrollBy: value => scrolls.push(value) } });
 const lines = cell.textContent.split('\n');
