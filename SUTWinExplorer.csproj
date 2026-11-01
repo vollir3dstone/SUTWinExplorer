@@ -10,7 +10,15 @@
     <AssemblyTitle>KIS Explorer</AssemblyTitle>
     <Product>KIS Explorer</Product>
     <Company>SUT</Company>
+    <VersionFile>$(MSBuildProjectDirectory)\VERSION_READONLY</VersionFile>
+    <InformationalVersion Condition="Exists('$(VersionFile)')">$([System.IO.File]::ReadAllText('$(VersionFile)').Trim())</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
+
+  <Target Name="ValidateReleaseVersion" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(VersionFile)')" Text="VERSION_READONLY is missing. Set the version using the release script." />
+    <Error Condition="'$(InformationalVersion)' == ''" Text="VERSION_READONLY is empty. Set the version using the release script." />
+  </Target>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <OutputPath>bin\Release\net10.0-raw\</OutputPath>

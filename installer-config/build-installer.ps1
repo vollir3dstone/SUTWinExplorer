@@ -13,13 +13,27 @@ $installerRoot = Join-Path $repositoryRoot "installer"
 $outputDirectory = Join-Path $installerRoot "Release"
 $temporaryDirectory = Join-Path $installerRoot "Temp"
 $executableName = "KIS Explorer.exe"
+$versionPath = Join-Path $repositoryRoot "VERSION_READONLY"
+
+if (-not (Test-Path -LiteralPath $versionPath)) {
+    throw "VERSION_READONLY is missing. Set the version using the release script."
+}
+$appVersion = [System.IO.File]::ReadAllText($versionPath).Trim()
+if ([string]::IsNullOrWhiteSpace($appVersion)) {
+    throw "VERSION_READONLY is empty. Set the version using the release script."
+}
+$invalidFilenameCharacters = [System.IO.Path]::GetInvalidFileNameChars() + [char[]]"%{}"
+$filenameVersion = -join @($appVersion.ToCharArray() | ForEach-Object {
+    if ($_ -in $invalidFilenameCharacters) { '%' + ([int]$_).ToString('X4') } else { $_ }
+})
+$innoVersion = $appVersion.Replace('"', '""').Replace('{', '{{')
 
 $config = Get-Content -Raw -Path $ConfigPath | ConvertFrom-Json
 if ($config._type -ne "installer_profiles") {
     throw "The configuration _type must be 'installer_profiles'."
 }
 
-foreach ($requiredProperty in @("appName", "appVersion", "publisher", "profiles")) {
+foreach ($requiredProperty in @("appName", "publisher", "profiles")) {
     if (-not $config.PSObject.Properties[$requiredProperty]) {
         throw "Missing required configuration property '$requiredProperty'."
     }
@@ -92,7 +106,8 @@ foreach ($profile in $profiles) {
     $generatedScriptPath = Join-Path $temporaryDirectory "$($profile.profileId).iss"
     $definitions = @(
         "#define AppName `"$($config.appName)`""
-        "#define AppVersion `"$($config.appVersion)`""
+        "#define AppVersion `"$innoVersion`""
+        "#define FilenameVersion `"$filenameVersion`""
         "#define AppPublisher `"$($config.publisher)`""
         "#define AppExeName `"$executableName`""
         "#define ProfileId `"$($profile.profileId)`""

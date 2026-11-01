@@ -1,7 +1,6 @@
 {
   "_type": "installer_profiles",
   "appName": "KIS Explorer",
-  "appVersion": "1.0.0",
   "publisher": "SUT",
   "profiles": [
     {
