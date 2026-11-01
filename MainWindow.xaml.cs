@@ -33,6 +33,7 @@ public partial class MainWindow : Window
         var application = (App)Application.Current;
         _activeProfile = application.ActiveProfile;
         _profileStore = application.ProfileStore;
+        ProfileNameLabel.Text = _activeProfile.ProfileName;
         SourceInitialized += MainWindow_SourceInitialized;
         Closed += MainWindow_Closed;
         AddPaneview(GetInitialDirectory(), isBrowsable: true);

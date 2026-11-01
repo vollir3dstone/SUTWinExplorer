@@ -50,6 +50,8 @@ when it is created and cannot be changed by the user.
   Fixed tabs. Fixed tabs are saved on successful opening and removed from the
   profile on explicit close; unavailable locations remain marked and stored.
   BROWSE stays selected at startup, and virtual **This PC** cannot be pinned.
+  The active profile icon and name appear at the left of the top toolbar before
+  the navigation buttons; the name uses the same font as the path display.
   Only one KIS Explorer instance runs on the machine. Profile configuration
   and acceptance checks are specified in [Configuration.md](Configuration.md).
 - [x] The application starts with exactly one browsable Pathview in the first

@@ -12,8 +12,10 @@ application is already running and exits; its command-line path is not forwarded
 
 The application always has one active profile during normal operation. The
 internal model allows multiple profiles later, but this version loads only
-`default`, activates it automatically, and provides no profile selection or
-profile-name display. Its file is:
+`default` and activates it automatically. The active profile icon and name
+appear at the left of the top toolbar before the navigation buttons; profile
+selection is not yet available.
+Its file is:
 
 ```text
 %APPDATA%\KIS Explorer\Profile „default“.kisexplorer.json
@@ -73,7 +75,8 @@ them with an empty profile.
 ## Acceptance checks
 
 1. On a clean configuration, start the app and check the empty `default` file,
-   BROWSE selection, filename, and valid JSON.
+  BROWSE selection, filename, valid JSON, and the active profile name before
+  the path editor.
 2. Pin two folders, confirm their entries and `Name: null`, restart, and
    confirm both Fixed tabs return in order with default settings and BROWSE
    selected. Pin an existing path again and confirm no duplicate is added.
