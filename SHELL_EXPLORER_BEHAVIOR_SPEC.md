@@ -56,7 +56,10 @@ when it is created and cannot be changed by the user.
   and acceptance checks are specified in [Configuration.md](Configuration.md).
 - [x] The profile icon toggles between TabsView and ProfilesView. A single
   profile-list selection displays its contents; double-click activates it and
-  returns to TabsView with its Fixed tabs. See [ProfilesView.md](ProfilesView.md).
+  returns to TabsView with its Fixed tabs. ProfilesView supports creating,
+  renaming, and confirmed deletion; it activates a newly created profile and
+  falls back to `default` when the active profile is deleted. `default` cannot
+  be renamed or deleted. See [ProfilesView.md](ProfilesView.md).
 - [x] The application starts with exactly one browsable Pathview in the first
   tab. Its tab title is **BROWSE**, independent of its current location, and it
   cannot be closed.

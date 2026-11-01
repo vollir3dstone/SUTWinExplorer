@@ -6,7 +6,19 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <TextBlock Text="Profiles" FontSize="16" FontWeight="SemiBold" Margin="8,8,8,12" />
+        <StackPanel Orientation="Horizontal" Margin="8,8,8,12">
+            <TextBlock Text="Profiles" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,0" />
+            <Button x:Name="NewProfileButton" Content="New" Style="{StaticResource ContentPaneButtonStyle}"
+                Padding="10,1" Margin="0,0,8,0" Click="NewProfileButton_Click" />
+            <Border Background="#E1E4E7" Padding="6,3" Margin="0,0,8,0"
+                    HorizontalAlignment="Left" VerticalAlignment="Center">
+                <TextBlock Text="FOR SELECTED:" FontWeight="Bold" Foreground="#4E5963" />
+            </Border>
+            <Button x:Name="EditProfileButton" Content="Edit" Style="{StaticResource ContentPaneButtonStyle}"
+                Padding="10,1" Margin="0,0,8,0" Click="EditProfileButton_Click" />
+            <Button x:Name="DeleteProfileButton" Content="Delete" Style="{StaticResource ContentPaneButtonStyle}"
+                Padding="10,1" Click="DeleteProfileButton_Click" />
+        </StackPanel>
         <Grid Grid.Row="1" Margin="8,0,8,8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="300" MinWidth="160" />
@@ -36,6 +48,8 @@
                            Source="/Assets/profile 24.png" />
                     <TextBox Grid.Column="1" x:Name="ProfileNameEditor" Padding="4,1"
                              VerticalAlignment="Center" IsReadOnly="True"
+                             TextChanged="ProfileNameEditor_TextChanged"
+                             PreviewKeyDown="ProfileNameEditor_PreviewKeyDown"
                              AutomationProperties.Name="Selected profile name" />
                 </Grid>
                 <DataGrid Grid.Row="1" x:Name="PathviewsTable"

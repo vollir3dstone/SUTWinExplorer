@@ -13,8 +13,8 @@ application is already running and exits; its command-line path is not forwarded
 The application always has one active profile during normal operation. It
 loads and activates `default` at startup. The active profile icon and name
 appear at the left of the top toolbar before the navigation buttons. The icon
-opens [ProfilesView](ProfilesView.md), where other existing profiles can be
-inspected and activated. The default profile file is:
+opens [ProfilesView](ProfilesView.md), where profiles can be created,
+renamed, deleted, inspected, and activated. The default profile file is:
 
 ```text
 %APPDATA%\KIS Explorer\Profile „default“.kisexplorer.json
@@ -47,6 +47,15 @@ and normalized paths must not be duplicated case-insensitively. Additional
 JSON properties are retained when the profile is saved. Invalid or unreadable
 profiles are reported and left untouched; the application does not replace
 them with an empty profile.
+
+Profile names cannot contain Windows-invalid filename characters. The name
+`new` is reserved for an unsaved draft, and names must be unique without regard
+to case; changing only the case of an existing profile name is allowed. The
+editor trims surrounding whitespace on confirmation. The `default` profile
+cannot be renamed or deleted. Renaming updates the filename and JSON name
+without discarding Pathviews or additional fields; deleting the active profile
+activates `default`. Creating a profile activates it with only BROWSE, provided
+the previous active profile can be saved.
 
 ## Activation and synchronization
 

@@ -61,12 +61,46 @@ try {
     $otherStore = $constructor.Invoke([object[]] @([string] $directory, 'other'))
     $otherProfile = Invoke-Store $otherStore 'LoadOrCreate'
     Assert-True ($otherProfile.ProfileName -eq 'other' -and (Test-Path -LiteralPath (Join-Path $directory "Profile $([char]0x201e)other$([char]0x201c).kisexplorer.json"))) 'A second profile could not be stored independently.'
+    $otherPath = Join-Path $directory "Profile $([char]0x201e)other$([char]0x201c).kisexplorer.json"
+    $otherJson = Get-Content -LiteralPath $otherPath -Raw | ConvertFrom-Json -AsHashtable
+    $otherJson.FutureSetting = @{ value = 42 }
+    $otherJson.Pathviews = @($json.Pathviews[0])
+    $otherJson | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $otherPath -Encoding utf8
+    $otherProfile = Invoke-Store $otherStore 'Load'
+    $beforeOther = [System.IO.File]::ReadAllText($otherPath)
+    $failed = $false
+    try { Invoke-Store $otherStore 'Create' @($otherProfile) } catch { $failed = $true }
+    Assert-True ($failed -and [System.IO.File]::ReadAllText($otherPath) -ceq $beforeOther) 'Creating an existing profile overwrote it.'
     $names = @(Invoke-Store $store 'GetProfileNames')
     Assert-True ($names.Count -eq 2 -and 'default' -in $names -and 'other' -in $names) 'Profile discovery did not return both profile names.'
     $missingStore = Invoke-Store $store 'ForProfile' @('missing')
     $failed = $false
     try { Invoke-Store $missingStore 'Load' } catch { $failed = $true }
     Assert-True ($failed -and @(Invoke-Store $store 'GetProfileNames').Count -eq 2) 'Loading a missing profile unexpectedly created it.'
+
+    $failed = $false
+    try { Invoke-Store $store 'Delete' } catch { $failed = $true }
+    Assert-True ($failed -and (Test-Path -LiteralPath $filePath)) 'The default profile could be deleted.'
+    $failed = $false
+    try { Invoke-Store $store 'Rename' @($profile, 'renamed-default') } catch { $failed = $true }
+    Assert-True ($failed -and (Test-Path -LiteralPath $filePath)) 'The default profile could be renamed.'
+
+    $failed = $false
+    try { Invoke-Store $otherStore 'Rename' @($otherProfile, 'default') } catch { $failed = $true }
+    Assert-True ($failed -and $otherProfile.ProfileName -eq 'other' -and (Test-Path -LiteralPath $filePath)) 'Renaming overwrote an existing profile.'
+    $failed = $false
+    try { Invoke-Store $otherStore 'Rename' @($otherProfile, 'new') } catch { $failed = $true }
+    Assert-True ($failed -and $otherProfile.ProfileName -eq 'other') 'The reserved name was accepted.'
+
+    $otherStore = Invoke-Store $otherStore 'Rename' @($otherProfile, 'renamed')
+    Assert-True ($otherProfile.ProfileName -eq 'renamed' -and (Invoke-Store $otherStore 'Load').ProfileName -eq 'renamed') 'Profile rename did not update the filename and JSON name.'
+    $renamedPath = Join-Path $directory "Profile $([char]0x201e)renamed$([char]0x201c).kisexplorer.json"
+    $renamedJson = Get-Content -LiteralPath $renamedPath -Raw | ConvertFrom-Json -AsHashtable
+    Assert-True ($renamedJson.FutureSetting.value -eq 42 -and $renamedJson.Pathviews[0].FuturePathviewSetting -eq 'kept') 'Profile rename lost Pathviews or unknown properties.'
+    $otherStore = Invoke-Store $otherStore 'Rename' @($otherProfile, 'RENAMED')
+    Assert-True ($otherProfile.ProfileName -eq 'RENAMED' -and (Invoke-Store $otherStore 'Load').ProfileName -eq 'RENAMED') 'Case-only profile rename failed.'
+    Invoke-Store $otherStore 'Delete'
+    Assert-True (@(Invoke-Store $store 'GetProfileNames').Count -eq 1) 'Deleted profile remains in discovery.'
 
     $savedPath = $json.Pathviews[0].Path
     $json.Pathviews[0].Path = '::{20D04FE0-3AEA-1069-A2D8-08002B30309D}'

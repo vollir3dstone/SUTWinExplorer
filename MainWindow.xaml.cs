@@ -37,6 +37,10 @@ public partial class MainWindow : Window
         ProfileNameLabel.Text = _activeProfile.ProfileName;
         ProfilesPane.ProfileSelected += ProfilesPane_ProfileSelected;
         ProfilesPane.ProfileActivationRequested += ProfilesPane_ProfileActivationRequested;
+        ProfilesPane.ProfileCreateRequested += ProfilesPane_ProfileCreateRequested;
+        ProfilesPane.ProfileRenameRequested += ProfilesPane_ProfileRenameRequested;
+        ProfilesPane.ProfileDeleteRequested += ProfilesPane_ProfileDeleteRequested;
+        ProfilesPane.ProfilesRefreshRequested += ProfilesPane_ProfilesRefreshRequested;
         SourceInitialized += MainWindow_SourceInitialized;
         Closed += MainWindow_Closed;
         AddPaneview(GetInitialDirectory(), isBrowsable: true);
@@ -48,6 +52,12 @@ public partial class MainWindow : Window
     {
         if (ProfilesPane.Visibility == Visibility.Visible)
         {
+            if (ProfilesPane.IsEditing)
+            {
+                MessageBox.Show(this, "Finish editing the profile name or press Escape to cancel.",
+                    "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
             ShowTabsView();
             return;
         }
@@ -109,6 +119,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        SwitchActiveProfile(targetStore, targetProfile);
+        ShowTabsView();
+    }
+
+    private void SwitchActiveProfile(ProfileStore targetStore, ProfileConfiguration targetProfile)
+    {
         if (_browsableTab is not null)
             SelectTabForNavigation(_browsableTab);
         foreach (var view in _tabsByPathview.Keys.Where(view => !view.IsBrowsable).ToArray())
@@ -128,7 +144,80 @@ public partial class MainWindow : Window
         foreach (var entry in targetProfile.Pathviews.ToArray())
             AddPaneview(entry.Path, isBrowsable: false, profileEntry: entry, select: false);
         RefreshPathChoices();
-        ShowTabsView();
+    }
+
+    private bool ProfilesPane_ProfileCreateRequested(ProfileConfiguration profile)
+    {
+        try
+        {
+            _profileStore.ForProfile(profile.ProfileName).Create(profile);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, $"Cannot create profile '{profile.ProfileName}': {exception.Message}",
+                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
+        }
+    }
+
+    private bool ProfilesPane_ProfileRenameRequested(ProfileConfiguration profile, string newName)
+    {
+        try
+        {
+            var oldName = profile.ProfileName;
+            var isActive = string.Equals(oldName, _activeProfile.ProfileName, StringComparison.OrdinalIgnoreCase);
+            var renamedProfile = isActive ? _activeProfile : profile;
+            var renamedStore = _profileStore.ForProfile(oldName).Rename(renamedProfile, newName);
+            if (isActive)
+            {
+                _profileStore = renamedStore;
+                if (!string.Equals(oldName, newName, StringComparison.Ordinal))
+                    _activeProfileDirty = false;
+                ((App)Application.Current).SetActiveProfile(renamedStore, renamedProfile);
+                ProfileNameLabel.Text = renamedProfile.ProfileName;
+            }
+            return true;
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, $"Cannot rename profile: {exception.Message}",
+                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
+        }
+    }
+
+    private bool ProfilesPane_ProfileDeleteRequested(string profileName)
+    {
+        try
+        {
+            var deletingActive = string.Equals(profileName, _activeProfile.ProfileName, StringComparison.OrdinalIgnoreCase);
+            var targetStore = deletingActive ? _profileStore.ForProfile("default") : null;
+            var targetProfile = targetStore?.LoadOrCreate();
+            _profileStore.ForProfile(profileName).Delete();
+            if (targetStore is not null && targetProfile is not null)
+                SwitchActiveProfile(targetStore, targetProfile);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, $"Cannot delete profile '{profileName}': {exception.Message}",
+                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
+        }
+    }
+
+    private void ProfilesPane_ProfilesRefreshRequested(string? selectedName)
+    {
+        try
+        {
+            ProfilesPane.SetProfiles(_profileStore.GetProfileNames(), selectedName ?? _activeProfile.ProfileName);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, $"Cannot list profiles: {exception.Message}",
+                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private static string GetInitialDirectory()

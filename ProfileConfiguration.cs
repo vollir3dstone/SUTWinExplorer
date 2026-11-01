@@ -96,7 +96,86 @@ internal sealed class ProfileStore
 
     public ProfileStore ForProfile(string profileName) => new(_directory, profileName);
 
-    public void Save(ProfileConfiguration profile)
+    public void Save(ProfileConfiguration profile) => Write(profile, overwrite: true);
+
+    public void Create(ProfileConfiguration profile)
+    {
+        if (string.Equals(_profileName, "new", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The name 'new' is reserved.");
+        Write(profile, overwrite: false);
+    }
+
+    public ProfileStore Rename(ProfileConfiguration profile, string newName)
+    {
+        if (string.Equals(_profileName, "default", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The default profile cannot be renamed.");
+        if (string.Equals(newName, "new", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("The name 'new' is reserved.", nameof(newName));
+        if (profile.ProfileName != _profileName)
+            throw new InvalidDataException("The profile name does not match its filename.");
+
+        var target = ForProfile(newName);
+        if (string.Equals(_profileName, newName, StringComparison.Ordinal))
+            return target;
+
+        var renamed = new ProfileConfiguration
+        {
+            Type = profile.Type,
+            ProfileName = newName,
+            Pathviews = profile.Pathviews,
+            AdditionalProperties = profile.AdditionalProperties
+        };
+        using (File.OpenRead(_filePath)) { }
+
+        if (string.Equals(_profileName, newName, StringComparison.OrdinalIgnoreCase))
+        {
+            var backupPath = System.IO.Path.Combine(_directory, $".{Guid.NewGuid():N}.tmp");
+            File.Move(_filePath, backupPath);
+            try
+            {
+                target.Create(renamed);
+            }
+            catch
+            {
+                File.Move(backupPath, _filePath);
+                throw;
+            }
+            try
+            {
+                File.Delete(backupPath);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                System.Diagnostics.Debug.WriteLine($"Cannot remove profile rename backup: {exception}");
+            }
+        }
+        else
+        {
+            target.Create(renamed);
+            try
+            {
+                File.Delete(_filePath);
+            }
+            catch
+            {
+                File.Delete(target._filePath);
+                throw;
+            }
+        }
+
+        profile.ProfileName = newName;
+        return target;
+    }
+
+    public void Delete()
+    {
+        if (string.Equals(_profileName, "default", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The default profile cannot be deleted.");
+        using (File.OpenRead(_filePath)) { }
+        File.Delete(_filePath);
+    }
+
+    private void Write(ProfileConfiguration profile, bool overwrite)
     {
         if (profile.ProfileName != _profileName)
             throw new InvalidDataException("The profile name does not match its filename.");
@@ -110,7 +189,7 @@ internal sealed class ProfileStore
                 JsonSerializer.Serialize(stream, profile, JsonOptions);
                 stream.Flush(flushToDisk: true);
             }
-            File.Move(temporaryPath, _filePath, overwrite: true);
+            File.Move(temporaryPath, _filePath, overwrite);
         }
         finally
         {
