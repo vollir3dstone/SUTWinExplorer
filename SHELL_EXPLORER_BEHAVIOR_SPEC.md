@@ -46,14 +46,17 @@ when it is created and cannot be changed by the user.
   [SHELL_EXPLORER_ARCHITECTURE.md](SHELL_EXPLORER_ARCHITECTURE.md#2026-11-01-separate-product-name-from-internal-identity).
 
 ### Navigation and tabs
-- [x] One active `default` profile restores its stored filesystem Pathviews as
-  Fixed tabs. Fixed tabs are saved on successful opening and removed from the
+- [x] The active profile restores its stored filesystem Pathviews as Fixed tabs;
+  `default` is active at startup. Fixed tabs are saved on successful opening and removed from the
   profile on explicit close; unavailable locations remain marked and stored.
   BROWSE stays selected at startup, and virtual **This PC** cannot be pinned.
   The active profile icon and name appear at the left of the top toolbar before
   the navigation buttons; the name uses the same font as the path display.
   Only one KIS Explorer instance runs on the machine. Profile configuration
   and acceptance checks are specified in [Configuration.md](Configuration.md).
+- [x] The profile icon toggles between TabsView and ProfilesView. A single
+  profile-list selection displays its contents; double-click activates it and
+  returns to TabsView with its Fixed tabs. See [ProfilesView.md](ProfilesView.md).
 - [x] The application starts with exactly one browsable Pathview in the first
   tab. Its tab title is **BROWSE**, independent of its current location, and it
   cannot be closed.

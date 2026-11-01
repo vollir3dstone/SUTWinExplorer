@@ -61,6 +61,12 @@ try {
     $otherStore = $constructor.Invoke([object[]] @([string] $directory, 'other'))
     $otherProfile = Invoke-Store $otherStore 'LoadOrCreate'
     Assert-True ($otherProfile.ProfileName -eq 'other' -and (Test-Path -LiteralPath (Join-Path $directory "Profile $([char]0x201e)other$([char]0x201c).kisexplorer.json"))) 'A second profile could not be stored independently.'
+    $names = @(Invoke-Store $store 'GetProfileNames')
+    Assert-True ($names.Count -eq 2 -and 'default' -in $names -and 'other' -in $names) 'Profile discovery did not return both profile names.'
+    $missingStore = Invoke-Store $store 'ForProfile' @('missing')
+    $failed = $false
+    try { Invoke-Store $missingStore 'Load' } catch { $failed = $true }
+    Assert-True ($failed -and @(Invoke-Store $store 'GetProfileNames').Count -eq 2) 'Loading a missing profile unexpectedly created it.'
 
     $savedPath = $json.Pathviews[0].Path
     $json.Pathviews[0].Path = '::{20D04FE0-3AEA-1069-A2D8-08002B30309D}'

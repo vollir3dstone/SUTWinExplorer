@@ -213,6 +213,13 @@ leading ellipsis prefix is omitted.
   their profile entries and synchronizes successful location changes and
   explicit closes. Startup restores tabs without selecting them. Failed
   locations remain associated and marked. See [Configuration.md](Configuration.md).
+- `ProfilesView` owns profile-list selection and the read-only profile display;
+  it raises activation requests to `MainWindow`. `ProfileStore` discovers names
+  and loads existing profiles without creating missing ones. `MainWindow`
+  validates the target, removes Fixed tabs without deleting their entries,
+  switches the active store and profile, and restores the target's Fixed tabs.
+  The BROWSE tab is retained. The toolbar icon toggles the two top-level views.
+  See [ProfilesView.md](ProfilesView.md).
 - **Pin** looks up the browsable Pathview's current path in the fixed-path map.
   It selects the mapped tab when present, otherwise it creates a fixed
   Pathview, registers it, adds the tab after the first item, and selects it.

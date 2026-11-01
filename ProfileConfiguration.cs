@@ -29,22 +29,23 @@ internal sealed class ProfileStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private readonly string _filePath;
+    private readonly string _directory;
     private readonly string _profileName;
 
     public ProfileStore(string directory, string profileName)
     {
         if (string.IsNullOrWhiteSpace(profileName) || profileName.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0)
             throw new ArgumentException("The profile name cannot be used in a filename.", nameof(profileName));
+        _directory = directory;
         _profileName = profileName;
         _filePath = System.IO.Path.Combine(directory, $"Profile \u201e{profileName}\u201c.kisexplorer.json");
     }
 
     public ProfileConfiguration LoadOrCreate()
     {
-        FileStream stream;
         try
         {
-            stream = File.OpenRead(_filePath);
+            return Load();
         }
         catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
         {
@@ -57,9 +58,12 @@ internal sealed class ProfileStore
             Save(profile);
             return profile;
         }
+    }
 
+    public ProfileConfiguration Load()
+    {
         ProfileConfiguration loaded;
-        using (stream)
+        using (var stream = File.OpenRead(_filePath))
             loaded = JsonSerializer.Deserialize<ProfileConfiguration>(stream, JsonOptions)
                 ?? throw new InvalidDataException("The profile is empty.");
         if (loaded.Type != "KIS Explorer profile" || loaded.ProfileName != _profileName || loaded.Pathviews is null)
@@ -76,6 +80,21 @@ internal sealed class ProfileStore
         }
         return loaded;
     }
+
+    public IReadOnlyList<string> GetProfileNames()
+    {
+        const string prefix = "Profile \u201e";
+        const string suffix = "\u201c.kisexplorer.json";
+        return Directory.EnumerateFiles(_directory, "*.kisexplorer.json")
+            .Select(System.IO.Path.GetFileName)
+            .Where(name => name is not null && name.StartsWith(prefix, StringComparison.Ordinal) &&
+                           name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) && name.Length > prefix.Length + suffix.Length)
+            .Select(name => name![prefix.Length..^suffix.Length])
+            .OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+    }
+
+    public ProfileStore ForProfile(string profileName) => new(_directory, profileName);
 
     public void Save(ProfileConfiguration profile)
     {

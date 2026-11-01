@@ -15,6 +15,12 @@ public partial class App : Application
 	internal ProfileStore ProfileStore { get; private set; } = null!;
 	internal ProfileConfiguration ActiveProfile { get; private set; } = null!;
 
+	internal void SetActiveProfile(ProfileStore store, ProfileConfiguration profile)
+	{
+		ProfileStore = store;
+		ActiveProfile = profile;
+	}
+
 	protected override void OnStartup(StartupEventArgs e)
 	{
 		base.OnStartup(e);

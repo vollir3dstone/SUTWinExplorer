@@ -10,12 +10,11 @@ application is already running and exits; its command-line path is not forwarded
 
 ## Profiles
 
-The application always has one active profile during normal operation. The
-internal model allows multiple profiles later, but this version loads only
-`default` and activates it automatically. The active profile icon and name
-appear at the left of the top toolbar before the navigation buttons; profile
-selection is not yet available.
-Its file is:
+The application always has one active profile during normal operation. It
+loads and activates `default` at startup. The active profile icon and name
+appear at the left of the top toolbar before the navigation buttons. The icon
+opens [ProfilesView](ProfilesView.md), where other existing profiles can be
+inspected and activated. The default profile file is:
 
 ```text
 %APPDATA%\KIS Explorer\Profile „default“.kisexplorer.json
@@ -40,8 +39,8 @@ The filename consists of `Profile `, the profile name enclosed in `„` and
 }
 ```
 
-`Name` is the optional Pathview name; JSON `null` means undefined. This version
-does not display or edit it. `Path` is an absolute Windows filesystem path,
+`Name` is the optional Pathview name; JSON `null` means undefined. ProfilesView
+displays undefined names as empty cells without changing them. `Path` is an absolute Windows filesystem path,
 not a localized display name. The only supported activation action is `open`.
 Required properties must be present, types and values must match the example,
 and normalized paths must not be duplicated case-insensitively. Additional
@@ -54,6 +53,9 @@ them with an empty profile.
 - Start BROWSE as the first and selected tab, preserving its existing startup
   path and command-line behavior. Restore the profile's Pathviews in array
   order as non-browsable Fixed tabs with the usual default view settings.
+- Activating another profile replaces only the Fixed tabs, preserves BROWSE,
+  selects it, and does not remove entries from the previous profile. Profile
+  selection and activation are specified in [ProfilesView.md](ProfilesView.md).
 - Shell views initialize when their tab is displayed. A path that cannot be
   reached is marked in the tab; its profile entry remains until explicitly
   closed. A failure from the Shell is likewise marked, without deleting it.

@@ -1,6 +1,7 @@
 ﻿<Window x:Class="SUTWinExplorer.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:SUTWinExplorer"
         Title="KIS Explorer" Icon="Assets/app.ico" Height="900" Width="1500"
         MinHeight="520" MinWidth="820" Background="#F3F5F7">
     <Window.Resources>
@@ -46,8 +47,11 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0">
-                <Image Width="24" Height="24" VerticalAlignment="Center" Margin="0,0,6,0"
-                       Source="/Assets/profile 24.png" />
+                <Button x:Name="ProfilesButton" Style="{StaticResource TabCloseButtonStyle}"
+                        Width="24" Height="24" Margin="0,0,6,0" Click="ProfilesButton_Click"
+                        ToolTip="Profiles" AutomationProperties.Name="Profiles">
+                    <Image Width="24" Height="24" Source="/Assets/profile 24.png" />
+                </Button>
                 <TextBlock x:Name="ProfileNameLabel" Style="{StaticResource PathHeaderDisplayStyle}"
                            VerticalAlignment="Center" MaxWidth="200" TextTrimming="CharacterEllipsis"
                            ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
@@ -55,31 +59,39 @@
             <Border Grid.Column="1" Width="1" Height="24" Margin="6,0" Background="#D8DDE3" />
                 <Button Grid.Column="2" Click="Back_Click" Padding="0" Margin="0,0,12,0"
                     Width="24" Height="24" UseLayoutRounding="True" SnapsToDevicePixels="True"
+                    IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}"
                     ToolTip="Back" AutomationProperties.Name="Back">
                 <Image Width="16" Height="16" SnapsToDevicePixels="True"
                        Source="/Assets/ic_fluent_arrow_left_16_regular.png" />
             </Button>
                 <Button Grid.Column="3" Click="Forward_Click" Padding="0" Margin="0,0,12,0"
                     Width="24" Height="24" UseLayoutRounding="True" SnapsToDevicePixels="True"
+                    IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}"
                     ToolTip="Forward" AutomationProperties.Name="Forward">
                 <Image Width="16" Height="16" SnapsToDevicePixels="True"
                        Source="/Assets/ic_fluent_arrow_right_16_regular.png" />
             </Button>
                 <Button Grid.Column="4" Click="Up_Click" Padding="0" Margin="0,0,12,0"
                     Width="24" Height="24" UseLayoutRounding="True" SnapsToDevicePixels="True"
+                    IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}"
                     ToolTip="Up" AutomationProperties.Name="Up">
                 <Image Width="16" Height="16" SnapsToDevicePixels="True"
                        Source="/Assets/ic_fluent_arrow_up_16_regular.png" />
             </Button>
                   <Border Grid.Column="5" Width="1" Height="24" Margin="6,0" Background="#D8DDE3" />
               <ComboBox Grid.Column="6" x:Name="AddressBox" IsEditable="True" IsTextSearchEnabled="False"
+                      IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}"
                       StaysOpenOnEdit="True" DisplayMemberPath="DisplayPath" SelectedValuePath="TabIndex"
                       Style="{StaticResource PathHeaderDisplayComboBoxStyle}"
                       VerticalContentAlignment="Center" KeyDown="AddressBox_KeyDown"
                       SelectionChanged="AddressBox_SelectionChanged" Margin="6,0" />
-            <Button Grid.Column="7" Content="Go" Click="Go_Click" Padding="12,4" />
+            <Button Grid.Column="7" Content="Go" Click="Go_Click" Padding="12,4"
+                    IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}" />
         </Grid>
-        <TabControl x:Name="ExplorerTabs" Padding="0" HorizontalContentAlignment="Stretch"
-                SelectionChanged="ExplorerTabs_SelectionChanged" />
+        <Grid>
+            <TabControl x:Name="ExplorerTabs" Padding="0" HorizontalContentAlignment="Stretch"
+                        SelectionChanged="ExplorerTabs_SelectionChanged" />
+            <local:ProfilesView x:Name="ProfilesPane" Visibility="Collapsed" />
+        </Grid>
     </DockPanel>
 </Window>

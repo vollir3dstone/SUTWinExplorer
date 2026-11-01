@@ -23,8 +23,9 @@ public partial class MainWindow : Window
     private readonly Dictionary<Pathview, string> _pathsByFixedPathview = new();
     private readonly Dictionary<Pathview, TabItem> _tabsByPathview = new();
     private readonly Dictionary<Pathview, ProfilePathview> _profileEntriesByPathview = new();
-    private readonly ProfileConfiguration _activeProfile;
-    private readonly ProfileStore _profileStore;
+    private ProfileConfiguration _activeProfile;
+    private ProfileStore _profileStore;
+    private bool _activeProfileDirty;
     private ShellCopyIntegration? _shellCopyIntegration;
 
     public MainWindow()
@@ -34,11 +35,100 @@ public partial class MainWindow : Window
         _activeProfile = application.ActiveProfile;
         _profileStore = application.ProfileStore;
         ProfileNameLabel.Text = _activeProfile.ProfileName;
+        ProfilesPane.ProfileSelected += ProfilesPane_ProfileSelected;
+        ProfilesPane.ProfileActivationRequested += ProfilesPane_ProfileActivationRequested;
         SourceInitialized += MainWindow_SourceInitialized;
         Closed += MainWindow_Closed;
         AddPaneview(GetInitialDirectory(), isBrowsable: true);
         foreach (var entry in _activeProfile.Pathviews.ToArray())
             AddPaneview(entry.Path, isBrowsable: false, profileEntry: entry, select: false);
+    }
+
+    private void ProfilesButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ProfilesPane.Visibility == Visibility.Visible)
+        {
+            ShowTabsView();
+            return;
+        }
+
+        try
+        {
+            ProfilesPane.SetProfiles(_profileStore.GetProfileNames(), _activeProfile.ProfileName);
+            ExplorerTabs.Visibility = Visibility.Collapsed;
+            ProfilesPane.Visibility = Visibility.Visible;
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, $"Cannot list profiles: {exception.Message}",
+                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void ShowTabsView()
+    {
+        ProfilesPane.Visibility = Visibility.Collapsed;
+        ExplorerTabs.Visibility = Visibility.Visible;
+    }
+
+    private void ProfilesPane_ProfileSelected(string profileName)
+    {
+        try
+        {
+            var profile = string.Equals(profileName, _activeProfile.ProfileName, StringComparison.OrdinalIgnoreCase)
+                ? _activeProfile
+                : _profileStore.ForProfile(profileName).Load();
+            ProfilesPane.DisplayProfile(profile);
+        }
+        catch (Exception exception)
+        {
+            ProfilesPane.DisplayProfile(null);
+            MessageBox.Show(this, $"Cannot open profile '{profileName}': {exception.Message}",
+                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void ProfilesPane_ProfileActivationRequested(string profileName)
+    {
+        if (_activeProfileDirty && !SaveActiveProfile())
+            return;
+
+        ProfileStore targetStore;
+        ProfileConfiguration targetProfile;
+        try
+        {
+            targetStore = _profileStore.ForProfile(profileName);
+            targetProfile = string.Equals(profileName, _activeProfile.ProfileName, StringComparison.OrdinalIgnoreCase)
+                ? _activeProfile
+                : targetStore.Load();
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, $"Cannot activate profile '{profileName}': {exception.Message}",
+                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        if (_browsableTab is not null)
+            SelectTabForNavigation(_browsableTab);
+        foreach (var view in _tabsByPathview.Keys.Where(view => !view.IsBrowsable).ToArray())
+        {
+            var tab = _tabsByPathview[view];
+            _tabsByPathview.Remove(view);
+            _profileEntriesByPathview.Remove(view);
+            RemoveFixedPathview(view);
+            ExplorerTabs.Items.Remove(tab);
+        }
+
+        _profileStore = targetStore;
+        _activeProfile = targetProfile;
+        _activeProfileDirty = false;
+        ((App)Application.Current).SetActiveProfile(targetStore, targetProfile);
+        ProfileNameLabel.Text = targetProfile.ProfileName;
+        foreach (var entry in targetProfile.Pathviews.ToArray())
+            AddPaneview(entry.Path, isBrowsable: false, profileEntry: entry, select: false);
+        RefreshPathChoices();
+        ShowTabsView();
     }
 
     private static string GetInitialDirectory()
@@ -257,19 +347,23 @@ public partial class MainWindow : Window
             _activeProfile.Pathviews.Add(entry);
             _profileEntriesByPathview.Add(view, entry);
         }
+        _activeProfileDirty = true;
         SaveActiveProfile();
     }
 
-    private void SaveActiveProfile()
+    private bool SaveActiveProfile()
     {
         try
         {
             _profileStore.Save(_activeProfile);
+            _activeProfileDirty = false;
+            return true;
         }
         catch (Exception exception)
         {
             MessageBox.Show(this, $"Cannot save the active profile: {exception.Message}",
                 "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
         }
     }
 
@@ -463,6 +557,7 @@ public partial class MainWindow : Window
             if (_profileEntriesByPathview.Remove(view, out var entry))
             {
                 _activeProfile.Pathviews.Remove(entry);
+                _activeProfileDirty = true;
                 SaveActiveProfile();
             }
             RefreshPathChoices();
