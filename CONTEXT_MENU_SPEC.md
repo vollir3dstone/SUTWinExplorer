@@ -1,11 +1,12 @@
-# File Context Menu Pair
+# File and Directory Context Menu Pair
 
 ## Scope and Intent
 
 ContentView provides a Base Menu (Basismenü) and a Content Menu (Inhaltsmenü)
-for a selection of one or more existing files. The Base Menu puts the
+for a selection of one or more existing files or one or more existing
+directories. The Base Menu puts the
 application's common file operations first and includes generally applicable
-Shell commands. The Content Menu provides the remaining file-specific Shell
+Shell commands. The Content Menu provides the remaining item-specific Shell
 commands. Windows constructs and invokes the Shell portions of both menus; KIS
 Explorer filters the resulting menus instead of reconstructing extension
 handlers itself.
@@ -34,15 +35,15 @@ implementation is in [ContentView.xaml.cs](ContentView.xaml.cs) and
 
 - On an initial right-click, an unselected row becomes the sole selection; a
   selected row preserves an existing multiple selection.
-- A file-only selection opens the Base Menu first. The clicked row's full
-  path identifies the menu series, and the complete selection is retained.
+- A file-only or directory-only selection opens the Base Menu first. The clicked
+  row's full path identifies the menu series, and the complete selection is
+  retained.
 - Repeated right-clicks on the same row alternate between the Base and Content
   menus for the same selection, including while either popup is still open and
   the pointer remains at its opening position.
 - A right-click on another row while the Base Menu is open ends the series and
   makes that row the sole selection, even if it was already part of a multiple
-  selection. A file starts a new Base Menu; a folder uses its ordinary Windows
-  item menu.
+  selection. A file or directory starts a new Base Menu.
 - A selection change invalidates the remembered Base Menu and its command
   snapshot. While the Base Menu popup is open, a change to the selection also
   prevents using the stale snapshot to open a Content Menu.
@@ -54,9 +55,9 @@ implementation is in [ContentView.xaml.cs](ContentView.xaml.cs) and
   on the same row while either popup is open. It preserves the current selection;
   on another row while the Base Menu is open it selects only that row. The
   modifier is taken from the mouse message, even if Shift is released before the
-  new menu opens. Folder and mixed file/folder selections also use the original item
-  menu. The keyboard context-menu key or Shift+F10 opens the applicable menu
-  without starting a mouse-driven alternation series.
+  new menu opens. Mixed file/directory selections also use the original item menu.
+  The keyboard context-menu key or Shift+F10 opens the applicable menu without
+  starting a mouse-driven alternation series.
 
 Both popups are tracked using a thread-local Windows menu message filter. For a
 right-button-down or right-button-double-click message, its screen coordinates
@@ -85,13 +86,176 @@ prepared operation. Delete uses the Shell file-operation API; it requires loaded
 deletable targets and is disabled during a prepared Copy or Move. The Shell
 controls confirmation and recycling, which depends on the location.
 
-The Shell section is produced by `SHCreateDefaultContextMenu` for the selection,
-using only the `*` and `AllFilesystemObjects` association keys. These keys limit
-association sources, not commands by semantic category. Windows still decides
-which providers participate, and can execute extensions while constructing the
-menu. `CMF_CANRENAME` is supplied for single and multiple file selections; on
+For files, the Shell section is produced by `SHCreateDefaultContextMenu` using
+the `*` and `AllFilesystemObjects` association keys. For directories, the Base
+Menu starts from the actual Windows item menu and keeps Properties, uniquely
+matching entries from an `AllFilesystemObjects` menu, and the additional
+registry-matched entries described below. The selected commands are invoked via
+the Windows item menu that produced them, not by using file commands on a
+directory. `CMF_CANRENAME` is supplied for single and multiple selections; on
 the investigated installation this avoids Link Shell Extension presenting its
 drag-and-drop-only menu instead of the appropriate selection menu.
+
+### Directory Classification: Three Alternative Criteria
+
+For a directory-only selection, a Shell entry can qualify for the Base Menu
+through any one of these criteria. They are alternatives, not three tests that
+must all pass. Properties is retained separately when Windows provides it;
+the explicit command exclusions below are applied afterwards.
+
+1. **`AllFilesystemObjects`:** the entry matches a command obtained by asking
+  the Shell for a menu using this association class.
+2. **`Directory` or `Folder` and `*`:** a directory registration also has a
+  corresponding `*` registration, and a matching entry is found in the actual
+  directory menu. `*` is the literal registry class name, not a search pattern.
+3. **`Directory` or `Folder` and whitelist:** a directory registration matches
+  a configured verb or CLSID, and a matching entry is found in the actual
+  directory menu. A `*` registration is not required for this criterion.
+
+The distinction between registry and Shell is important: the registry describes
+registrations, not the final menu for the current selection. The Shell builds
+menus and supplies command verbs and labels. KIS Explorer uses the registry to
+identify candidates for criteria 2 and 3, then compares them to entries actually
+supplied by the Shell. It does not simply display every registered verb or
+execute a command taken from the file-only `*` class on a directory.
+
+#### Order of Checks
+
+1. KIS Explorer asks `SHCreateDefaultContextMenu` and `QueryContextMenu` for a
+  menu for the selected directories with `AllFilesystemObjects` as the only
+  association key. It records comparable entries and their occurrence counts.
+  This is a separate probe, not the menu ultimately displayed.
+2. It reads the merged `HKEY_CLASSES_ROOT` registrations for `*`, `Directory`
+  and `Folder` and the embedded whitelist. It identifies eligible verbs and
+  classic handlers as described below. Each eligible classic handler is also
+  queried separately with the actual selection and the relevant directory
+  class; its resulting menu provides additional comparison data.
+3. KIS Explorer obtains the normal Windows item menu for the selected
+  directories using `IShellFolder::GetUIObjectOf` and `QueryContextMenu`. For
+  each top-level entry, it checks Properties and the three alternatives using
+  the data collected above. Entries that do not match are removed.
+4. The application's own actions are prepended and the explicit exclusions are
+  applied. The remaining Shell commands are still invoked through the normal
+  directory menu's own `IContextMenu`; the probe menus are not used to invoke
+  them.
+
+#### Criterion 1: AllFilesystemObjects
+
+The application compares each entry in the actual directory menu with the
+recorded `AllFilesystemObjects` probe. A comparable key must occur exactly once
+in each menu. For a top-level command, the key consists of its Shell verb from
+`IContextMenu::GetCommandString` and its exact visible label. Verb comparison is
+case-insensitive; label comparison is case-sensitive. A command without a
+usable verb is not recorded by this particular probe.
+
+For a submenu, the key includes its exact label and the currently populated
+submenu tree, including child order, labels and available verbs; separators are
+ignored. An empty or otherwise non-comparable submenu cannot match this way.
+Disabled entries can be considered here. The detailed comparability rules are
+described under Content Menu and Duplicate Detection, except that this
+classification allows disabled entries.
+
+For example, if the probe and the actual menu each contain exactly one command
+with verb `example` and label `Example`, that actual menu entry qualifies.
+Merely finding a registry key under `AllFilesystemObjects` does not itself
+establish that a particular actual menu entry matches.
+
+#### Criterion 2: Directory or Folder Also Registered Under *
+
+The `*` overlap is discovered during the registry scan, before the actual
+directory menu is filtered. Two registration forms are checked independently:
+
+- **Declarative verbs:** compare the subkey names under `*\shell` with those
+  under `Directory\shell` and `Folder\shell`, ignoring case. For example,
+  `*\shell\Example` and `Directory\shell\Example` make `Example` a shared
+  verb. When an actual top-level directory-menu command reports that verb via
+  `GetCommandString`, it qualifies, even if the verb appears more than once in
+  that menu. This compares names, not implementations: matching names do not
+  prove that the two registrations perform the same action.
+- **Classic handlers:** read the enabled CLSIDs under
+  `*\shellex\ContextMenuHandlers`, then compare them with the CLSIDs under the
+  same path below `Directory` and `Folder`. A GUID can be the default value or,
+  if that is not a GUID, the subkey name; entries whose default value starts
+  with `-` are skipped. Handler subkey names need not match if the CLSIDs match.
+  For example, a CLSID registered under both `*` and `Directory` identifies a
+  shared handler, not a particular entry in the actual menu.
+
+For each eligible classic handler, KIS Explorer instantiates the handler,
+initializes `IShellExtInit` with the selected items and each directory class
+under which it was found, and calls its `IContextMenu::QueryContextMenu`.
+It records the resulting top-level labels and whether each is an item or a
+submenu. An actual directory-menu entry with the same exact, readable label and
+the same kind qualifies even when the label is duplicated, or the submenu is
+empty or contains different children. The comparison does not establish that
+the actual entry came from that handler. As a guard, a known declarative
+directory-only verb is not admitted solely by this loose label match. Such an
+entry can still qualify through another applicable criterion.
+
+For example, if a shared handler independently produces `Hg &Workbench` as an
+item and the actual directory menu has an item with that exact label, the item
+can qualify even when the Shell supplies no usable verb. A submenu with that
+label would not match an item. Labels must be readable, nonempty and fit the
+comparison buffer; disabled entries can be considered. Handler initialization
+or querying can fail, and handlers without the required classic interfaces
+cannot be classified by this probe.
+
+The handler probe also collects strict comparable keys, using verbs and labels
+or populated submenu trees. A key that occurs exactly once across the eligible
+handler results and once in the actual menu is another way to match an entry.
+For a verb-less individual command, the exact label can be used as a strict key
+only when it is unique among top-level labels in each relevant menu. When the
+same handler is registered under both directory classes, its identical results
+are counted at most once per handler; results from different handlers are added.
+
+#### Criterion 3: Directory or Folder and Whitelist
+
+For declarative directory verbs, a whitelist verb is compared case-insensitively
+with the registry subkey name. Alternatively, the CLSID in that subkey's
+`ExplorerCommandHandler` value can be whitelisted. The actual menu entry's
+Shell verb must match the eligible registry verb and occur exactly once in the
+actual directory menu, unless criterion 2 independently permits it.
+
+For classic directory handlers, the whitelist CLSID is compared with the
+registered handler CLSID. The handler is queried with the selection as above.
+For a handler that is eligible only through the whitelist, the actual entry
+must match a strict comparable key occurring exactly once in both the actual
+menu and the combined handler results. The relaxed label-and-kind matching is
+reserved for handlers also registered under `*`. Whitelisting a handler covers
+its comparable commands, not only one named command.
+
+The relaxed criterion 2 can admit an unrelated command that happens to share a
+label, and ambiguous entries can also remain in the Content Menu because its
+duplicate detection is stricter. Conversely, an entry that cannot be matched by
+any available comparison stays out of the Base Menu. Neither registry overlap
+nor a menu match proves that an action is content-independent or identifies its
+provider with certainty.
+
+The embedded [directory menu whitelist](Assets/directory-menu-whitelist.json)
+is initially empty. Each `extensions` entry has `_type` set to `shellExtension`,
+a descriptive `name`, and `verbs` and `clsids` arrays. For example:
+
+```json
+{
+  "_type": "directoryMenuWhitelist",
+  "extensions": [
+    {
+      "_type": "shellExtension",
+      "name": "Example",
+      "verbs": ["ExampleVerb"],
+      "clsids": ["{11111111-2222-3333-4444-555555555555}"]
+    }
+  ]
+}
+```
+
+Either array can be empty. Verbs are matched case-insensitively and CLSIDs are
+parsed as GUIDs. A whitelisted verb or CLSID must still be registered under
+`Folder` or `Directory`, and Windows must provide a matching command for the
+selection. A classic handler whitelist entry covers its comparable commands,
+not just one command. Explicit Shell command exclusions still apply. The file
+is embedded at build time, so editing it requires a rebuild. A malformed
+whitelist is reported to .NET trace output and the additional registry-based
+classification is skipped; identifiable `AllFilesystemObjects` entries remain.
 
 The application then filters the resulting Shell entries, removes redundant
 separators and prepends the toolbar section. Shell Properties remains available
@@ -103,8 +267,8 @@ purpose or provider.
 
 Matching uses Shell command verbs obtained from `IContextMenu::GetCommandString`,
 case-insensitively. A menu command without a usable verb cannot be reliably
-classified this way. These rules apply to the file-menu pair, not the original
-Shift, folder, mixed-selection or background menus.
+classified this way. These rules apply to the file and directory menu pairs,
+not the original Shift, mixed-selection or background menus.
 
 | Shell action and verb | Base Menu | Content Menu | Reason or application equivalent |
 | --- | --- | --- | --- |
@@ -114,19 +278,21 @@ Shift, folder, mixed-selection or background menus.
 | Copy as path `copyaspath` | Excluded | Excluded | Path get copies the path for one selected file. |
 | Rename `rename` | Excluded | Excluded | Rename starts the application's inline editor. |
 | Delete `delete` | Excluded | Excluded | Delete uses the application's Shell-backed operation. |
-| Create shortcut `link` | Excluded | Excluded | No application replacement. |
+| Create shortcut `link` | Files: excluded; directories: retained when matched | Files: excluded; directories: retained unless identified as a duplicate | There is no application replacement. |
 | Properties `properties` | Retained if provided | Excluded | Keep the Shell Properties command in one menu. |
-| Open `open`, Edit `edit` | Top-level entries excluded | Retained unless separately identified as a duplicate | Content-specific operations belong in the Content Menu. |
-| Open With `openas` | Top-level entry excluded | Retained unless separately identified as a duplicate | Content-specific operation belongs in the Content Menu. |
+| Open `open`, Edit `edit` | Files: top-level entries excluded; directories: retained when matched | Retained unless separately identified as a duplicate | File content-specific operations belong in the Content Menu. |
+| Open With `openas` | Files: top-level entry excluded; directories: retained when matched | Retained unless separately identified as a duplicate | File content-specific operation belongs in the Content Menu. |
 
-The first seven exclusions are applied recursively to currently populated
-submenus in both menus and again after a submenu is initialized. `properties` is
-filtered the same way in the Content Menu only. The Base Menu-only exclusions for
-`open`, `edit`, `openas` and the blacklist are applied only to top-level commands
-when the Base Menu is prepared; they are not recursive or reapplied to lazy
-submenus. Consequently a nested or subsequently added entry can remain visible.
+The exclusions for `copy`, `cut`, `paste`, `copyaspath`, `rename` and `delete`
+are applied recursively to currently populated submenus in both menus and again
+after a submenu is initialized. The same applies to `link` for files only.
+`properties` is filtered the same way in the Content Menu only. For files, the
+Base Menu-only exclusions for `open`, `edit`, `openas` and the blacklist are
+applied only to top-level commands when the Base Menu is prepared; they are not
+recursive or reapplied to lazy submenus. Consequently a nested or subsequently
+added entry can remain visible.
 
-The Base Menu also removes the Shell Open With submenu when it is owner-drawn,
+The file Base Menu also removes the Shell Open With submenu when it is owner-drawn,
 has a submenu handle, and its label exactly matches the localized `shell32.dll`
 string resource 5376. This is needed because the observed submenu has no usable
 verb. The resource ID is not a documented Shell API contract; if the resource
@@ -136,8 +302,8 @@ exception may not match.
 The embedded [Shell extension blacklist](Assets/shell-extension-blacklist.json)
 contains descriptive names and exact verbs, currently `ANotepad++64` for
 Notepad++. Names are informational; verbs are matched case-insensitively. The
-blacklist affects only top-level entries in the Base Menu. It is embedded at
-build time, so editing it requires a rebuild. The Content Menu does not apply
+blacklist affects only top-level entries in the file Base Menu, not the directory
+Base Menu. It is embedded at build time, so editing it requires a rebuild. The Content Menu does not apply
 this blacklist, so those commands can appear there when Windows supplies them.
 The separate
 [diagnostic tool](tests/ContextMenuSpike.ps1) can help discover observed verbs;
@@ -145,7 +311,7 @@ its registry candidates are not proof that a particular command was supplied.
 
 ## Content Menu and Duplicate Detection
 
-The Content Menu starts with the normal Shell item menu for the selected files,
+The Content Menu starts with the normal Shell item menu for the selected items,
 again using `CMF_CANRENAME`. It first removes the common exclusions and
 `properties`, then compares the remaining top-level entries against a snapshot
 of comparable entries from the Base Menu. The snapshot is collected from the
@@ -154,9 +320,11 @@ while it was open. Application toolbar IDs are outside the Shell command-ID rang
 and do not participate in this comparison.
 
 An individual top-level Shell command is comparable only if it is enabled, not
-owner-drawn, has a readable nonempty, nontruncated label, has a Shell command ID,
-and exposes a nonblank verb. Its key is the case-normalized verb and the exact
-label; labels are case-sensitive. A submenu is comparable when it has a readable
+owner-drawn, has a readable nonempty, nontruncated label and has a Shell command
+ID. Its key is normally the case-normalized verb and the exact label; labels are
+case-sensitive. For directory commands without a usable verb, the exact label
+alone is used only when it is unique among all top-level labels in each menu.
+This is an indication, not proof, that the entries share a provider. A submenu is comparable when it has a readable
 nonempty, nontruncated label and its currently populated tree can be described
 recursively:
 
@@ -195,8 +363,10 @@ Exceptions in native right-click and menu-message callbacks are reported through
 normal Windows hook or subclass processing continues as the fallback.
 
 Filtering happens after Windows and registered extensions have constructed the
-menu. It is not a sandbox and cannot prevent a filtered extension from loading or
-executing during construction. Results depend on the selection, installed
+menu. The directory classification also initializes and queries matching classic
+handlers separately, which can run extension code and add latency. It is not a
+sandbox and cannot prevent a filtered extension from loading or executing during
+construction. Results depend on the selection, installed
 extensions, architecture and Windows version. Modern packaged extensions and
 the Windows 11 compact menu are not guaranteed to match these classic Shell
 menus. The [spike results](CONTEXT_MENU_SPIKE.md) document investigated
@@ -206,23 +376,23 @@ alternatives and their limitations.
 
 [SutShell.Tests.ps1](tests/SutShell.Tests.ps1) exercises menu contents, filtering,
 toolbar actions, Shell invocation, selection and menu switching for single and
-multiple files. It includes native popup and mouse-input probes in WPF windows;
+multiple files and directories. It includes native popup and mouse-input probes in WPF windows;
 these tests display windows and move the pointer. Manual verification in the
 actual application remains useful for installed extensions, Windows versions and
 interaction timings not represented by the test environment.
 
 ## Follow-up
 
-- [ ] Define the Base and Content Menu contents for folder selections,
-  mixed file/folder selections, and list background separately. In particular,
+- [ ] Define the Base and Content Menu contents for mixed file/directory
+  selections and list background separately. In particular,
   decide how background commands such as Paste and New relate to application
   operations; do not apply the file exclusion list automatically.
-- [ ] When implementing those menus, make the target kind and filtering rules
+- [ ] When implementing the remaining menus, make the target kind and filtering rules
   explicit while retaining the shared Shell menu creation, invocation and
   native-resource lifetime handling. Background menus use a Shell view rather
   than the selected-item association keys.
 - [ ] Extract the menu-series state and transitions into a small reusable unit
-  when the folder and background behavior is specified. Cover target changes,
+  when the mixed-selection and background behavior is specified. Cover target changes,
   multiple selections, cancellation, Shift and background clicks.
 - [ ] Add deterministic tests for duplicate and submenu comparison, including
   disabled, owner-drawn, ambiguous, lazy and missing-verb entries. Keep native

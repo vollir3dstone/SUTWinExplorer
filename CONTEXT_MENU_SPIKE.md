@@ -26,10 +26,12 @@ items must belong to the same parent. The tool uses the current process's Shell
 and registry view; menu contents depend on installed extensions, selection,
 Shell state and process architecture. It requires PowerShell on Windows.
 `-Generic` accepts one file and queries a menu with only the `*` and
-`AllFilesystemObjects` association keys. `-NoCanRename` omits `CMF_CANRENAME`
-for comparing Shell extension behavior. `-HandlerClsid <guid>` with `-Generic`
-instead activates one classic `IShellExtInit`/`IContextMenu` handler for the
-selected file; it does not display a menu or invoke a command.
+`AllFilesystemObjects` association keys. `-FilesystemObjects` accepts one
+directory and queries only `AllFilesystemObjects`. `-NoCanRename` omits
+`CMF_CANRENAME` for comparing Shell extension behavior. `-HandlerClsid <guid>`
+with `-Generic` or `-FilesystemObjects` instead activates one classic
+`IShellExtInit`/`IContextMenu` handler for the selected file or directory; it
+does not display a menu or invoke a command.
 
 ## Individual Handler Probe
 

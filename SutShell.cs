@@ -177,11 +177,11 @@ internal static class SutShell
     internal static void Delete(IReadOnlyList<string> paths, IntPtr owner) =>
         ShellFileOperations.Delete(paths, owner);
 
-    internal static IReadOnlyDictionary<string, int> ShowBaseFileMenu(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions, Func<int, int, bool, bool, bool>? secondRightClick) =>
-        ShellContextMenu.ShowBaseFile(paths, owner, actions, secondRightClick);
+    internal static IReadOnlyDictionary<string, int> ShowBaseMenu(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions, Func<int, int, bool, bool, bool>? secondRightClick) =>
+        ShellContextMenu.ShowBase(paths, owner, actions, secondRightClick);
 
-    internal static void ShowContentFileMenu(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands, Func<int, int, bool, bool, bool>? secondRightClick = null) =>
-        ShellContextMenu.ShowContentFile(paths, owner, baseCommands, secondRightClick);
+    internal static void ShowContentMenu(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands, Func<int, int, bool, bool, bool>? secondRightClick = null) =>
+        ShellContextMenu.ShowContent(paths, owner, baseCommands, secondRightClick);
 
     internal static void ShowItemMenu(IReadOnlyList<string> paths, IntPtr owner, Action? rename = null) =>
         ShellContextMenu.ShowItems(paths, owner, rename);

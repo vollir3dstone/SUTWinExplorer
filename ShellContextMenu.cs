@@ -23,7 +23,9 @@ internal static class ShellContextMenu
     private const uint ShellViewSelectEdit = 0x0003;
     private const string ShellIdListArrayFormat = "Shell IDList Array";
     private const string BlacklistResourceName = "SUTWinExplorer.ShellExtensionBlacklist.json";
+    private const string DirectoryWhitelistResourceName = "SUTWinExplorer.DirectoryMenuWhitelist.json";
     private static readonly Lazy<HashSet<string>> BlacklistedVerbs = new(LoadBlacklistedVerbs);
+    private static readonly Lazy<DirectoryMenuWhitelist> DirectoryWhitelist = new(LoadDirectoryWhitelist);
     private static readonly HashSet<string> ExcludedFileVerbs = new(StringComparer.OrdinalIgnoreCase)
         { "copy", "cut", "paste", "copyaspath", "link", "delete", "rename" };
     internal const uint ShellViewBackground = 0;
@@ -152,10 +154,10 @@ internal static class ShellContextMenu
     internal static void ShowItems(IReadOnlyList<string> paths, IntPtr owner, Action? rename = null) =>
         ShowCore(paths, owner, background: false, rename);
 
-    internal static IReadOnlyDictionary<string, int> ShowBaseFile(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions, Func<int, int, bool, bool, bool>? secondRightClick) =>
+    internal static IReadOnlyDictionary<string, int> ShowBase(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions, Func<int, int, bool, bool, bool>? secondRightClick) =>
         ShowCore(paths, owner, background: false, rename: null, actions, secondRightClick: secondRightClick)!;
 
-    internal static void ShowContentFile(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands, Func<int, int, bool, bool, bool>? secondRightClick = null) =>
+    internal static void ShowContent(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands, Func<int, int, bool, bool, bool>? secondRightClick = null) =>
         ShowCore(paths, owner, background: false, rename: null, excludedCommands: baseCommands, secondRightClick: secondRightClick);
 
     public static void ShowBackground(string folderPath, IntPtr owner) => ShowCore([folderPath], owner, background: true, rename: null);
@@ -173,6 +175,7 @@ internal static class ShellContextMenu
                 Path.GetDirectoryName(paths[0]), StringComparison.OrdinalIgnoreCase)))
             throw new ArgumentException("Selected items must belong to the same directory.", nameof(paths));
 
+        var directorySelection = !background && Directory.Exists(paths[0]);
         var absolutePidls = new List<IntPtr>();
         IntPtr childPidlArray = IntPtr.Zero;
         IntPtr menu = IntPtr.Zero;
@@ -187,7 +190,7 @@ internal static class ShellContextMenu
         MenuMessageFilter? menuFilter = null;
         IntPtr menuHook = IntPtr.Zero;
         var subclassInstalled = false;
-        using var fileClass = isBaseMenu ? Microsoft.Win32.Registry.ClassesRoot.OpenSubKey("*") : null;
+        using var fileClass = isBaseMenu && !directorySelection ? Microsoft.Win32.Registry.ClassesRoot.OpenSubKey("*") : null;
         using var filesystemClass = isBaseMenu ? Microsoft.Win32.Registry.ClassesRoot.OpenSubKey("AllFilesystemObjects") : null;
 
         try
@@ -220,14 +223,16 @@ internal static class ShellContextMenu
                 for (var index = 1; index < absolutePidls.Count; index++)
                     Marshal.WriteIntPtr(childPidlArray, index * IntPtr.Size, ILFindLastID(absolutePidls[index]));
                 if (!isBaseMenu)
-                    Marshal.ThrowExceptionForHR(parentFolder.GetUIObjectOf(owner, (uint)paths.Count, childPidlArray, ref contextMenuId, IntPtr.Zero, out contextMenu));
+                    contextMenu = GetItemContextMenu(parentFolder, owner, paths.Count, childPidlArray);
                 else
                 {
-                    if (fileClass is null || filesystemClass is null)
+                    if (filesystemClass is null || (!directorySelection && fileClass is null))
                         throw new InvalidOperationException("The generic Shell association classes are unavailable.");
-                    keyArray = Marshal.AllocCoTaskMem(IntPtr.Size * 2);
-                    Marshal.WriteIntPtr(keyArray, 0, fileClass.Handle.DangerousGetHandle());
-                    Marshal.WriteIntPtr(keyArray, IntPtr.Size, filesystemClass.Handle.DangerousGetHandle());
+                    var keyCount = fileClass is null ? 1 : 2;
+                    keyArray = Marshal.AllocCoTaskMem(IntPtr.Size * keyCount);
+                    if (fileClass is not null)
+                        Marshal.WriteIntPtr(keyArray, 0, fileClass.Handle.DangerousGetHandle());
+                    Marshal.WriteIntPtr(keyArray, IntPtr.Size * (keyCount - 1), filesystemClass.Handle.DangerousGetHandle());
                     parentPointer = Marshal.GetComInterfaceForObject(parentFolder, typeof(IShellFolder));
                     var definition = new DefaultContextMenu
                     {
@@ -235,7 +240,7 @@ internal static class ShellContextMenu
                         Folder = parentPointer,
                         Count = (uint)paths.Count,
                         Children = childPidlArray,
-                        KeyCount = 2,
+                        KeyCount = (uint)keyCount,
                         Keys = keyArray
                     };
                     Marshal.ThrowExceptionForHR(SHCreateDefaultContextMenu(ref definition, ref contextMenuId, out var contextMenuPointer));
@@ -253,12 +258,32 @@ internal static class ShellContextMenu
                     ? MenuFlags | MenuCanRename : MenuFlags));
             if (isBaseMenu)
             {
-                PrepareBaseMenu(menu, contextMenu, actions!);
-                RemoveExcludedFileCommands(menu, contextMenu);
+                if (directorySelection)
+                {
+                    var filesystemCommands = CollectComparableCommands(menu, contextMenu, includeDisabled: true);
+                    (HashSet<string> Verbs, HashSet<string> WildcardVerbs, HashSet<string> DirectoryOnlyVerbs, Dictionary<string, int> Commands, HashSet<string> WildcardLabels) sharedCommands =
+                        (new HashSet<string>(StringComparer.OrdinalIgnoreCase), new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                            new HashSet<string>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, int>(StringComparer.Ordinal),
+                            new HashSet<string>(StringComparer.Ordinal));
+                    try { sharedCommands = CollectSharedDirectoryCommands(parentFolder!, owner, paths.Count, childPidlArray, absolutePidls[0]); }
+                    catch (Exception exception) { System.Diagnostics.Trace.TraceError("Could not read directory context menu registrations: {0}", exception); }
+                    _ = DestroyMenu(menu);
+                    menu = IntPtr.Zero;
+                    _ = Marshal.ReleaseComObject(contextMenu);
+                    contextMenu = null;
+                    contextMenu = GetItemContextMenu(parentFolder!, owner, paths.Count, childPidlArray);
+                    menu = CreatePopupMenu();
+                    if (menu == IntPtr.Zero)
+                        throw new InvalidOperationException("CreatePopupMenu failed.");
+                    Marshal.ThrowExceptionForHR(contextMenu.QueryContextMenu(menu, 0, FirstCommandId, LastCommandId, MenuFlags | MenuCanRename));
+                    FilterDirectoryBaseMenu(menu, contextMenu, filesystemCommands, sharedCommands);
+                }
+                PrepareBaseMenu(menu, contextMenu, actions!, directorySelection);
+                RemoveExcludedFileCommands(menu, contextMenu, directorySelection);
             }
             else if (excludedCommands is not null)
-                PrepareContentMenu(menu, contextMenu, excludedCommands);
-            InstallMenuMessageForwarder(owner, contextMenu, isBaseMenu || excludedCommands is not null, excludedCommands is not null, out subclassProc);
+                PrepareContentMenu(menu, contextMenu, excludedCommands, directorySelection);
+            InstallMenuMessageForwarder(owner, contextMenu, isBaseMenu || excludedCommands is not null, excludedCommands is not null, directorySelection, out subclassProc);
             subclassInstalled = true;
             var point = GetCursorPosition();
             if (secondRightClick is not null)
@@ -303,7 +328,7 @@ internal static class ShellContextMenu
             _ = SetForegroundWindow(owner);
             var commandId = TrackPopupMenuEx(menu, isBaseMenu || excludedCommands is not null ? PopupFlags & ~0x0002u : PopupFlags, point.X, point.Y, owner, IntPtr.Zero);
             if (isBaseMenu)
-                baseCommands = CollectComparableCommands(menu, contextMenu);
+                baseCommands = CollectComparableCommands(menu, contextMenu, allowVerbless: directorySelection);
             _ = PostMessage(owner, 0, IntPtr.Zero, IntPtr.Zero);
 
             if (commandId != 0)
@@ -383,16 +408,228 @@ internal static class ShellContextMenu
         }
     }
 
-    private static void PrepareBaseMenu(IntPtr menu, IContextMenu contextMenu, IReadOnlyList<ShellMenuAction> actions)
+    private static IContextMenu GetItemContextMenu(IShellFolder parent, IntPtr owner, int count, IntPtr children)
+    {
+        var interfaceId = typeof(IContextMenu).GUID;
+        Marshal.ThrowExceptionForHR(parent.GetUIObjectOf(owner, (uint)count, children, ref interfaceId, IntPtr.Zero, out var pointer));
+        try { return (IContextMenu)Marshal.GetObjectForIUnknown(pointer); }
+        finally { _ = Marshal.Release(pointer); }
+    }
+
+    private static (HashSet<string> Verbs, HashSet<string> WildcardVerbs, HashSet<string> DirectoryOnlyVerbs, Dictionary<string, int> Commands, HashSet<string> WildcardLabels) CollectSharedDirectoryCommands(
+        IShellFolder parent, IntPtr owner, int count, IntPtr children, IntPtr itemPidl)
+    {
+        var verbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var wildcardVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var directoryOnlyVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var wildcardLabels = new HashSet<string>(StringComparer.Ordinal);
+        var handlers = new Dictionary<Guid, List<string>>();
+        var whitelist = DirectoryWhitelist.Value;
+        using var fileVerbs = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(@"*\shell");
+        using var fileHandlers = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(@"*\shellex\ContextMenuHandlers");
+        var fileVerbNames = new HashSet<string>(fileVerbs?.GetSubKeyNames() ?? [], StringComparer.OrdinalIgnoreCase);
+        var fileHandlerIds = GetHandlerIds(fileHandlers);
+        foreach (var className in new[] { "Directory", "Folder" })
+        {
+            using var directoryVerbs = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(className + @"\shell");
+            verbs.UnionWith(GetEligibleDirectoryVerbs(directoryVerbs, fileVerbNames, whitelist));
+            if (directoryVerbs is not null)
+            {
+                directoryOnlyVerbs.UnionWith(directoryVerbs.GetSubKeyNames());
+                wildcardVerbs.UnionWith(directoryVerbs.GetSubKeyNames().Where(fileVerbNames.Contains));
+            }
+            using var directoryHandlers = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(className + @"\shellex\ContextMenuHandlers");
+            foreach (var handler in GetHandlerIds(directoryHandlers))
+                if (IsEligibleDirectoryHandler(handler, fileHandlerIds, whitelist.HandlerIds))
+                {
+                    if (!handlers.TryGetValue(handler, out var classes))
+                        handlers[handler] = classes = [];
+                    classes.Add(className);
+                }
+        }
+
+        directoryOnlyVerbs.ExceptWith(verbs);
+        var commands = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (handlers.Count == 0)
+            return (verbs, wildcardVerbs, directoryOnlyVerbs, commands, wildcardLabels);
+        IntPtr dataPointer = IntPtr.Zero;
+        IntPtr folderPidl = IntPtr.Zero;
+        try
+        {
+            var dataId = typeof(IDataObject).GUID;
+            Marshal.ThrowExceptionForHR(parent.GetUIObjectOf(owner, (uint)count, children, ref dataId, IntPtr.Zero, out dataPointer));
+            folderPidl = ILClone(itemPidl);
+            if (folderPidl == IntPtr.Zero || !ILRemoveLastID(folderPidl))
+                throw new InvalidOperationException("Could not obtain the parent PIDL.");
+            foreach (var (handlerId, classNames) in handlers)
+            {
+                var handlerCommands = new Dictionary<string, int>(StringComparer.Ordinal);
+                foreach (var className in classNames)
+                {
+                    object? instance = null;
+                    IntPtr pointer = IntPtr.Zero;
+                    IntPtr handlerMenu = IntPtr.Zero;
+                    try
+                    {
+                        using var classKey = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(className);
+                        if (classKey is null)
+                            continue;
+                        var classId = handlerId;
+                        var initId = typeof(IShellExtInit).GUID;
+                        Marshal.ThrowExceptionForHR(CoCreateInstance(ref classId, IntPtr.Zero, 1, ref initId, out pointer));
+                        instance = Marshal.GetObjectForIUnknown(pointer);
+                        Marshal.ThrowExceptionForHR(((IShellExtInit)instance).Initialize(folderPidl, dataPointer, classKey.Handle.DangerousGetHandle()));
+                        var handlerMenuContext = (IContextMenu)instance;
+                        handlerMenu = CreatePopupMenu();
+                        if (handlerMenu == IntPtr.Zero)
+                            throw new InvalidOperationException("CreatePopupMenu failed.");
+                        Marshal.ThrowExceptionForHR(handlerMenuContext.QueryContextMenu(handlerMenu, 0, FirstCommandId, LastCommandId, MenuFlags | MenuCanRename));
+                        if (fileHandlerIds.Contains(handlerId))
+                            wildcardLabels.UnionWith(CollectMenuLabels(handlerMenu));
+                        foreach (var (command, occurrences) in CollectComparableCommands(handlerMenu, handlerMenuContext, includeDisabled: true, allowVerbless: true))
+                            handlerCommands[command] = Math.Max(handlerCommands.GetValueOrDefault(command), occurrences);
+                    }
+                    catch (Exception exception)
+                    {
+                        System.Diagnostics.Trace.TraceError("Could not inspect directory context menu handler {0}: {1}", handlerId, exception);
+                    }
+                    finally
+                    {
+                        if (handlerMenu != IntPtr.Zero) _ = DestroyMenu(handlerMenu);
+                        if (instance is not null && Marshal.IsComObject(instance)) _ = Marshal.ReleaseComObject(instance);
+                        if (pointer != IntPtr.Zero) _ = Marshal.Release(pointer);
+                    }
+                }
+                foreach (var (command, occurrences) in handlerCommands)
+                    commands[command] = commands.GetValueOrDefault(command) + occurrences;
+            }
+        }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Trace.TraceError("Could not inspect directory context menu handlers: {0}", exception);
+        }
+        finally
+        {
+            if (folderPidl != IntPtr.Zero) Marshal.FreeCoTaskMem(folderPidl);
+            if (dataPointer != IntPtr.Zero) _ = Marshal.Release(dataPointer);
+        }
+        return (verbs, wildcardVerbs, directoryOnlyVerbs, commands, wildcardLabels);
+    }
+
+    private static HashSet<string> CollectMenuLabels(IntPtr menu)
+    {
+        var labels = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = 0; index < GetMenuItemCount(menu); index++)
+        {
+            var label = MenuLabelKey(menu, index);
+            if (label is not null)
+                labels.Add(label);
+        }
+        return labels;
+    }
+
+    private static string? MenuLabelKey(IntPtr menu, int index)
+    {
+        var state = GetMenuState(menu, (uint)index, MenuByPosition);
+        if (state == uint.MaxValue || (state & MenuSeparator) != 0)
+            return null;
+        var label = new StringBuilder(512);
+        var length = GetMenuString(menu, (uint)index, label, label.Capacity, MenuByPosition);
+        return length > 0 && length < label.Capacity - 1
+            ? (GetSubMenu(menu, index) != IntPtr.Zero ? "submenu\0" : "item\0") + label : null;
+    }
+
+    private static bool IsWildcardDirectoryMatch(string? verb, string? label, HashSet<string> wildcardVerbs,
+        HashSet<string> directoryOnlyVerbs, HashSet<string> wildcardLabels) =>
+        (verb is not null && wildcardVerbs.Contains(verb)) ||
+        ((verb is null || !directoryOnlyVerbs.Contains(verb)) && label is not null && wildcardLabels.Contains(label));
+
+    private static bool IsEligibleDirectoryHandler(Guid handler, HashSet<Guid> fileHandlerIds, HashSet<Guid> whitelistedHandlerIds) =>
+        fileHandlerIds.Contains(handler) || whitelistedHandlerIds.Contains(handler);
+
+    private static HashSet<string> GetEligibleDirectoryVerbs(Microsoft.Win32.RegistryKey? directoryVerbs,
+        HashSet<string> fileVerbNames, DirectoryMenuWhitelist whitelist)
+    {
+        var verbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (directoryVerbs is null)
+            return verbs;
+        foreach (var name in directoryVerbs.GetSubKeyNames())
+        {
+            if (fileVerbNames.Contains(name) || whitelist.Verbs.Contains(name))
+            {
+                verbs.Add(name);
+                continue;
+            }
+            using var entry = directoryVerbs.OpenSubKey(name);
+            if (Guid.TryParse(entry?.GetValue("ExplorerCommandHandler") as string, out var handlerId) &&
+                whitelist.HandlerIds.Contains(handlerId))
+                verbs.Add(name);
+        }
+        return verbs;
+    }
+
+    private static HashSet<Guid> GetHandlerIds(Microsoft.Win32.RegistryKey? key)
+    {
+        var handlers = new HashSet<Guid>();
+        if (key is null)
+            return handlers;
+        foreach (var name in key.GetSubKeyNames())
+        {
+            using var entry = key.OpenSubKey(name);
+            var value = entry?.GetValue(null) as string;
+            if (value is not null && value.StartsWith('-'))
+                continue;
+            if (Guid.TryParse(value, out var handler) || Guid.TryParse(name, out handler))
+                handlers.Add(handler);
+        }
+        return handlers;
+    }
+
+    private static void FilterDirectoryBaseMenu(IntPtr menu, IContextMenu contextMenu,
+        IReadOnlyDictionary<string, int> filesystemCommands,
+        (HashSet<string> Verbs, HashSet<string> WildcardVerbs, HashSet<string> DirectoryOnlyVerbs, Dictionary<string, int> Commands, HashSet<string> WildcardLabels) shared)
+    {
+        var nativeCommands = CollectComparableCommands(menu, contextMenu, includeDisabled: true, allowVerbless: true);
+        var nativeVerbs = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < GetMenuItemCount(menu); index++)
+        {
+            var id = GetMenuItemID(menu, index);
+            if (id >= FirstCommandId && id <= LastCommandId && GetCommandVerb(contextMenu, id - FirstCommandId) is { Length: > 0 } verb)
+                nativeVerbs[verb] = nativeVerbs.GetValueOrDefault(verb) + 1;
+        }
+        for (var index = GetMenuItemCount(menu) - 1; index >= 0; index--)
+        {
+            var id = GetMenuItemID(menu, index);
+            var verb = id >= FirstCommandId && id <= LastCommandId ? GetCommandVerb(contextMenu, id - FirstCommandId) : null;
+            var command = ComparableCommand(menu, contextMenu, index, includeDisabled: true, allowVerbless: true);
+            var label = MenuLabelKey(menu, index);
+            if (string.Equals(verb, "properties", StringComparison.OrdinalIgnoreCase) ||
+                IsWildcardDirectoryMatch(verb, label, shared.WildcardVerbs, shared.DirectoryOnlyVerbs, shared.WildcardLabels) ||
+                (verb is not null && shared.Verbs.Contains(verb) && nativeVerbs[verb] == 1) ||
+                (command is not null && nativeCommands.TryGetValue(command, out var nativeCount) && nativeCount == 1 &&
+                    ((filesystemCommands.TryGetValue(command, out var filesystemCount) && filesystemCount == 1) ||
+                     (shared.Commands.TryGetValue(command, out var sharedCount) && sharedCount == 1))))
+                continue;
+            var removed = GetSubMenu(menu, index) != IntPtr.Zero
+                ? DeleteMenu(menu, (uint)index, MenuByPosition)
+                : RemoveMenu(menu, (uint)index, MenuByPosition);
+            if (!removed)
+                throw new InvalidOperationException("Could not filter the directory Base Menu.");
+        }
+    }
+
+    private static void PrepareBaseMenu(IntPtr menu, IContextMenu contextMenu, IReadOnlyList<ShellMenuAction> actions, bool directorySelection)
     {
         var standardVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            { "copy", "copyaspath", "paste", "rename", "delete", "cut", "link", "open", "openas", "edit" };
+            { "copy", "copyaspath", "paste", "rename", "delete", "cut" };
+        if (!directorySelection)
+            standardVerbs.UnionWith(["link", "open", "openas", "edit"]);
         var openWithLabel = new StringBuilder(256);
         var shellModule = GetModuleHandle("shell32.dll");
         var hasOpenWithLabel = shellModule != IntPtr.Zero && LoadString(shellModule, 5376, openWithLabel, openWithLabel.Capacity) > 0;
         for (var index = GetMenuItemCount(menu) - 1; index >= 0; index--)
         {
-            if (hasOpenWithLabel && GetSubMenu(menu, index) != IntPtr.Zero &&
+            if (!directorySelection && hasOpenWithLabel && GetSubMenu(menu, index) != IntPtr.Zero &&
                 (GetMenuState(menu, (uint)index, MenuByPosition) & MenuOwnerDrawn) != 0)
             {
                 var label = new StringBuilder(256);
@@ -408,7 +645,7 @@ internal static class ShellContextMenu
             if (id < FirstCommandId || id > LastCommandId)
                 continue;
             var verb = GetCommandVerb(contextMenu, id - FirstCommandId);
-            if (verb is null || (!standardVerbs.Contains(verb) && !BlacklistedVerbs.Value.Contains(verb)))
+            if (verb is null || (!standardVerbs.Contains(verb) && (directorySelection || !BlacklistedVerbs.Value.Contains(verb))))
                 continue;
             if (!RemoveMenu(menu, (uint)index, MenuByPosition))
                 throw new InvalidOperationException("Could not rearrange the Shell menu.");
@@ -427,10 +664,10 @@ internal static class ShellContextMenu
         }
     }
 
-    private static string? ComparableCommand(IntPtr menu, IContextMenu contextMenu, int index)
+    private static string? ComparableCommand(IntPtr menu, IContextMenu contextMenu, int index, bool includeDisabled = false, bool allowVerbless = false)
     {
         var state = GetMenuState(menu, (uint)index, MenuByPosition);
-        if (state == uint.MaxValue || (state & (MenuDisabled | MenuSeparator)) != 0)
+        if (state == uint.MaxValue || (state & MenuSeparator) != 0 || (!includeDisabled && (state & MenuDisabled) != 0))
             return null;
         var label = new StringBuilder(512);
         var labelLength = GetMenuString(menu, (uint)index, label, label.Capacity, MenuByPosition);
@@ -441,7 +678,7 @@ internal static class ShellContextMenu
         {
             var leafCount = 0;
             var verbCount = 0;
-            var contents = ComparableSubmenu(submenu, contextMenu, ref leafCount, ref verbCount);
+            var contents = ComparableSubmenu(submenu, contextMenu, ref leafCount, ref verbCount, includeDisabled);
             return contents is not null && (verbCount > 0 || leafCount > 1)
                 ? "submenu\0" + JsonSerializer.Serialize(new[] { label.ToString(), contents }) : null;
         }
@@ -450,11 +687,11 @@ internal static class ShellContextMenu
             return null;
         var verb = GetCommandVerb(contextMenu, id - FirstCommandId);
         if (string.IsNullOrWhiteSpace(verb))
-            return null;
+            return allowVerbless ? "label\0" + label : null;
         return verb.ToUpperInvariant() + "\0" + label;
     }
 
-    private static string? ComparableSubmenu(IntPtr menu, IContextMenu contextMenu, ref int leafCount, ref int verbCount)
+    private static string? ComparableSubmenu(IntPtr menu, IContextMenu contextMenu, ref int leafCount, ref int verbCount, bool includeDisabled)
     {
         var entries = new List<string>();
         for (var index = 0; index < GetMenuItemCount(menu); index++)
@@ -464,7 +701,7 @@ internal static class ShellContextMenu
                 return null;
             if ((state & MenuSeparator) != 0)
                 continue;
-            if ((state & MenuDisabled) != 0)
+            if (!includeDisabled && (state & MenuDisabled) != 0)
                 return null;
             var label = new StringBuilder(512);
             var labelLength = GetMenuString(menu, (uint)index, label, label.Capacity, MenuByPosition);
@@ -473,7 +710,7 @@ internal static class ShellContextMenu
             var submenu = GetSubMenu(menu, index);
             if (submenu != IntPtr.Zero)
             {
-                var contents = ComparableSubmenu(submenu, contextMenu, ref leafCount, ref verbCount);
+                var contents = ComparableSubmenu(submenu, contextMenu, ref leafCount, ref verbCount, includeDisabled);
                 if (contents is null)
                     return null;
                 entries.Add(JsonSerializer.Serialize(new[] { "submenu", label.ToString(), contents }));
@@ -493,25 +730,36 @@ internal static class ShellContextMenu
         return entries.Count > 0 ? JsonSerializer.Serialize(entries) : null;
     }
 
-    private static Dictionary<string, int> CollectComparableCommands(IntPtr menu, IContextMenu contextMenu)
+    private static Dictionary<string, int> CollectComparableCommands(IntPtr menu, IContextMenu contextMenu, bool includeDisabled = false, bool allowVerbless = false)
     {
         var commands = new Dictionary<string, int>(StringComparer.Ordinal);
+        var labels = new Dictionary<string, int>(StringComparer.Ordinal);
         for (var index = 0; index < GetMenuItemCount(menu); index++)
         {
-            var command = ComparableCommand(menu, contextMenu, index);
+            if (allowVerbless)
+            {
+                var label = new StringBuilder(512);
+                var length = GetMenuString(menu, (uint)index, label, label.Capacity, MenuByPosition);
+                if (length > 0 && length < label.Capacity - 1)
+                    labels[label.ToString()] = labels.GetValueOrDefault(label.ToString()) + 1;
+            }
+            var command = ComparableCommand(menu, contextMenu, index, includeDisabled, allowVerbless);
             if (command is not null)
                 commands[command] = commands.GetValueOrDefault(command) + 1;
         }
+        foreach (var (label, occurrences) in labels)
+            if (occurrences != 1)
+                commands.Remove("label\0" + label);
         return commands;
     }
 
-    private static void PrepareContentMenu(IntPtr menu, IContextMenu contextMenu, IReadOnlyDictionary<string, int> baseCommands)
+    private static void PrepareContentMenu(IntPtr menu, IContextMenu contextMenu, IReadOnlyDictionary<string, int> baseCommands, bool directorySelection)
     {
-        RemoveExcludedFileCommands(menu, contextMenu, isContentMenu: true);
-        var contentCommands = CollectComparableCommands(menu, contextMenu);
+        RemoveExcludedFileCommands(menu, contextMenu, directorySelection, isContentMenu: true);
+        var contentCommands = CollectComparableCommands(menu, contextMenu, allowVerbless: directorySelection);
         for (var index = GetMenuItemCount(menu) - 1; index >= 0; index--)
         {
-            var command = ComparableCommand(menu, contextMenu, index);
+            var command = ComparableCommand(menu, contextMenu, index, allowVerbless: directorySelection);
             if (command is not null && baseCommands.TryGetValue(command, out var baseCount) && baseCount == 1 &&
                 contentCommands.TryGetValue(command, out var contentCount) && contentCount == 1)
             {
@@ -525,17 +773,18 @@ internal static class ShellContextMenu
         RemoveRedundantSeparators(menu);
     }
 
-    private static void RemoveExcludedFileCommands(IntPtr menu, IContextMenu contextMenu, bool isContentMenu = false)
+    private static void RemoveExcludedFileCommands(IntPtr menu, IContextMenu contextMenu, bool directorySelection, bool isContentMenu = false)
     {
         for (var index = GetMenuItemCount(menu) - 1; index >= 0; index--)
         {
             var submenu = GetSubMenu(menu, index);
             if (submenu != IntPtr.Zero)
-                RemoveExcludedFileCommands(submenu, contextMenu, isContentMenu);
+                RemoveExcludedFileCommands(submenu, contextMenu, directorySelection, isContentMenu);
             var id = GetMenuItemID(menu, index);
             if (id >= FirstCommandId && id <= LastCommandId &&
                 GetCommandVerb(contextMenu, id - FirstCommandId) is { } verb &&
-                (ExcludedFileVerbs.Contains(verb) || (isContentMenu && string.Equals(verb, "properties", StringComparison.OrdinalIgnoreCase))) &&
+                ((ExcludedFileVerbs.Contains(verb) && (!directorySelection || !string.Equals(verb, "link", StringComparison.OrdinalIgnoreCase))) ||
+                 (isContentMenu && string.Equals(verb, "properties", StringComparison.OrdinalIgnoreCase))) &&
                 !RemoveMenu(menu, (uint)index, MenuByPosition))
                 throw new InvalidOperationException("Could not remove a Shell file command.");
         }
@@ -583,6 +832,44 @@ internal static class ShellContextMenu
         return verbs;
     }
 
+    private static DirectoryMenuWhitelist LoadDirectoryWhitelist()
+    {
+        using var stream = typeof(ShellContextMenu).Assembly.GetManifestResourceStream(DirectoryWhitelistResourceName)
+            ?? throw new InvalidOperationException($"Embedded directory menu whitelist '{DirectoryWhitelistResourceName}' is missing.");
+        using var document = JsonDocument.Parse(stream);
+        return ParseDirectoryWhitelist(document);
+    }
+
+    private static DirectoryMenuWhitelist ParseDirectoryWhitelist(JsonDocument document)
+    {
+        if (document.RootElement.GetProperty("_type").GetString() != "directoryMenuWhitelist")
+            throw new InvalidDataException("Invalid directory menu whitelist type.");
+        var verbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var handlerIds = new HashSet<Guid>();
+        foreach (var extension in document.RootElement.GetProperty("extensions").EnumerateArray())
+        {
+            if (extension.GetProperty("_type").GetString() != "shellExtension" ||
+                string.IsNullOrWhiteSpace(extension.GetProperty("name").GetString()))
+                throw new InvalidDataException("Invalid directory menu whitelist entry.");
+            foreach (var element in extension.GetProperty("verbs").EnumerateArray())
+            {
+                var verb = element.GetString();
+                if (string.IsNullOrWhiteSpace(verb))
+                    throw new InvalidDataException("A whitelisted Shell verb is missing or empty.");
+                verbs.Add(verb);
+            }
+            foreach (var element in extension.GetProperty("clsids").EnumerateArray())
+            {
+                if (!Guid.TryParse(element.GetString(), out var handlerId) || handlerId == Guid.Empty)
+                    throw new InvalidDataException("A whitelisted Shell handler CLSID is invalid.");
+                handlerIds.Add(handlerId);
+            }
+        }
+        return new DirectoryMenuWhitelist(verbs, handlerIds);
+    }
+
+    private sealed record DirectoryMenuWhitelist(HashSet<string> Verbs, HashSet<Guid> HandlerIds);
+
     internal static string Rename(string path, string name, IntPtr owner)
     {
         IntPtr absolutePidl = IntPtr.Zero;
@@ -623,7 +910,7 @@ internal static class ShellContextMenu
         }
     }
 
-    private static void InstallMenuMessageForwarder(IntPtr owner, IContextMenu contextMenu, bool excludeFileCommands, bool isContentMenu, out SubclassProc callback)
+    private static void InstallMenuMessageForwarder(IntPtr owner, IContextMenu contextMenu, bool excludeFileCommands, bool isContentMenu, bool directorySelection, out SubclassProc callback)
     {
         var menu3 = contextMenu as IContextMenu3;
         var menu2 = contextMenu as IContextMenu2;
@@ -644,7 +931,7 @@ internal static class ShellContextMenu
                         handled = true;
                     }
                     if (excludeFileCommands && message == 0x0117 && wParam != IntPtr.Zero)
-                        RemoveExcludedFileCommands(wParam, contextMenu, isContentMenu);
+                        RemoveExcludedFileCommands(wParam, contextMenu, directorySelection, isContentMenu);
                     if (handled)
                         return menuResult;
                 }
@@ -683,6 +970,12 @@ internal static class ShellContextMenu
 
     [DllImport("shell32.dll")]
     private static extern IntPtr ILFindLastID(IntPtr itemIdList);
+
+    [DllImport("shell32.dll")]
+    private static extern IntPtr ILClone(IntPtr itemIdList);
+
+    [DllImport("ole32.dll")]
+    private static extern int CoCreateInstance(ref Guid classId, IntPtr outer, uint context, ref Guid interfaceId, out IntPtr result);
 
     [DllImport("shell32.dll")]
     private static extern IntPtr ILCombine(IntPtr parent, IntPtr child);
@@ -868,7 +1161,7 @@ internal interface IShellFolder
     [PreserveSig] int CompareIDs(IntPtr parameter, IntPtr itemIdList1, IntPtr itemIdList2);
     [PreserveSig] int CreateViewObject(IntPtr owner, ref Guid interfaceId, out IShellView result);
     [PreserveSig] int GetAttributesOf(uint count, IntPtr itemIdLists, ref uint attributes);
-    [PreserveSig] int GetUIObjectOf(IntPtr owner, uint count, IntPtr itemIdLists, ref Guid interfaceId, IntPtr reserved, out IContextMenu result);
+    [PreserveSig] int GetUIObjectOf(IntPtr owner, uint count, IntPtr itemIdLists, ref Guid interfaceId, IntPtr reserved, out IntPtr result);
     [PreserveSig] int GetDisplayNameOf(IntPtr itemIdList, uint flags, IntPtr name);
     [PreserveSig] int SetNameOf(IntPtr owner, IntPtr itemIdList, IntPtr name, uint flags, out IntPtr renamedItemIdList);
 }
@@ -924,4 +1217,12 @@ internal interface IContextMenu3
     [PreserveSig] int GetCommandString(UIntPtr commandOffset, uint flags, IntPtr reserved, IntPtr name, uint maximumLength);
     [PreserveSig] int HandleMenuMsg(uint message, IntPtr wParam, IntPtr lParam);
     [PreserveSig] int HandleMenuMsg2(uint message, IntPtr wParam, IntPtr lParam, out IntPtr result);
+}
+
+[ComImport]
+[Guid("000214E8-0000-0000-C000-000000000046")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IShellExtInit
+{
+    [PreserveSig] int Initialize(IntPtr folder, IntPtr dataObject, IntPtr key);
 }

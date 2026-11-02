@@ -3,6 +3,7 @@ param(
     [string[]] $Path,
     [switch] $Background,
     [switch] $Generic,
+    [switch] $FilesystemObjects,
     [switch] $NoCanRename,
     [guid] $HandlerClsid = [guid]::Empty
 )
@@ -19,8 +20,11 @@ if ($Background -and ($paths.Count -ne 1 -or -not [IO.Directory]::Exists($paths[
 if ($Generic -and ($Background -or $paths.Count -ne 1 -or -not [IO.File]::Exists($paths[0]))) {
     throw 'Generic requires exactly one file.'
 }
-if ($HandlerClsid -ne [guid]::Empty -and -not $Generic) {
-    throw 'HandlerClsid requires Generic.'
+if ($FilesystemObjects -and ($Background -or $Generic -or $paths.Count -ne 1 -or -not [IO.Directory]::Exists($paths[0]))) {
+    throw 'FilesystemObjects requires exactly one directory and cannot be combined with Generic or Background.'
+}
+if ($HandlerClsid -ne [guid]::Empty -and -not ($Generic -or $FilesystemObjects)) {
+    throw 'HandlerClsid requires Generic or FilesystemObjects.'
 }
 if (-not $Background -and $paths.Count -gt 1) {
     $parent = [IO.Path]::GetDirectoryName($paths[0])
@@ -298,6 +302,10 @@ try {
         $genericKeys = @([Microsoft.Win32.Registry]::ClassesRoot.OpenSubKey('*'),
             [Microsoft.Win32.Registry]::ClassesRoot.OpenSubKey('AllFilesystemObjects'))
         if (@($genericKeys | Where-Object { $null -eq $_ }).Count -gt 0) { throw 'Generic Shell classes not found.' }
+    } elseif ($FilesystemObjects) {
+        $className = if ($HandlerClsid -ne [guid]::Empty) { 'Folder' } else { 'AllFilesystemObjects' }
+        $genericKeys = @([Microsoft.Win32.Registry]::ClassesRoot.OpenSubKey($className))
+        if ($null -eq $genericKeys[0]) { throw "$className Shell class not found." }
     }
     [IntPtr[]] $keyHandles = @($genericKeys | ForEach-Object { $_.Handle.DangerousGetHandle() })
     $menu = @([ContextMenuSpike]::Inspect($paths, [bool] $Background, $keyHandles, -not $NoCanRename, $HandlerClsid) | ForEach-Object {

@@ -475,7 +475,8 @@ public partial class ContentView : UserControl
                     return;
                 }
                 var selectedPaths = FileList.SelectedItems.OfType<DirectoryRow>().Select(item => item.FullPath).ToArray();
-                if (!forceNativeMenu && selectedPaths.Length > 0 && selectedPaths.All(System.IO.File.Exists) &&
+                if (!forceNativeMenu && selectedPaths.Length > 0 &&
+                    (selectedPaths.All(System.IO.File.Exists) || selectedPaths.All(System.IO.Directory.Exists)) &&
                     (Keyboard.Modifiers & ModifierKeys.Shift) == 0)
                 {
                     if (alternate && _baseMenuCommands is { } baseCommands &&
@@ -486,7 +487,7 @@ public partial class ContentView : UserControl
                         var selectionVersion = _selectionVersion;
                         var repeatOnSameRow = false;
                         var clickedWithShift = false;
-                        SutShell.ShowContentFileMenu(selectedPaths, owner, baseCommands,
+                        SutShell.ShowContentMenu(selectedPaths, owner, baseCommands,
                             (screenX, screenY, overOwner, shiftPressed) =>
                             {
                                 if (!overOwner)
@@ -520,7 +521,7 @@ public partial class ContentView : UserControl
                         var clickedBackground = false;
                         var clickedElsewhere = false;
                         var clickedWithShift = false;
-                        var shownCommands = SutShell.ShowBaseFileMenu(selectedPaths, owner, actions,
+                        var shownCommands = SutShell.ShowBaseMenu(selectedPaths, owner, actions,
                             alternate ? (screenX, screenY, overOwner, shiftPressed) =>
                             {
                                 if (overOwner)

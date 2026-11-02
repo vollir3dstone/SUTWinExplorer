@@ -40,6 +40,9 @@ public sealed class SutShellMenuProbe : System.IDisposable
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint GetMenuState(System.IntPtr menu, uint position, uint flags);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern System.IntPtr GetSubMenu(System.IntPtr menu, int position);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool RemoveMenu(System.IntPtr menu, uint position, uint flags);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern System.IntPtr CreatePopupMenu();
+    [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool DestroyMenu(System.IntPtr menu);
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern bool AppendMenu(System.IntPtr menu, uint flags, System.UIntPtr id, string text);
     [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern System.IntPtr GetModuleHandle(string name);
     [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern int LoadString(System.IntPtr module, uint id, System.Text.StringBuilder text, int length);
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
@@ -62,6 +65,19 @@ public sealed class SutShellMenuProbe : System.IDisposable
     public string AlterSubmenu;
     public bool EmptySubmenu;
     public bool SubmenuAltered;
+
+    public static System.IntPtr CreateAmbiguousMenu()
+    {
+        var menu = CreatePopupMenu();
+        var submenu = CreatePopupMenu();
+        if (menu == System.IntPtr.Zero || submenu == System.IntPtr.Zero ||
+            !AppendMenu(menu, 0, new System.UIntPtr(1), "Shared") ||
+            !AppendMenu(menu, 0, new System.UIntPtr(2), "Shared") ||
+            !AppendMenu(menu, 0x10, new System.UIntPtr(unchecked((ulong)submenu.ToInt64())), "Lazy") ||
+            !AppendMenu(menu, 0x800, System.UIntPtr.Zero, null))
+            throw new System.InvalidOperationException("Could not create the ambiguous menu fixture.");
+        return menu;
+    }
 
     public static string OpenWithLabel()
     {
@@ -549,6 +565,35 @@ $application.InitializeComponent()
 $application.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
 $shell = $assembly.GetType('SUTWinExplorer.SutShell', $true)
 $flags = [System.Reflection.BindingFlags]'Static,NonPublic'
+$menuType = $assembly.GetType('SUTWinExplorer.ShellContextMenu', $true)
+$whitelistJson = '{"_type":"directoryMenuWhitelist","extensions":[{"_type":"shellExtension","name":"test","verbs":["TestVerb"],"clsids":["{11111111-2222-3333-4444-555555555555}"]}]}'
+$whitelistDocument = [System.Text.Json.JsonDocument]::Parse($whitelistJson)
+try {
+    $parsedWhitelist = $menuType.GetMethod('ParseDirectoryWhitelist', $flags).Invoke($null, @($whitelistDocument))
+    $parsedVerbs = $parsedWhitelist.GetType().GetProperty('Verbs').GetValue($parsedWhitelist)
+    $parsedHandlers = $parsedWhitelist.GetType().GetProperty('HandlerIds').GetValue($parsedWhitelist)
+    $testHandler = [guid] '{11111111-2222-3333-4444-555555555555}'
+    $emptyHandlers = [System.Collections.Generic.HashSet[guid]]::new()
+    $eligibleHandler = $menuType.GetMethod('IsEligibleDirectoryHandler', $flags)
+    Assert-True ($parsedVerbs.Contains('testverb') -and $parsedHandlers.Contains($testHandler) -and
+        $eligibleHandler.Invoke($null, [object[]] @($testHandler, $emptyHandlers, $parsedHandlers)) -and
+        -not $eligibleHandler.Invoke($null, [object[]] @([guid]::NewGuid(), $emptyHandlers, $parsedHandlers))) 'Directory whitelist parsing or handler eligibility failed.'
+} finally { $whitelistDocument.Dispose() }
+$ambiguousMenu = [SutShellMenuProbe]::CreateAmbiguousMenu()
+try {
+    $labels = $menuType.GetMethod('CollectMenuLabels', $flags).Invoke($null, @($ambiguousMenu))
+    $wildcardVerbs = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $directoryOnlyVerbs = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $null = $wildcardVerbs.Add('SharedVerb')
+    $null = $directoryOnlyVerbs.Add('DirectoryOnlyVerb')
+    $wildcardMatch = $menuType.GetMethod('IsWildcardDirectoryMatch', $flags)
+    Assert-True ($labels.Count -eq 2 -and $labels.Contains("item`0Shared") -and $labels.Contains("submenu`0Lazy") -and
+        $wildcardMatch.Invoke($null, [object[]] @('sharedverb', $null, $wildcardVerbs, $directoryOnlyVerbs, $labels)) -and
+        $wildcardMatch.Invoke($null, [object[]] @($null, "item`0Shared", $wildcardVerbs, $directoryOnlyVerbs, $labels)) -and
+        $wildcardMatch.Invoke($null, [object[]] @($null, "submenu`0Lazy", $wildcardVerbs, $directoryOnlyVerbs, $labels)) -and
+        -not $wildcardMatch.Invoke($null, [object[]] @('DirectoryOnlyVerb', "item`0Shared", $wildcardVerbs, $directoryOnlyVerbs, $labels)) -and
+        -not $wildcardMatch.Invoke($null, [object[]] @($null, "item`0Lazy", $wildcardVerbs, $directoryOnlyVerbs, $labels))) 'Ambiguous wildcard menu matching did not preserve the intended criteria.'
+} finally { [void] [SutShellMenuProbe]::DestroyMenu($ambiguousMenu) }
 $openDirectory = $shell.GetMethod('OpenDirectoryAsync', $flags)
 $openSortedDirectory = $shell.GetMethod('OpenSortedDirectoryAsync', $flags)
 $openCachedDirectory = $shell.GetMethod('OpenCachedDirectoryAsync', $flags)
@@ -813,6 +858,7 @@ try {
     foreach ($index in 1..80) {
         [System.IO.File]::WriteAllText((Join-Path $directory ('visible-test-{0:D3}.txt' -f $index)), 'test')
     }
+    [System.IO.Directory]::CreateDirectory((Join-Path $directory 'OtherFolder')) | Out-Null
     $previousContext = [System.Threading.SynchronizationContext]::Current
     [System.Threading.SynchronizationContext]::SetSynchronizationContext(
         [System.Windows.Threading.DispatcherSynchronizationContext]::new([System.Windows.Threading.Dispatcher]::CurrentDispatcher))
@@ -1555,6 +1601,222 @@ try {
         $folderRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'Folder') })[0]
         $renamedFileRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'renamed-notes.txt') })[0]
         Assert-True ($null -ne $folderRow -and $null -ne $renamedFileRow) 'Mixed-selection rows were not available.'
+        $otherFolderRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'OtherFolder') })[0]
+        Assert-True ($null -ne $otherFolderRow) 'The second directory menu test row was not loaded.'
+        $registrySuffix = [guid]::NewGuid().ToString('N')
+        $sharedVerb = "KISTestShared$registrySuffix"
+        $folderSharedVerb = "KISTestFolderShared$registrySuffix"
+        $directoryVerb = "KISTestDirectory$registrySuffix"
+        $sharedLabel = "KIS shared action $registrySuffix"
+        $folderSharedLabel = "KIS shared folder action $registrySuffix"
+        $directoryLabel = "KIS directory action $registrySuffix"
+        $registryPaths = @("Software\Classes\*\shell\$sharedVerb", "Software\Classes\Directory\shell\$sharedVerb",
+            "Software\Classes\*\shell\$folderSharedVerb", "Software\Classes\Folder\shell\$folderSharedVerb", "Software\Classes\Directory\shell\$directoryVerb")
+        try {
+            foreach ($registryPath in $registryPaths) {
+                $entry = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($registryPath)
+                try {
+                    $label = if ($registryPath.EndsWith($sharedVerb)) { $sharedLabel } elseif ($registryPath.EndsWith($folderSharedVerb)) { $folderSharedLabel } else { $directoryLabel }
+                    $entry.SetValue('', $label)
+                    $command = $entry.CreateSubKey('command')
+                    try { $command.SetValue('', 'cmd.exe /c exit 0') } finally { $command.Dispose() }
+                } finally { $entry.Dispose() }
+            }
+            $list.SelectedItems.Clear()
+            $list.SelectedItem = $folderRow
+            foreach ($menuKind in @('base', 'content')) {
+                $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+                try {
+                    $null = $showMenuCore.Invoke($view, [object[]] @($folderRow.PSObject.BaseObject, $true))
+                    Assert-True (($sharedLabel -in $menuProbe.Items) -eq ($menuKind -eq 'base') -and
+                        ($folderSharedLabel -in $menuProbe.Items) -eq ($menuKind -eq 'base') -and
+                        ($directoryLabel -in $menuProbe.Items) -eq ($menuKind -eq 'content')) "Registry-matched directory commands appeared in the wrong menu: $menuKind."
+                } finally { $menuProbe.Dispose() }
+            }
+            $whitelist = $menuType.GetField('DirectoryWhitelist', $flags).GetValue($null).Value
+            $whitelistedVerbs = $whitelist.GetType().GetProperty('Verbs').GetValue($whitelist)
+            $null = $whitelistedVerbs.Add($directoryVerb.ToLowerInvariant())
+            try {
+                foreach ($menuKind in @('base', 'content')) {
+                    $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+                    try {
+                        $null = $showMenuCore.Invoke($view, [object[]] @($folderRow.PSObject.BaseObject, $true))
+                        Assert-True (($directoryLabel -in $menuProbe.Items) -eq ($menuKind -eq 'base')) "The whitelisted directory command appeared in the wrong menu: $menuKind."
+                    } finally { $menuProbe.Dispose() }
+                }
+            } finally { $null = $whitelistedVerbs.Remove($directoryVerb) }
+            $explorerVerb = "KISTestExplorerCommand$registrySuffix"
+            $explorerPath = "Software\Classes\Directory\shell\$explorerVerb"
+            try {
+                $entry = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($explorerPath)
+                try { $entry.SetValue('ExplorerCommandHandler', $testHandler.ToString('B')) } finally { $entry.Dispose() }
+                $directoryVerbKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Classes\Directory\shell')
+                try {
+                    $emptyNames = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+                    $getEligibleVerbs = $menuType.GetMethod('GetEligibleDirectoryVerbs', $flags)
+                    $accepted = $getEligibleVerbs.Invoke($null, [object[]] @($directoryVerbKey, $emptyNames, $parsedWhitelist))
+                    $rejected = $getEligibleVerbs.Invoke($null, [object[]] @($directoryVerbKey, $emptyNames, $whitelist))
+                    Assert-True ($accepted.Contains($explorerVerb) -and -not $rejected.Contains($explorerVerb)) 'ExplorerCommandHandler CLSID whitelist matching failed.'
+                } finally { $directoryVerbKey.Dispose() }
+            } finally { [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($explorerPath, $false) }
+        } finally {
+            foreach ($registryPath in $registryPaths) {
+                [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($registryPath, $false)
+            }
+        }
+        foreach ($multiple in @($false, $true)) {
+            $list.SelectedItems.Clear()
+            $list.SelectedItems.Add($folderRow) | Out-Null
+            if ($multiple) { $list.SelectedItems.Add($otherFolderRow) | Out-Null }
+            $folderPaths = @($list.SelectedItems | ForEach-Object { $_.Entry.FullPath })
+            $folderNativeEntries = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path $folderPaths | ConvertFrom-Json).Menu
+            $folderProperties = @($folderNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -eq 'properties' -and $_.Text })
+            Assert-True ($folderProperties.Count -gt 0) "The Shell did not provide directory properties: multiple=$multiple."
+            if (-not $multiple) {
+                $singleFolderProperty = $folderProperties[0].Text
+                $folderFilesystemEntries = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path $folderPaths -FilesystemObjects | ConvertFrom-Json).Menu
+                $sevenZipNative = @($folderNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Text -eq '7-Zip' -and $_.HasSubmenu })
+                $sevenZipFileKey = [Microsoft.Win32.Registry]::ClassesRoot.OpenSubKey('*\shellex\ContextMenuHandlers\7-Zip')
+                $sevenZipFolderKey = [Microsoft.Win32.Registry]::ClassesRoot.OpenSubKey('Folder\shellex\ContextMenuHandlers\7-Zip')
+                try {
+                    $sevenZipShared = $null -ne $sevenZipFileKey -and $null -ne $sevenZipFolderKey -and
+                        $sevenZipFileKey.GetValue('') -eq $sevenZipFolderKey.GetValue('') -and $sevenZipNative.Count -eq 1
+                } finally {
+                    if ($sevenZipFileKey) { $sevenZipFileKey.Dispose() }
+                    if ($sevenZipFolderKey) { $sevenZipFolderKey.Dispose() }
+                }
+                $hgFileKey = [Microsoft.Win32.Registry]::ClassesRoot.OpenSubKey('*\shellex\ContextMenuHandlers\TortoiseHgCMenu')
+                $hgFolderKey = [Microsoft.Win32.Registry]::ClassesRoot.OpenSubKey('Folder\shellex\ContextMenuHandlers\TortoiseHgCMenu')
+                try {
+                    $hgWorkbench = @($folderNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Text -match '^Hg\s+&?Workbench$' -and -not $_.Verb -and -not $_.HasSubmenu -and -not $_.OwnerDrawn })
+                    $hgShared = $null -ne $hgFileKey -and $null -ne $hgFolderKey -and
+                        $hgFileKey.GetValue('') -eq $hgFolderKey.GetValue('') -and $hgWorkbench.Count -eq 1
+                } finally {
+                    if ($hgFileKey) { $hgFileKey.Dispose() }
+                    if ($hgFolderKey) { $hgFolderKey.Dispose() }
+                }
+            }
+            foreach ($menuKind in @('base', 'content', 'base')) {
+                $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+                try {
+                    $null = $showMenuCore.Invoke($view, [object[]] @($folderRow.PSObject.BaseObject, $true))
+                    $isBase = $menuProbe.ItemCount -ge 9 -and ($menuProbe.Items[0..8] -join ',') -ceq 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete'
+                    Assert-True ($isBase -eq ($menuKind -eq 'base')) "The directory menu did not alternate to $menuKind`: multiple=$multiple."
+                    foreach ($entry in $folderProperties) {
+                        $index = [Array]::IndexOf($menuProbe.Items, $entry.Text)
+                        Assert-True (($index -ge 0) -eq ($menuKind -eq 'base')) "Directory properties appeared in the wrong menu: multiple=$multiple, menu=$menuKind."
+                        if ($menuKind -eq 'base') { Assert-True (($menuProbe.States[$index] -band 3) -eq 0) 'Directory properties was disabled.' }
+                    }
+                    if ($multiple -and $menuKind -eq 'base') {
+                        Assert-True (($menuProbe.States[0] -band 3) -ne 0 -and ($menuProbe.States[1] -band 3) -ne 0) 'Rename and Path get must be disabled for multiple directories.'
+                    }
+                    if ($menuKind -eq 'base') {
+                        $folderBaseLabels = @($menuProbe.Items)
+                        if (-not $multiple) {
+                            if ($sevenZipShared) { Assert-True ('7-Zip' -in $folderBaseLabels) 'The shared 7-Zip handler was missing from the directory Base Menu.' }
+                            if ($hgShared) { Assert-True ($hgWorkbench[0].Text -in $folderBaseLabels) 'The shared Hg Workbench command was missing from the directory Base Menu.' }
+                            foreach ($entry in $folderFilesystemEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -and $_.Verb -notin @('copy', 'cut', 'paste', 'copyaspath', 'delete', 'rename') -and $_.Text }) {
+                                Assert-True ($entry.Text -in $folderBaseLabels) "An AllFilesystemObjects command was missing from the directory Base Menu: $($entry.Text)."
+                            }
+                        }
+                    }
+                    if ($menuKind -eq 'content') {
+                        if (-not $multiple -and $sevenZipShared) { Assert-True ('7-Zip' -notin $menuProbe.Items) 'The shared 7-Zip handler remained duplicated in the directory Content Menu.' }
+                        if (-not $multiple -and $hgShared) { Assert-True ($hgWorkbench[0].Text -notin $menuProbe.Items) 'The shared Hg Workbench command remained duplicated in the directory Content Menu.' }
+                        foreach ($entry in $folderNativeEntries | Where-Object { $_.Verb -in @('copy', 'cut', 'paste', 'copyaspath', 'delete', 'rename') -and $_.Text }) {
+                            Assert-True ($entry.Text -notin $menuProbe.Items) "An excluded command remained in the directory Content Menu: $($entry.Text)."
+                        }
+                        foreach ($entry in $folderNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Text -and $_.Verb -and -not $_.HasSubmenu -and -not $_.Disabled -and -not $_.OwnerDrawn -and $_.Text -notin $folderBaseLabels -and $_.Verb -notin @('copy', 'cut', 'paste', 'copyaspath', 'delete', 'rename', 'properties') }) {
+                            Assert-True ($entry.Text -in $menuProbe.Items) "A directory command absent from the Base Menu was lost: $($entry.Text)."
+                        }
+                    }
+                    Assert-True ($list.SelectedItems.Count -eq $folderPaths.Count) 'Switching directory menus changed the selection.'
+                } finally { $menuProbe.Dispose() }
+            }
+        }
+        if ($hgShared) {
+            $collisionVerb = "KISTestDirectoryCollision$registrySuffix"
+            $collisionPath = "Software\Classes\Directory\shell\$collisionVerb"
+            try {
+                $entry = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($collisionPath)
+                try {
+                    $entry.SetValue('', $hgWorkbench[0].Text)
+                    $command = $entry.CreateSubKey('command')
+                    try { $command.SetValue('', 'cmd.exe /c exit 0') } finally { $command.Dispose() }
+                } finally { $entry.Dispose() }
+                $list.SelectedItems.Clear()
+                $list.SelectedItem = $folderRow
+                $collisionEntries = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path $folderRow.Entry.FullPath | ConvertFrom-Json).Menu
+                Assert-True (@($collisionEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Text -ceq $hgWorkbench[0].Text }).Count -eq 2) 'The duplicate-label directory fixture was not shown by the Shell.'
+                $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+                try {
+                    $null = $showMenuCore.Invoke($view, [object[]] @($folderRow.PSObject.BaseObject, $true))
+                    Assert-True (@($menuProbe.Items | Where-Object { $_ -ceq $hgWorkbench[0].Text }).Count -eq 1) 'The ambiguous shared Hg command was lost or the directory-only command was promoted.'
+                } finally { $menuProbe.Dispose() }
+            } finally { [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($collisionPath, $false) }
+        }
+        $list.SelectedItems.Clear()
+        $list.SelectedItem = $folderRow
+        $propertiesProbe = [SutShellPropertiesProbe]::new('Folder')
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        $menuProbe.SelectLabel = $singleFolderProperty
+        try {
+            $null = $showMenu.Invoke($view, [object[]] @($folderRow.PSObject.BaseObject))
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $deadline = [DateTime]::UtcNow.AddSeconds(5)
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(50)
+            $timer.add_Tick({ if ($propertiesProbe.Opened -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+            $timer.Start()
+            try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+            Assert-True ($menuProbe.SelectIndex -ge 9 -and $propertiesProbe.Opened) 'Directory properties did not open a Windows dialog from the Base Menu.'
+        } finally { $menuProbe.Dispose(); $propertiesProbe.Dispose() }
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        $menuProbe.SelectIndex = 2
+        try {
+            $null = $showMenu.Invoke($view, [object[]] @($folderRow.PSObject.BaseObject))
+            $workflow = $assembly.GetType('SUTWinExplorer.CopyWorkflowState', $true).GetProperty('Shared').GetValue($null)
+            Assert-True ($workflow.IsPrepared -and @($workflow.PreparedPaths).Count -eq 1 -and
+                @($workflow.PreparedPaths)[0] -eq $folderRow.Entry.FullPath) 'Copy get did not prepare the selected directory.'
+        } finally {
+            $menuProbe.Dispose()
+            $view.FindName('CopyAbortButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        }
+        $originalCursor = [SutShellRightClickProbe]::CursorPosition()
+        $originalLeft = $window.Left
+        $originalTop = $window.Top
+        try {
+            $window.Left = 20
+            $window.Top = 20
+            $window.Activate() | Out-Null
+            $list.ScrollIntoView($folderRow)
+            $list.UpdateLayout()
+            $folderContainer = $list.ItemContainerGenerator.ContainerFromItem($folderRow)
+            Assert-True ($null -ne $folderContainer) 'The directory right-click test row was not realized.'
+            $folderPoint = $folderContainer.PointToScreen([System.Windows.Point]::new(10, $folderContainer.ActualHeight / 2))
+            $list.SelectedItems.Clear()
+            $list.SelectedItem = $folderRow
+            $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $folderPoint.X, [int] $folderPoint.Y, [int] $folderPoint.X, [int] $folderPoint.Y)
+            $rightClickProbe.SecondDelayMilliseconds = [int] [SutShellRightClickProbe]::GetDoubleClickTime() + 250
+            $rightClickProbe.AdditionalClicks = 2
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $deadline = [DateTime]::UtcNow.AddMilliseconds(3 * $rightClickProbe.SecondDelayMilliseconds + 7000)
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(50)
+            $timer.add_Tick({ if ($rightClickProbe.AdditionalMenuCount -eq 2 -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+            $timer.Start()
+            try {
+                [System.Windows.Threading.Dispatcher]::PushFrame($frame)
+                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasBase -and
+                    $rightClickProbe.AdditionalMenuCount -eq 2 -and $rightClickProbe.AdditionalMenuWasBase[0] -and
+                    -not $rightClickProbe.AdditionalMenuWasBase[1] -and $list.SelectedItems.Count -eq 1 -and
+                    $list.SelectedItem.Entry.FullPath -eq $folderRow.Entry.FullPath) 'Stationary right-clicks did not alternate the directory menus.'
+            } finally { $timer.Stop(); $rightClickProbe.Dispose() }
+        } finally {
+            $window.Left = $originalLeft
+            $window.Top = $originalTop
+            [SutShellRightClickProbe]::MovePointer($originalCursor[0], $originalCursor[1])
+        }
         $list.SelectedItems.Clear()
         $list.SelectedItems.Add($renamedFileRow) | Out-Null
         $list.SelectedItems.Add($folderRow) | Out-Null
