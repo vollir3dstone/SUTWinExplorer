@@ -133,13 +133,14 @@ view even if an operation is interrupted. Drive roots cannot be deleted. Delete
 is disabled while Copy or Move is prepared. Recycling availability and prompts
 depend on the location and Windows settings. Right-clicking an already-selected
 row preserves the selection; right-clicking an unselected row first selects only
-that row. File-only selections use the [generic and special file menu pair](CONTEXT_MENU_SPEC.md).
-A second right-click on the same row opens the special menu, including while the
-generic menu is open. A right-click on another row ends the series, selects only
-that row and starts its applicable menu; changing the selection also resets the
-series. Shift-right-click opens the original Windows menu, including when the
-generic menu is already open. Folders, mixed selections and the background keep
-their existing native menus.
+that row. File-only selections use the [Base and Content Menu pair](CONTEXT_MENU_SPEC.md).
+Repeated right-clicks on the same row alternate between the menus, including
+while either menu is open and the pointer stays at the opening position. A
+right-click on another row while the Base Menu is open ends the series,
+selects only that row and starts its applicable menu; changing the selection
+also resets the series. Shift-right-click opens the original Windows menu,
+including on the same row while either menu is open. Folders, mixed selections
+and the background keep their existing native menus.
 
 Rename starts from the toolbar, `F2`, or the single-item context menu. The
 inline editor uses the actual filesystem name including its extension; the

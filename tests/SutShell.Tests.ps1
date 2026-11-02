@@ -90,7 +90,12 @@ public sealed class SutShellMenuProbe : System.IDisposable
             var name = new System.Text.StringBuilder(64);
             GetClassName(window, name, name.Capacity);
             if (name.ToString() != "#32768") return true;
-            if (System.Threading.Interlocked.Exchange(ref handled, 1) != 0) return false;
+            if (System.Threading.Interlocked.Exchange(ref handled, 1) != 0)
+            {
+                if (SelectWithRightButton && ticks >= 4)
+                    PostMessage(owner, 0x001F, System.IntPtr.Zero, System.IntPtr.Zero);
+                return false;
+            }
             var menu = SendMessage(window, 0x01E1, System.IntPtr.Zero, System.IntPtr.Zero);
             ItemCount = GetMenuItemCount(menu);
             Items = new string[ItemCount];
@@ -234,6 +239,7 @@ public sealed class SutShellRightClickProbe : System.IDisposable
     private int ticks;
     private int checking;
     private System.IntPtr firstMenu;
+    private System.IntPtr currentMenu;
     private readonly int targetX;
     private readonly int targetY;
     private int startX;
@@ -241,9 +247,12 @@ public sealed class SutShellRightClickProbe : System.IDisposable
     private long secondClickAt;
     public bool FirstMenu;
     public bool SecondMenu;
-    public bool SecondWasGeneric;
+    public bool SecondWasBase;
     public bool SecondWithShift;
     public int SecondDelayMilliseconds;
+    public int AdditionalClicks;
+    public int AdditionalMenuCount;
+    public bool[] AdditionalMenuWasBase = new bool[2];
     public string[] SecondItems;
     public string TargetClass;
     public string ObservedFirstLabel;
@@ -332,7 +341,7 @@ public sealed class SutShellRightClickProbe : System.IDisposable
                 else if (phase == 1 && menu != firstMenu)
                 {
                     SecondMenu = true;
-                    SecondWasGeneric = label.ToString() == "Path get";
+                    SecondWasBase = label.ToString() == "Path get";
                     SecondItems = new string[GetMenuItemCount(menu)];
                     for (var index = 0; index < SecondItems.Length; index++)
                     {
@@ -340,8 +349,38 @@ public sealed class SutShellRightClickProbe : System.IDisposable
                         GetMenuString(menu, (uint)index, itemLabel, itemLabel.Capacity, 0x400);
                         SecondItems[index] = itemLabel.ToString();
                     }
-                    phase = 2;
-                    PostMessage(owner, 0x001F, System.IntPtr.Zero, System.IntPtr.Zero);
+                    if (AdditionalClicks > 0)
+                    {
+                        currentMenu = menu;
+                        phase = 4;
+                        secondClickAt = System.Environment.TickCount64 + SecondDelayMilliseconds;
+                    }
+                    else
+                    {
+                        phase = 2;
+                        PostMessage(owner, 0x001F, System.IntPtr.Zero, System.IntPtr.Zero);
+                    }
+                }
+                else if (phase == 4 && menu == currentMenu && System.Environment.TickCount64 >= secondClickAt)
+                {
+                    phase = 5;
+                    mouse_event(8, 0, 0, 0, System.UIntPtr.Zero);
+                    mouse_event(16, 0, 0, 0, System.UIntPtr.Zero);
+                }
+                else if (phase == 5 && menu != currentMenu)
+                {
+                    AdditionalMenuWasBase[AdditionalMenuCount++] = label.ToString() == "Path get";
+                    if (AdditionalMenuCount == AdditionalClicks)
+                    {
+                        phase = 2;
+                        PostMessage(owner, 0x001F, System.IntPtr.Zero, System.IntPtr.Zero);
+                    }
+                    else
+                    {
+                        currentMenu = menu;
+                        phase = 4;
+                        secondClickAt = System.Environment.TickCount64 + SecondDelayMilliseconds;
+                    }
                 }
                 return false;
             }, System.IntPtr.Zero);
@@ -918,7 +957,7 @@ try {
             try {
                 $null = $showMenu.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject))
                 Assert-True ($menuProbe.ItemCount -ge 9 -and
-                    ($menuProbe.Items[0..8] -join ',') -ceq 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete') 'Multiple files did not show the generic menu.'
+                    ($menuProbe.Items[0..8] -join ',') -ceq 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete') 'Multiple files did not show the Base Menu.'
                 Assert-True (($menuProbe.States[0] -band 3) -ne 0 -and ($menuProbe.States[1] -band 3) -ne 0) 'Rename and Path get must be disabled for multiple files.'
                 if ($selection -ge 0) { Assert-True (($menuProbe.States[$selection] -band 3) -eq 0) "Multi-file command $selection was disabled." }
             } finally { $menuProbe.Dispose() }
@@ -937,21 +976,21 @@ try {
         $showMenuCore = $view.GetType().GetMethod('ShowMenuCore', $viewFlags)
         $multiNativeEntries = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path $multiPaths | ConvertFrom-Json).Menu
         Assert-True (@($multiNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -eq 'properties' -and $_.Text }).Count -gt 0) 'The Shell did not provide a properties command for the multi-file selection.'
-        foreach ($menuKind in @('generic', 'special', 'generic')) {
+        foreach ($menuKind in @('base', 'content', 'base')) {
             $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
             try {
                 $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
                 Assert-True ($menuProbe.ItemCount -gt 0) "The multi-file $menuKind menu was empty."
-                $isGeneric = $menuProbe.ItemCount -ge 9 -and ($menuProbe.Items[0..8] -join ',') -ceq 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete'
-                Assert-True ($isGeneric -eq ($menuKind -eq 'generic')) "The multi-file menu did not alternate to $menuKind."
+                $isBase = $menuProbe.ItemCount -ge 9 -and ($menuProbe.Items[0..8] -join ',') -ceq 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete'
+                Assert-True ($isBase -eq ($menuKind -eq 'base')) "The multi-file menu did not alternate to $menuKind."
                 foreach ($entry in $multiNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -eq 'properties' -and $_.Text }) {
-                    Assert-True (($entry.Text -in $menuProbe.Items) -eq ($menuKind -eq 'generic')) "Properties was shown in the wrong multi-file menu: $menuKind."
-                    if ($menuKind -eq 'generic') {
+                    Assert-True (($entry.Text -in $menuProbe.Items) -eq ($menuKind -eq 'base')) "Properties was shown in the wrong multi-file menu: $menuKind."
+                    if ($menuKind -eq 'base') {
                         $index = [Array]::IndexOf($menuProbe.Items, $entry.Text)
-                        Assert-True (($menuProbe.States[$index] -band 3) -eq 0) 'Properties was disabled in the generic multi-file menu.'
+                        Assert-True (($menuProbe.States[$index] -band 3) -eq 0) 'Properties was disabled in the Base Menu multi-file menu.'
                     }
                 }
-                if ($menuKind -eq 'special') {
+                if ($menuKind -eq 'content') {
                     $linkDropHereLabel = [SutShellMenuProbe]::LinkDropHereLabel()
                     Assert-True ($null -eq $linkDropHereLabel -or $linkDropHereLabel -notin $menuProbe.Items) 'A drag-and-drop-only Link Shell Extension command appeared in the multi-file menu.'
                     foreach ($entry in $multiNativeEntries | Where-Object { $_.Verb -in @('copy', 'cut', 'paste', 'copyaspath', 'link', 'delete', 'rename') -and $_.Text }) {
@@ -973,7 +1012,7 @@ try {
             $timer.add_Tick({ if ($propertiesProbe.Opened -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
             $timer.Start()
             try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-            Assert-True ($menuProbe.SelectIndex -ge 9 -and $propertiesProbe.Opened) 'The generic multi-file properties command did not open a Windows dialog.'
+            Assert-True ($menuProbe.SelectIndex -ge 9 -and $propertiesProbe.Opened) 'The Base Menu multi-file properties command did not open a Windows dialog.'
         } finally {
             $menuProbe.Dispose()
             $propertiesProbe.Dispose()
@@ -1021,7 +1060,7 @@ try {
             $timer.Start()
             try {
                 [System.Windows.Threading.Dispatcher]::PushFrame($frame)
-                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasGeneric) "Two actual right-clicks on the same row did not show the special menu: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), generic=$($rightClickProbe.SecondWasGeneric), targetClass=$($rightClickProbe.TargetClass)."
+                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasBase) "Two actual right-clicks on the same row did not show the Content Menu: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), base=$($rightClickProbe.SecondWasBase), targetClass=$($rightClickProbe.TargetClass)."
             } finally { $timer.Stop(); $rightClickProbe.Dispose() }
             $list.SelectedItems.Clear()
             $list.SelectedItem = $notesMenuRow
@@ -1035,9 +1074,31 @@ try {
             $timer.Start()
             try {
                 [System.Windows.Threading.Dispatcher]::PushFrame($frame)
-                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasGeneric -and
-                    $rightClickProbe.TargetClass -eq '#32768') "A delayed right-click at the popup's opening point did not show the special menu: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), generic=$($rightClickProbe.SecondWasGeneric), targetClass=$($rightClickProbe.TargetClass)."
+                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasBase -and
+                    $rightClickProbe.TargetClass -eq '#32768') "A delayed right-click at the popup's opening point did not show the Content Menu: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), base=$($rightClickProbe.SecondWasBase), targetClass=$($rightClickProbe.TargetClass)."
             } finally { $timer.Stop(); $rightClickProbe.Dispose() }
+            foreach ($mode in @('delayed', 'rapid-multi')) {
+                $list.SelectedItems.Clear()
+                $list.SelectedItems.Add($notesMenuRow) | Out-Null
+                if ($mode -eq 'rapid-multi') { $list.SelectedItems.Add($otherMenuRow) | Out-Null }
+                $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $samePoint.X, [int] $samePoint.Y, [int] $samePoint.X, [int] $samePoint.Y)
+                if ($mode -eq 'delayed') { $rightClickProbe.SecondDelayMilliseconds = [int] [SutShellRightClickProbe]::GetDoubleClickTime() + 250 }
+                $rightClickProbe.AdditionalClicks = 2
+                $frame = [System.Windows.Threading.DispatcherFrame]::new()
+                $deadline = [DateTime]::UtcNow.AddMilliseconds(3 * $rightClickProbe.SecondDelayMilliseconds + 7000)
+                $timer = [System.Windows.Threading.DispatcherTimer]::new()
+                $timer.Interval = [TimeSpan]::FromMilliseconds(50)
+                $timer.add_Tick({ if ($rightClickProbe.AdditionalMenuCount -eq 2 -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+                $timer.Start()
+                try {
+                    [System.Windows.Threading.Dispatcher]::PushFrame($frame)
+                    $expectedCount = if ($mode -eq 'rapid-multi') { 2 } else { 1 }
+                    Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasBase -and
+                        $rightClickProbe.AdditionalMenuCount -eq 2 -and $rightClickProbe.AdditionalMenuWasBase[0] -and
+                        -not $rightClickProbe.AdditionalMenuWasBase[1] -and $list.SelectedItems.Count -eq $expectedCount -and
+                        $list.SelectedItems.Contains($notesMenuRow) -and ($mode -ne 'rapid-multi' -or $list.SelectedItems.Contains($otherMenuRow))) "Repeated stationary right-clicks did not alternate menus for mode=$mode`: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), additional=$($rightClickProbe.AdditionalMenuCount), selection=$($list.SelectedItems.Count)."
+                } finally { $timer.Stop(); $rightClickProbe.Dispose() }
+            }
             $list.SelectedItems.Clear()
             $list.SelectedItem = $notesMenuRow
             $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $startPoint.X, [int] $startPoint.Y, [int] $otherPoint.X, [int] $otherPoint.Y)
@@ -1049,8 +1110,8 @@ try {
             $timer.Start()
             try {
                 [System.Windows.Threading.Dispatcher]::PushFrame($frame)
-                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and $rightClickProbe.SecondWasGeneric -and
-                    $list.SelectedItems.Count -eq 1 -and $list.SelectedItem.Entry.FullPath -eq $otherMenuRow.Entry.FullPath) "Actual right-clicks on different rows did not select the new row and open its generic menu: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), generic=$($rightClickProbe.SecondWasGeneric), targetClass=$($rightClickProbe.TargetClass), selection=$($list.SelectedItems.Count), selected=$($list.SelectedItem.Entry.FullPath)."
+                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and $rightClickProbe.SecondWasBase -and
+                    $list.SelectedItems.Count -eq 1 -and $list.SelectedItem.Entry.FullPath -eq $otherMenuRow.Entry.FullPath) "Actual right-clicks on different rows did not select the new row and open its Base Menu: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), base=$($rightClickProbe.SecondWasBase), targetClass=$($rightClickProbe.TargetClass), selection=$($list.SelectedItems.Count), selected=$($list.SelectedItem.Entry.FullPath)."
             } finally { $timer.Stop(); $rightClickProbe.Dispose() }
             foreach ($target in @('same', 'selected')) {
                 $list.SelectedItems.Clear()
@@ -1068,8 +1129,8 @@ try {
                     [System.Windows.Threading.Dispatcher]::PushFrame($frame)
                     $expectedRow = if ($target -eq 'same') { $notesMenuRow } else { $otherMenuRow }
                     Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and
-                        $rightClickProbe.SecondWasGeneric -eq ($target -eq 'selected') -and $list.SelectedItems.Count -eq 1 -and
-                        $list.SelectedItem.Entry.FullPath -eq $expectedRow.Entry.FullPath) "Actual right-clicks failed for target=$target`: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), generic=$($rightClickProbe.SecondWasGeneric), targetClass=$($rightClickProbe.TargetClass), selection=$($list.SelectedItems.Count)."
+                        $rightClickProbe.SecondWasBase -eq ($target -eq 'selected') -and $list.SelectedItems.Count -eq 1 -and
+                        $list.SelectedItem.Entry.FullPath -eq $expectedRow.Entry.FullPath) "Actual right-clicks failed for target=$target`: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), base=$($rightClickProbe.SecondWasBase), targetClass=$($rightClickProbe.TargetClass), selection=$($list.SelectedItems.Count)."
                 } finally { $timer.Stop(); $rightClickProbe.Dispose() }
             }
             foreach ($target in @('same', 'other', 'double', 'delayed')) {
@@ -1091,9 +1152,9 @@ try {
                     [System.Windows.Threading.Dispatcher]::PushFrame($frame)
                     $expectedCount = if ($target -eq 'other') { 1 } else { 2 }
                     $expectedProperty = if ($target -eq 'other') { $propertyEntries[0].Text } else { $multiProperties.Text }
-                    Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasGeneric -and
+                    Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasBase -and
                         $expectedProperty -in $rightClickProbe.SecondItems -and $list.SelectedItems.Count -eq $expectedCount -and
-                        ($target -ne 'other' -or $list.SelectedItem.Entry.FullPath -eq $otherMenuRow.Entry.FullPath)) "Shift-right-click during the generic menu failed for target=$target`: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), properties=$($expectedProperty -in $rightClickProbe.SecondItems), selection=$($list.SelectedItems.Count)."
+                        ($target -ne 'other' -or $list.SelectedItem.Entry.FullPath -eq $otherMenuRow.Entry.FullPath)) "Shift-right-click during the Base Menu failed for target=$target`: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), properties=$($expectedProperty -in $rightClickProbe.SecondItems), selection=$($list.SelectedItems.Count)."
                 } finally { $timer.Stop(); $rightClickProbe.Dispose() }
             }
             $list.SelectedItems.Clear()
@@ -1102,7 +1163,7 @@ try {
             $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $samePoint.X, [int] $samePoint.Y)
             try {
                 $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
-                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasGeneric) 'A second right-click on the same row did not show the special menu.'
+                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasBase) 'A second right-click on the same row did not show the Content Menu.'
             } finally { $rightClickProbe.Dispose() }
             $list.SelectedItems.Clear()
             $list.SelectedItem = $notesMenuRow
@@ -1110,8 +1171,8 @@ try {
             $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $otherPoint.X, [int] $otherPoint.Y)
             try {
                 $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
-                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and $rightClickProbe.SecondWasGeneric -and
-                    $list.SelectedItems.Count -eq 1 -and $list.SelectedItem.Entry.FullPath -eq $otherMenuRow.Entry.FullPath) 'A right-click on another row did not select it and show its generic menu.'
+                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and $rightClickProbe.SecondWasBase -and
+                    $list.SelectedItems.Count -eq 1 -and $list.SelectedItem.Entry.FullPath -eq $otherMenuRow.Entry.FullPath) 'A right-click on another row did not select it and show its Base Menu.'
             } finally { $rightClickProbe.Dispose() }
             $list.SelectedItems.Clear()
             $list.SelectedItems.Add($notesMenuRow) | Out-Null
@@ -1126,8 +1187,8 @@ try {
             $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $otherPoint.X, [int] $otherPoint.Y)
             try {
                 $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
-                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and $rightClickProbe.SecondWasGeneric -and
-                    $list.SelectedItems.Count -eq 1 -and $list.SelectedItem.Entry.FullPath -eq $otherMenuRow.Entry.FullPath) "A right-click on another selected row did not start a new single-item menu: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), generic=$($rightClickProbe.SecondWasGeneric), targetClass=$($rightClickProbe.TargetClass), selection=$($list.SelectedItems.Count), selected=$($list.SelectedItem.Entry.FullPath), target=$($otherMenuRow.Entry.FullPath)."
+                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and $rightClickProbe.SecondWasBase -and
+                    $list.SelectedItems.Count -eq 1 -and $list.SelectedItem.Entry.FullPath -eq $otherMenuRow.Entry.FullPath) "A right-click on another selected row did not start a new single-item menu: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), base=$($rightClickProbe.SecondWasBase), targetClass=$($rightClickProbe.TargetClass), selection=$($list.SelectedItems.Count), selected=$($list.SelectedItem.Entry.FullPath), target=$($otherMenuRow.Entry.FullPath)."
             } finally { $rightClickProbe.Dispose() }
             $list.SelectedItems.Clear()
             $list.SelectedItems.Add($notesMenuRow) | Out-Null
@@ -1155,8 +1216,7 @@ try {
             $menuProbe.SelectWithRightButton = $true
             try {
                 $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
-                Assert-True ($copyWorkflow.IsPrepared -and @($copyWorkflow.PreparedPaths).Count -eq 1 -and
-                    @($copyWorkflow.PreparedPaths)[0] -eq $notesMenuRow.Entry.FullPath) 'A right-click on a menu command away from the opening point did not invoke it.'
+                Assert-True ($menuProbe.ItemCount -ge 3 -and -not $copyWorkflow.IsPrepared) 'A right-click on a menu command unexpectedly invoked it.'
             } finally {
                 $menuProbe.Dispose()
                 $view.FindName('CopyAbortButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
@@ -1171,39 +1231,39 @@ try {
         $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
         try {
             $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
-            Assert-True (($menuProbe.Items[0..8] -join ',') -ceq 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete') 'The first right-click did not show the generic menu.'
-            $genericLabels = @($menuProbe.Items)
+            Assert-True (($menuProbe.Items[0..8] -join ',') -ceq 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete') 'The first right-click did not show the Base Menu.'
+            $baseLabels = @($menuProbe.Items)
             foreach ($entry in $propertyEntries) {
                 $index = [Array]::IndexOf($menuProbe.Items, $entry.Text)
-                Assert-True ($index -ge 9 -and ($menuProbe.States[$index] -band 3) -eq 0) 'Properties was missing or disabled in the generic menu.'
+                Assert-True ($index -ge 9 -and ($menuProbe.States[$index] -band 3) -eq 0) 'Properties was missing or disabled in the Base Menu.'
             }
             foreach ($entry in $shellRenameEntries) {
-                Assert-True ($entry.Text -notin $genericLabels[9..($genericLabels.Count - 1)]) 'The Shell rename command appeared alongside the application Rename action.'
+                Assert-True ($entry.Text -notin $baseLabels[9..($baseLabels.Count - 1)]) 'The Shell rename command appeared alongside the application Rename action.'
             }
         } finally { $menuProbe.Dispose() }
         $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
         try {
             $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
-            $specialLabels = @($menuProbe.Items)
-            Assert-True ($menuProbe.ItemCount -gt 0 -and $specialLabels[1] -ne 'Path get') 'The second right-click did not show the special menu.'
+            $contentLabels = @($menuProbe.Items)
+            Assert-True ($menuProbe.ItemCount -gt 0 -and $contentLabels[1] -ne 'Path get') 'The second right-click did not show the Content Menu.'
             $linkDropHereLabel = [SutShellMenuProbe]::LinkDropHereLabel()
-            Assert-True ($null -eq $linkDropHereLabel -or $linkDropHereLabel -notin $specialLabels) 'A drag-and-drop-only Link Shell Extension command appeared in the special file menu.'
+            Assert-True ($null -eq $linkDropHereLabel -or $linkDropHereLabel -notin $contentLabels) 'A drag-and-drop-only Link Shell Extension command appeared in the Content file menu.'
             $openWithLabel = [SutShellMenuProbe]::OpenWithLabel()
-            if ($openWithLabel -in $nativeLabels) { Assert-True ($openWithLabel -in $specialLabels) 'Open With was lost from the special menu.' }
+            if ($openWithLabel -in $nativeLabels) { Assert-True ($openWithLabel -in $contentLabels) 'Open With was lost from the Content Menu.' }
             foreach ($entry in $notepadEntries) {
-                if ($entry.Text -in $nativeLabels) { Assert-True ($entry.Text -in $specialLabels) 'Notepad++ was lost from the special menu.' }
+                if ($entry.Text -in $nativeLabels) { Assert-True ($entry.Text -in $contentLabels) 'Notepad++ was lost from the Content Menu.' }
             }
             foreach ($entry in $nativeEntries | Where-Object { $_.Verb -in @('copy', 'cut', 'paste', 'copyaspath', 'link', 'delete', 'rename', 'properties') -and $_.Text }) {
-                Assert-True ($entry.Text -notin $specialLabels) "Excluded Shell command remained in the special menu: $($entry.Text)."
+                Assert-True ($entry.Text -notin $contentLabels) "Excluded Shell command remained in the Content Menu: $($entry.Text)."
             }
-            foreach ($label in $nativeLabels | Where-Object { $_ -and $_ -notin $genericLabels }) {
+            foreach ($label in $nativeLabels | Where-Object { $_ -and $_ -notin $baseLabels }) {
                 $excludedLabel = @($nativeEntries | Where-Object { $_.Text -ceq $label -and $_.Verb -in @('copy', 'cut', 'paste', 'copyaspath', 'link', 'delete', 'rename', 'properties') }).Count -gt 0
-                if (-not $excludedLabel) { Assert-True ($label -in $specialLabels) "A native command absent from the generic menu was lost: $label." }
+                if (-not $excludedLabel) { Assert-True ($label -in $contentLabels) "A native command absent from the Base Menu was lost: $label." }
             }
             foreach ($label in @('7-Zip', 'Norton 360', '&TortoiseGit', 'Pa&th Copy')) {
                 $genericParents = @($unfilteredMenu | Where-Object { $_.Position -notmatch '\.' -and $_.Text -ceq $label -and $_.HasSubmenu })
                 $nativeParents = @($nativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Text -ceq $label -and $_.HasSubmenu })
-                if ($genericParents.Count -ne 1 -or $nativeParents.Count -ne 1 -or $label -notin $genericLabels -or $label -notin $nativeLabels) { continue }
+                if ($genericParents.Count -ne 1 -or $nativeParents.Count -ne 1 -or $label -notin $baseLabels -or $label -notin $nativeLabels) { continue }
                 $genericPrefix = $genericParents[0].Position + '.'
                 $nativePrefix = $nativeParents[0].Position + '.'
                 $genericChildren = @($unfilteredMenu | Where-Object { $_.Position.StartsWith($genericPrefix) -and -not $_.Separator })
@@ -1212,11 +1272,11 @@ try {
                 $genericSignature = @($genericChildren | ForEach-Object { @($_.Position.Substring($genericPrefix.Length), $_.Text, $_.Verb, $_.HasSubmenu, $_.Disabled) -join '|' }) -join "`n"
                 $nativeSignature = @($nativeChildren | ForEach-Object { @($_.Position.Substring($nativePrefix.Length), $_.Text, $_.Verb, $_.HasSubmenu, $_.Disabled) -join '|' }) -join "`n"
                 if ($genericSignature -ceq $nativeSignature) {
-                    Assert-True ($label -notin $specialLabels) "The matching $label submenu remained in the special menu."
+                    Assert-True ($label -notin $contentLabels) "The matching $label submenu remained in the Content Menu."
                 }
             }
         } finally { $menuProbe.Dispose() }
-        if ('7-Zip' -in $genericLabels -and '7-Zip' -in $nativeLabels -and '7-Zip' -notin $specialLabels) {
+        if ('7-Zip' -in $baseLabels -and '7-Zip' -in $nativeLabels -and '7-Zip' -notin $contentLabels) {
             foreach ($emptySubmenu in @($false, $true)) {
                 $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
                 $menuProbe.AlterSubmenu = '7-Zip'
@@ -1228,14 +1288,14 @@ try {
                 $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
                 try {
                     $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
-                    Assert-True ('7-Zip' -in $menuProbe.Items) 'A submenu with extra special commands or an empty generic counterpart was removed.'
+                    Assert-True ('7-Zip' -in $menuProbe.Items) 'A submenu with extra Content Menu commands or an empty Base Menu counterpart was removed.'
                 } finally { $menuProbe.Dispose() }
             }
         }
         $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
         try {
             $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
-            Assert-True (($menuProbe.Items[0..8] -join ',') -ceq 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete') 'The third right-click did not return to the generic menu.'
+            Assert-True (($menuProbe.Items[0..8] -join ',') -ceq 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete') 'The third right-click did not return to the Base Menu.'
         } finally { $menuProbe.Dispose() }
         $list.SelectedItems.Clear()
         $list.SelectedItem = $notesMenuRow
@@ -1251,7 +1311,7 @@ try {
             $timer.add_Tick({ if ($propertiesProbe.Opened -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
             $timer.Start()
             try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-            Assert-True ($menuProbe.SelectIndex -ge 9 -and $propertiesProbe.Opened) "The generic properties command did not open the Windows properties dialog: index=$($menuProbe.SelectIndex), opened=$($propertiesProbe.Opened)."
+            Assert-True ($menuProbe.SelectIndex -ge 9 -and $propertiesProbe.Opened) "The Base Menu properties command did not open the Windows properties dialog: index=$($menuProbe.SelectIndex), opened=$($propertiesProbe.Opened)."
         } finally {
             $menuProbe.Dispose()
             $propertiesProbe.Dispose()
@@ -1275,17 +1335,17 @@ try {
                 $menuProbe.SelectIndex = $selection
                 try {
                     $null = $showMenu.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject))
-                    Assert-True ($menuProbe.ItemCount -ge 9) 'The generic file menu did not contain all toolbar actions.'
+                    Assert-True ($menuProbe.ItemCount -ge 9) 'The Base file menu did not contain all toolbar actions.'
                     Assert-True (($menuProbe.Items[0..8] -join ',') -ceq 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete') "The menu did not match the toolbar actions: $($menuProbe.Items[0..8] -join ',')."
                     $openWithLabel = [SutShellMenuProbe]::OpenWithLabel()
                     Assert-True ($null -ne $openWithLabel -and $openWithLabel -notin $menuProbe.Items) 'The Shell Open With submenu is still present.'
                     $linkDropHereLabel = [SutShellMenuProbe]::LinkDropHereLabel()
                     Assert-True ($null -eq $linkDropHereLabel -or $linkDropHereLabel -notin $menuProbe.Items) 'A drag-and-drop-only Link Shell Extension command appeared in the file menu.'
                     foreach ($entry in $notepadEntries) {
-                        Assert-True ($entry.Text -notin $menuProbe.Items) 'The blacklisted Notepad++ command appeared in the generic menu.'
+                        Assert-True ($entry.Text -notin $menuProbe.Items) 'The blacklisted Notepad++ command appeared in the Base Menu.'
                     }
                     foreach ($entry in $viewerEntries) {
-                        Assert-True ($entry.Text -in $menuProbe.Items) 'The unblacklisted SUTTextViewer command disappeared from the generic menu.'
+                        Assert-True ($entry.Text -in $menuProbe.Items) 'The unblacklisted SUTTextViewer command disappeared from the Base Menu.'
                     }
                     if ($menuProbe.ItemCount -gt 9) {
                         Assert-True (($menuProbe.States[9] -band 0x800) -ne 0) 'The toolbar actions were not separated from Shell extensions.'
@@ -1590,10 +1650,10 @@ try {
             $confirmationProbe = [SutShellDeleteConfirmProbe]::new()
             try {
                 $null = $showMenu.Invoke($view, [object[]] @($firstDeleteRow.PSObject.BaseObject))
-                Assert-True (($menuProbe.States[8] -band 3) -eq 0) 'Delete was disabled in the generic file menu.'
+                Assert-True (($menuProbe.States[8] -band 3) -eq 0) 'Delete was disabled in the Base file menu.'
             } finally { $menuProbe.Dispose(); $confirmationProbe.Dispose() }
             Assert-True (-not [System.IO.File]::Exists((Join-Path $deleteDirectory $deleteNames[0])) -and
-                -not [System.IO.File]::Exists((Join-Path $deleteDirectory $deleteNames[1]))) 'The generic Delete command did not delete both selected files.'
+                -not [System.IO.File]::Exists((Join-Path $deleteDirectory $deleteNames[1]))) 'The Base Menu Delete command did not delete both selected files.'
             $frame = [System.Windows.Threading.DispatcherFrame]::new()
             $probe = [SutShellUiProbe]::new()
             $probe.List = $list
@@ -1711,8 +1771,8 @@ try {
                 [System.Windows.Threading.Dispatcher]::PushFrame($frame)
                 $expectedRow = if ($target -eq 'other') { $mainOther } else { $mainNotes }
                 Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and
-                    $rightClickProbe.SecondWasGeneric -eq ($target -eq 'other') -and $mainList.SelectedItems.Count -eq 1 -and
-                    $mainList.SelectedItem.Entry.FullPath -eq $expectedRow.Entry.FullPath) "MainWindow right-click failed for target=$target`: first=$($rightClickProbe.FirstMenu), firstLabel=$($rightClickProbe.ObservedFirstLabel), start=$($origin.X),$($origin.Y), actualStart=$($rightClickProbe.ActualStart -join ','), startClass=$($rightClickProbe.StartClass), hit=$($hitPath -join '/'), second=$($rightClickProbe.SecondMenu), generic=$($rightClickProbe.SecondWasGeneric), targetClass=$($rightClickProbe.TargetClass), selection=$($mainList.SelectedItems.Count), selected=$($mainList.SelectedItem.Entry.FullPath)."
+                    $rightClickProbe.SecondWasBase -eq ($target -eq 'other') -and $mainList.SelectedItems.Count -eq 1 -and
+                    $mainList.SelectedItem.Entry.FullPath -eq $expectedRow.Entry.FullPath) "MainWindow right-click failed for target=$target`: first=$($rightClickProbe.FirstMenu), firstLabel=$($rightClickProbe.ObservedFirstLabel), start=$($origin.X),$($origin.Y), actualStart=$($rightClickProbe.ActualStart -join ','), startClass=$($rightClickProbe.StartClass), hit=$($hitPath -join '/'), second=$($rightClickProbe.SecondMenu), base=$($rightClickProbe.SecondWasBase), targetClass=$($rightClickProbe.TargetClass), selection=$($mainList.SelectedItems.Count), selected=$($mainList.SelectedItem.Entry.FullPath)."
             } finally { $timer.Stop(); $rightClickProbe.Dispose() }
         }
     } finally {

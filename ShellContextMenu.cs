@@ -19,7 +19,7 @@ internal static class ShellContextMenu
     private const uint MenuDisabled = 0x00000003;
     private const uint MenuSeparator = 0x00000800;
     private const uint MenuOwnerDrawn = 0x00000100;
-    private const uint GenericCommandFirst = 0x8000;
+    private const uint BaseMenuCommandFirst = 0x8000;
     private const uint ShellViewSelectEdit = 0x0003;
     private const string ShellIdListArrayFormat = "Shell IDList Array";
     private const string BlacklistResourceName = "SUTWinExplorer.ShellExtensionBlacklist.json";
@@ -152,19 +152,19 @@ internal static class ShellContextMenu
     internal static void ShowItems(IReadOnlyList<string> paths, IntPtr owner, Action? rename = null) =>
         ShowCore(paths, owner, background: false, rename);
 
-    internal static IReadOnlyDictionary<string, int> ShowGenericFile(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions, Func<int, int, bool, bool, bool>? secondRightClick) =>
+    internal static IReadOnlyDictionary<string, int> ShowBaseFile(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions, Func<int, int, bool, bool, bool>? secondRightClick) =>
         ShowCore(paths, owner, background: false, rename: null, actions, secondRightClick: secondRightClick)!;
 
-    internal static void ShowSpecialFile(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> genericCommands) =>
-        ShowCore(paths, owner, background: false, rename: null, excludedCommands: genericCommands);
+    internal static void ShowContentFile(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands, Func<int, int, bool, bool, bool>? secondRightClick = null) =>
+        ShowCore(paths, owner, background: false, rename: null, excludedCommands: baseCommands, secondRightClick: secondRightClick);
 
     public static void ShowBackground(string folderPath, IntPtr owner) => ShowCore([folderPath], owner, background: true, rename: null);
 
     private static IReadOnlyDictionary<string, int>? ShowCore(IReadOnlyList<string> paths, IntPtr owner, bool background, Action? rename,
         IReadOnlyList<ShellMenuAction>? actions = null, IReadOnlyDictionary<string, int>? excludedCommands = null, Func<int, int, bool, bool, bool>? secondRightClick = null)
     {
-        var generic = actions is not null;
-        IReadOnlyDictionary<string, int>? genericCommands = null;
+        var isBaseMenu = actions is not null;
+        IReadOnlyDictionary<string, int>? baseCommands = null;
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
             throw new InvalidOperationException("The Windows Shell context menu must be opened from an STA thread.");
         if (paths.Count == 0)
@@ -187,8 +187,8 @@ internal static class ShellContextMenu
         MenuMessageFilter? menuFilter = null;
         IntPtr menuHook = IntPtr.Zero;
         var subclassInstalled = false;
-        using var fileClass = generic ? Microsoft.Win32.Registry.ClassesRoot.OpenSubKey("*") : null;
-        using var filesystemClass = generic ? Microsoft.Win32.Registry.ClassesRoot.OpenSubKey("AllFilesystemObjects") : null;
+        using var fileClass = isBaseMenu ? Microsoft.Win32.Registry.ClassesRoot.OpenSubKey("*") : null;
+        using var filesystemClass = isBaseMenu ? Microsoft.Win32.Registry.ClassesRoot.OpenSubKey("AllFilesystemObjects") : null;
 
         try
         {
@@ -219,7 +219,7 @@ internal static class ShellContextMenu
                 Marshal.WriteIntPtr(childPidlArray, childPidl);
                 for (var index = 1; index < absolutePidls.Count; index++)
                     Marshal.WriteIntPtr(childPidlArray, index * IntPtr.Size, ILFindLastID(absolutePidls[index]));
-                if (!generic)
+                if (!isBaseMenu)
                     Marshal.ThrowExceptionForHR(parentFolder.GetUIObjectOf(owner, (uint)paths.Count, childPidlArray, ref contextMenuId, IntPtr.Zero, out contextMenu));
                 else
                 {
@@ -249,16 +249,16 @@ internal static class ShellContextMenu
                 throw new InvalidOperationException("CreatePopupMenu failed.");
 
             Marshal.ThrowExceptionForHR(contextMenu.QueryContextMenu(menu, 0, FirstCommandId, LastCommandId,
-                generic || rename is not null || excludedCommands is not null
+                isBaseMenu || rename is not null || excludedCommands is not null
                     ? MenuFlags | MenuCanRename : MenuFlags));
-            if (generic)
+            if (isBaseMenu)
             {
-                PrepareGenericMenu(menu, contextMenu, actions!);
+                PrepareBaseMenu(menu, contextMenu, actions!);
                 RemoveExcludedFileCommands(menu, contextMenu);
             }
             else if (excludedCommands is not null)
-                PrepareSpecialMenu(menu, contextMenu, excludedCommands);
-            InstallMenuMessageForwarder(owner, contextMenu, generic || excludedCommands is not null, excludedCommands is not null, out subclassProc);
+                PrepareContentMenu(menu, contextMenu, excludedCommands);
+            InstallMenuMessageForwarder(owner, contextMenu, isBaseMenu || excludedCommands is not null, excludedCommands is not null, out subclassProc);
             subclassInstalled = true;
             var point = GetCursorPosition();
             if (secondRightClick is not null)
@@ -301,24 +301,24 @@ internal static class ShellContextMenu
             }
 
             _ = SetForegroundWindow(owner);
-            var commandId = TrackPopupMenuEx(menu, excludedCommands is null ? PopupFlags : PopupFlags & ~0x0002u, point.X, point.Y, owner, IntPtr.Zero);
-            if (generic)
-                genericCommands = CollectComparableCommands(menu, contextMenu);
+            var commandId = TrackPopupMenuEx(menu, isBaseMenu || excludedCommands is not null ? PopupFlags & ~0x0002u : PopupFlags, point.X, point.Y, owner, IntPtr.Zero);
+            if (isBaseMenu)
+                baseCommands = CollectComparableCommands(menu, contextMenu);
             _ = PostMessage(owner, 0, IntPtr.Zero, IntPtr.Zero);
 
             if (commandId != 0)
             {
-                if (actions is not null && commandId >= GenericCommandFirst)
+                if (actions is not null && commandId >= BaseMenuCommandFirst)
                 {
-                    var index = commandId - GenericCommandFirst;
+                    var index = commandId - BaseMenuCommandFirst;
                     if (index < actions.Count && actions[(int)index].IsEnabled)
                         actions[(int)index].Invoke();
-                    return genericCommands;
+                    return baseCommands;
                 }
                 if (rename is not null && IsRenameCommand(contextMenu, commandId - FirstCommandId))
                 {
                     rename();
-                    return genericCommands;
+                    return baseCommands;
                 }
 
                 var invokeInfo = new CMINVOKECOMMANDINFOEX
@@ -332,7 +332,7 @@ internal static class ShellContextMenu
                 };
                 Marshal.ThrowExceptionForHR(contextMenu.InvokeCommand(ref invokeInfo));
             }
-            return genericCommands;
+            return baseCommands;
         }
         finally
         {
@@ -383,7 +383,7 @@ internal static class ShellContextMenu
         }
     }
 
-    private static void PrepareGenericMenu(IntPtr menu, IContextMenu contextMenu, IReadOnlyList<ShellMenuAction> actions)
+    private static void PrepareBaseMenu(IntPtr menu, IContextMenu contextMenu, IReadOnlyList<ShellMenuAction> actions)
     {
         var standardVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             { "copy", "copyaspath", "paste", "rename", "delete", "cut", "link", "open", "openas", "edit" };
@@ -421,7 +421,7 @@ internal static class ShellContextMenu
 
         for (var index = actions.Count - 1; index >= 0; index--)
         {
-            var id = GenericCommandFirst + (uint)index;
+            var id = BaseMenuCommandFirst + (uint)index;
             if (!InsertMenu(menu, 0, MenuByPosition | (actions[index].IsEnabled ? 0u : MenuDisabled), (UIntPtr)id, actions[index].Label))
                 throw new InvalidOperationException("Could not insert a standard menu command.");
         }
@@ -505,15 +505,15 @@ internal static class ShellContextMenu
         return commands;
     }
 
-    private static void PrepareSpecialMenu(IntPtr menu, IContextMenu contextMenu, IReadOnlyDictionary<string, int> genericCommands)
+    private static void PrepareContentMenu(IntPtr menu, IContextMenu contextMenu, IReadOnlyDictionary<string, int> baseCommands)
     {
-        RemoveExcludedFileCommands(menu, contextMenu, special: true);
-        var specialCommands = CollectComparableCommands(menu, contextMenu);
+        RemoveExcludedFileCommands(menu, contextMenu, isContentMenu: true);
+        var contentCommands = CollectComparableCommands(menu, contextMenu);
         for (var index = GetMenuItemCount(menu) - 1; index >= 0; index--)
         {
             var command = ComparableCommand(menu, contextMenu, index);
-            if (command is not null && genericCommands.TryGetValue(command, out var genericCount) && genericCount == 1 &&
-                specialCommands.TryGetValue(command, out var specialCount) && specialCount == 1)
+            if (command is not null && baseCommands.TryGetValue(command, out var baseCount) && baseCount == 1 &&
+                contentCommands.TryGetValue(command, out var contentCount) && contentCount == 1)
             {
                 var removed = GetSubMenu(menu, index) != IntPtr.Zero
                     ? DeleteMenu(menu, (uint)index, MenuByPosition)
@@ -525,17 +525,17 @@ internal static class ShellContextMenu
         RemoveRedundantSeparators(menu);
     }
 
-    private static void RemoveExcludedFileCommands(IntPtr menu, IContextMenu contextMenu, bool special = false)
+    private static void RemoveExcludedFileCommands(IntPtr menu, IContextMenu contextMenu, bool isContentMenu = false)
     {
         for (var index = GetMenuItemCount(menu) - 1; index >= 0; index--)
         {
             var submenu = GetSubMenu(menu, index);
             if (submenu != IntPtr.Zero)
-                RemoveExcludedFileCommands(submenu, contextMenu, special);
+                RemoveExcludedFileCommands(submenu, contextMenu, isContentMenu);
             var id = GetMenuItemID(menu, index);
             if (id >= FirstCommandId && id <= LastCommandId &&
                 GetCommandVerb(contextMenu, id - FirstCommandId) is { } verb &&
-                (ExcludedFileVerbs.Contains(verb) || (special && string.Equals(verb, "properties", StringComparison.OrdinalIgnoreCase))) &&
+                (ExcludedFileVerbs.Contains(verb) || (isContentMenu && string.Equals(verb, "properties", StringComparison.OrdinalIgnoreCase))) &&
                 !RemoveMenu(menu, (uint)index, MenuByPosition))
                 throw new InvalidOperationException("Could not remove a Shell file command.");
         }
@@ -623,7 +623,7 @@ internal static class ShellContextMenu
         }
     }
 
-    private static void InstallMenuMessageForwarder(IntPtr owner, IContextMenu contextMenu, bool excludeFileCommands, bool special, out SubclassProc callback)
+    private static void InstallMenuMessageForwarder(IntPtr owner, IContextMenu contextMenu, bool excludeFileCommands, bool isContentMenu, out SubclassProc callback)
     {
         var menu3 = contextMenu as IContextMenu3;
         var menu2 = contextMenu as IContextMenu2;
@@ -644,7 +644,7 @@ internal static class ShellContextMenu
                         handled = true;
                     }
                     if (excludeFileCommands && message == 0x0117 && wParam != IntPtr.Zero)
-                        RemoveExcludedFileCommands(wParam, contextMenu, special);
+                        RemoveExcludedFileCommands(wParam, contextMenu, isContentMenu);
                     if (handled)
                         return menuResult;
                 }

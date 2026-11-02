@@ -31,8 +31,8 @@ public partial class ContentView : UserControl
     private int _nextBackgroundIndex;
     private bool _loadingRange;
     private bool _loadScheduled;
-    private IReadOnlyDictionary<string, int>? _genericMenuCommands;
-    private string? _genericMenuPath;
+    private IReadOnlyDictionary<string, int>? _baseMenuCommands;
+    private string? _baseMenuPath;
     private int _selectionVersion;
 
     public ContentView()
@@ -392,8 +392,8 @@ public partial class ContentView : UserControl
 
     private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        _genericMenuCommands = null;
-        _genericMenuPath = null;
+        _baseMenuCommands = null;
+        _baseMenuPath = null;
         _selectionVersion++;
         if (!_restoringSelection)
         {
@@ -469,8 +469,8 @@ public partial class ContentView : UserControl
             {
                 if (row is null)
                 {
-                    _genericMenuCommands = null;
-                    _genericMenuPath = null;
+                    _baseMenuCommands = null;
+                    _baseMenuPath = null;
                     SutShell.ShowBackgroundMenu(CurrentPath, owner);
                     return;
                 }
@@ -478,18 +478,38 @@ public partial class ContentView : UserControl
                 if (!forceNativeMenu && selectedPaths.Length > 0 && selectedPaths.All(System.IO.File.Exists) &&
                     (Keyboard.Modifiers & ModifierKeys.Shift) == 0)
                 {
-                    if (alternate && _genericMenuCommands is { } genericCommands &&
-                        string.Equals(_genericMenuPath, row.FullPath, StringComparison.OrdinalIgnoreCase))
+                    if (alternate && _baseMenuCommands is { } baseCommands &&
+                        string.Equals(_baseMenuPath, row.FullPath, StringComparison.OrdinalIgnoreCase))
                     {
-                        _genericMenuCommands = null;
-                        _genericMenuPath = null;
-                        SutShell.ShowSpecialFileMenu(selectedPaths, owner, genericCommands);
+                        _baseMenuCommands = null;
+                        _baseMenuPath = null;
+                        var selectionVersion = _selectionVersion;
+                        var repeatOnSameRow = false;
+                        var clickedWithShift = false;
+                        SutShell.ShowContentFileMenu(selectedPaths, owner, baseCommands,
+                            (screenX, screenY, overOwner, shiftPressed) =>
+                            {
+                                if (!overOwner)
+                                    return false;
+                                var source = FileList.InputHitTest(FileList.PointFromScreen(new Point(screenX, screenY))) as DependencyObject;
+                                if (FindAncestor<ListViewItem>(source) is not { DataContext: DirectoryRow targetRow } ||
+                                    !string.Equals(targetRow.FullPath, row.FullPath, StringComparison.OrdinalIgnoreCase))
+                                    return false;
+                                repeatOnSameRow = true;
+                                clickedWithShift = shiftPressed;
+                                return true;
+                            });
+                        if (repeatOnSameRow && selectionVersion == _selectionVersion)
+                        {
+                            forceNativeMenu = clickedWithShift;
+                            continue;
+                        }
                         return;
                     }
                     else
                     {
-                        _genericMenuCommands = null;
-                        _genericMenuPath = null;
+                        _baseMenuCommands = null;
+                        _baseMenuPath = null;
                         var buttons = new[] { RenameButton, PathGetButton, CopyGetButton, CopyAbortButton, CopyPasteButton,
                             MoveGetButton, MoveAbortButton, MovePasteButton, DeleteButton };
                         var actions = buttons.Select(button => new ShellMenuAction(
@@ -500,7 +520,7 @@ public partial class ContentView : UserControl
                         var clickedBackground = false;
                         var clickedElsewhere = false;
                         var clickedWithShift = false;
-                        var shownCommands = SutShell.ShowGenericFileMenu(selectedPaths, owner, actions,
+                        var shownCommands = SutShell.ShowBaseFileMenu(selectedPaths, owner, actions,
                             alternate ? (screenX, screenY, overOwner, shiftPressed) =>
                             {
                                 if (overOwner)
@@ -525,8 +545,8 @@ public partial class ContentView : UserControl
                             selectedPaths.All(path => FileList.SelectedItems.OfType<DirectoryRow>().Any(item =>
                                 string.Equals(item.FullPath, path, StringComparison.OrdinalIgnoreCase))))
                         {
-                            _genericMenuCommands = shownCommands;
-                            _genericMenuPath = row.FullPath;
+                            _baseMenuCommands = shownCommands;
+                            _baseMenuPath = row.FullPath;
                             if (clickedRow is not null && clickedWithShift)
                             {
                                 if (!string.Equals(clickedRow.FullPath, row.FullPath, StringComparison.OrdinalIgnoreCase))
@@ -540,10 +560,7 @@ public partial class ContentView : UserControl
                             }
                             if (clickedRow is not null && string.Equals(clickedRow.FullPath, row.FullPath, StringComparison.OrdinalIgnoreCase))
                             {
-                                _genericMenuCommands = null;
-                                _genericMenuPath = null;
-                                SutShell.ShowSpecialFileMenu(selectedPaths, owner, shownCommands);
-                                return;
+                                continue;
                             }
                             if (clickedRow is not null || clickedBackground)
                             {
@@ -559,8 +576,8 @@ public partial class ContentView : UserControl
                 }
                 else
                 {
-                    _genericMenuCommands = null;
-                    _genericMenuPath = null;
+                    _baseMenuCommands = null;
+                    _baseMenuPath = null;
                     SutShell.ShowItemMenu(selectedPaths, owner,
                         FileList.SelectedItems.Count == 1 && row.Entry is not null && SutShell.GetEditName(row.FullPath) is not null ? BeginRename : null);
                     return;
@@ -578,8 +595,8 @@ public partial class ContentView : UserControl
         var source = e.OriginalSource as DependencyObject;
         if (FindAncestor<ListViewItem>(source) is { DataContext: DirectoryRow row })
         {
-            if (!FileList.SelectedItems.Contains(row) || (_genericMenuCommands is not null &&
-                !string.Equals(_genericMenuPath, row.FullPath, StringComparison.OrdinalIgnoreCase)))
+            if (!FileList.SelectedItems.Contains(row) || (_baseMenuCommands is not null &&
+                !string.Equals(_baseMenuPath, row.FullPath, StringComparison.OrdinalIgnoreCase)))
             {
                 FileList.SelectedItems.Clear();
                 FileList.SelectedItems.Add(row);
@@ -593,8 +610,8 @@ public partial class ContentView : UserControl
             return;
 
         FileList.SelectedItems.Clear();
-        _genericMenuCommands = null;
-        _genericMenuPath = null;
+        _baseMenuCommands = null;
+        _baseMenuPath = null;
         ShowMenu(null);
         e.Handled = true;
     }
