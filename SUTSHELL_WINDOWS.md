@@ -15,13 +15,17 @@ children. This PC is represented by `ShellLocations.TopPath` and enumerated as
 drive roots. `InternalItemFilter` supplies internal-item and name-pattern rules;
 the pattern uses the Shell display name with a filesystem-name fallback.
 Directory attributes determine folder classification, including directory
-reparse points. A background STA thread resolves the display names needed for
-filtering and sorting and produces a snapshot of item identities. ContentView
+reparse points. A background STA thread builds a per-view, unfiltered cache of
+the current directory and resolves Shell display names. Sort and filter changes
+reuse the cache and its loaded metadata and images; a filesystem notification,
+explicit refresh or navigation invalidates the whole cache. Missing sort keys
+are read before ordering, including icons when sorting the icon columns.
+ContentView
 creates fixed-height placeholders from its count, then requests complete rows
 in batches of up to eight. The visible region has priority; once it is loaded,
 remaining rows are fetched asynchronously in the background. Each completed row
 replaces its placeholder data through property notification and is retained for
-that snapshot. Scrolling cancels the current request, and a newer refresh prevents
+the directory cache. Scrolling cancels the current request, and a newer refresh prevents
 older results from replacing newer data. Loading pauses when the view is unloaded
 and resumes when visible again. Individual Shell calls cannot be interrupted, and
 an item can change after the snapshot is created.
@@ -72,8 +76,8 @@ fully recoverable guarantees. Observation failures are written to debug output.
 ## Follow-up work
 
 The table does not yet reproduce all behavior in the Shell-oriented behavior
-specification. Delete remains disabled, and column sorting, drag/drop and
-clipboard shortcuts are not implemented. Navigation access checks and tree loading still run
+specification. Delete remains disabled, and drag/drop and clipboard shortcuts
+are not implemented. Navigation access checks and tree loading still run
 synchronously and can block the UI. The access check precedes committing
 navigation but cannot prevent later filesystem changes or enumeration failures.
 Virtual Shell namespace locations beyond the drive listing are not supported.

@@ -21,6 +21,8 @@ public partial class ContentView : UserControl
     private CancellationTokenSource? _rangeCancellation;
     private DirectorySnapshot? _snapshot;
     private DirectoryRow[]? _rows;
+    private readonly DirectorySortState _sorting = new();
+    private readonly DirectoryDataCache _directoryCache = new();
     private readonly HashSet<string> _selectedPaths = new(StringComparer.OrdinalIgnoreCase);
     private bool _restoringSelection;
     private DirectoryRow? _editingRow;
@@ -65,6 +67,7 @@ public partial class ContentView : UserControl
     internal void SetCurrentPath(string path)
     {
         EndRename(commit: false);
+        _directoryCache.Invalidate();
         _deferredRefresh = false;
         _refreshCancellation?.Cancel();
         _rangeCancellation?.Cancel();
@@ -78,10 +81,14 @@ public partial class ContentView : UserControl
 
     internal void EnsureLocationAccessible(string path) => SutShell.EnsureDirectoryAccessible(path);
 
-    internal async void Refresh(bool refreshView)
+    internal void Refresh(bool refreshView) => RefreshCore(invalidate: true);
+
+    private async void RefreshCore(bool invalidate)
     {
         if (string.IsNullOrWhiteSpace(CurrentPath))
             return;
+        if (invalidate)
+            _directoryCache.Invalidate();
         if (_editingRow is not null)
         {
             _deferredRefresh = true;
@@ -102,7 +109,7 @@ public partial class ContentView : UserControl
         StatusLabel.Text = "Loading...";
         try
         {
-            var snapshot = await SutShell.OpenDirectoryAsync(path, showDirectories, hideInternal, namePattern, cancellation.Token);
+            var snapshot = await SutShell.OpenCachedDirectoryAsync(path, showDirectories, hideInternal, namePattern, _sorting, _directoryCache, cancellation.Token);
             if (cancellation.IsCancellationRequested || !ReferenceEquals(_refreshCancellation, cancellation))
                 return;
 
@@ -186,7 +193,7 @@ public partial class ContentView : UserControl
             .MaxBy(digit => Measure(digit.ToString()));
         var sampleDate = new DateTime(2026, 12, 28, 23, 58, 0).ToString(FileEntry.DateFormat, CultureInfo.InvariantCulture);
         sampleDate = string.Concat(sampleDate.Select(character => char.IsAsciiDigit(character) ? widestDigit : character));
-        DateColumn.Width = Math.Ceiling(Math.Max(Measure("Date modified"), Measure(sampleDate)) + 16);
+        DateColumn.Width = Math.Ceiling(Math.Max(Measure("Date modified") + 10, Measure(sampleDate)) + 16);
         FileList_SizeChanged(FileList, null!);
         ScheduleRangeLoad();
         CopyWorkflowState.Shared.Changed += WorkflowState_Changed;
@@ -201,7 +208,31 @@ public partial class ContentView : UserControl
         MoveWorkflowState.Shared.Changed -= WorkflowState_Changed;
     }
 
-    private void FiltersChanged(object sender, RoutedEventArgs e) => Refresh(true);
+    private void FiltersChanged(object sender, RoutedEventArgs e) => RefreshCore(invalidate: false);
+
+    private void FileList_ColumnHeaderClick(object sender, RoutedEventArgs e)
+    {
+        if (e.OriginalSource is not GridViewColumnHeader { Tag: string tag } ||
+            !Enum.TryParse<DirectorySortColumn>(tag, out var column))
+            return;
+
+        var current = _sorting.Pairs.FirstOrDefault();
+        var criterion = _sorting.Pairs.Count > 0 && current.Column == column && current.Criterion == DirectorySortCriterion.Ascending
+            ? DirectorySortCriterion.Descending : DirectorySortCriterion.Ascending;
+        _sorting.Update([new DirectorySortPair(column, criterion)]);
+        foreach (var (indicator, indicatorColumn) in new[]
+        {
+            (NameSortIndicator, DirectorySortColumn.Name), (TypeSortIndicator, DirectorySortColumn.Type),
+            (SizeSortIndicator, DirectorySortColumn.Size), (DateSortIndicator, DirectorySortColumn.DateModified),
+            (MediaTypeSortIndicator, DirectorySortColumn.MediaType), (IconSortIndicator, DirectorySortColumn.ShellIcon),
+            (OverlaySortIndicator, DirectorySortColumn.Overlay)
+        })
+        {
+            indicator.Visibility = indicatorColumn == column ? Visibility.Visible : Visibility.Collapsed;
+            indicator.Text = criterion == DirectorySortCriterion.Ascending ? "\u25B2" : "\u25BC";
+        }
+        RefreshCore(invalidate: false);
+    }
 
     private void FileList_LayoutUpdated(object? sender, EventArgs e) => ScheduleRangeLoad();
 
@@ -290,7 +321,7 @@ public partial class ContentView : UserControl
         }
     }
 
-    private void NamePatternTextBox_TextChanged(object sender, TextChangedEventArgs e) => Refresh(true);
+    private void NamePatternTextBox_TextChanged(object sender, TextChangedEventArgs e) => RefreshCore(invalidate: false);
 
     private void ClearNamePatternButton_Click(object sender, RoutedEventArgs e) => NamePatternTextBox.Clear();
 
@@ -385,7 +416,7 @@ public partial class ContentView : UserControl
         if (FileList.View is not GridView gridView || gridView.Columns.Count < 7)
             return;
 
-        var fixedColumnWidths = 32 + 34 + 26 + 130 + SizeColumn.Width + DateColumn.Width;
+        var fixedColumnWidths = 42 + 34 + 26 + 130 + SizeColumn.Width + DateColumn.Width;
         const double minimumNameWidth = 80;
         var scrollViewer = FindVisualChild<ScrollViewer>(FileList);
         var scrollbarWidth = scrollViewer?.ComputedVerticalScrollBarVisibility == Visibility.Visible
@@ -567,7 +598,7 @@ public partial class ContentView : UserControl
         if (renamed || _deferredRefresh)
         {
             _deferredRefresh = false;
-            Refresh(true);
+            RefreshCore(invalidate: renamed);
         }
     }
 }

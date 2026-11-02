@@ -21,8 +21,8 @@ A **Pathview** is the browsing unit attached to an application tab. It comprises
 the directory-tree pane, content pane, status display, active location, and
 temporary view settings scoped to that tab. Each tab retains its own Pathview
 state when the user switches tabs. For example, **Hide directories** is
-tab-scoped; sort parameters continue to follow the active folder's configured
-view. A Pathview is either browsable or non-browsable; that role is assigned
+tab-scoped; sort history is also tab-scoped and remains in effect on navigation.
+A Pathview is either browsable or non-browsable; that role is assigned
 when it is created and cannot be changed by the user.
 
 ## P0: Core Behavior
@@ -121,9 +121,8 @@ when it is created and cannot be changed by the user.
   appearance. The browsable Pathview has no color-selection button.
   **Browse** and **Pin** remain keyboard-operable without a visible focus ring.
 - [x] Each Pathview retains its own location, **Hide directories**, and
-  content **Hide internal** settings
-  when the user switches tabs. Sort parameters continue to follow the active
-  folder's configured view.
+  content **Hide internal** settings and sort history when the user switches
+  tabs.
 - [x] The address field displays the selected tab's path and offers paths from
   open non-browsable tabs in its dropdown; the browsable tab's current path is
   never a dropdown entry. Selecting a dropdown entry selects its associated tab.
@@ -283,10 +282,10 @@ may show its requested row in light gray without changing the active selection.
   folders.
 - [x] The content view provides a Details layout with Shell-provided names,
   types, sizes, dates, icons, and available overlays.
-- [x] Every folder uses the same ungrouped Details layout and Name, Type, Size,
-  Date modified columns in that order. Size is shown in KB. The active sort
-  column and direction come from the folder's configured view; other
-  folder-specific view settings are ignored.
+- [x] Every folder uses the same Details columns. Size is shown in KB.
+  Directories precede files; both groups use the same tab-scoped sort history.
+  Clicking any column makes it the primary criterion, and a triangle
+  indicates its direction. Earlier columns remain as secondary criteria.
 - [x] The adjacent private column is headed `MT`, is 16 DIP wide with 8 DIP
   of space to its left, and displays a 16-by-16 DIP media type icon for each
   filesystem item, in Shell view order.
@@ -443,10 +442,9 @@ SUTWinExplorer installation before testing a new installation.
   destinations do not crash the application. If folder navigation fails, the
   active path, address, tab title, trees, and history remain on the last
   successfully displayed folder.
-7. Navigate between folders with different saved view modes, groups, columns,
-  and sort choices. Verify the content view always uses the standard ungrouped
-  Details layout and column order, while retaining each folder's selected
-  sort column and direction.
+7. Select several sort columns in succession and verify their priority, then
+  navigate and switch tabs. Verify each tab retains its own sort history and
+  that directories remain before files in either direction.
 8. In the browsable Pathview, toggle **Hide internal** and verify dot-prefixed
   and dollar-prefixed directories disappear and reappear, and a System
   directory is hidden only when listing its contents is denied. Verify normal

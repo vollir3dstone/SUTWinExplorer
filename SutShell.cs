@@ -19,38 +19,85 @@ internal static class SutShell
 
     internal static Task<DirectorySnapshot> OpenDirectoryAsync(
         string path, bool showDirectories, bool hideInternal, string namePattern, CancellationToken cancellationToken) =>
+        OpenSortedDirectoryAsync(path, showDirectories, hideInternal, namePattern, new DirectorySortState(), cancellationToken);
+
+    internal static Task<DirectorySnapshot> OpenSortedDirectoryAsync(
+        string path, bool showDirectories, bool hideInternal, string namePattern,
+        DirectorySortState sorting, CancellationToken cancellationToken) =>
+        OpenCachedDirectoryAsync(path, showDirectories, hideInternal, namePattern, sorting, new DirectoryDataCache(), cancellationToken);
+
+    internal static Task<DirectorySnapshot> OpenCachedDirectoryAsync(
+        string path, bool showDirectories, bool hideInternal, string namePattern,
+        DirectorySortState sorting, DirectoryDataCache cache, CancellationToken cancellationToken)
+    {
+        var sortPairs = sorting.Pairs;
+        return
         RunOnShellThread(token =>
         {
-            var isTop = ShellLocations.IsTopPath(path);
-            IEnumerable<string> paths = isTop
-                ? DriveInfo.GetDrives().Select(drive => drive.Name)
-                : Directory.EnumerateFileSystemEntries(path);
+            var source = cache.GetDirectory(path, token);
             var items = new List<DirectoryItem>();
-            foreach (var itemPath in paths)
+            foreach (var item in source)
             {
                 token.ThrowIfCancellationRequested();
                 try
                 {
-                    var attributes = isTop ? FileAttributes.Directory : File.GetAttributes(itemPath);
-                    var isDirectory = (attributes & FileAttributes.Directory) != 0;
-                    if ((!showDirectories && isDirectory) ||
-                        (hideInternal && !isTop && InternalItemFilter.IsInternal(itemPath, isDirectory)))
+                    if ((!showDirectories && item.IsDirectory) || (hideInternal && !item.IsDrive && item.IsInternal))
                         continue;
-
-                    var fallbackName = isTop ? itemPath.TrimEnd(Path.DirectorySeparatorChar) : Path.GetFileName(itemPath);
-                    var name = ShellDisplayNameProvider.GetDisplayName(itemPath) ?? fallbackName;
-                    if (InternalItemFilter.MatchesName(name, namePattern))
-                        items.Add(new DirectoryItem(name, itemPath, isDirectory, isTop));
+                    if (InternalItemFilter.MatchesName(item.Name, namePattern))
+                        items.Add(item);
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
                 {
                 }
             }
 
+            var sortColumns = sortPairs.Select(pair => pair.Column).ToHashSet();
+            var values = new List<DirectorySortValues>(items.Count);
+            foreach (var item in items)
+            {
+                token.ThrowIfCancellationRequested();
+                var icons = sortColumns.Contains(DirectorySortColumn.ShellIcon) || sortColumns.Contains(DirectorySortColumn.Overlay)
+                    ? item.Icons : null;
+                values.Add(new DirectorySortValues(item,
+                    sortColumns.Contains(DirectorySortColumn.Size) ? item.Size : null,
+                    sortColumns.Contains(DirectorySortColumn.DateModified) ? item.Modified : null,
+                    sortColumns.Contains(DirectorySortColumn.Type) ? item.Type : string.Empty,
+                    item.MediaType, icons?.BaseIconIndex, icons?.OverlaySlot));
+            }
+
+            IOrderedEnumerable<DirectorySortValues> ordered = values.OrderByDescending(value => value.Item.IsDirectory);
+            foreach (var pair in sortPairs)
+            {
+                var ascending = pair.Criterion == DirectorySortCriterion.Ascending;
+                ordered = pair.Column switch
+                {
+                    DirectorySortColumn.Name => ascending
+                        ? ordered.ThenBy(value => value.Item.Name, StringComparer.CurrentCultureIgnoreCase)
+                        : ordered.ThenByDescending(value => value.Item.Name, StringComparer.CurrentCultureIgnoreCase),
+                    DirectorySortColumn.Type => ascending
+                        ? ordered.ThenBy(value => value.Type, StringComparer.CurrentCultureIgnoreCase)
+                        : ordered.ThenByDescending(value => value.Type, StringComparer.CurrentCultureIgnoreCase),
+                    DirectorySortColumn.MediaType => ascending
+                        ? ordered.ThenBy(value => value.MediaType == MediaType.None).ThenBy(value => value.MediaType)
+                        : ordered.ThenBy(value => value.MediaType == MediaType.None).ThenByDescending(value => value.MediaType),
+                    DirectorySortColumn.Size => ascending
+                        ? ordered.ThenBy(value => value.Size) : ordered.ThenByDescending(value => value.Size),
+                    DirectorySortColumn.DateModified => ascending
+                        ? ordered.ThenBy(value => value.Modified) : ordered.ThenByDescending(value => value.Modified),
+                    DirectorySortColumn.ShellIcon => ascending
+                        ? ordered.ThenBy(value => value.BaseIconIndex) : ordered.ThenByDescending(value => value.BaseIconIndex),
+                    DirectorySortColumn.Overlay => ascending
+                        ? ordered.ThenBy(value => value.OverlaySlot) : ordered.ThenByDescending(value => value.OverlaySlot),
+                    _ => throw new ArgumentOutOfRangeException(nameof(sorting))
+                };
+            }
+            var result = ordered.ThenBy(value => value.Item.Name, StringComparer.CurrentCultureIgnoreCase)
+                .ThenBy(value => value.Item.FullPath, StringComparer.OrdinalIgnoreCase)
+                .Select(value => value.Item).ToArray();
             token.ThrowIfCancellationRequested();
-            return new DirectorySnapshot(items.OrderByDescending(item => item.IsDirectory)
-                .ThenBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase).ToArray());
+            return new DirectorySnapshot(result);
         }, cancellationToken);
+    }
 
     internal static Task<IReadOnlyList<FileEntry>> GetDirectoryRangeAsync(
         DirectorySnapshot snapshot, int start, int count, CancellationToken cancellationToken)
@@ -66,34 +113,7 @@ internal static class SutShell
             foreach (var item in snapshot.Items.Skip(start).Take(count))
             {
                 token.ThrowIfCancellationRequested();
-                string size = string.Empty;
-                DateTime? modified = null;
-                ShellIconSet? icons = null;
-                try
-                {
-                    if (!item.IsDrive)
-                    {
-                        if (!item.IsDirectory)
-                            size = FormatSize(new FileInfo(item.FullPath).Length);
-                        modified = File.GetLastWriteTime(item.FullPath);
-                    }
-                }
-                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-                {
-                    Debug.WriteLine($"Could not load details for '{item.FullPath}': {exception.Message}");
-                }
-                try
-                {
-                    icons = ShellIconProvider.GetSmallIcons(item.FullPath);
-                }
-                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ExternalException)
-                {
-                    Debug.WriteLine($"Could not load icon for '{item.FullPath}': {exception.Message}");
-                }
-                var mediaType = MediaTypeMap.GetMediaType(item.FullPath, item.IsDirectory);
-                entries.Add(new FileEntry(item.Name, item.FullPath, item.IsDirectory,
-                    GetTypeName(item.FullPath, item.IsDirectory), size, modified, icons,
-                    MediaTypeIconMap.GetIcon(mediaType), MediaTypeMap.GetName(mediaType)));
+                entries.Add(item.Entry);
             }
             token.ThrowIfCancellationRequested();
             return entries;
@@ -202,7 +222,7 @@ internal static class SutShell
         }
     }
 
-    private static string GetTypeName(string path, bool isDirectory)
+    internal static string GetTypeName(string path, bool isDirectory)
     {
         const uint shellFileInfoTypeName = 0x00000400;
         var fileInfo = new ShellFileInfo();
@@ -212,14 +232,215 @@ internal static class SutShell
             : isDirectory ? "Folder" : Path.GetExtension(path);
     }
 
-    private static string FormatSize(long bytes) =>
+    internal static string FormatSize(long bytes) =>
         $"{(bytes / 1024 + (bytes % 1024 == 0 ? 0 : 1)):N0} KB";
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr SHGetFileInfo(string path, uint fileAttributes, ref ShellFileInfo fileInfo, uint fileInfoSize, uint flags);
 }
 
-internal sealed record DirectoryItem(string Name, string FullPath, bool IsDirectory, bool IsDrive);
+internal sealed class DirectoryDataCache
+{
+    private readonly object _sync = new();
+    private readonly SemaphoreSlim _enumeration = new(1, 1);
+    private string? _path;
+    private DirectoryItem[]? _items;
+    private int _generation;
+
+    internal void Invalidate()
+    {
+        lock (_sync)
+        {
+            _generation++;
+            _path = null;
+            _items = null;
+        }
+    }
+
+    internal DirectoryItem[] GetDirectory(string path, CancellationToken token)
+    {
+        _enumeration.Wait(token);
+        try
+        {
+            int generation;
+            lock (_sync)
+            {
+                if (_items is not null && string.Equals(_path, path, StringComparison.OrdinalIgnoreCase))
+                    return _items;
+                generation = _generation;
+            }
+            var isTop = ShellLocations.IsTopPath(path);
+            IEnumerable<string> paths = isTop
+                ? DriveInfo.GetDrives().Select(drive => drive.Name)
+                : Directory.EnumerateFileSystemEntries(path);
+            var items = new List<DirectoryItem>();
+            foreach (var itemPath in paths)
+            {
+                token.ThrowIfCancellationRequested();
+                try
+                {
+                    var attributes = isTop ? FileAttributes.Directory : File.GetAttributes(itemPath);
+                    var isDirectory = (attributes & FileAttributes.Directory) != 0;
+                    var fallbackName = isTop ? itemPath.TrimEnd(Path.DirectorySeparatorChar) : Path.GetFileName(itemPath);
+                    var name = ShellDisplayNameProvider.GetDisplayName(itemPath) ?? fallbackName;
+                    items.Add(new DirectoryItem(name, itemPath, isDirectory, isTop));
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+            token.ThrowIfCancellationRequested();
+            var result = items.ToArray();
+            lock (_sync)
+            {
+                if (_generation == generation)
+                {
+                    _path = path;
+                    _items = result;
+                }
+            }
+            return result;
+        }
+        finally
+        {
+            _enumeration.Release();
+        }
+    }
+}
+
+internal sealed class DirectoryItem(string name, string fullPath, bool isDirectory, bool isDrive)
+{
+    private readonly object _sync = new();
+    private bool? _internal;
+    private bool _sizeLoaded, _modifiedLoaded, _typeLoaded, _iconsLoaded;
+    private long? _size;
+    private DateTime? _modified;
+    private string? _type;
+    private ShellIconSet? _icons;
+    private FileEntry? _entry;
+    internal string Name { get; } = name;
+    internal string FullPath { get; } = fullPath;
+    internal bool IsDirectory { get; } = isDirectory;
+    internal bool IsDrive { get; } = isDrive;
+    internal MediaType MediaType { get; } = MediaTypeMap.GetMediaType(fullPath, isDirectory);
+
+    internal bool IsInternal
+    {
+        get { lock (_sync) return _internal ??= InternalItemFilter.IsInternal(FullPath, IsDirectory); }
+    }
+
+    internal long? Size
+    {
+        get
+        {
+            lock (_sync)
+            {
+                if (!_sizeLoaded)
+                {
+                    try { if (!IsDrive && !IsDirectory) _size = new FileInfo(FullPath).Length; }
+                    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                    { Debug.WriteLine($"Could not load size for '{FullPath}': {exception.Message}"); }
+                    _sizeLoaded = true;
+                }
+                return _size;
+            }
+        }
+    }
+
+    internal DateTime? Modified
+    {
+        get
+        {
+            lock (_sync)
+            {
+                if (!_modifiedLoaded)
+                {
+                    try { if (!IsDrive) _modified = File.GetLastWriteTime(FullPath); }
+                    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                    { Debug.WriteLine($"Could not load date for '{FullPath}': {exception.Message}"); }
+                    _modifiedLoaded = true;
+                }
+                return _modified;
+            }
+        }
+    }
+
+    internal string Type
+    {
+        get
+        {
+            lock (_sync)
+            {
+                if (!_typeLoaded)
+                {
+                    _type = SutShell.GetTypeName(FullPath, IsDirectory);
+                    _typeLoaded = true;
+                }
+                return _type!;
+            }
+        }
+    }
+
+    internal ShellIconSet? Icons
+    {
+        get
+        {
+            lock (_sync)
+            {
+                if (!_iconsLoaded)
+                {
+                    try { _icons = ShellIconProvider.GetSmallIcons(FullPath); }
+                    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ExternalException)
+                    { Debug.WriteLine($"Could not load icon for '{FullPath}': {exception.Message}"); }
+                    _iconsLoaded = true;
+                }
+                return _icons;
+            }
+        }
+    }
+
+    internal FileEntry Entry
+    {
+        get
+        {
+            lock (_sync)
+                return _entry ??= new FileEntry(Name, FullPath, IsDirectory, Type,
+                    Size is { } size ? SutShell.FormatSize(size) : string.Empty, Modified, Icons,
+                    MediaTypeIconMap.GetIcon(MediaType), MediaTypeMap.GetName(MediaType));
+        }
+    }
+}
+
+internal enum DirectorySortColumn { Name, Type, Size, DateModified, MediaType, ShellIcon, Overlay }
+
+internal enum DirectorySortCriterion { Ascending, Descending }
+
+internal readonly record struct DirectorySortPair(DirectorySortColumn Column, DirectorySortCriterion Criterion);
+
+internal sealed class DirectorySortState
+{
+    private readonly List<DirectorySortPair> _pairs = [];
+
+    internal IReadOnlyList<DirectorySortPair> Pairs => _pairs.ToArray();
+
+    internal void Update(IReadOnlyList<DirectorySortPair> pairs)
+    {
+        Validate(pairs);
+        var columns = pairs.Select(pair => pair.Column).ToHashSet();
+        _pairs.RemoveAll(pair => columns.Contains(pair.Column));
+        _pairs.InsertRange(0, pairs);
+    }
+
+    internal static void Validate(IReadOnlyList<DirectorySortPair> pairs)
+    {
+        if (pairs.Any(pair => !Enum.IsDefined(pair.Column) || !Enum.IsDefined(pair.Criterion)) ||
+            pairs.Select(pair => pair.Column).Distinct().Count() != pairs.Count)
+            throw new ArgumentException("Sort columns and criteria must be valid, with no duplicate columns.", nameof(pairs));
+    }
+}
+
+internal sealed record DirectorySortValues(DirectoryItem Item, long? Size, DateTime? Modified, string Type,
+    MediaType MediaType, int? BaseIconIndex, int? OverlaySlot);
 
 internal sealed class DirectorySnapshot(DirectoryItem[] items)
 {

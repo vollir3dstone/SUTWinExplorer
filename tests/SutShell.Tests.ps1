@@ -71,6 +71,7 @@ public sealed class SutShellUiProbe
 {
     public object List;
     public object Window;
+    public object ContentView;
     public bool Startup;
     public bool AwaitAll;
     public object Frame;
@@ -113,7 +114,7 @@ public sealed class SutShellUiProbe
             if (List == null && Window != null)
             {
                 var content = FindContentView(Window);
-                if (content != null) List = content.GetType().GetMethod("FindName").Invoke(content, new object[] { "FileList" });
+                if (content != null) { ContentView = content; List = content.GetType().GetMethod("FindName").Invoke(content, new object[] { "FileList" }); }
             }
             if (List == null)
             {
@@ -223,6 +224,13 @@ $application.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
 $shell = $assembly.GetType('SUTWinExplorer.SutShell', $true)
 $flags = [System.Reflection.BindingFlags]'Static,NonPublic'
 $openDirectory = $shell.GetMethod('OpenDirectoryAsync', $flags)
+$openSortedDirectory = $shell.GetMethod('OpenSortedDirectoryAsync', $flags)
+$openCachedDirectory = $shell.GetMethod('OpenCachedDirectoryAsync', $flags)
+$cacheType = $assembly.GetType('SUTWinExplorer.DirectoryDataCache', $true)
+$sortPairType = $assembly.GetType('SUTWinExplorer.DirectorySortPair', $true)
+$sortColumnType = $assembly.GetType('SUTWinExplorer.DirectorySortColumn', $true)
+$sortCriterionType = $assembly.GetType('SUTWinExplorer.DirectorySortCriterion', $true)
+$sortStateType = $assembly.GetType('SUTWinExplorer.DirectorySortState', $true)
 $getRange = $shell.GetMethod('GetDirectoryRangeAsync', $flags)
 $ensureAccessible = $shell.GetMethod('EnsureDirectoryAccessible', $flags)
 $observe = $shell.GetMethod('ObserveDirectories', $flags)
@@ -254,6 +262,144 @@ try {
     $caseNames = @([System.IO.Directory]::EnumerateFileSystemEntries($directory) | ForEach-Object { [System.IO.Path]::GetFileName($_) })
     Assert-True ($caseResult -ceq (Join-Path $directory 'CASE-only.tmp') -and $caseNames -ccontains 'CASE-only.tmp') 'Case-only rename failed.'
     [System.IO.File]::Delete($caseResult)
+
+    $sortDirectory = Join-Path $directory 'sorting-fixture'
+    try {
+        [System.IO.Directory]::CreateDirectory((Join-Path $sortDirectory 'Z-folder')) | Out-Null
+        [System.IO.Directory]::CreateDirectory((Join-Path $sortDirectory 'A-folder')) | Out-Null
+        foreach ($case in @(@('a.bin', 2, 1), @('b.bin', 2, 2), @('c.txt', 10, 1), @('d.txt', 1, 2))) {
+            $path = Join-Path $sortDirectory $case[0]
+            [System.IO.File]::WriteAllBytes($path, [byte[]]::new($case[1]))
+            [System.IO.File]::SetLastWriteTime($path, [datetime]::new(2026, 1, $case[2]))
+        }
+        $sortState = [Activator]::CreateInstance($sortStateType, $true)
+        $instanceFlags = [System.Reflection.BindingFlags]'Instance,NonPublic'
+        $updateSort = $sortStateType.GetMethod('Update', $instanceFlags)
+        $pairsProperty = $sortStateType.GetProperty('Pairs', $instanceFlags)
+        function New-SortPair([string] $column, [string] $criterion) {
+            [Activator]::CreateInstance($sortPairType, [object[]] @(
+                [Enum]::Parse($sortColumnType, $column), [Enum]::Parse($sortCriterionType, $criterion)))
+        }
+        function Set-TestSort($state, [object[]] $pairs) {
+            $array = [Array]::CreateInstance($sortPairType, $pairs.Count)
+            for ($index = 0; $index -lt $pairs.Count; $index++) { $array.SetValue($pairs[$index], $index) }
+            $null = $updateSort.Invoke($state, [object[]] @(,$array))
+        }
+        function Get-SortedNames($state) {
+            $result = $openSortedDirectory.Invoke($null, [object[]] @([string] $sortDirectory, [bool] $true,
+                [bool] $false, [string] '', $state, [Threading.CancellationToken]::None)).GetAwaiter().GetResult()
+            $entries = $getRange.Invoke($null, [object[]] @($result, [int] 0, [int] $result.Count,
+                [Threading.CancellationToken]::None)).GetAwaiter().GetResult()
+            return ,@($entries | ForEach-Object { [System.IO.Path]::GetFileName($_.FullPath) })
+        }
+        Set-TestSort $sortState @((New-SortPair 'Name' 'Descending'))
+        Assert-True ((Get-SortedNames $sortState) -join ',' -ceq 'Z-folder,A-folder,d.txt,c.txt,b.bin,a.bin') 'Name descending or directory grouping failed.'
+        Set-TestSort $sortState @((New-SortPair 'Size' 'Ascending'))
+        Assert-True ((Get-SortedNames $sortState) -join ',' -ceq 'Z-folder,A-folder,d.txt,b.bin,a.bin,c.txt') 'Numeric size sort or secondary name sort failed.'
+        Set-TestSort $sortState @((New-SortPair 'Size' 'Descending'))
+        Assert-True ((Get-SortedNames $sortState) -join ',' -ceq 'Z-folder,A-folder,c.txt,b.bin,a.bin,d.txt') 'Size direction change or sort history failed.'
+        Set-TestSort $sortState @((New-SortPair 'DateModified' 'Ascending'), (New-SortPair 'Name' 'Ascending'))
+        Assert-True ((Get-SortedNames $sortState)[2..5] -join ',' -ceq 'a.bin,c.txt,b.bin,d.txt') 'Multi-column update or date sorting failed.'
+        $history = @($pairsProperty.GetValue($sortState))
+        Assert-True (($history.Column -join ',') -ceq 'DateModified,Name,Size') 'Updating a sort column did not move it to the front without duplication.'
+        $invalid = $false
+        try { Set-TestSort $sortState @((New-SortPair 'Name' 'Ascending'), (New-SortPair 'Name' 'Descending')) } catch { $invalid = $true }
+        Assert-True ($invalid -and (@($pairsProperty.GetValue($sortState)).Column -join ',') -ceq 'DateModified,Name,Size') 'Duplicate columns were accepted or changed sort history.'
+        foreach ($column in @('Type', 'MediaType')) {
+            Set-TestSort $sortState @((New-SortPair $column 'Ascending'))
+            $sortedNames = Get-SortedNames $sortState
+            Assert-True ($sortedNames.Count -eq 6 -and $sortedNames[0] -in @('A-folder', 'Z-folder') -and $sortedNames[1] -in @('A-folder', 'Z-folder')) "$column sort lost items or directory grouping."
+            $mediaMap = $assembly.GetType('SUTWinExplorer.MediaTypeMap', $true)
+            $previous = $null
+            foreach ($name in $sortedNames[2..5]) {
+                $path = Join-Path $sortDirectory $name
+                $key = if ($column -eq 'Type') { [SutShellTestTypeName]::Get($path) } else {
+                    $mediaType = $mediaMap.GetMethod('GetMediaType').Invoke($null, [object[]] @([string] $path, [bool] $false))
+                    if ([int] $mediaType -eq 0) { [int]::MaxValue } else { [int] $mediaType }
+                }
+                $inOrder = if ($null -eq $previous) { $true } elseif ($column -eq 'Type') {
+                    [StringComparer]::CurrentCultureIgnoreCase.Compare($previous, $key) -le 0
+                } else { $previous -le $key }
+                Assert-True $inOrder "$column keys are not in ascending order."
+                $previous = $key
+            }
+        }
+        [System.IO.File]::WriteAllBytes((Join-Path $sortDirectory 'picture.png'), [byte[]]::new(0))
+        [System.IO.File]::WriteAllBytes((Join-Path $sortDirectory 'archive.zip'), [byte[]]::new(0))
+        $mediaOrder = [Activator]::CreateInstance($sortStateType, $true)
+        Set-TestSort $mediaOrder @((New-SortPair 'MediaType' 'Ascending'))
+        $mediaNames = Get-SortedNames $mediaOrder
+        Assert-True ([Array]::IndexOf($mediaNames, 'picture.png') -lt [Array]::IndexOf($mediaNames, 'archive.zip')) 'Media types are not sorted by enum order.'
+        Assert-True (($mediaNames[2..7] -join ',') -ceq 'c.txt,d.txt,picture.png,archive.zip,a.bin,b.bin') 'Files without a media type must follow known media types in ascending order.'
+        Set-TestSort $mediaOrder @((New-SortPair 'MediaType' 'Descending'))
+        $mediaNames = Get-SortedNames $mediaOrder
+        Assert-True (($mediaNames[2..7] -join ',') -ceq 'archive.zip,picture.png,c.txt,d.txt,a.bin,b.bin') 'Files without a media type must follow known media types in descending order.'
+        Set-TestSort $mediaOrder @((New-SortPair 'Size' 'Ascending'), (New-SortPair 'MediaType' 'Ascending'))
+        $mediaNames = Get-SortedNames $mediaOrder
+        Assert-True (($mediaNames[2..7] -join ',') -ceq 'picture.png,archive.zip,d.txt,a.bin,b.bin,c.txt') 'A secondary media-type sort must not override the primary size sort.'
+        [System.IO.File]::Delete((Join-Path $sortDirectory 'picture.png'))
+        [System.IO.File]::Delete((Join-Path $sortDirectory 'archive.zip'))
+        $cache = [Activator]::CreateInstance($cacheType, $true)
+        $cacheSort = [Activator]::CreateInstance($sortStateType, $true)
+        function Get-CachedSnapshot([string] $pattern) {
+            $openCachedDirectory.Invoke($null, [object[]] @([string] $sortDirectory, [bool] $true, [bool] $false,
+                [string] $pattern, $cacheSort, $cache, [Threading.CancellationToken]::None)).GetAwaiter().GetResult()
+        }
+        function Get-SnapshotEntries($sourceSnapshot) {
+            return ,@($getRange.Invoke($null, [object[]] @($sourceSnapshot, [int] 0, [int] $sourceSnapshot.Count,
+                [Threading.CancellationToken]::None)).GetAwaiter().GetResult())
+        }
+        $initialSnapshot = Get-CachedSnapshot ''
+        $initialEntries = Get-SnapshotEntries $initialSnapshot
+        $cachedFile = @($initialEntries | Where-Object { $_.FullPath -eq (Join-Path $sortDirectory 'a.bin') })[0]
+        [System.IO.File]::WriteAllBytes((Join-Path $sortDirectory 'a.bin'), [byte[]]::new(2048))
+        [System.IO.File]::WriteAllText((Join-Path $sortDirectory 'new-file.txt'), 'new')
+        $filteredCache = Get-CachedSnapshot '*.txt'
+        Assert-True ($filteredCache.Count -eq 2) 'A filter unexpectedly re-enumerated the directory.'
+        Set-TestSort $cacheSort @((New-SortPair 'Size' 'Descending'))
+        $reusedSnapshot = Get-CachedSnapshot ''
+        $reusedEntries = Get-SnapshotEntries $reusedSnapshot
+        $reusedFile = @($reusedEntries | Where-Object { $_.FullPath -eq $cachedFile.FullPath })[0]
+        Assert-True ($reusedSnapshot.Count -eq 6 -and [object]::ReferenceEquals($cachedFile, $reusedFile) -and
+            $reusedFile.SizeText -ceq $cachedFile.SizeText -and [object]::ReferenceEquals($reusedFile.Icons, $cachedFile.Icons)) 'Filtering or sorting discarded cached entry data.'
+        foreach ($column in @('ShellIcon', 'Overlay')) {
+            Set-TestSort $cacheSort @((New-SortPair $column 'Ascending'))
+            $iconEntries = Get-SnapshotEntries (Get-CachedSnapshot '')
+            $iconKeyName = if ($column -eq 'ShellIcon') { 'BaseIconIndex' } else { 'OverlaySlot' }
+            $iconProperty = $assembly.GetType('SUTWinExplorer.ShellIconSet').GetProperty($iconKeyName, $instanceFlags)
+            $previous = $null
+            foreach ($entry in @($iconEntries | Where-Object { -not $_.IsDirectory })) {
+                $key = if ($null -ne $entry.Icons) { $iconProperty.GetValue($entry.Icons) } else { $null }
+                Assert-True ($null -eq $previous -or ($null -ne $key -and $previous -le $key)) "$column keys are not in ascending order."
+                $previous = $key
+            }
+            Set-TestSort $cacheSort @((New-SortPair $column 'Descending'))
+            $reverseEntries = Get-SnapshotEntries (Get-CachedSnapshot '')
+            $previous = $null
+            foreach ($entry in @($reverseEntries | Where-Object { -not $_.IsDirectory -and $null -ne $_.Icons })) {
+                $key = $iconProperty.GetValue($entry.Icons)
+                Assert-True ($null -eq $previous -or $previous -ge $key) "$column keys are not in descending order."
+                $previous = $key
+            }
+        }
+        $null = $cacheType.GetMethod('Invalidate', $instanceFlags).Invoke($cache, @())
+        $refreshedSnapshot = Get-CachedSnapshot ''
+        $refreshedEntries = Get-SnapshotEntries $refreshedSnapshot
+        $refreshedFile = @($refreshedEntries | Where-Object { $_.FullPath -eq $cachedFile.FullPath })[0]
+        Assert-True ($refreshedSnapshot.Count -eq 7 -and -not [object]::ReferenceEquals($cachedFile, $refreshedFile) -and
+            $refreshedFile.SizeText -ceq ('{0:N0} KB' -f 2)) 'Invalidation did not refresh directory membership and metadata.'
+        $freshCache = [Activator]::CreateInstance($cacheType, $true)
+        $iconSort = [Activator]::CreateInstance($sortStateType, $true)
+        Set-TestSort $iconSort @((New-SortPair 'ShellIcon' 'Ascending'))
+        $firstIconSnapshot = $openCachedDirectory.Invoke($null, [object[]] @([string] $sortDirectory, [bool] $true,
+            [bool] $false, [string] '', $iconSort, $freshCache, [Threading.CancellationToken]::None)).GetAwaiter().GetResult()
+        $itemsProperty = $firstIconSnapshot.GetType().GetProperty('Items', $instanceFlags)
+        $firstIconItem = @($itemsProperty.GetValue($firstIconSnapshot))[0]
+        $iconsProperty = $firstIconItem.GetType().GetProperty('Icons', $instanceFlags)
+        $cachedIcon = $iconsProperty.GetValue($firstIconItem)
+        $firstIconEntries = Get-SnapshotEntries $firstIconSnapshot
+        Assert-True ($null -ne $cachedIcon -and [object]::ReferenceEquals($cachedIcon, $firstIconEntries[0].Icons)) 'Initial icon sort did not reuse its loaded icon for the row.'
+    } finally { [System.IO.Directory]::Delete($sortDirectory, $true) }
 
     $snapshot = $openDirectory.Invoke($null, [object[]] @([string] $directory, [bool] $true, [bool] $false, [string] '', [Threading.CancellationToken]::None)).GetAwaiter().GetResult()
     Assert-True ($snapshot.Count -eq 8) 'Snapshot count is incorrect.'
@@ -371,7 +517,7 @@ try {
         Assert-True $probe.Ready "ContentView did not load and render requested row packages: $($probe.Error)"
         $list = $view.FindName('FileList')
         $columns = $list.View.Columns
-        Assert-True ($columns.Count -eq 7 -and $columns[3].Header -eq 'Name' -and
+        Assert-True ($columns.Count -eq 7 -and $columns[3].Header.Tag -eq 'Name' -and
             $columns[3].Width -gt 80 -and $columns[4].Width -eq 130) 'Shell column order or name-column sizing is incorrect.'
         $iconSetType = $assembly.GetType('SUTWinExplorer.ShellIconSet', $true)
         $iconSet = $iconSetType.GetConstructor([type[]] @([System.Windows.Media.ImageSource], [System.Windows.Media.ImageSource], [double])).Invoke(
@@ -410,9 +556,52 @@ try {
         Assert-True $probe.Ready "Background packages did not complete: $($probe.Error)"
         $list.SelectedItems.Add($list.Items[0]) | Out-Null
         $list.SelectedItems.Add($list.Items[$list.Items.Count - 1]) | Out-Null
+        $selectedEntries = @($list.SelectedItems | ForEach-Object { $_.Entry })
         $selectedPaths = @($list.SelectedItems | ForEach-Object { $_.Entry.FullPath })
         Assert-True ($list.SelectedItems.Count -eq 2 -and $view.FindName('CopyGetButton').IsEnabled -and
             -not $view.FindName('PathGetButton').IsEnabled -and -not $view.FindName('RenameButton').IsEnabled) 'Multiple selection or its toolbar state failed.'
+        $columns[5].Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        Assert-True ($view.FindName('SizeSortIndicator').Visibility -eq 'Visible' -and
+            $view.FindName('SizeSortIndicator').Text -ceq [string] [char] 0x25B2) 'Ascending size indicator was not shown.'
+        $columns[5].Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        Assert-True ($view.FindName('SizeSortIndicator').Text -ceq [string] [char] 0x25BC) 'Descending size indicator was not shown.'
+        $columns[3].Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        $list.UpdateLayout()
+        Assert-True ($view.FindName('NameSortIndicator').Visibility -eq 'Visible' -and
+            $view.FindName('SizeSortIndicator').Visibility -eq 'Collapsed' -and
+            $view.FindName('NameSortIndicator').IsVisible -and $view.FindName('NameSortIndicator').ActualWidth -gt 0 -and
+            $view.FindName('NameSortIndicator').Text -ceq [string] [char] 0x25B2) 'Primary sort indicator did not move to the new column.'
+        $viewSort = $view.GetType().GetField('_sorting', $viewFlags).GetValue($view)
+        Assert-True ((@($pairsProperty.GetValue($viewSort)).Column -join ',') -ceq 'Name,Size') 'Column clicks did not preserve the secondary sort.'
+        foreach ($iconColumn in @(@(1, 'IconSortIndicator'), @(2, 'OverlaySortIndicator'))) {
+            $columns[$iconColumn[0]].Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            $list.UpdateLayout()
+            $indicator = $view.FindName($iconColumn[1])
+            Assert-True ($indicator.IsVisible -and $indicator.Text -ceq [string] [char] 0x25B2) 'Icon header did not select ascending sort.'
+        }
+        $columns[3].Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        $view.FindName('NamePatternTextBox').Text = '*'
+        $view.FindName('NamePatternTextBox').Text = ''
+        $otherView = [Activator]::CreateInstance($view.GetType())
+        $otherSort = $otherView.GetType().GetField('_sorting', $viewFlags).GetValue($otherView)
+        Assert-True (@($pairsProperty.GetValue($otherSort)).Count -eq 0) 'Sort history leaked into another ContentView.'
+        $frame = [System.Windows.Threading.DispatcherFrame]::new()
+        $probe = [SutShellUiProbe]::new()
+        $probe.List = $list
+        $probe.AwaitAll = $true
+        $probe.Frame = $frame
+        $timer = [System.Windows.Threading.DispatcherTimer]::new()
+        $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+        $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
+        $timer.Start()
+        try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+        $restoredPaths = @($list.SelectedItems | ForEach-Object { $_.Entry.FullPath })
+        Assert-True ($probe.Ready -and $restoredPaths.Count -eq 2 -and
+            @($selectedPaths | Where-Object { $_ -notin $restoredPaths }).Count -eq 0) 'Sorting did not preserve selected paths.'
+        foreach ($selectedEntry in $selectedEntries) {
+            $restoredEntry = @($list.SelectedItems | ForEach-Object { $_.Entry } | Where-Object { $_.FullPath -eq $selectedEntry.FullPath })[0]
+            Assert-True ([object]::ReferenceEquals($selectedEntry, $restoredEntry)) 'GUI sorting or filtering reloaded a cached entry.'
+        }
         foreach ($operation in @('Copy', 'Move')) {
             $view.FindName("${operation}GetButton").RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
             $workflowType = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true)
@@ -629,7 +818,8 @@ try {
         $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
         $timer.Start()
         try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-        Assert-True $probe.Ready "BROWSE startup did not render a Shell icon: $($probe.Error)"
+        $browseStatus = if ($null -ne $probe.ContentView) { $probe.ContentView.FindName('StatusLabel').Text } else { 'no ContentView' }
+        Assert-True $probe.Ready "BROWSE startup did not render a Shell icon: $($probe.Error); status=$browseStatus"
     } finally {
         $mainWindow.Close()
         [System.Threading.SynchronizationContext]::SetSynchronizationContext($previousContext)

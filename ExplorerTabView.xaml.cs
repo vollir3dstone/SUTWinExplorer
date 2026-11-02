@@ -1360,7 +1360,11 @@ public sealed class TreeEntry : INotifyPropertyChanged
     }
 }
 
-public sealed record ShellIconSet(ImageSource? BaseIcon, ImageSource? OverlayIcon, double Opacity);
+public sealed record ShellIconSet(ImageSource? BaseIcon, ImageSource? OverlayIcon, double Opacity)
+{
+    internal int BaseIconIndex { get; init; }
+    internal int OverlaySlot { get; init; }
+}
 
 internal static class ShellDisplayNameProvider
 {
@@ -1578,7 +1582,11 @@ internal static class ShellIconProvider
                 if (overlaySlot > 0 && GetImageListMethod<GetOverlayImageDelegate>(imageList, 31)(imageList, overlaySlot, out var overlayImageIndex) >= 0)
                     overlayIcon = GetImage(imageList, overlayImageIndex);
 
-                return new ShellIconSet(baseIcon, overlayIcon, GetOpacity(path));
+                return new ShellIconSet(baseIcon, overlayIcon, GetOpacity(path))
+                {
+                    BaseIconIndex = baseInfo.IconIndex,
+                    OverlaySlot = overlaySlot
+                };
             }
             finally
             {

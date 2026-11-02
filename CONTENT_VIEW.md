@@ -2,12 +2,14 @@
 
 ## Current ContentView
 
-ContentView owns the WPF table, its filters, row placeholders, selection, and
-the scheduling of directory-data requests. Pathview owns navigation and supplies
-the committed location. ContentView uses [SutShell](SUTSHELL_API.md) for
-directory data, filesystem observation, and operating-system operations; it does
-not embed a Shell view. The Windows-specific implementation is described in
-[SutShell Windows implementation](SUTSHELL_WINDOWS.md).
+ContentView owns the WPF table, filter controls and settings, row placeholders,
+selection, and the scheduling of directory-data requests. It passes the filter
+criteria to SutShell, which applies them when preparing the directory snapshot;
+ContentView does not filter the returned rows itself. Pathview owns navigation
+and supplies the committed location. ContentView uses [SutShell](SUTSHELL_API.md)
+for directory data, filesystem observation, and operating-system operations;
+it does not embed a Shell view. The Windows-specific implementation is described
+in [SutShell Windows implementation](SUTSHELL_WINDOWS.md).
 
 The table has one row per item and columns for MT, Shell base icon, Shell
 overlay, Name, Type, Size, and Date modified. The base icon and overlay are
@@ -26,14 +28,15 @@ is prepared, then the total item count, not the number of loaded rows.
 | Component | Responsibility |
 | --- | --- |
 | Pathview | Validates and commits navigation, supplies the current path, and coordinates refreshes from filesystem notifications. |
-| ContentView | Owns one snapshot and its row placeholders, decides which range to request next, handles scrolling, caching, cancellation, UI updates, and refreshes. |
-| SutShell | Prepares the filtered, sorted snapshot and returns the particular complete range requested. It does not choose ranges, monitor scrolling, or independently preload the rest. |
+| ContentView | Owns one snapshot, its row placeholders and per-view SutShell sort and directory-cache state; handles column clicks, scrolling, cancellation, UI updates and refreshes. |
+| SutShell | Maintains the unfiltered directory records, loaded data and sort history, prepares filtered, sorted snapshots and returns requested ranges. It does not choose ranges, monitor scrolling, or independently preload the rest. |
 
 The background loading policy therefore belongs to ContentView. SutShell runs
 each requested snapshot or range operation asynchronously on a background STA
 thread; it does not run a separate prefetch loop. In the current implementation,
 every call creates its own thread. Completed images are frozen so WPF can use
-them on the UI thread.
+them on the UI thread. Cache ownership, fields, invalidation, concurrency and
+freshness limitations are described in [Directory Cache](SUTSHELL_API.md#directory-cache).
 
 ### Snapshot and placeholders
 
@@ -42,16 +45,29 @@ them on the UI thread.
   refreshes can also start a new refresh.
 2. ContentView cancels the previous snapshot and range requests, clears the
   existing rows, captures the current path and filter settings, and calls
-  `SutShell.OpenDirectoryAsync`.
-3. SutShell enumerates immediate children, applies the directory and internal
-  filters, resolves Shell display names for name-pattern filtering and sorting,
-  and creates a snapshot ordered directories first, then by display name. This
-  preparation covers all candidates; the count alone cannot provide a stable
-  mapping from row index to item. This PC enumerates drive roots.
+  `SutShell.OpenCachedDirectoryAsync` with its SutShell sort and cache state.
+3. SutShell reuses or enumerates all immediate children and their Shell display
+  names, applies the filters, and creates a snapshot with directories before
+  files and the selected sort criteria applied within each group. Missing sort
+  keys are loaded as needed; previously loaded keys and entries are retained.
+  This PC enumerates drive roots.
 4. Once the snapshot is ready, ContentView creates one empty `DirectoryRow` per
   snapshot item, assigns the rows to the table, and schedules range loading.
   The snapshot fixes the identity and order for these indices, but does not
   freeze the filesystem: details may change or an item may disappear later.
+
+### Sorting
+
+Each ContentView has its own initially empty SutShell sort history, retained on
+refresh, filtering and navigation while that view exists. Clicking Name, Type,
+Size, Date modified, MT, Shell base icon or overlay submits one column/criterion
+pair. Clicking the active
+column toggles ascending and descending; choosing another starts ascending. A
+triangle marks only the primary pair. SutShell moves each submitted pair to the
+front, removing any previous pair for that column; remaining pairs break ties in
+priority order. Directories always precede files, and both groups use the same
+criteria. Without criteria, and as a final tie-breaker, display names sort
+ascending. Selection is restored by path after sorting.
 
 ### Range scheduling
 
@@ -75,9 +91,9 @@ For each decision, `LoadNextRange`:
   snapshot and row array are still current. It then assigns each complete
   `FileEntry` to its placeholder on the UI thread. Property change notification
   updates all row bindings, including the separate Shell icon, overlay, and MT icon.
-5. Schedules another decision. Loaded rows remain cached for this snapshot, so
-  scrolling back does not require another request. When all rows have been
-  loaded or marked failed, the background sequence stops.
+5. Schedules another decision. Loaded entries are also retained in SutShell's
+  current-directory cache for subsequent filter and sort snapshots. When all
+  rows have been loaded or marked failed, the background sequence stops.
 
 ```mermaid
 sequenceDiagram
@@ -85,7 +101,7 @@ sequenceDiagram
    participant C as ContentView / UI dispatcher
    participant S as SutShell / STA worker
    P->>C: SetCurrentPath and Refresh
-   C->>S: OpenDirectoryAsync(path, filters, token)
+    C->>S: OpenCachedDirectoryAsync(path, filters, sort state, cache, token)
    S-->>C: Sorted snapshot and count
    C->>C: Create placeholders and schedule loading
    loop Until loaded or failed
@@ -135,7 +151,7 @@ be updated. External renames are not tracked as identity-preserving renames.
   call already in progress cannot be interrupted and may delay that decision.
 - SutShell checks cancellation between items and before returning. A cancelled
   package is discarded as a whole; partially computed entries are not published.
-- A path or filter refresh creates a new snapshot. Cancellation plus snapshot
+- A path, filter or sort refresh creates a new snapshot. Cancellation plus snapshot
   and row-array identity checks prevent an old range from populating the new
   table. A previous snapshot request is also checked before publication.
 - Unloading the control cancels its active range. Loading can resume when the
@@ -147,14 +163,18 @@ be updated. External renames are not tracked as identity-preserving renames.
   empty fields without failing the whole range.
 - SutShell's directory observer is best-effort. ContentView marshals its change
   callback to the dispatcher; Pathview coalesces notifications and initiates a
-  refresh. Notifications and snapshots do not guarantee an atomic filesystem view.
+  refresh, which invalidates the whole current-directory cache. Explicit refresh,
+  successful rename, copy or move, and navigation also invalidate it. Filter and
+  sort changes do not. Notifications and snapshots do not guarantee an atomic
+  filesystem view; Shell icon or overlay changes may not generate notifications.
 
 The focused checks in [SutShell.Tests.ps1](tests/SutShell.Tests.ps1) exercise
 snapshot ranges, cancellation, missing files, background completion without
 scrolling, visible-row priority, scrolling, rapid navigation, and Shell icon
 rendering in the BROWSE startup path. They also cover multiple-selection
 restoration and Copy/Move staging, the multi-item Shell menu, inline rename
-entry points, commit/cancel, validation, and folder-rename notification.
+entry points, commit/cancel, validation, folder-rename notification, cached
+filter/sort reuse, invalidation, MT enum ordering and both Shell icon columns.
 
 ## Historical Shell-Host Reference
 
