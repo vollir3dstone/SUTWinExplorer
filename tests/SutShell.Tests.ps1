@@ -36,11 +36,39 @@ public sealed class SutShellMenuProbe : System.IDisposable
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern System.IntPtr SendMessage(System.IntPtr window, uint message, System.IntPtr wparam, System.IntPtr lparam);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool PostMessage(System.IntPtr window, uint message, System.IntPtr wparam, System.IntPtr lparam);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int GetMenuItemCount(System.IntPtr menu);
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern int GetMenuString(System.IntPtr menu, uint position, System.Text.StringBuilder text, int length, uint flags);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint GetMenuState(System.IntPtr menu, uint position, uint flags);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern System.IntPtr GetModuleHandle(string name);
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern int LoadString(System.IntPtr module, uint id, System.Text.StringBuilder text, int length);
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetMenuItemRect(System.IntPtr window, System.IntPtr menu, uint item, out Rect rect);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetCursorPos(out Point point);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern void mouse_event(uint flags, uint dx, uint dy, uint data, System.UIntPtr extra);
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)] private struct Point { public int X, Y; }
     private readonly uint thread = GetCurrentThreadId();
     private readonly System.IntPtr owner;
     private readonly System.Threading.Timer timer;
     private int ticks;
+    private int handled;
     public int ItemCount = -1;
+    public string[] Items;
+    public uint[] States;
+    public int SelectIndex = -1;
+
+    public static string OpenWithLabel()
+    {
+        var text = new System.Text.StringBuilder(256);
+        return LoadString(GetModuleHandle("shell32.dll"), 5376, text, text.Capacity) > 0 ? text.ToString() : null;
+    }
+
+    public static string LinkDropHereLabel()
+    {
+        var module = GetModuleHandle("HardlinkShellExt.dll");
+        if (module == System.IntPtr.Zero) return null;
+        var text = new System.Text.StringBuilder(256);
+        return LoadString(module, 241, text, text.Capacity) > 0 ? text.ToString() : null;
+    }
 
     public SutShellMenuProbe(System.IntPtr owner)
     {
@@ -55,9 +83,27 @@ public sealed class SutShellMenuProbe : System.IDisposable
             var name = new System.Text.StringBuilder(64);
             GetClassName(window, name, name.Capacity);
             if (name.ToString() != "#32768") return true;
+            if (System.Threading.Interlocked.Exchange(ref handled, 1) != 0) return false;
             var menu = SendMessage(window, 0x01E1, System.IntPtr.Zero, System.IntPtr.Zero);
             ItemCount = GetMenuItemCount(menu);
-            PostMessage(owner, 0x001F, System.IntPtr.Zero, System.IntPtr.Zero);
+            Items = new string[ItemCount];
+            States = new uint[ItemCount];
+            for (var index = 0; index < ItemCount; index++)
+            {
+                var text = new System.Text.StringBuilder(512);
+                GetMenuString(menu, (uint)index, text, text.Capacity, 0x400);
+                Items[index] = text.ToString();
+                States[index] = GetMenuState(menu, (uint)index, 0x400);
+            }
+            if (SelectIndex >= 0 && SelectIndex < ItemCount && (States[SelectIndex] & 3) == 0 &&
+                GetMenuItemRect(window, menu, (uint)SelectIndex, out var rect) && GetCursorPos(out var original))
+            {
+                SetCursorPos((rect.Left + rect.Right) / 2, (rect.Top + rect.Bottom) / 2);
+                mouse_event(2, 0, 0, 0, System.UIntPtr.Zero);
+                mouse_event(4, 0, 0, 0, System.UIntPtr.Zero);
+                SetCursorPos(original.X, original.Y);
+            }
+            else PostMessage(owner, 0x001F, System.IntPtr.Zero, System.IntPtr.Zero);
             return false;
         }, System.IntPtr.Zero);
         if (System.Threading.Interlocked.Increment(ref ticks) > 100)
@@ -617,6 +663,91 @@ try {
                 [System.Windows.Interop.WindowInteropHelper]::new($window).Handle, $null))
             Assert-True ($menuProbe.ItemCount -gt 0) 'The Shell did not display a populated multi-item context menu.'
         } finally { $menuProbe.Dispose() }
+        $notesMenuRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'notes.txt') })[0]
+        $list.SelectedItem = $notesMenuRow
+        $showMenu = $view.GetType().GetMethod('ShowMenu', $viewFlags)
+        $ownerHandle = [System.Windows.Interop.WindowInteropHelper]::new($window).Handle
+        $originalClipboard = [System.Windows.Clipboard]::GetDataObject()
+        try {
+            foreach ($selection in @(-1, 1, 2, 3, 5, 6, 0)) {
+                $buttonStates = @(@('Rename', 'PathGet', 'CopyGet', 'CopyAbort', 'CopyPaste', 'MoveGet', 'MoveAbort', 'MovePaste', 'Delete') |
+                    ForEach-Object { $view.FindName($_ + 'Button').IsEnabled })
+                $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+                $menuProbe.SelectIndex = $selection
+                try {
+                    $null = $showMenu.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject))
+                    Assert-True ($menuProbe.ItemCount -ge 9) 'The generic file menu did not contain all toolbar actions.'
+                    Assert-True (($menuProbe.Items[0..8] -join ',') -ceq 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete') "The menu did not match the toolbar actions: $($menuProbe.Items[0..8] -join ',')."
+                    $openWithLabel = [SutShellMenuProbe]::OpenWithLabel()
+                    Assert-True ($null -ne $openWithLabel -and $openWithLabel -notin $menuProbe.Items) 'The Shell Open With submenu is still present.'
+                    $linkDropHereLabel = [SutShellMenuProbe]::LinkDropHereLabel()
+                    Assert-True ($null -eq $linkDropHereLabel -or $linkDropHereLabel -notin $menuProbe.Items) 'A drag-and-drop-only Link Shell Extension command appeared in the file menu.'
+                    if ($menuProbe.ItemCount -gt 9) {
+                        Assert-True (($menuProbe.States[9] -band 0x800) -ne 0) 'The toolbar actions were not separated from Shell extensions.'
+                    }
+                    for ($index = 0; $index -lt 9; $index++) {
+                        Assert-True ((($menuProbe.States[$index] -band 3) -eq 0) -eq $buttonStates[$index]) "Menu state did not match $($menuProbe.Items[$index])."
+                    }
+                    if ($selection -ge 0) { Assert-True (($menuProbe.States[$selection] -band 3) -eq 0) "Command $selection was disabled." }
+                } finally { $menuProbe.Dispose() }
+                if ($selection -eq 1) {
+                    Assert-True ([System.Windows.Clipboard]::GetText() -ceq (Join-Path $directory 'notes.txt')) 'Path get did not put the selected path on the clipboard.'
+                } elseif ($selection -in @(2, 5)) {
+                    $operation = if ($selection -eq 2) { 'Copy' } else { 'Move' }
+                    $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
+                    Assert-True ($workflow.IsPrepared -and @($workflow.PreparedPaths)[0] -ceq (Join-Path $directory 'notes.txt')) "$operation get did not prepare the selected file."
+                } elseif ($selection -in @(3, 6)) {
+                    $operation = if ($selection -eq 3) { 'Copy' } else { 'Move' }
+                    $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
+                    Assert-True (-not $workflow.IsPrepared) "$operation abort did not clear the workflow."
+                } elseif ($selection -eq 0) {
+                    Assert-True $notesMenuRow.IsEditing 'Rename did not start the inline editor.'
+                    $null = $view.GetType().GetMethod('EndRename', $viewFlags).Invoke($view, [object[]] @([bool] $false))
+                }
+            }
+        } finally {
+            if ($null -eq $originalClipboard) { [System.Windows.Clipboard]::Clear() }
+            else { [System.Windows.Clipboard]::SetDataObject($originalClipboard, $true) }
+        }
+        $pasteSource = Join-Path ([System.IO.Path]::GetTempPath()) ('kis-menu-source-' + [guid]::NewGuid().ToString('N'))
+        try {
+            [System.IO.Directory]::CreateDirectory($pasteSource) | Out-Null
+            foreach ($operation in @('Copy', 'Move')) {
+                $sourceFile = Join-Path $pasteSource "menu-$operation-test.txt"
+                $destinationFile = Join-Path $directory "menu-$operation-test.txt"
+                [System.IO.File]::WriteAllText($sourceFile, 'menu workflow test')
+                $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
+                $workflow.Prepare([string[]] @($sourceFile))
+                $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+                $menuProbe.SelectIndex = if ($operation -eq 'Copy') { 4 } else { 7 }
+                try {
+                    $null = $showMenu.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject))
+                    Assert-True (($menuProbe.States[$menuProbe.SelectIndex] -band 3) -eq 0) "$operation paste was disabled."
+                } finally { $menuProbe.Dispose() }
+                Assert-True ([System.IO.File]::Exists($destinationFile) -and -not $workflow.IsPrepared) "$operation paste did not complete the prepared workflow."
+                Assert-True (([System.IO.File]::Exists($sourceFile)) -eq ($operation -eq 'Copy')) "$operation paste did not preserve the expected source state."
+                $frame = [System.Windows.Threading.DispatcherFrame]::new()
+                $probe = [SutShellUiProbe]::new()
+                $probe.List = $list
+                $probe.AwaitAll = $true
+                $probe.Frame = $frame
+                $timer = [System.Windows.Threading.DispatcherTimer]::new()
+                $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+                $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
+                $timer.Start()
+                try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+                Assert-True $probe.Ready "Rows did not reload after $operation paste: $($probe.Error)"
+                $notesMenuRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'notes.txt') })[0]
+                $list.SelectedItem = $notesMenuRow
+                Remove-Item -LiteralPath $destinationFile -Force
+            }
+        } finally {
+            Remove-Item -LiteralPath $pasteSource -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        $list.SelectedItems.Clear()
+        foreach ($selectedPath in $selectedPaths) {
+            $list.SelectedItems.Add(@($list.Items | Where-Object { $_.Entry.FullPath -eq $selectedPath })[0]) | Out-Null
+        }
         $null = $view.GetType().GetMethod('Refresh', $viewFlags).Invoke($view, [object[]] @([bool] $true))
         $null = $view.GetType().GetMethod('Refresh', $viewFlags).Invoke($view, [object[]] @([bool] $true))
         $frame = [System.Windows.Threading.DispatcherFrame]::new()
