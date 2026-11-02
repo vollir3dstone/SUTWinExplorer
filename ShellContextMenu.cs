@@ -150,8 +150,8 @@ internal static class ShellContextMenu
     internal static void ShowItems(IReadOnlyList<string> paths, IntPtr owner, Action? rename = null) =>
         ShowCore(paths, owner, background: false, rename);
 
-    internal static void ShowGenericFile(string path, IntPtr owner, IReadOnlyList<ShellMenuAction> actions) =>
-        ShowCore([path], owner, background: false, rename: null, actions);
+    internal static void ShowGenericFile(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions) =>
+        ShowCore(paths, owner, background: false, rename: null, actions);
 
     public static void ShowBackground(string folderPath, IntPtr owner) => ShowCore([folderPath], owner, background: true, rename: null);
 

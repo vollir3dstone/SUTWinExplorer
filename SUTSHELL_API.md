@@ -22,7 +22,7 @@ Shell helpers directly.
 | `Open(path)` | Opens an item using the OS shell. |
 | `Copy(paths, destination, owner)` / `Move(...)` | Run the existing native transfer operation; failures propagate and a transfer is not atomic. |
 | `ShowItemMenu(paths, owner, rename)` / `ShowBackgroundMenu(path, owner)` | Show a native Windows context menu for one or more items from the same directory, or for a folder background. The optional single-item rename callback starts the caller's editor. |
-| `ShowGenericFileMenu(path, owner, actions)` | Experimental single-file menu: caller-provided actions and enabled states precede a Shell menu restricted to the `*` and `AllFilesystemObjects` class keys. |
+| `ShowGenericFileMenu(paths, owner, actions)` | Experimental menu for one or more files from the same directory: caller-provided actions and enabled states precede a Shell menu restricted to the `*` and `AllFilesystemObjects` class keys. |
 | `ObserveDirectories(paths, changed)` | Observes immediate changes in the supplied directories and returns an `IDisposable` subscription. The callback may run on a background thread; callers must marshal UI work. Observation failures are logged and do not abort other subscriptions. |
 
 The snapshot fixes item identities and ordering, not filesystem contents: items

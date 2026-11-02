@@ -451,19 +451,23 @@ public partial class ContentView : UserControl
             var owner = new WindowInteropHelper(Window.GetWindow(this)!).Handle;
             if (row is null)
                 SutShell.ShowBackgroundMenu(CurrentPath, owner);
-            else if (FileList.SelectedItems.Count == 1 && System.IO.File.Exists(row.FullPath) &&
-                     (Keyboard.Modifiers & ModifierKeys.Shift) == 0)
-            {
-                var buttons = new[] { RenameButton, PathGetButton, CopyGetButton, CopyAbortButton, CopyPasteButton,
-                    MoveGetButton, MoveAbortButton, MovePasteButton, DeleteButton };
-                var actions = buttons.Select(button => new ShellMenuAction(
-                    System.Windows.Automation.AutomationProperties.GetName(button), button.IsEnabled,
-                    () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)))).ToArray();
-                SutShell.ShowGenericFileMenu(row.FullPath, owner, actions);
-            }
             else
-                SutShell.ShowItemMenu(FileList.SelectedItems.OfType<DirectoryRow>().Select(item => item.FullPath).ToArray(), owner,
-                    FileList.SelectedItems.Count == 1 && row.Entry is not null && SutShell.GetEditName(row.FullPath) is not null ? BeginRename : null);
+            {
+                var selectedPaths = FileList.SelectedItems.OfType<DirectoryRow>().Select(item => item.FullPath).ToArray();
+                if (selectedPaths.Length > 0 && selectedPaths.All(System.IO.File.Exists) &&
+                    (Keyboard.Modifiers & ModifierKeys.Shift) == 0)
+                {
+                    var buttons = new[] { RenameButton, PathGetButton, CopyGetButton, CopyAbortButton, CopyPasteButton,
+                        MoveGetButton, MoveAbortButton, MovePasteButton, DeleteButton };
+                    var actions = buttons.Select(button => new ShellMenuAction(
+                        System.Windows.Automation.AutomationProperties.GetName(button), button.IsEnabled,
+                        () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)))).ToArray();
+                    SutShell.ShowGenericFileMenu(selectedPaths, owner, actions);
+                }
+                else
+                    SutShell.ShowItemMenu(selectedPaths, owner,
+                        FileList.SelectedItems.Count == 1 && row.Entry is not null && SutShell.GetEditName(row.FullPath) is not null ? BeginRename : null);
+            }
         }
         catch (Exception exception)
         {

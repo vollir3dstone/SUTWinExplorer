@@ -64,12 +64,12 @@ Verb strings are optional and may be noncanonical or malformed.
 
 ## Experimental File Menu
 
-In ContentView, right-clicking one file opens the experimental menu. Its first
+In ContentView, right-clicking a selection of one or more files opens the experimental menu. Its first
 section mirrors the toolbar: Rename, Path get, Copy get/abort/paste, Move
 get/abort/paste and Delete. Each command calls the same button handler and has
 the same enabled state. Copy and Move use the application's prepared workflows,
 not the Windows clipboard; Delete remains disabled while its toolbar button is
-disabled. There is no separate Properties button in the toolbar.
+disabled. Rename and Path get are disabled for multiple files. There is no separate Properties button in the toolbar.
 
 The second section comes from `SHCreateDefaultContextMenu` with the `*` and
 `AllFilesystemObjects` keys, followed by the Shell's ordinary menu-message
@@ -86,7 +86,7 @@ Our initial hypothesis was that we could give Windows a list of unwanted verbs
 or extension CLSIDs and have it leave those entries out. The actual sequence is
 different:
 
-1. The application asks Windows to build a menu for the selected file using the
+1. The application asks Windows to build a menu for the selected files using the
   `*` and `AllFilesystemObjects` association keys. These keys narrow the
   registration sources; they are not a list of blocked extensions or verbs.
 2. Windows queries the applicable registrations and creates a combined native
@@ -177,8 +177,8 @@ registrations, not proven contributors to individual menu entries.
 
 Like the media type mapping, the blacklist JSON is embedded in the application,
 so changing it requires a rebuild. The blacklist applies only to the
-experimental generic single-file menu, not Shift-right-click's original Windows
-menu or the existing folder, background and multiple-selection menus. Other
+experimental generic file menu, not Shift-right-click's original Windows
+menu or the existing folder, background and mixed-selection menus. Other
 versions or packaged registrations may use different verbs or no usable verb.
 
 The built-in Open With command is excluded, including its owner-drawn submenu.
@@ -197,8 +197,9 @@ enabled state. The extension's source storage and the complete Pick/Drop workflo
 have not been independently verified; no Link Shell Extension commands are filtered.
 
 Shift-right-click opens the original Windows item menu. Folders, background and
-multiple selections retain their existing menus. The integration test exercises
-the menu's toolbar actions, including Copy and Move paste with temporary files.
+mixed file-and-folder selections retain their existing menus. The integration test
+exercises the menu's toolbar actions, including multiple-file Copy and Move and
+Copy and Move paste with temporary files.
 
 `CategoryHints` are text-based guesses for Archive, VersionControl, Links and
 Verification, not authoritative classifications or rules for production. The

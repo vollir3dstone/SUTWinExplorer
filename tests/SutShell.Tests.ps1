@@ -664,9 +664,37 @@ try {
             Assert-True ($menuProbe.ItemCount -gt 0) 'The Shell did not display a populated multi-item context menu.'
         } finally { $menuProbe.Dispose() }
         $notesMenuRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'notes.txt') })[0]
-        $list.SelectedItem = $notesMenuRow
+        $otherFileRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'exact.bin') })[0]
         $showMenu = $view.GetType().GetMethod('ShowMenu', $viewFlags)
         $ownerHandle = [System.Windows.Interop.WindowInteropHelper]::new($window).Handle
+        $multiPaths = @($notesMenuRow.Entry.FullPath, $otherFileRow.Entry.FullPath)
+        $list.SelectedItems.Clear()
+        $list.SelectedItems.Add($notesMenuRow) | Out-Null
+        $list.SelectedItems.Add($otherFileRow) | Out-Null
+        foreach ($selection in @(-1, 2, 3, 5, 6)) {
+            $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+            $menuProbe.SelectIndex = $selection
+            try {
+                $null = $showMenu.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject))
+                Assert-True ($menuProbe.ItemCount -ge 9 -and
+                    ($menuProbe.Items[0..8] -join ',') -ceq 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete') 'Multiple files did not show the generic menu.'
+                Assert-True (($menuProbe.States[0] -band 3) -ne 0 -and ($menuProbe.States[1] -band 3) -ne 0) 'Rename and Path get must be disabled for multiple files.'
+                if ($selection -ge 0) { Assert-True (($menuProbe.States[$selection] -band 3) -eq 0) "Multi-file command $selection was disabled." }
+            } finally { $menuProbe.Dispose() }
+            if ($selection -in @(2, 5)) {
+                $operation = if ($selection -eq 2) { 'Copy' } else { 'Move' }
+                $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
+                $preparedPaths = @($workflow.PreparedPaths)
+                Assert-True ($workflow.IsPrepared -and $preparedPaths.Count -eq 2 -and
+                    @($multiPaths | Where-Object { $_ -notin $preparedPaths }).Count -eq 0) "Multi-file $operation get did not prepare both files."
+            } elseif ($selection -in @(3, 6)) {
+                $operation = if ($selection -eq 3) { 'Copy' } else { 'Move' }
+                $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
+                Assert-True (-not $workflow.IsPrepared) "Multi-file $operation abort did not clear the workflow."
+            }
+        }
+        $list.SelectedItems.Clear()
+        $list.SelectedItem = $notesMenuRow
         $unfilteredMenu = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path (Join-Path $directory 'notes.txt') -Generic | ConvertFrom-Json).Menu
         $notepadEntries = @($unfilteredMenu | Where-Object { $_.Verb -eq 'ANotepad++64' })
         $viewerEntries = @($unfilteredMenu | Where-Object { $_.Verb -eq 'view SUTTextViewer' })
@@ -907,6 +935,18 @@ try {
         try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
         Assert-True $probe.Ready 'Directory rows were not loaded for rename testing.'
         $folderRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'Folder') })[0]
+        $renamedFileRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'renamed-notes.txt') })[0]
+        Assert-True ($null -ne $folderRow -and $null -ne $renamedFileRow) 'Mixed-selection rows were not available.'
+        $list.SelectedItems.Clear()
+        $list.SelectedItems.Add($renamedFileRow) | Out-Null
+        $list.SelectedItems.Add($folderRow) | Out-Null
+        Assert-True ($list.SelectedItems.Count -eq 2) 'The mixed file and folder selection was not established.'
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        try {
+            $null = $showMenu.Invoke($view, [object[]] @($renamedFileRow.PSObject.BaseObject))
+            Assert-True ($menuProbe.ItemCount -gt 0 -and
+                ($menuProbe.ItemCount -lt 9 -or ($menuProbe.Items[0..8] -join ',') -cne 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete')) 'A mixed file and folder selection did not retain the Windows menu.'
+        } finally { $menuProbe.Dispose() }
         $list.SelectedItem = $folderRow
         $renameProbe = [SutShellRenameProbe]::new()
         $folderEvent = $view.GetType().GetEvent('FolderRenamed', $viewFlags)
