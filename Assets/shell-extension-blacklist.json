@@ -1,0 +1,10 @@
+{
+  "_type": "shellExtensionBlacklist",
+  "extensions": [
+    {
+      "_type": "shellExtension",
+      "name": "Notepad++",
+      "verbs": ["ANotepad++64"]
+    }
+  ]
+}

@@ -667,6 +667,19 @@ try {
         $list.SelectedItem = $notesMenuRow
         $showMenu = $view.GetType().GetMethod('ShowMenu', $viewFlags)
         $ownerHandle = [System.Windows.Interop.WindowInteropHelper]::new($window).Handle
+        $unfilteredMenu = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path (Join-Path $directory 'notes.txt') -Generic | ConvertFrom-Json).Menu
+        $notepadEntries = @($unfilteredMenu | Where-Object { $_.Verb -eq 'ANotepad++64' })
+        $viewerEntries = @($unfilteredMenu | Where-Object { $_.Verb -eq 'view SUTTextViewer' })
+        $contextMenuType = $assembly.GetType('SUTWinExplorer.ShellContextMenu', $true)
+        $blacklist = $contextMenuType.GetField('BlacklistedVerbs', [System.Reflection.BindingFlags]'Static,NonPublic').GetValue($null).Value
+        Assert-True ($blacklist.Contains('anotepad++64') -and -not $blacklist.Contains('view SUTTextViewer')) 'The embedded blacklist did not load the expected case-insensitive verbs.'
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        try {
+            $null = $showItems.Invoke($null, [object[]] @([string[]] @((Join-Path $directory 'notes.txt')), $ownerHandle, $null))
+            foreach ($entry in $notepadEntries) {
+                Assert-True ($entry.Text -in $menuProbe.Items) 'The original Windows menu lost the Notepad++ command.'
+            }
+        } finally { $menuProbe.Dispose() }
         $originalClipboard = [System.Windows.Clipboard]::GetDataObject()
         try {
             foreach ($selection in @(-1, 1, 2, 3, 5, 6, 0)) {
@@ -682,6 +695,12 @@ try {
                     Assert-True ($null -ne $openWithLabel -and $openWithLabel -notin $menuProbe.Items) 'The Shell Open With submenu is still present.'
                     $linkDropHereLabel = [SutShellMenuProbe]::LinkDropHereLabel()
                     Assert-True ($null -eq $linkDropHereLabel -or $linkDropHereLabel -notin $menuProbe.Items) 'A drag-and-drop-only Link Shell Extension command appeared in the file menu.'
+                    foreach ($entry in $notepadEntries) {
+                        Assert-True ($entry.Text -notin $menuProbe.Items) 'The blacklisted Notepad++ command appeared in the generic menu.'
+                    }
+                    foreach ($entry in $viewerEntries) {
+                        Assert-True ($entry.Text -in $menuProbe.Items) 'The unblacklisted SUTTextViewer command disappeared from the generic menu.'
+                    }
                     if ($menuProbe.ItemCount -gt 9) {
                         Assert-True (($menuProbe.States[9] -band 0x800) -ne 0) 'The toolbar actions were not separated from Shell extensions.'
                     }

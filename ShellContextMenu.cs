@@ -2,6 +2,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Text;
+using System.Text.Json;
 
 namespace SUTWinExplorer;
 
@@ -21,6 +22,8 @@ internal static class ShellContextMenu
     private const uint GenericCommandFirst = 0x8000;
     private const uint ShellViewSelectEdit = 0x0003;
     private const string ShellIdListArrayFormat = "Shell IDList Array";
+    private const string BlacklistResourceName = "SUTWinExplorer.ShellExtensionBlacklist.json";
+    private static readonly Lazy<HashSet<string>> BlacklistedVerbs = new(LoadBlacklistedVerbs);
     internal const uint ShellViewBackground = 0;
     internal const uint ShellViewSelection = 1;
 
@@ -346,7 +349,7 @@ internal static class ShellContextMenu
             if (id < FirstCommandId || id > LastCommandId)
                 continue;
             var verb = GetCommandVerb(contextMenu, id - FirstCommandId);
-            if (verb is null || !standardVerbs.Contains(verb))
+            if (verb is null || (!standardVerbs.Contains(verb) && !BlacklistedVerbs.Value.Contains(verb)))
                 continue;
             if (!RemoveMenu(menu, (uint)index, MenuByPosition))
                 throw new InvalidOperationException("Could not rearrange the Shell menu.");
@@ -375,6 +378,30 @@ internal static class ShellContextMenu
             if (!InsertMenu(menu, 0, MenuByPosition | (actions[index].IsEnabled ? 0u : MenuDisabled), (UIntPtr)id, actions[index].Label))
                 throw new InvalidOperationException("Could not insert a standard menu command.");
         }
+    }
+
+    private static HashSet<string> LoadBlacklistedVerbs()
+    {
+        using var stream = typeof(ShellContextMenu).Assembly.GetManifestResourceStream(BlacklistResourceName)
+            ?? throw new InvalidOperationException($"Embedded Shell extension blacklist '{BlacklistResourceName}' is missing.");
+        using var document = JsonDocument.Parse(stream);
+        if (document.RootElement.GetProperty("_type").GetString() != "shellExtensionBlacklist")
+            throw new InvalidDataException("Invalid Shell extension blacklist type.");
+        var verbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var extension in document.RootElement.GetProperty("extensions").EnumerateArray())
+        {
+            if (extension.GetProperty("_type").GetString() != "shellExtension" ||
+                string.IsNullOrWhiteSpace(extension.GetProperty("name").GetString()))
+                throw new InvalidDataException("Invalid Shell extension blacklist entry.");
+            foreach (var verbElement in extension.GetProperty("verbs").EnumerateArray())
+            {
+                var verb = verbElement.GetString();
+                if (string.IsNullOrWhiteSpace(verb))
+                    throw new InvalidDataException("A blacklisted Shell verb is missing or empty.");
+                verbs.Add(verb);
+            }
+        }
+        return verbs;
     }
 
     internal static string Rename(string path, string name, IntPtr owner)

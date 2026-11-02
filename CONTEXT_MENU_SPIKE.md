@@ -23,7 +23,27 @@ and registry view; menu contents depend on installed extensions, selection,
 Shell state and process architecture. It requires PowerShell on Windows.
 `-Generic` accepts one file and queries a menu with only the `*` and
 `AllFilesystemObjects` association keys. `-NoCanRename` omits `CMF_CANRENAME`
-for comparing Shell extension behavior.
+for comparing Shell extension behavior. `-HandlerClsid <guid>` with `-Generic`
+instead activates one classic `IShellExtInit`/`IContextMenu` handler for the
+selected file; it does not display a menu or invoke a command.
+
+## Individual Handler Probe
+
+The generic association classes have two different registration paths: `shell`
+contains declarative verbs, sometimes backed by `ExplorerCommandHandler` CLSIDs;
+`shellex\ContextMenuHandlers` identifies classic extension classes. A classic
+handler is initialized with the Shell selection data object and can then insert
+its own commands and submenus into a menu. Its verbs and command count depend on
+the selection and are not necessarily enumerable from the registry.
+
+On this machine the individual probe returned menu entries for 7-Zip, Link Shell
+Extension, Norton, TortoiseGit, TortoiseHg and Attribute Changer. Link Shell
+Extension required `CoCreateInstance` with the `IShellExtInit` IID directly;
+activating it first as `IUnknown` did not expose the expected interfaces. The
+registered Notepad++ class implements `IExplorerCommand` rather than the
+classic interfaces. The probe does not exercise invocation or menu-message
+forwarding, and those are required before replacing the current merged menu.
+The production menu and verb-based blacklist remain unchanged by this probe.
 
 `Menu` contains positions, labels, command IDs, optional verb strings, state,
 submenus and category hints. IDs are meaningful only within the menu instance
@@ -59,6 +79,107 @@ canonical verbs, and the Shell can include built-in submenus as well as
 extensions. Wildcard registrations can also include type-oriented tools such as
 Notepad++; a registration does not guarantee that its commands appear for every
 file. Packaged/modern extensions are not guaranteed to be included.
+
+### Decision: Let Windows Build the Menu
+
+Our initial hypothesis was that we could give Windows a list of unwanted verbs
+or extension CLSIDs and have it leave those entries out. The actual sequence is
+different:
+
+1. The application asks Windows to build a menu for the selected file using the
+  `*` and `AllFilesystemObjects` association keys. These keys narrow the
+  registration sources; they are not a list of blocked extensions or verbs.
+2. Windows queries the applicable registrations and creates a combined native
+  menu. Registered extensions can run while this happens.
+3. Before showing the popup, the application inspects the resulting top-level
+  entries. It asks `IContextMenu::GetCommandString` for each command's verb and
+  removes matching standard verbs and blacklisted verbs. Windows is not given
+  the blacklist before constructing the menu.
+4. The application's toolbar actions are inserted at the beginning. Windows
+  menu messages and the chosen Shell command are forwarded to the original
+  `IContextMenu` while that menu is alive.
+
+This keeps Windows responsible for constructing and invoking the Shell menu,
+which is more compatible with different extension implementations than our own
+handler-by-handler reconstruction. It does **not** guarantee every installed
+extension will appear: the selected association keys, file, Shell state, process
+architecture, registration mechanism and extension all affect the result.
+The resulting classic menu is not necessarily Windows 11's compact menu.
+
+This filtering is not a security sandbox. A blacklisted extension may already
+have been loaded and executed by Windows before its visible command is removed.
+
+### Verbs, Entries and Extension IDs
+
+A verb is a technical name for a Shell action, such as `open` or the observed
+Notepad++ verb `ANotepad++64`. It is not necessarily the localized text shown in
+the menu. An extension can contribute several actions, and the available actions
+can depend on the selected item or other state. A registered `shell` verb can
+refer to an extension, but can also describe a command without one.
+
+Not every clickable entry exposes a usable verb through `GetCommandString`.
+Windows can still invoke such an entry using its numeric command ID, but that ID
+is assigned for the current menu instance and is not a stable blacklist key.
+The application passes the chosen command's offset back to the same
+`IContextMenu`; it does not persist the ID across menu instances.
+
+An entry can also be a submenu rather than an action. For example, the observed
+`7-Zip` parent has visible text and a submenu handle but no usable verb; some
+of its children expose verbs such as `SevenZipCompress`. A submenu parent is
+therefore not automatically removable by verb. In particular, the current
+blacklist scan handles only top-level entries: it neither descends into
+submenus nor filters entries subsequently added when a submenu is opened. Such
+entries can remain visible even if a related verb is listed. An entry without a
+usable verb is left in the menu; a visible name or a menu handle is not a stable
+extension identity.
+
+A CLSID identifies a COM class, not necessarily every command of a product.
+For example, the observed `*\shell\ANotepad++64` registration points to the
+Notepad++ `ExplorerCommandHandler` CLSID
+`{B298D29A-A6ED-11DE-BA8C-A68E55D89593}`. For this registration we can relate
+that verb and CLSID by reading the registry. However, classic handlers under
+`shellex\ContextMenuHandlers` can generate different commands dynamically, and
+other registrations use different mechanisms. The combined `IContextMenu` does
+not provide a reliable CLSID-to-entry mapping for every resulting item. Looking
+up a CLSID in the registry therefore cannot reliably discover all of an
+extension's visible commands or filter commands that expose no verb.
+
+The individual-handler probe above explored reconstructing the menu by CLSID.
+It worked for several installed classic handlers, but 7-Zip, Link Shell
+Extension and Notepad++ already demonstrate different activation or interface
+requirements. Other handlers may depend on additional context or create lazy
+submenus. Reconstructing, invoking and forwarding messages for all of them is
+not established as a compatible replacement. We therefore retain the merged
+Windows menu and accept the limitations of verb-based filtering.
+
+### Maintaining the Blacklist
+
+The embedded [Shell extension blacklist](Assets/shell-extension-blacklist.json)
+stores descriptive names and exact Shell command verbs. It currently removes
+`ANotepad++64`; the unrelated `view SUTTextViewer` command is not blacklisted.
+For example, another entry has this shape:
+
+```json
+{
+  "_type": "shellExtension",
+  "name": "Example application",
+  "verbs": ["ExampleCommand", "ExampleOtherCommand"]
+}
+```
+
+The name is for maintainers only; the application matches verbs
+case-insensitively. Add all unwanted top-level verbs that the extension actually
+exposes, not its visible menu labels or transient numeric command IDs. Use the
+`-Generic` diagnostic on representative files to inspect observed `Text`,
+`Verb`, and submenu positions; absence from the diagnostic does not establish
+that an entry will never appear. The `RegistryCandidates` section lists possible
+registrations, not proven contributors to individual menu entries.
+
+Like the media type mapping, the blacklist JSON is embedded in the application,
+so changing it requires a rebuild. The blacklist applies only to the
+experimental generic single-file menu, not Shift-right-click's original Windows
+menu or the existing folder, background and multiple-selection menus. Other
+versions or packaged registrations may use different verbs or no usable verb.
 
 The built-in Open With command is excluded, including its owner-drawn submenu.
 That submenu has no canonical verb in the observed menu, so it is identified by

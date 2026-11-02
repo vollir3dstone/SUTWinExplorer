@@ -3,7 +3,8 @@ param(
     [string[]] $Path,
     [switch] $Background,
     [switch] $Generic,
-    [switch] $NoCanRename
+    [switch] $NoCanRename,
+    [guid] $HandlerClsid = [guid]::Empty
 )
 
 $ErrorActionPreference = 'Stop'
@@ -17,6 +18,9 @@ if ($Background -and ($paths.Count -ne 1 -or -not [IO.Directory]::Exists($paths[
 }
 if ($Generic -and ($Background -or $paths.Count -ne 1 -or -not [IO.File]::Exists($paths[0]))) {
     throw 'Generic requires exactly one file.'
+}
+if ($HandlerClsid -ne [guid]::Empty -and -not $Generic) {
+    throw 'HandlerClsid requires Generic.'
 }
 if (-not $Background -and $paths.Count -gt 1) {
     $parent = [IO.Path]::GetDirectoryName($paths[0])
@@ -43,7 +47,7 @@ public static class ContextMenuSpike
         [PreserveSig] int CompareIDs(IntPtr parameter, IntPtr first, IntPtr second);
         [PreserveSig] int CreateViewObject(IntPtr owner, ref Guid iid, out IShellView result);
         [PreserveSig] int GetAttributesOf(uint count, IntPtr pidls, ref uint attributes);
-        [PreserveSig] int GetUIObjectOf(IntPtr owner, uint count, IntPtr pidls, ref Guid iid, IntPtr reserved, out IContextMenu result);
+        [PreserveSig] int GetUIObjectOf(IntPtr owner, uint count, IntPtr pidls, ref Guid iid, IntPtr reserved, out IntPtr result);
         [PreserveSig] int GetDisplayNameOf(IntPtr pidl, uint flags, IntPtr name);
         [PreserveSig] int SetNameOf(IntPtr owner, IntPtr pidl, IntPtr name, uint flags, out IntPtr result);
     }
@@ -74,10 +78,19 @@ public static class ContextMenuSpike
         [PreserveSig] int GetCommandString(UIntPtr offset, uint flags, IntPtr reserved, IntPtr text, uint length);
     }
 
+    [ComImport, Guid("000214E8-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellExtInit
+    {
+        [PreserveSig] int Initialize(IntPtr folder, IntPtr dataObject, IntPtr key);
+    }
+
     [DllImport("shell32.dll")] private static extern int SHGetDesktopFolder(out IShellFolder folder);
     [DllImport("shell32.dll")] private static extern int SHBindToParent(IntPtr pidl, ref Guid iid, out IShellFolder folder, out IntPtr child);
     [DllImport("shell32.dll")] private static extern IntPtr ILFindLastID(IntPtr pidl);
+    [DllImport("shell32.dll")] private static extern IntPtr ILClone(IntPtr pidl);
+    [DllImport("shell32.dll")] private static extern bool ILRemoveLastID(IntPtr pidl);
     [DllImport("shell32.dll")] private static extern int SHCreateDefaultContextMenu(ref DefaultContextMenu definition, ref Guid iid, out IntPtr result);
+    [DllImport("ole32.dll")] private static extern int CoCreateInstance(ref Guid clsid, IntPtr outer, uint context, ref Guid iid, out IntPtr result);
     [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr CreatePopupMenu();
     [DllImport("user32.dll")] private static extern bool DestroyMenu(IntPtr menu);
     [DllImport("user32.dll")] private static extern int GetMenuItemCount(IntPtr menu);
@@ -108,13 +121,44 @@ public static class ContextMenuSpike
         public bool HasSubmenu { get; set; }
     }
 
-    public static MenuEntry[] Inspect(string[] paths, bool background, IntPtr[] keys, bool canRename)
+    public static string[] InspectInterfaces(Guid clsid)
+    {
+        var instance = Activator.CreateInstance(Type.GetTypeFromCLSID(clsid, true));
+        var unknown = Marshal.GetIUnknownForObject(instance);
+        var supported = new List<string>();
+        try
+        {
+            foreach (var item in new[] { ("IShellExtInit", typeof(IShellExtInit).GUID),
+                ("IContextMenu", typeof(IContextMenu).GUID),
+                ("IExplorerCommand", new Guid("A08CE4D0-FA25-44AB-B57C-C7B1C323E0B9")) })
+            {
+                var iid = item.Item2;
+                if (Marshal.QueryInterface(unknown, in iid, out var pointer) >= 0)
+                {
+                    supported.Add(item.Item1);
+                    Marshal.Release(pointer);
+                }
+                var classId = clsid;
+                if (CoCreateInstance(ref classId, IntPtr.Zero, 1, ref iid, out pointer) >= 0)
+                {
+                    supported.Add(item.Item1 + " via CoCreateInstance");
+                    Marshal.Release(pointer);
+                }
+            }
+            return supported.ToArray();
+        }
+        finally { Marshal.Release(unknown); Marshal.ReleaseComObject(instance); }
+    }
+
+    public static MenuEntry[] Inspect(string[] paths, bool background, IntPtr[] keys, bool canRename, Guid handlerClsid)
     {
         var pidls = new List<IntPtr>();
         IntPtr children = IntPtr.Zero, menu = IntPtr.Zero, keyArray = IntPtr.Zero, parentPointer = IntPtr.Zero;
+        IntPtr folderPidl = IntPtr.Zero, dataPointer = IntPtr.Zero;
         IShellFolder desktop = null, parent = null, target = null;
         IShellView view = null;
         IContextMenu context = null;
+        object handler = null;
         try
         {
             Marshal.ThrowExceptionForHR(SHGetDesktopFolder(out desktop));
@@ -147,8 +191,27 @@ public static class ContextMenuSpike
                 Marshal.WriteIntPtr(children, 0, firstChild);
                 for (var index = 1; index < pidls.Count; index++)
                     Marshal.WriteIntPtr(children, index * IntPtr.Size, ILFindLastID(pidls[index]));
-                if (keys.Length == 0)
-                    Marshal.ThrowExceptionForHR(parent.GetUIObjectOf(IntPtr.Zero, (uint)paths.Length, children, ref contextId, IntPtr.Zero, out context));
+                if (handlerClsid != Guid.Empty)
+                {
+                    var dataId = typeof(System.Runtime.InteropServices.ComTypes.IDataObject).GUID;
+                    Marshal.ThrowExceptionForHR(parent.GetUIObjectOf(IntPtr.Zero, (uint)paths.Length, children, ref dataId, IntPtr.Zero, out dataPointer));
+                    folderPidl = ILClone(pidls[0]);
+                    if (folderPidl == IntPtr.Zero || !ILRemoveLastID(folderPidl)) throw new InvalidOperationException("Could not obtain the parent PIDL.");
+                    var initId = typeof(IShellExtInit).GUID;
+                    IntPtr handlerPointer;
+                    Marshal.ThrowExceptionForHR(CoCreateInstance(ref handlerClsid, IntPtr.Zero, 1, ref initId, out handlerPointer));
+                    try { handler = Marshal.GetObjectForIUnknown(handlerPointer); }
+                    finally { Marshal.Release(handlerPointer); }
+                    context = (IContextMenu)handler;
+                    Marshal.ThrowExceptionForHR(((IShellExtInit)handler).Initialize(folderPidl, dataPointer, keys[0]));
+                }
+                else if (keys.Length == 0)
+                {
+                    IntPtr pointer;
+                    Marshal.ThrowExceptionForHR(parent.GetUIObjectOf(IntPtr.Zero, (uint)paths.Length, children, ref contextId, IntPtr.Zero, out pointer));
+                    try { context = (IContextMenu)Marshal.GetObjectForIUnknown(pointer); }
+                    finally { Marshal.Release(pointer); }
+                }
                 else
                 {
                     keyArray = Marshal.AllocCoTaskMem(IntPtr.Size * keys.Length);
@@ -173,6 +236,9 @@ public static class ContextMenuSpike
         {
             if (menu != IntPtr.Zero) DestroyMenu(menu);
             if (context != null) Marshal.ReleaseComObject(context);
+            else if (handler != null) Marshal.ReleaseComObject(handler);
+            if (dataPointer != IntPtr.Zero) Marshal.Release(dataPointer);
+            if (folderPidl != IntPtr.Zero) Marshal.FreeCoTaskMem(folderPidl);
             if (view != null) Marshal.ReleaseComObject(view);
             if (target != null) Marshal.ReleaseComObject(target);
             if (parent != null) Marshal.ReleaseComObject(parent);
@@ -234,7 +300,7 @@ try {
         if (@($genericKeys | Where-Object { $null -eq $_ }).Count -gt 0) { throw 'Generic Shell classes not found.' }
     }
     [IntPtr[]] $keyHandles = @($genericKeys | ForEach-Object { $_.Handle.DangerousGetHandle() })
-    $menu = @([ContextMenuSpike]::Inspect($paths, [bool] $Background, $keyHandles, -not $NoCanRename) | ForEach-Object {
+    $menu = @([ContextMenuSpike]::Inspect($paths, [bool] $Background, $keyHandles, -not $NoCanRename, $HandlerClsid) | ForEach-Object {
     [PSCustomObject]@{ Position = $_.Position; Text = $_.Text; CommandId = $_.CommandId; Verb = $_.Verb;
         Separator = $_.Separator; OwnerDrawn = $_.OwnerDrawn; Disabled = $_.Disabled; HasSubmenu = $_.HasSubmenu;
         CategoryHints = Get-CategoryHints ($_.Text + ' ' + $_.Verb) }
