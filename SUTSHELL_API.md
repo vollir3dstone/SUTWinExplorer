@@ -23,9 +23,12 @@ Shell helpers directly.
 | `Copy(paths, destination, owner)` / `Move(...)` | Run the existing native transfer operation; failures propagate and a transfer is not atomic. |
 | `Delete(paths, owner)` | Delete selected filesystem items using `IFileOperation`, requesting recycling and undo. Rejects drive/share roots; the Shell controls confirmation and may not support recycling for every location. Failures and cancellation propagate, and deletion is not atomic. |
 | `ShowItemMenu(paths, owner, rename)` / `ShowBackgroundMenu(path, owner)` | Show a native Windows context menu for one or more items from the same directory, or for a folder background. The optional single-item rename callback starts the caller's editor. |
-| `ShowGenericFileMenu(paths, owner, actions, secondRightClick)` | Experimental menu for one or more files from the same directory: caller-provided actions precede a Shell menu restricted to the `*` and `AllFilesystemObjects` class keys. Returns comparable displayed commands and optionally forwards a second right-click's screen coordinates and owner-window hit state to the caller. |
+| `ShowGenericFileMenu(paths, owner, actions, secondRightClick)` | Generic menu for one or more files from the same directory: caller-provided actions precede a Shell menu restricted to the `*` and `AllFilesystemObjects` class keys. Returns comparable displayed commands and optionally forwards a second right-click's screen coordinates, owner-window hit state and Shift state to the caller. |
 | `ShowSpecialFileMenu(paths, owner, genericCommands)` | Shows the native item menu, conservatively removing commands also identified in the generic menu and the Shell verbs `copy`, `cut`, `paste`, `copyaspath`, `link`, `delete`, `rename` and `properties`. |
 | `ObserveDirectories(paths, changed)` | Observes immediate changes in the supplied directories and returns an `IDisposable` subscription. The callback may run on a background thread; callers must marshal UI work. Observation failures are logged and do not abort other subscriptions. |
+
+The [file context menu specification](CONTEXT_MENU_SPEC.md) defines the menu
+sequence, filtering, comparison rules and Shell integration limitations.
 
 The snapshot fixes item identities and ordering, not filesystem contents: items
 can change or disappear before their range is loaded. A refresh creates a new

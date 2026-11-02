@@ -216,11 +216,13 @@ public sealed class SutShellRightClickProbe : System.IDisposable
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern System.IntPtr SendMessage(System.IntPtr window, uint message, System.IntPtr wparam, System.IntPtr lparam);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool PostMessage(System.IntPtr window, uint message, System.IntPtr wparam, System.IntPtr lparam);
     [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern int GetMenuString(System.IntPtr menu, uint position, System.Text.StringBuilder text, int length, uint flags);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int GetMenuItemCount(System.IntPtr menu);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetMenuItemRect(System.IntPtr window, System.IntPtr menu, uint item, out Rect rect);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetCursorPos(out Point point);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern System.IntPtr WindowFromPoint(Point point);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern void mouse_event(uint flags, uint dx, uint dy, uint data, System.UIntPtr extra);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern void keybd_event(byte key, byte scan, uint flags, System.UIntPtr extra);
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)] private struct Point { public int X, Y; }
     private readonly uint thread = GetCurrentThreadId();
@@ -237,6 +239,8 @@ public sealed class SutShellRightClickProbe : System.IDisposable
     public bool FirstMenu;
     public bool SecondMenu;
     public bool SecondWasGeneric;
+    public bool SecondWithShift;
+    public string[] SecondItems;
     public string TargetClass;
     public string ObservedFirstLabel;
     public string StartClass;
@@ -305,13 +309,28 @@ public sealed class SutShellRightClickProbe : System.IDisposable
                     var targetName = new System.Text.StringBuilder(64);
                     GetClassName(WindowFromPoint(new Point { X = targetX, Y = targetY }), targetName, targetName.Capacity);
                     TargetClass = targetName.ToString();
-                    mouse_event(8, 0, 0, 0, System.UIntPtr.Zero);
-                    mouse_event(16, 0, 0, 0, System.UIntPtr.Zero);
+                    if (SecondWithShift) keybd_event(0x10, 0, 0, System.UIntPtr.Zero);
+                    try
+                    {
+                        mouse_event(8, 0, 0, 0, System.UIntPtr.Zero);
+                        mouse_event(16, 0, 0, 0, System.UIntPtr.Zero);
+                    }
+                    finally
+                    {
+                        if (SecondWithShift) keybd_event(0x10, 0, 2, System.UIntPtr.Zero);
+                    }
                 }
                 else if (phase == 1 && menu != firstMenu)
                 {
                     SecondMenu = true;
                     SecondWasGeneric = label.ToString() == "Path get";
+                    SecondItems = new string[GetMenuItemCount(menu)];
+                    for (var index = 0; index < SecondItems.Length; index++)
+                    {
+                        var itemLabel = new System.Text.StringBuilder(512);
+                        GetMenuString(menu, (uint)index, itemLabel, itemLabel.Capacity, 0x400);
+                        SecondItems[index] = itemLabel.ToString();
+                    }
                     phase = 2;
                     PostMessage(owner, 0x001F, System.IntPtr.Zero, System.IntPtr.Zero);
                 }
@@ -1027,6 +1046,29 @@ try {
                     Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and
                         $rightClickProbe.SecondWasGeneric -eq ($target -eq 'selected') -and $list.SelectedItems.Count -eq 1 -and
                         $list.SelectedItem.Entry.FullPath -eq $expectedRow.Entry.FullPath) "Actual right-clicks failed for target=$target`: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), generic=$($rightClickProbe.SecondWasGeneric), targetClass=$($rightClickProbe.TargetClass), selection=$($list.SelectedItems.Count)."
+                } finally { $timer.Stop(); $rightClickProbe.Dispose() }
+            }
+            foreach ($target in @('same', 'other', 'double')) {
+                $list.SelectedItems.Clear()
+                $list.SelectedItems.Add($notesMenuRow) | Out-Null
+                $list.SelectedItems.Add($otherMenuRow) | Out-Null
+                $origin = if ($target -eq 'double') { $samePoint } else { $startPoint }
+                $targetPoint = if ($target -eq 'other') { $otherPoint } else { $samePoint }
+                $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $origin.X, [int] $origin.Y, [int] $targetPoint.X, [int] $targetPoint.Y)
+                $rightClickProbe.SecondWithShift = $true
+                $frame = [System.Windows.Threading.DispatcherFrame]::new()
+                $deadline = [DateTime]::UtcNow.AddSeconds(7)
+                $timer = [System.Windows.Threading.DispatcherTimer]::new()
+                $timer.Interval = [TimeSpan]::FromMilliseconds(50)
+                $timer.add_Tick({ if ($rightClickProbe.SecondMenu -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+                $timer.Start()
+                try {
+                    [System.Windows.Threading.Dispatcher]::PushFrame($frame)
+                    $expectedCount = if ($target -eq 'other') { 1 } else { 2 }
+                    $expectedProperty = if ($target -eq 'other') { $propertyEntries[0].Text } else { $multiProperties.Text }
+                    Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasGeneric -and
+                        $expectedProperty -in $rightClickProbe.SecondItems -and $list.SelectedItems.Count -eq $expectedCount -and
+                        ($target -ne 'other' -or $list.SelectedItem.Entry.FullPath -eq $otherMenuRow.Entry.FullPath)) "Shift-right-click during the generic menu failed for target=$target`: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), properties=$($expectedProperty -in $rightClickProbe.SecondItems), selection=$($list.SelectedItems.Count)."
                 } finally { $timer.Stop(); $rightClickProbe.Dispose() }
             }
             $list.SelectedItems.Clear()

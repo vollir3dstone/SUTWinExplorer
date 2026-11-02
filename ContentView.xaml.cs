@@ -464,6 +464,7 @@ public partial class ContentView : UserControl
         try
         {
             var owner = new WindowInteropHelper(Window.GetWindow(this)!).Handle;
+            var forceNativeMenu = false;
             while (true)
             {
                 if (row is null)
@@ -474,7 +475,7 @@ public partial class ContentView : UserControl
                     return;
                 }
                 var selectedPaths = FileList.SelectedItems.OfType<DirectoryRow>().Select(item => item.FullPath).ToArray();
-                if (selectedPaths.Length > 0 && selectedPaths.All(System.IO.File.Exists) &&
+                if (!forceNativeMenu && selectedPaths.Length > 0 && selectedPaths.All(System.IO.File.Exists) &&
                     (Keyboard.Modifiers & ModifierKeys.Shift) == 0)
                 {
                     if (alternate && _genericMenuCommands is { } genericCommands &&
@@ -498,8 +499,9 @@ public partial class ContentView : UserControl
                         DirectoryRow? clickedRow = null;
                         var clickedBackground = false;
                         var clickedElsewhere = false;
+                        var clickedWithShift = false;
                         var shownCommands = SutShell.ShowGenericFileMenu(selectedPaths, owner, actions,
-                            alternate ? (screenX, screenY, overOwner) =>
+                            alternate ? (screenX, screenY, overOwner, shiftPressed) =>
                             {
                                 if (overOwner)
                                 {
@@ -507,6 +509,7 @@ public partial class ContentView : UserControl
                                     if (FindAncestor<ListViewItem>(source) is { DataContext: DirectoryRow targetRow })
                                     {
                                         clickedRow = targetRow;
+                                        clickedWithShift = shiftPressed;
                                         return true;
                                     }
                                     if (source is not null && !IsListChrome(source))
@@ -524,6 +527,17 @@ public partial class ContentView : UserControl
                         {
                             _genericMenuCommands = shownCommands;
                             _genericMenuPath = row.FullPath;
+                            if (clickedRow is not null && clickedWithShift)
+                            {
+                                if (!string.Equals(clickedRow.FullPath, row.FullPath, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    FileList.SelectedItems.Clear();
+                                    FileList.SelectedItems.Add(clickedRow);
+                                }
+                                row = clickedRow;
+                                forceNativeMenu = true;
+                                continue;
+                            }
                             if (clickedRow is not null && string.Equals(clickedRow.FullPath, row.FullPath, StringComparison.OrdinalIgnoreCase))
                             {
                                 _genericMenuCommands = null;

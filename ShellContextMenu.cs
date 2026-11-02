@@ -152,7 +152,7 @@ internal static class ShellContextMenu
     internal static void ShowItems(IReadOnlyList<string> paths, IntPtr owner, Action? rename = null) =>
         ShowCore(paths, owner, background: false, rename);
 
-    internal static IReadOnlyDictionary<string, int> ShowGenericFile(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions, Func<int, int, bool, bool>? secondRightClick) =>
+    internal static IReadOnlyDictionary<string, int> ShowGenericFile(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions, Func<int, int, bool, bool, bool>? secondRightClick) =>
         ShowCore(paths, owner, background: false, rename: null, actions, secondRightClick: secondRightClick)!;
 
     internal static void ShowSpecialFile(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> genericCommands) =>
@@ -161,7 +161,7 @@ internal static class ShellContextMenu
     public static void ShowBackground(string folderPath, IntPtr owner) => ShowCore([folderPath], owner, background: true, rename: null);
 
     private static IReadOnlyDictionary<string, int>? ShowCore(IReadOnlyList<string> paths, IntPtr owner, bool background, Action? rename,
-        IReadOnlyList<ShellMenuAction>? actions = null, IReadOnlyDictionary<string, int>? excludedCommands = null, Func<int, int, bool, bool>? secondRightClick = null)
+        IReadOnlyList<ShellMenuAction>? actions = null, IReadOnlyDictionary<string, int>? excludedCommands = null, Func<int, int, bool, bool, bool>? secondRightClick = null)
     {
         var generic = actions is not null;
         var triggerTime = unchecked((uint)GetMessageTime());
@@ -282,14 +282,15 @@ internal static class ShellContextMenu
                                 _ = GetClassName(targetWindow, className, className.Capacity);
                                 overOwner = className.ToString() == "#32768";
                             }
-                            if (secondRightClick(clickPoint.X, clickPoint.Y, overOwner))
+                            if (secondRightClick(clickPoint.X, clickPoint.Y, overOwner, (message.WParam.ToInt64() & 0x0004) != 0))
                             {
                                 _ = PostMessage(owner, 0x001F, IntPtr.Zero, IntPtr.Zero);
                                 return new IntPtr(1);
                             }
                         }
-                        catch
+                        catch (Exception exception)
                         {
+                            System.Diagnostics.Trace.TraceError("Context menu right-click handling failed: {0}", exception);
                         }
                     }
                     return CallNextHookEx(IntPtr.Zero, code, wParam, lParam);
@@ -648,8 +649,9 @@ internal static class ShellContextMenu
                         return menuResult;
                 }
             }
-            catch
+            catch (Exception exception)
             {
+                System.Diagnostics.Trace.TraceError("Context menu message forwarding failed: {0}", exception);
             }
 
             return DefSubclassProc(hwnd, message, wParam, lParam);

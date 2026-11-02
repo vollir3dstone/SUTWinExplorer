@@ -1,7 +1,8 @@
 # Context Menu Diagnostic Spike
 
-This document also records the current file-menu behavior and implementation
-details. These should eventually be consolidated into a context-menu specification.
+This document preserves the diagnostic findings and the file-menu design as
+recorded during the spike. The authoritative description of the implemented
+menu pair is [File Context Menu Pair](CONTEXT_MENU_SPEC.md).
 
 ## Purpose
 
@@ -414,7 +415,7 @@ Sources: [Association Arrays](https://learn.microsoft.com/en-us/windows/win32/sh
 [Creating Shortcut Menu Handlers](https://learn.microsoft.com/en-us/windows/win32/shell/context-menu-handlers),
 [Package ItemType](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-desktop4-itemtype).
 
-## Next Questions
+## Questions Recorded During the Spike
 
 - Determine which entries can be mapped to stable, documented identities and
   when a mapping from a menu entry to a provider is ambiguous.
