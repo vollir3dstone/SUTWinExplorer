@@ -11,6 +11,7 @@ internal static class ShellFileOperations
     private const uint DropFileCount = uint.MaxValue;
     private const uint ClsctxInprocServer = 1;
     private const uint FileOperationAllowUndo = 0x40;
+    private const uint FileOperationRecycleOnDelete = 0x00080000;
     private static readonly Guid FileOperationClassId = new("3AD05575-8857-4850-9277-11B85BDB8E09");
     private static readonly Guid ShellLinkClassId = new("00021401-0000-0000-C000-000000000046");
     private static readonly Guid ShellLinkInterfaceId = new("000214F9-0000-0000-C000-000000000046");
@@ -103,6 +104,70 @@ internal static class ShellFileOperations
     public static void Move(IReadOnlyList<string> sourcePaths, string destinationPath, IntPtr ownerWindow) =>
         Transfer(sourcePaths, destinationPath, ownerWindow, "move",
             (operation, source, destination) => operation.MoveItem(source, destination, null, IntPtr.Zero));
+
+    internal static bool CanDelete(string path)
+    {
+        try
+        {
+            if (!Path.IsPathFullyQualified(path))
+                return false;
+            var fullPath = Path.GetFullPath(path);
+            var root = Path.GetPathRoot(fullPath);
+            return root is not null && !string.Equals(Path.TrimEndingDirectorySeparator(fullPath),
+                Path.TrimEndingDirectorySeparator(root), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+    }
+
+    public static void Delete(IReadOnlyList<string> sourcePaths, IntPtr ownerWindow)
+    {
+        if (sourcePaths.Count == 0)
+            throw new InvalidOperationException("Select one or more items to delete.");
+
+        foreach (var sourcePath in sourcePaths)
+        {
+            if (!CanDelete(sourcePath))
+                throw new InvalidOperationException($"Cannot delete this location: {sourcePath}");
+            try { _ = File.GetAttributes(sourcePath); }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                throw new InvalidOperationException($"Cannot delete because this source no longer exists or cannot be accessed: {sourcePath}", exception);
+            }
+        }
+
+        IFileOperationNative? operation = null;
+        var sources = new List<IShellItemNative>(sourcePaths.Count);
+        try
+        {
+            var operationInterfaceId = typeof(IFileOperationNative).GUID;
+            var classId = FileOperationClassId;
+            Marshal.ThrowExceptionForHR(CoCreateInstance(ref classId, IntPtr.Zero, ClsctxInprocServer, ref operationInterfaceId, out operation));
+            Marshal.ThrowExceptionForHR(operation.SetOperationFlags(FileOperationAllowUndo | FileOperationRecycleOnDelete));
+            Marshal.ThrowExceptionForHR(operation.SetOwnerWindow(ownerWindow));
+            foreach (var sourcePath in sourcePaths)
+            {
+                Marshal.ThrowExceptionForHR(SHCreateItemFromParsingName(sourcePath, IntPtr.Zero, ref ShellItemInterfaceId, out var source));
+                sources.Add(source);
+            }
+            foreach (var source in sources)
+                Marshal.ThrowExceptionForHR(operation.DeleteItem(source, IntPtr.Zero));
+            Marshal.ThrowExceptionForHR(operation.PerformOperations());
+            Marshal.ThrowExceptionForHR(operation.GetAnyOperationsAborted(out var operationsAborted));
+            if (operationsAborted)
+                throw new OperationCanceledException("The Shell delete operation was canceled.");
+        }
+        finally
+        {
+            foreach (var source in sources)
+                if (Marshal.IsComObject(source))
+                    _ = Marshal.ReleaseComObject(source);
+            if (operation is not null && Marshal.IsComObject(operation))
+                _ = Marshal.ReleaseComObject(operation);
+        }
+    }
 
     private static void Transfer(
         IReadOnlyList<string> sourcePaths,

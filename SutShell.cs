@@ -174,8 +174,14 @@ internal static class SutShell
     internal static void Move(IReadOnlyList<string> paths, string destination, IntPtr owner) =>
         ShellFileOperations.Move(paths, destination, owner);
 
-    internal static void ShowGenericFileMenu(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions) =>
-        ShellContextMenu.ShowGenericFile(paths, owner, actions);
+    internal static void Delete(IReadOnlyList<string> paths, IntPtr owner) =>
+        ShellFileOperations.Delete(paths, owner);
+
+    internal static IReadOnlyDictionary<string, int> ShowGenericFileMenu(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions, Func<int, int, bool, bool>? secondRightClick) =>
+        ShellContextMenu.ShowGenericFile(paths, owner, actions, secondRightClick);
+
+    internal static void ShowSpecialFileMenu(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> genericCommands) =>
+        ShellContextMenu.ShowSpecialFile(paths, owner, genericCommands);
 
     internal static void ShowItemMenu(IReadOnlyList<string> paths, IntPtr owner, Action? rename = null) =>
         ShellContextMenu.ShowItems(paths, owner, rename);

@@ -127,9 +127,19 @@ even before their full records are loaded. On refresh it restores the selected
 paths in the new snapshot, including off-screen rows; paths no longer present or
 excluded by the filters are dropped. Navigating to another location clears the
 selection. Copy get and Move get stage all selected paths, while Path get and
-Rename require exactly one loaded selection. Right-clicking an already-selected
-row preserves the selection and opens the native menu for all selected paths;
-right-clicking an unselected row first selects only that row.
+Rename require exactly one loaded selection. Delete operates on selected files
+and folders through the Windows Shell, requests recycling, and refreshes the
+view even if an operation is interrupted. Drive roots cannot be deleted. Delete
+is disabled while Copy or Move is prepared. Recycling availability and prompts
+depend on the location and Windows settings. Right-clicking an already-selected
+row preserves the selection; right-clicking an unselected row first selects only
+that row. For file-only selections, the first right-click opens the generic file
+menu and a second right-click on the same row opens the special file menu,
+including when the first menu is still open. Further right-clicks on the same row
+alternate between them. A right-click on another row ends the series, selects only
+that row and starts with its generic menu; changing the selection also resets the
+series. Shift-right-click opens the original Windows menu.
+Folders, mixed selections and the background keep their existing native menus.
 
 Rename starts from the toolbar, `F2`, or the single-item context menu. The
 inline editor uses the actual filesystem name including its extension; the

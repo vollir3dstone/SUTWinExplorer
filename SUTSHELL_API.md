@@ -21,8 +21,10 @@ Shell helpers directly.
 | `GetEditName(path)` / `Rename(path, name, owner)` | Obtain the filesystem leaf name for editing, or `null` for a drive root; validate and rename an item through the Windows Shell, returning its new filesystem path. Invalid names and existing targets fail; case-only changes are allowed. |
 | `Open(path)` | Opens an item using the OS shell. |
 | `Copy(paths, destination, owner)` / `Move(...)` | Run the existing native transfer operation; failures propagate and a transfer is not atomic. |
+| `Delete(paths, owner)` | Delete selected filesystem items using `IFileOperation`, requesting recycling and undo. Rejects drive/share roots; the Shell controls confirmation and may not support recycling for every location. Failures and cancellation propagate, and deletion is not atomic. |
 | `ShowItemMenu(paths, owner, rename)` / `ShowBackgroundMenu(path, owner)` | Show a native Windows context menu for one or more items from the same directory, or for a folder background. The optional single-item rename callback starts the caller's editor. |
-| `ShowGenericFileMenu(paths, owner, actions)` | Experimental menu for one or more files from the same directory: caller-provided actions and enabled states precede a Shell menu restricted to the `*` and `AllFilesystemObjects` class keys. |
+| `ShowGenericFileMenu(paths, owner, actions, secondRightClick)` | Experimental menu for one or more files from the same directory: caller-provided actions precede a Shell menu restricted to the `*` and `AllFilesystemObjects` class keys. Returns comparable displayed commands and optionally forwards a second right-click's screen coordinates and owner-window hit state to the caller. |
+| `ShowSpecialFileMenu(paths, owner, genericCommands)` | Shows the native item menu, conservatively removing commands also identified in the generic menu and the Shell verbs `copy`, `cut`, `paste`, `copyaspath`, `link`, `delete`, `rename` and `properties`. |
 | `ObserveDirectories(paths, changed)` | Observes immediate changes in the supplied directories and returns an `IDisposable` subscription. The callback may run on a background thread; callers must marshal UI work. Observation failures are logged and do not abort other subscriptions. |
 
 The snapshot fixes item identities and ordering, not filesystem contents: items
@@ -208,7 +210,7 @@ and prioritizes the new visible region. Loading pauses when the view is unloaded
 and resumes when it is visible again.
 A newer refresh cancels previous requests and cannot be overwritten by their
 results. A slow OS call can still delay completion of its batch. ContentView
-supports multiple selection and its own inline rename editor; Delete remains
-disabled. Shell clipboard/drag-and-drop integration has not been implemented
+supports multiple selection, its own inline rename editor, and Shell-backed Delete.
+Shell clipboard/drag-and-drop integration has not been implemented
 for the table. Watchers are best-effort and
 are not a complete replacement for all Shell namespace notifications.

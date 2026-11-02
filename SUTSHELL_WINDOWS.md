@@ -76,8 +76,8 @@ fully recoverable guarantees. Observation failures are written to debug output.
 ## Follow-up work
 
 The table does not yet reproduce all behavior in the Shell-oriented behavior
-specification. Delete remains disabled, and drag/drop and clipboard shortcuts
-are not implemented. Navigation access checks and tree loading still run
+specification. Drag/drop and clipboard shortcuts are not implemented. Navigation
+access checks and tree loading still run
 synchronously and can block the UI. The access check precedes committing
 navigation but cannot prevent later filesystem changes or enumeration failures.
 Virtual Shell namespace locations beyond the drive listing are not supported.

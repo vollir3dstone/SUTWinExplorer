@@ -1,5 +1,8 @@
 # Context Menu Diagnostic Spike
 
+This document also records the current file-menu behavior and implementation
+details. These should eventually be consolidated into a context-menu specification.
+
 ## Purpose
 
 The diagnostic in [ContextMenuSpike.ps1](tests/ContextMenuSpike.ps1) inspects
@@ -68,8 +71,9 @@ In ContentView, right-clicking a selection of one or more files opens the experi
 section mirrors the toolbar: Rename, Path get, Copy get/abort/paste, Move
 get/abort/paste and Delete. Each command calls the same button handler and has
 the same enabled state. Copy and Move use the application's prepared workflows,
-not the Windows clipboard; Delete remains disabled while its toolbar button is
-disabled. Rename and Path get are disabled for multiple files. There is no separate Properties button in the toolbar.
+not the Windows clipboard; Delete uses the Shell's file operation API. Rename
+and Path get are disabled for multiple files. Properties is a
+Shell command in the second section, not a toolbar button.
 
 The second section comes from `SHCreateDefaultContextMenu` with the `*` and
 `AllFilesystemObjects` keys, followed by the Shell's ordinary menu-message
@@ -79,6 +83,52 @@ canonical verbs, and the Shell can include built-in submenus as well as
 extensions. Wildcard registrations can also include type-oriented tools such as
 Notepad++; a registration does not guarantee that its commands appear for every
 file. Packaged/modern extensions are not guaranteed to be included.
+
+A second right-click on the same row opens the special file menu, even while the
+generic popup is open; subsequent right-clicks on that row alternate between
+them. A right-click on another row selects only that row and starts with its
+generic menu; a selection change also resets the series. The special menu starts with the original Windows
+item menu. An enabled top-level command is removed only when it has a readable
+verb and label matching exactly one enabled command in the displayed generic
+Shell section, and is unique in both menus. Unidentifiable, disabled, owner-drawn
+individual commands remain, so duplicates are possible. An enabled submenu is
+removed only when its label and entire currently populated tree match a unique
+generic submenu: every non-separator entry must have a readable label and be
+enabled, and verbs are compared where available. A tree with no verbs must have
+at least two commands. Empty, unreadable or differing trees remain in the special
+menu. Labels and verbs cannot prove that two handlers are identical, and a
+provider may add commands when a submenu is opened, after this comparison.
+Open With and blacklisted generic entries such as Notepad++ are not removed by
+this comparison.
+
+As an explicit exception, both menus remove commands exposing the Shell verbs
+`copy`, `cut`, `paste`, `copyaspath`, `link`, `delete` and `rename`, including
+submenus populated when opened. The special menu also removes `properties`;
+the generic menu retains it. An extension that does not expose a usable verb
+cannot be reliably classified. The application's own Rename and staged Copy
+and Move actions remain in the generic menu.
+
+### Standard Shell Actions
+
+| Shell action | Current behavior |
+| --- | --- |
+| Copy (`copy`) | Replaced by the application's Copy get. |
+| Cut (`cut`) | Replaced by the application's Move get. |
+| Paste (`paste`) | Replaced by the application's Copy paste or Move paste. |
+| Copy as path (`copyaspath`) | The application's Path get copies the path of one selected file. |
+| Rename (`rename`) | The application's Rename edits one selected file. |
+| Delete (`delete`) | Replaced by the application's Delete action, which uses the Shell file operation API. |
+| Create shortcut (`link`) | Removed; there is no application replacement. |
+| Properties (`properties`) | The Shell command remains in the generic menu. |
+| Open / Edit (`open`, `edit`) | Removed from the generic menu; may appear in the special menu. |
+| Open with (`openas` and the Shell submenu) | Removed from the generic menu; remains in the special menu when provided by the Shell. |
+
+Copy and Move use prepared application workflows, not the Windows clipboard;
+their get, paste and abort actions are therefore not identical to the Shell
+clipboard commands. This table covers the standard verbs explicitly handled by
+the implementation, not every possible Shell command. Other built-in or
+extension entries can vary by file, selection and installation. Shift-right-click
+continues to show the original Windows item menu.
 
 ### Decision: Let Windows Build the Menu
 
@@ -191,15 +241,16 @@ Link Shell Extension manages its own Pick Link Source / Drop As workflow, not
 the application's Copy/Move workflow. Its [documentation](https://schinagl.priv.at/nt/hardlinkshellext/linkshellextension.html)
 also describes Drop Here As for right-button drag and drop. On this machine,
 querying the same file with `CMF_CANRENAME` produced Pick Link Source; omitting
-the flag produced the inappropriate Drop Here As submenu instead. The experimental
-file menu now supplies `CMF_CANRENAME`, while retaining the toolbar's own Rename
-enabled state. The extension's source storage and the complete Pick/Drop workflow
+the flag produced the inappropriate Drop Here As submenu instead. The generic
+and special file menus supply `CMF_CANRENAME` for both single and multiple files,
+while the generic menu retains the toolbar's own Rename enabled state. The
+extension's source storage and the complete Pick/Drop workflow
 have not been independently verified; no Link Shell Extension commands are filtered.
 
 Shift-right-click opens the original Windows item menu. Folders, background and
 mixed file-and-folder selections retain their existing menus. The integration test
-exercises the menu's toolbar actions, including multiple-file Copy and Move and
-Copy and Move paste with temporary files.
+exercises the alternating menus and toolbar actions, including multiple-file Copy
+and Move and Copy and Move paste with temporary files.
 
 `CategoryHints` are text-based guesses for Archive, VersionControl, Links and
 Verification, not authoritative classifications or rules for production. The

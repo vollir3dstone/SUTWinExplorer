@@ -38,6 +38,8 @@ public sealed class SutShellMenuProbe : System.IDisposable
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int GetMenuItemCount(System.IntPtr menu);
     [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern int GetMenuString(System.IntPtr menu, uint position, System.Text.StringBuilder text, int length, uint flags);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint GetMenuState(System.IntPtr menu, uint position, uint flags);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern System.IntPtr GetSubMenu(System.IntPtr menu, int position);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool RemoveMenu(System.IntPtr menu, uint position, uint flags);
     [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern System.IntPtr GetModuleHandle(string name);
     [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern int LoadString(System.IntPtr module, uint id, System.Text.StringBuilder text, int length);
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
@@ -55,6 +57,10 @@ public sealed class SutShellMenuProbe : System.IDisposable
     public string[] Items;
     public uint[] States;
     public int SelectIndex = -1;
+    public string SelectLabel;
+    public string AlterSubmenu;
+    public bool EmptySubmenu;
+    public bool SubmenuAltered;
 
     public static string OpenWithLabel()
     {
@@ -95,6 +101,19 @@ public sealed class SutShellMenuProbe : System.IDisposable
                 Items[index] = text.ToString();
                 States[index] = GetMenuState(menu, (uint)index, 0x400);
             }
+            if (SelectLabel != null) SelectIndex = System.Array.IndexOf(Items, SelectLabel);
+            if (AlterSubmenu != null)
+            {
+                var index = System.Array.IndexOf(Items, AlterSubmenu);
+                var submenu = index < 0 ? System.IntPtr.Zero : GetSubMenu(menu, index);
+                var count = submenu == System.IntPtr.Zero ? 0 : GetMenuItemCount(submenu);
+                if (count > 1 && GetSubMenu(submenu, count - 1) == System.IntPtr.Zero)
+                {
+                    SubmenuAltered = RemoveMenu(submenu, (uint)(count - 1), 0x400);
+                    while (SubmenuAltered && EmptySubmenu && --count > 0)
+                        SubmenuAltered = RemoveMenu(submenu, (uint)(count - 1), 0x400);
+                }
+            }
             if (SelectIndex >= 0 && SelectIndex < ItemCount && (States[SelectIndex] & 3) == 0 &&
                 GetMenuItemRect(window, menu, (uint)SelectIndex, out var rect) && GetCursorPos(out var original))
             {
@@ -108,6 +127,200 @@ public sealed class SutShellMenuProbe : System.IDisposable
         }, System.IntPtr.Zero);
         if (System.Threading.Interlocked.Increment(ref ticks) > 100)
             PostMessage(owner, 0x001F, System.IntPtr.Zero, System.IntPtr.Zero);
+    }
+
+    public void Dispose() => timer.Dispose();
+}
+
+public sealed class SutShellPropertiesProbe : System.IDisposable
+{
+    private delegate bool EnumWindowProc(System.IntPtr window, System.IntPtr parameter);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern uint GetCurrentProcessId();
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowProc callback, System.IntPtr parameter);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(System.IntPtr window, out uint process);
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern int GetClassName(System.IntPtr window, System.Text.StringBuilder name, int maximum);
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern int GetWindowText(System.IntPtr window, System.Text.StringBuilder text, int maximum);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool PostMessage(System.IntPtr window, uint message, System.IntPtr wparam, System.IntPtr lparam);
+    private readonly uint process = GetCurrentProcessId();
+    private readonly string filename;
+    private readonly System.Threading.Timer timer;
+    private int handled;
+    public bool Opened;
+
+    public SutShellPropertiesProbe(string filename)
+    {
+        this.filename = filename;
+        timer = new System.Threading.Timer(Check, null, 50, 50);
+    }
+
+    private void Check(object state)
+    {
+        EnumWindows((window, parameter) =>
+        {
+            GetWindowThreadProcessId(window, out var ownerProcess);
+            if (ownerProcess != process) return true;
+            var name = new System.Text.StringBuilder(64);
+            GetClassName(window, name, name.Capacity);
+            if (name.ToString() != "#32770") return true;
+            var title = new System.Text.StringBuilder(512);
+            GetWindowText(window, title, title.Capacity);
+            if (title.ToString().IndexOf(filename, System.StringComparison.OrdinalIgnoreCase) < 0) return true;
+            if (System.Threading.Interlocked.Exchange(ref handled, 1) != 0) return false;
+            Opened = true;
+            PostMessage(window, 0x0010, System.IntPtr.Zero, System.IntPtr.Zero);
+            return false;
+        }, System.IntPtr.Zero);
+    }
+
+    public void Dispose() => timer.Dispose();
+}
+
+public sealed class SutShellDeleteConfirmProbe : System.IDisposable
+{
+    private delegate bool EnumWindowProc(System.IntPtr window, System.IntPtr parameter);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern uint GetCurrentProcessId();
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowProc callback, System.IntPtr parameter);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(System.IntPtr window, out uint process);
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern int GetClassName(System.IntPtr window, System.Text.StringBuilder name, int maximum);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern System.IntPtr GetDlgItem(System.IntPtr window, int id);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool PostMessage(System.IntPtr window, uint message, System.IntPtr wparam, System.IntPtr lparam);
+    private readonly uint process = GetCurrentProcessId();
+    private readonly System.Threading.Timer timer;
+
+    public SutShellDeleteConfirmProbe() => timer = new System.Threading.Timer(Check, null, 50, 50);
+
+    private void Check(object state)
+    {
+        EnumWindows((window, parameter) =>
+        {
+            GetWindowThreadProcessId(window, out var ownerProcess);
+            if (ownerProcess != process) return true;
+            var name = new System.Text.StringBuilder(64);
+            GetClassName(window, name, name.Capacity);
+            if (name.ToString() != "#32770") return true;
+            var button = GetDlgItem(window, 6);
+            if (button != System.IntPtr.Zero) PostMessage(button, 0x00F5, System.IntPtr.Zero, System.IntPtr.Zero);
+            return true;
+        }, System.IntPtr.Zero);
+    }
+
+    public void Dispose() => timer.Dispose();
+}
+
+public sealed class SutShellRightClickProbe : System.IDisposable
+{
+    private delegate bool EnumWindowProc(System.IntPtr window, System.IntPtr parameter);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool EnumThreadWindows(uint thread, EnumWindowProc callback, System.IntPtr parameter);
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern int GetClassName(System.IntPtr window, System.Text.StringBuilder name, int maximum);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern System.IntPtr SendMessage(System.IntPtr window, uint message, System.IntPtr wparam, System.IntPtr lparam);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool PostMessage(System.IntPtr window, uint message, System.IntPtr wparam, System.IntPtr lparam);
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern int GetMenuString(System.IntPtr menu, uint position, System.Text.StringBuilder text, int length, uint flags);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetMenuItemRect(System.IntPtr window, System.IntPtr menu, uint item, out Rect rect);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetCursorPos(out Point point);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern System.IntPtr WindowFromPoint(Point point);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern void mouse_event(uint flags, uint dx, uint dy, uint data, System.UIntPtr extra);
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)] private struct Point { public int X, Y; }
+    private readonly uint thread = GetCurrentThreadId();
+    private readonly System.IntPtr owner;
+    private readonly System.Threading.Timer timer;
+    private int phase;
+    private int ticks;
+    private int checking;
+    private System.IntPtr firstMenu;
+    private readonly int targetX;
+    private readonly int targetY;
+    private int startX;
+    private int startY;
+    public bool FirstMenu;
+    public bool SecondMenu;
+    public bool SecondWasGeneric;
+    public string TargetClass;
+    public string ObservedFirstLabel;
+    public string StartClass;
+    public int[] ActualStart;
+
+    public SutShellRightClickProbe(System.IntPtr owner, int targetX, int targetY)
+    {
+        this.owner = owner;
+        this.targetX = targetX;
+        this.targetY = targetY;
+        timer = new System.Threading.Timer(Check, null, 50, 50);
+    }
+
+    public SutShellRightClickProbe(System.IntPtr owner, int startX, int startY, int targetX, int targetY)
+    {
+        this.owner = owner;
+        this.startX = startX;
+        this.startY = startY;
+        this.targetX = targetX;
+        this.targetY = targetY;
+        phase = -1;
+        timer = new System.Threading.Timer(Check, null, 50, 50);
+    }
+
+    public static int[] CursorPosition()
+    {
+        GetCursorPos(out var point);
+        return new[] { point.X, point.Y };
+    }
+
+    public static void MovePointer(int x, int y) => SetCursorPos(x, y);
+
+    private void Check(object state)
+    {
+        if (System.Threading.Interlocked.Exchange(ref checking, 1) != 0) return;
+        try
+        {
+            if (phase == -1)
+            {
+                phase = 0;
+                SetCursorPos(startX, startY);
+                GetCursorPos(out var actualStart);
+                ActualStart = new[] { actualStart.X, actualStart.Y };
+                var startName = new System.Text.StringBuilder(64);
+                GetClassName(WindowFromPoint(actualStart), startName, startName.Capacity);
+                StartClass = startName.ToString();
+                mouse_event(8, 0, 0, 0, System.UIntPtr.Zero);
+                mouse_event(16, 0, 0, 0, System.UIntPtr.Zero);
+                return;
+            }
+            EnumThreadWindows(thread, (window, parameter) =>
+            {
+                var name = new System.Text.StringBuilder(64);
+                GetClassName(window, name, name.Capacity);
+                if (name.ToString() != "#32768") return true;
+                var menu = SendMessage(window, 0x01E1, System.IntPtr.Zero, System.IntPtr.Zero);
+                var label = new System.Text.StringBuilder(512);
+                GetMenuString(menu, 1, label, label.Capacity, 0x400);
+                if (phase == 0 && ObservedFirstLabel == null) ObservedFirstLabel = label.ToString();
+                if (phase == 0 && label.ToString() == "Path get")
+                {
+                    FirstMenu = true;
+                    firstMenu = menu;
+                    phase = 1;
+                    SetCursorPos(targetX, targetY);
+                    var targetName = new System.Text.StringBuilder(64);
+                    GetClassName(WindowFromPoint(new Point { X = targetX, Y = targetY }), targetName, targetName.Capacity);
+                    TargetClass = targetName.ToString();
+                    mouse_event(8, 0, 0, 0, System.UIntPtr.Zero);
+                    mouse_event(16, 0, 0, 0, System.UIntPtr.Zero);
+                }
+                else if (phase == 1 && menu != firstMenu)
+                {
+                    SecondMenu = true;
+                    SecondWasGeneric = label.ToString() == "Path get";
+                    phase = 2;
+                    PostMessage(owner, 0x001F, System.IntPtr.Zero, System.IntPtr.Zero);
+                }
+                return false;
+            }, System.IntPtr.Zero);
+            if (System.Threading.Interlocked.Increment(ref ticks) > 100)
+                PostMessage(owner, 0x001F, System.IntPtr.Zero, System.IntPtr.Zero);
+        }
+        finally { System.Threading.Volatile.Write(ref checking, 0); }
     }
 
     public void Dispose() => timer.Dispose();
@@ -693,11 +906,275 @@ try {
                 Assert-True (-not $workflow.IsPrepared) "Multi-file $operation abort did not clear the workflow."
             }
         }
+        $showMenuCore = $view.GetType().GetMethod('ShowMenuCore', $viewFlags)
+        $multiNativeEntries = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path $multiPaths | ConvertFrom-Json).Menu
+        Assert-True (@($multiNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -eq 'properties' -and $_.Text }).Count -gt 0) 'The Shell did not provide a properties command for the multi-file selection.'
+        foreach ($menuKind in @('generic', 'special', 'generic')) {
+            $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+            try {
+                $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
+                Assert-True ($menuProbe.ItemCount -gt 0) "The multi-file $menuKind menu was empty."
+                $isGeneric = $menuProbe.ItemCount -ge 9 -and ($menuProbe.Items[0..8] -join ',') -ceq 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete'
+                Assert-True ($isGeneric -eq ($menuKind -eq 'generic')) "The multi-file menu did not alternate to $menuKind."
+                foreach ($entry in $multiNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -eq 'properties' -and $_.Text }) {
+                    Assert-True (($entry.Text -in $menuProbe.Items) -eq ($menuKind -eq 'generic')) "Properties was shown in the wrong multi-file menu: $menuKind."
+                    if ($menuKind -eq 'generic') {
+                        $index = [Array]::IndexOf($menuProbe.Items, $entry.Text)
+                        Assert-True (($menuProbe.States[$index] -band 3) -eq 0) 'Properties was disabled in the generic multi-file menu.'
+                    }
+                }
+                if ($menuKind -eq 'special') {
+                    $linkDropHereLabel = [SutShellMenuProbe]::LinkDropHereLabel()
+                    Assert-True ($null -eq $linkDropHereLabel -or $linkDropHereLabel -notin $menuProbe.Items) 'A drag-and-drop-only Link Shell Extension command appeared in the multi-file menu.'
+                    foreach ($entry in $multiNativeEntries | Where-Object { $_.Verb -in @('copy', 'cut', 'paste', 'copyaspath', 'link', 'delete', 'rename') -and $_.Text }) {
+                        Assert-True ($entry.Text -notin $menuProbe.Items) "Excluded Shell command remained in the multi-file menu: $($entry.Text)."
+                    }
+                }
+            } finally { $menuProbe.Dispose() }
+        }
+        $multiProperties = @($multiNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -eq 'properties' -and $_.Text })[0]
+        $propertiesProbe = [SutShellPropertiesProbe]::new('')
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        $menuProbe.SelectLabel = $multiProperties.Text
+        try {
+            $null = $showMenu.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject))
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $deadline = [DateTime]::UtcNow.AddSeconds(5)
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(50)
+            $timer.add_Tick({ if ($propertiesProbe.Opened -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+            $timer.Start()
+            try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+            Assert-True ($menuProbe.SelectIndex -ge 9 -and $propertiesProbe.Opened) 'The generic multi-file properties command did not open a Windows dialog.'
+        } finally {
+            $menuProbe.Dispose()
+            $propertiesProbe.Dispose()
+        }
         $list.SelectedItems.Clear()
         $list.SelectedItem = $notesMenuRow
         $unfilteredMenu = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path (Join-Path $directory 'notes.txt') -Generic | ConvertFrom-Json).Menu
         $notepadEntries = @($unfilteredMenu | Where-Object { $_.Verb -eq 'ANotepad++64' })
         $viewerEntries = @($unfilteredMenu | Where-Object { $_.Verb -eq 'view SUTTextViewer' })
+        $propertyEntries = @($unfilteredMenu | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -eq 'properties' -and $_.Text })
+        $shellRenameEntries = @($unfilteredMenu | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -eq 'rename' -and $_.Text })
+        Assert-True ($propertyEntries.Count -gt 0) 'The Shell did not provide a properties command for the test file.'
+        $nativeEntries = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path (Join-Path $directory 'notes.txt') | ConvertFrom-Json).Menu
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        try {
+            $null = $showItems.Invoke($null, [object[]] @([string[]] @((Join-Path $directory 'notes.txt')), $ownerHandle, [Action] {}))
+            $nativeLabels = @($menuProbe.Items)
+            foreach ($entry in $nativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -in @('properties', 'rename') -and $_.Text }) {
+                Assert-True ($entry.Text -in $nativeLabels) "The original Windows menu lost $($entry.Verb)."
+            }
+        } finally { $menuProbe.Dispose() }
+        $originalCursor = [SutShellRightClickProbe]::CursorPosition()
+        $originalLeft = $window.Left
+        $originalTop = $window.Top
+        try {
+            $window.Left = 20
+            $window.Top = 20
+            $window.Activate() | Out-Null
+            $notesIndex = $list.Items.IndexOf($notesMenuRow)
+            $otherMenuRow = $list.Items[($notesIndex + 1) % $list.Items.Count]
+            $list.ScrollIntoView($otherMenuRow)
+            $list.UpdateLayout()
+            $notesContainer = $list.ItemContainerGenerator.ContainerFromItem($notesMenuRow)
+            $otherContainer = $list.ItemContainerGenerator.ContainerFromItem($otherMenuRow)
+            Assert-True ($null -ne $notesContainer -and $null -ne $otherContainer) 'The right-click test rows were not realized.'
+            $startPoint = $notesContainer.PointToScreen([System.Windows.Point]::new($notesContainer.ActualWidth - 10, $notesContainer.ActualHeight / 2))
+            $samePoint = $notesContainer.PointToScreen([System.Windows.Point]::new(10, $notesContainer.ActualHeight / 2))
+            $otherPoint = $otherContainer.PointToScreen([System.Windows.Point]::new(10, $otherContainer.ActualHeight / 2))
+            $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $samePoint.X, [int] $samePoint.Y, [int] $samePoint.X, [int] $samePoint.Y)
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $deadline = [DateTime]::UtcNow.AddSeconds(7)
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(50)
+            $timer.add_Tick({ if ($rightClickProbe.SecondMenu -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+            $timer.Start()
+            try {
+                [System.Windows.Threading.Dispatcher]::PushFrame($frame)
+                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasGeneric) "Two actual right-clicks on the same row did not show the special menu: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), generic=$($rightClickProbe.SecondWasGeneric), targetClass=$($rightClickProbe.TargetClass)."
+            } finally { $timer.Stop(); $rightClickProbe.Dispose() }
+            $list.SelectedItems.Clear()
+            $list.SelectedItem = $notesMenuRow
+            $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $startPoint.X, [int] $startPoint.Y, [int] $otherPoint.X, [int] $otherPoint.Y)
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $deadline = [DateTime]::UtcNow.AddSeconds(7)
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(50)
+            $timer.add_Tick({ if ($rightClickProbe.SecondMenu -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+            $timer.Start()
+            try {
+                [System.Windows.Threading.Dispatcher]::PushFrame($frame)
+                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and $rightClickProbe.SecondWasGeneric -and
+                    $list.SelectedItems.Count -eq 1 -and $list.SelectedItem.Entry.FullPath -eq $otherMenuRow.Entry.FullPath) "Actual right-clicks on different rows did not select the new row and open its generic menu: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), generic=$($rightClickProbe.SecondWasGeneric), targetClass=$($rightClickProbe.TargetClass), selection=$($list.SelectedItems.Count), selected=$($list.SelectedItem.Entry.FullPath)."
+            } finally { $timer.Stop(); $rightClickProbe.Dispose() }
+            foreach ($target in @('same', 'selected')) {
+                $list.SelectedItems.Clear()
+                $list.SelectedItems.Add($notesMenuRow) | Out-Null
+                if ($target -eq 'selected') { $list.SelectedItems.Add($otherMenuRow) | Out-Null }
+                $targetPoint = if ($target -eq 'same') { $samePoint } else { $otherPoint }
+                $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $startPoint.X, [int] $startPoint.Y, [int] $targetPoint.X, [int] $targetPoint.Y)
+                $frame = [System.Windows.Threading.DispatcherFrame]::new()
+                $deadline = [DateTime]::UtcNow.AddSeconds(7)
+                $timer = [System.Windows.Threading.DispatcherTimer]::new()
+                $timer.Interval = [TimeSpan]::FromMilliseconds(50)
+                $timer.add_Tick({ if ($rightClickProbe.SecondMenu -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+                $timer.Start()
+                try {
+                    [System.Windows.Threading.Dispatcher]::PushFrame($frame)
+                    $expectedRow = if ($target -eq 'same') { $notesMenuRow } else { $otherMenuRow }
+                    Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and
+                        $rightClickProbe.SecondWasGeneric -eq ($target -eq 'selected') -and $list.SelectedItems.Count -eq 1 -and
+                        $list.SelectedItem.Entry.FullPath -eq $expectedRow.Entry.FullPath) "Actual right-clicks failed for target=$target`: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), generic=$($rightClickProbe.SecondWasGeneric), targetClass=$($rightClickProbe.TargetClass), selection=$($list.SelectedItems.Count)."
+                } finally { $timer.Stop(); $rightClickProbe.Dispose() }
+            }
+            $list.SelectedItems.Clear()
+            $list.SelectedItem = $notesMenuRow
+            [SutShellRightClickProbe]::MovePointer([int] $startPoint.X, [int] $startPoint.Y)
+            $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $samePoint.X, [int] $samePoint.Y)
+            try {
+                $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
+                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasGeneric) 'A second right-click on the same row did not show the special menu.'
+            } finally { $rightClickProbe.Dispose() }
+            $list.SelectedItems.Clear()
+            $list.SelectedItem = $notesMenuRow
+            [SutShellRightClickProbe]::MovePointer([int] $startPoint.X, [int] $startPoint.Y)
+            $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $otherPoint.X, [int] $otherPoint.Y)
+            try {
+                $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
+                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and $rightClickProbe.SecondWasGeneric -and
+                    $list.SelectedItems.Count -eq 1 -and $list.SelectedItem.Entry.FullPath -eq $otherMenuRow.Entry.FullPath) 'A right-click on another row did not select it and show its generic menu.'
+            } finally { $rightClickProbe.Dispose() }
+            $list.SelectedItems.Clear()
+            $list.SelectedItems.Add($notesMenuRow) | Out-Null
+            $list.SelectedItems.Add($otherMenuRow) | Out-Null
+            $list.ScrollIntoView($otherMenuRow)
+            $list.UpdateLayout()
+            $notesContainer = $list.ItemContainerGenerator.ContainerFromItem($notesMenuRow)
+            $otherContainer = $list.ItemContainerGenerator.ContainerFromItem($otherMenuRow)
+            $startPoint = $notesContainer.PointToScreen([System.Windows.Point]::new($notesContainer.ActualWidth - 10, $notesContainer.ActualHeight / 2))
+            $otherPoint = $otherContainer.PointToScreen([System.Windows.Point]::new(10, $otherContainer.ActualHeight / 2))
+            [SutShellRightClickProbe]::MovePointer([int] $startPoint.X, [int] $startPoint.Y)
+            $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $otherPoint.X, [int] $otherPoint.Y)
+            try {
+                $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
+                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and $rightClickProbe.SecondWasGeneric -and
+                    $list.SelectedItems.Count -eq 1 -and $list.SelectedItem.Entry.FullPath -eq $otherMenuRow.Entry.FullPath) "A right-click on another selected row did not start a new single-item menu: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), generic=$($rightClickProbe.SecondWasGeneric), targetClass=$($rightClickProbe.TargetClass), selection=$($list.SelectedItems.Count), selected=$($list.SelectedItem.Entry.FullPath), target=$($otherMenuRow.Entry.FullPath)."
+            } finally { $rightClickProbe.Dispose() }
+            $list.SelectedItems.Clear()
+            $list.SelectedItems.Add($notesMenuRow) | Out-Null
+            $list.SelectedItems.Add($otherMenuRow) | Out-Null
+            $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+            try {
+                $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
+                Assert-True ($menuProbe.Items[1] -eq 'Path get') 'The first menu did not open for the multiple selection.'
+            } finally { $menuProbe.Dispose() }
+            $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+            try {
+                $rightClick = [System.Windows.Input.MouseButtonEventArgs]::new([System.Windows.Input.Mouse]::PrimaryDevice, 0, [System.Windows.Input.MouseButton]::Right)
+                $rightClick.RoutedEvent = [System.Windows.Input.Mouse]::PreviewMouseDownEvent
+                $otherContainer.RaiseEvent($rightClick)
+                Assert-True ($menuProbe.ItemCount -ge 9 -and $menuProbe.Items[1] -eq 'Path get' -and
+                    $list.SelectedItems.Count -eq 1 -and $list.SelectedItem.Entry.FullPath -eq $otherMenuRow.Entry.FullPath) "A right-click on another selected row after dismissing the menu did not start a new single-item menu: menu=$($menuProbe.ItemCount), selection=$($list.SelectedItems.Count), selected=$($list.SelectedItem.Entry.FullPath), handled=$($rightClick.Handled)."
+            } finally { $menuProbe.Dispose() }
+            $copyWorkflow = $assembly.GetType('SUTWinExplorer.CopyWorkflowState', $true).GetProperty('Shared').GetValue($null)
+            Assert-True (-not $copyWorkflow.IsPrepared) 'The second right-click activated Copy get.'
+        } finally {
+            $window.Left = $originalLeft
+            $window.Top = $originalTop
+            [SutShellRightClickProbe]::MovePointer($originalCursor[0], $originalCursor[1])
+            $list.SelectedItems.Clear()
+            $list.SelectedItem = $notesMenuRow
+        }
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        try {
+            $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
+            Assert-True (($menuProbe.Items[0..8] -join ',') -ceq 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete') 'The first right-click did not show the generic menu.'
+            $genericLabels = @($menuProbe.Items)
+            foreach ($entry in $propertyEntries) {
+                $index = [Array]::IndexOf($menuProbe.Items, $entry.Text)
+                Assert-True ($index -ge 9 -and ($menuProbe.States[$index] -band 3) -eq 0) 'Properties was missing or disabled in the generic menu.'
+            }
+            foreach ($entry in $shellRenameEntries) {
+                Assert-True ($entry.Text -notin $genericLabels[9..($genericLabels.Count - 1)]) 'The Shell rename command appeared alongside the application Rename action.'
+            }
+        } finally { $menuProbe.Dispose() }
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        try {
+            $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
+            $specialLabels = @($menuProbe.Items)
+            Assert-True ($menuProbe.ItemCount -gt 0 -and $specialLabels[1] -ne 'Path get') 'The second right-click did not show the special menu.'
+            $linkDropHereLabel = [SutShellMenuProbe]::LinkDropHereLabel()
+            Assert-True ($null -eq $linkDropHereLabel -or $linkDropHereLabel -notin $specialLabels) 'A drag-and-drop-only Link Shell Extension command appeared in the special file menu.'
+            $openWithLabel = [SutShellMenuProbe]::OpenWithLabel()
+            if ($openWithLabel -in $nativeLabels) { Assert-True ($openWithLabel -in $specialLabels) 'Open With was lost from the special menu.' }
+            foreach ($entry in $notepadEntries) {
+                if ($entry.Text -in $nativeLabels) { Assert-True ($entry.Text -in $specialLabels) 'Notepad++ was lost from the special menu.' }
+            }
+            foreach ($entry in $nativeEntries | Where-Object { $_.Verb -in @('copy', 'cut', 'paste', 'copyaspath', 'link', 'delete', 'rename', 'properties') -and $_.Text }) {
+                Assert-True ($entry.Text -notin $specialLabels) "Excluded Shell command remained in the special menu: $($entry.Text)."
+            }
+            foreach ($label in $nativeLabels | Where-Object { $_ -and $_ -notin $genericLabels }) {
+                $excludedLabel = @($nativeEntries | Where-Object { $_.Text -ceq $label -and $_.Verb -in @('copy', 'cut', 'paste', 'copyaspath', 'link', 'delete', 'rename', 'properties') }).Count -gt 0
+                if (-not $excludedLabel) { Assert-True ($label -in $specialLabels) "A native command absent from the generic menu was lost: $label." }
+            }
+            foreach ($label in @('7-Zip', 'Norton 360', '&TortoiseGit', 'Pa&th Copy')) {
+                $genericParents = @($unfilteredMenu | Where-Object { $_.Position -notmatch '\.' -and $_.Text -ceq $label -and $_.HasSubmenu })
+                $nativeParents = @($nativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Text -ceq $label -and $_.HasSubmenu })
+                if ($genericParents.Count -ne 1 -or $nativeParents.Count -ne 1 -or $label -notin $genericLabels -or $label -notin $nativeLabels) { continue }
+                $genericPrefix = $genericParents[0].Position + '.'
+                $nativePrefix = $nativeParents[0].Position + '.'
+                $genericChildren = @($unfilteredMenu | Where-Object { $_.Position.StartsWith($genericPrefix) -and -not $_.Separator })
+                $nativeChildren = @($nativeEntries | Where-Object { $_.Position.StartsWith($nativePrefix) -and -not $_.Separator })
+                if ($genericChildren.Count -eq 0 -or @($genericChildren | Where-Object { $_.Disabled -or -not $_.Text }).Count -gt 0) { continue }
+                $genericSignature = @($genericChildren | ForEach-Object { @($_.Position.Substring($genericPrefix.Length), $_.Text, $_.Verb, $_.HasSubmenu, $_.Disabled) -join '|' }) -join "`n"
+                $nativeSignature = @($nativeChildren | ForEach-Object { @($_.Position.Substring($nativePrefix.Length), $_.Text, $_.Verb, $_.HasSubmenu, $_.Disabled) -join '|' }) -join "`n"
+                if ($genericSignature -ceq $nativeSignature) {
+                    Assert-True ($label -notin $specialLabels) "The matching $label submenu remained in the special menu."
+                }
+            }
+        } finally { $menuProbe.Dispose() }
+        if ('7-Zip' -in $genericLabels -and '7-Zip' -in $nativeLabels -and '7-Zip' -notin $specialLabels) {
+            foreach ($emptySubmenu in @($false, $true)) {
+                $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+                $menuProbe.AlterSubmenu = '7-Zip'
+                $menuProbe.EmptySubmenu = $emptySubmenu
+                try {
+                    $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
+                    Assert-True $menuProbe.SubmenuAltered 'The differing-submenu fixture could not be created.'
+                } finally { $menuProbe.Dispose() }
+                $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+                try {
+                    $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
+                    Assert-True ('7-Zip' -in $menuProbe.Items) 'A submenu with extra special commands or an empty generic counterpart was removed.'
+                } finally { $menuProbe.Dispose() }
+            }
+        }
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        try {
+            $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
+            Assert-True (($menuProbe.Items[0..8] -join ',') -ceq 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete') 'The third right-click did not return to the generic menu.'
+        } finally { $menuProbe.Dispose() }
+        $list.SelectedItems.Clear()
+        $list.SelectedItem = $notesMenuRow
+        $propertiesProbe = [SutShellPropertiesProbe]::new('notes.txt')
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        $menuProbe.SelectLabel = $propertyEntries[0].Text
+        try {
+            $null = $showMenu.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject))
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $deadline = [DateTime]::UtcNow.AddSeconds(5)
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(50)
+            $timer.add_Tick({ if ($propertiesProbe.Opened -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+            $timer.Start()
+            try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+            Assert-True ($menuProbe.SelectIndex -ge 9 -and $propertiesProbe.Opened) "The generic properties command did not open the Windows properties dialog: index=$($menuProbe.SelectIndex), opened=$($propertiesProbe.Opened)."
+        } finally {
+            $menuProbe.Dispose()
+            $propertiesProbe.Dispose()
+        }
         $contextMenuType = $assembly.GetType('SUTWinExplorer.ShellContextMenu', $true)
         $blacklist = $contextMenuType.GetField('BlacklistedVerbs', [System.Reflection.BindingFlags]'Static,NonPublic').GetValue($null).Value
         Assert-True ($blacklist.Contains('anotepad++64') -and -not $blacklist.Contains('view SUTTextViewer')) 'The embedded blacklist did not load the expected case-insensitive verbs.'
@@ -980,6 +1457,94 @@ try {
         $timer.Start()
         try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
         Assert-True ($probe.Ready -and [System.IO.Path]::GetDirectoryName($list.Items[0].Entry.FullPath) -eq $directory) "A stale navigation replaced the current snapshot: $($probe.Error)"
+
+        $deleteDirectory = Join-Path $directory 'delete-fixture'
+        $deleteNames = @('delete-first', 'delete-second', 'delete-folder')
+        [System.IO.Directory]::CreateDirectory((Join-Path $deleteDirectory $deleteNames[2])) | Out-Null
+        [System.IO.File]::WriteAllText((Join-Path $deleteDirectory $deleteNames[0]), 'first')
+        [System.IO.File]::WriteAllText((Join-Path $deleteDirectory $deleteNames[1]), 'second')
+        [System.IO.File]::WriteAllText((Join-Path $deleteDirectory $deleteNames[2] 'nested'), 'folder content')
+        $recycleBin = (New-Object -ComObject Shell.Application).NameSpace(10)
+        try {
+            $deleteApi = $shell.GetMethod('Delete', $flags)
+            $fileOperations = $assembly.GetType('SUTWinExplorer.ShellFileOperations', $true)
+            $canDelete = $fileOperations.GetMethod('CanDelete', $flags)
+            $driveRoot = [System.IO.Path]::GetPathRoot($deleteDirectory)
+            foreach ($invalidPath in @($driveRoot, '\\server\share\', 'relative-file')) {
+                Assert-True (-not $canDelete.Invoke($null, [object[]] @([string] $invalidPath))) "A non-deletable path was accepted: $invalidPath"
+            }
+            foreach ($invalidSelection in @(
+                [string[]] @(),
+                [string[]] @((Join-Path $deleteDirectory $deleteNames[0]), (Join-Path $deleteDirectory 'missing')),
+                [string[]] @((Join-Path $deleteDirectory $deleteNames[0]), $driveRoot)
+            )) {
+                $failed = $false
+                try { $null = $deleteApi.Invoke($null, [object[]] @([string[]] $invalidSelection, [IntPtr]::Zero)) }
+                catch { $failed = $_.Exception.InnerException -is [InvalidOperationException] }
+                Assert-True ($failed -and [System.IO.File]::Exists((Join-Path $deleteDirectory $deleteNames[0]))) 'An invalid delete selection was accepted or partially deleted.'
+            }
+            $null = $view.GetType().GetMethod('SetCurrentPath', $viewFlags).Invoke($view, [object[]] @([string] $deleteDirectory))
+            $null = $view.GetType().GetMethod('Refresh', $viewFlags).Invoke($view, [object[]] @([bool] $true))
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $probe = [SutShellUiProbe]::new()
+            $probe.List = $list
+            $probe.AwaitAll = $true
+            $probe.Frame = $frame
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+            $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
+            $timer.Start()
+            try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+            Assert-True ($probe.Ready -and -not $view.FindName('DeleteButton').IsEnabled) 'Delete was enabled without a selection or the test directory did not load.'
+            $firstDeleteRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $deleteDirectory $deleteNames[0]) })[0]
+            $secondDeleteRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $deleteDirectory $deleteNames[1]) })[0]
+            $list.SelectedItems.Add($firstDeleteRow) | Out-Null
+            $list.SelectedItems.Add($secondDeleteRow) | Out-Null
+            Assert-True $view.FindName('DeleteButton').IsEnabled 'Delete was not enabled for two files.'
+            $view.FindName('CopyGetButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            Assert-True (-not $view.FindName('DeleteButton').IsEnabled) 'Delete was enabled during a prepared Copy.'
+            $view.FindName('CopyAbortButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+            $menuProbe.SelectIndex = 8
+            $confirmationProbe = [SutShellDeleteConfirmProbe]::new()
+            try {
+                $null = $showMenu.Invoke($view, [object[]] @($firstDeleteRow.PSObject.BaseObject))
+                Assert-True (($menuProbe.States[8] -band 3) -eq 0) 'Delete was disabled in the generic file menu.'
+            } finally { $menuProbe.Dispose(); $confirmationProbe.Dispose() }
+            Assert-True (-not [System.IO.File]::Exists((Join-Path $deleteDirectory $deleteNames[0])) -and
+                -not [System.IO.File]::Exists((Join-Path $deleteDirectory $deleteNames[1]))) 'The generic Delete command did not delete both selected files.'
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $probe = [SutShellUiProbe]::new()
+            $probe.List = $list
+            $probe.AwaitAll = $true
+            $probe.Frame = $frame
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+            $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
+            $timer.Start()
+            try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+            Assert-True ($probe.Ready -and $list.Items.Count -eq 1) 'The view did not refresh after deleting files.'
+            $folderDeleteRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $deleteDirectory $deleteNames[2]) })[0]
+            $list.SelectedItem = $folderDeleteRow
+            Assert-True $view.FindName('DeleteButton').IsEnabled 'Delete was not enabled for a folder.'
+            $confirmationProbe = [SutShellDeleteConfirmProbe]::new()
+            try {
+                $view.FindName('DeleteButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            } finally { $confirmationProbe.Dispose() }
+            Assert-True (-not [System.IO.Directory]::Exists((Join-Path $deleteDirectory $deleteNames[2]))) 'The toolbar Delete command did not delete the folder.'
+            $recycled = @($recycleBin.Items() | Where-Object {
+                $_.Name -in $deleteNames -and [string]::Equals($recycleBin.GetDetailsOf($_, 1), $deleteDirectory, [StringComparison]::OrdinalIgnoreCase)
+            })
+            Assert-True ($recycled.Count -eq 3) "The Shell did not put all test objects in the Recycle Bin: $($recycled.Count)."
+        } finally {
+            foreach ($item in @($recycleBin.Items() | Where-Object {
+                $_.Name -in $deleteNames -and [string]::Equals($recycleBin.GetDetailsOf($_, 1), $deleteDirectory, [StringComparison]::OrdinalIgnoreCase)
+            })) { $item.Verbs().Item(0).DoIt() }
+            $remaining = @($recycleBin.Items() | Where-Object {
+                $_.Name -in $deleteNames -and [string]::Equals($recycleBin.GetDetailsOf($_, 1), $deleteDirectory, [StringComparison]::OrdinalIgnoreCase)
+            })
+            Assert-True ($remaining.Count -eq 0) "Could not restore $($remaining.Count) Delete test fixtures from the Recycle Bin."
+        }
     } finally {
         $window.Close()
         [System.Threading.SynchronizationContext]::SetSynchronizationContext($previousContext)
@@ -1010,6 +1575,65 @@ try {
         try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
         $browseStatus = if ($null -ne $probe.ContentView) { $probe.ContentView.FindName('StatusLabel').Text } else { 'no ContentView' }
         Assert-True $probe.Ready "BROWSE startup did not render a Shell icon: $($probe.Error); status=$browseStatus"
+        $mainView = $probe.ContentView
+        $null = $mainView.GetType().GetMethod('SetCurrentPath', $viewFlags).Invoke($mainView, [object[]] @([string] $directory))
+        $null = $mainView.GetType().GetMethod('Refresh', $viewFlags).Invoke($mainView, [object[]] @([bool] $true))
+        $frame = [System.Windows.Threading.DispatcherFrame]::new()
+        $probe = [SutShellUiProbe]::new()
+        $probe.List = $mainView.FindName('FileList')
+        $probe.AwaitAll = $true
+        $probe.Frame = $frame
+        $timer = [System.Windows.Threading.DispatcherTimer]::new()
+        $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+        $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
+        $timer.Start()
+        try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+        Assert-True $probe.Ready "MainWindow content did not load: $($probe.Error)"
+        $mainList = $mainView.FindName('FileList')
+        $mainNotes = @($mainList.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'renamed-notes.txt') })[0]
+        $mainOther = $mainList.Items[($mainList.Items.IndexOf($mainNotes) + 1) % $mainList.Items.Count]
+        $mainWindow.Width = 1000
+        $mainWindow.Height = 700
+        $mainWindow.Left = 20
+        $mainWindow.Top = 20
+        $mainWindow.Activate() | Out-Null
+        $mainWindow.UpdateLayout()
+        $mainList.ScrollIntoView($mainOther)
+        $mainList.UpdateLayout()
+        $notesContainer = $mainList.ItemContainerGenerator.ContainerFromItem($mainNotes)
+        $otherContainer = $mainList.ItemContainerGenerator.ContainerFromItem($mainOther)
+        Assert-True ($null -ne $notesContainer -and $null -ne $otherContainer) "MainWindow test rows were not realized: notes=$($null -ne $mainNotes), other=$($null -ne $mainOther), notesContainer=$($null -ne $notesContainer), otherContainer=$($null -ne $otherContainer), visible=$($mainList.IsVisible), size=$($mainList.ActualWidth)x$($mainList.ActualHeight)."
+        $startPoint = $notesContainer.PointToScreen([System.Windows.Point]::new(200, $notesContainer.ActualHeight / 2))
+        $samePoint = $notesContainer.PointToScreen([System.Windows.Point]::new(10, $notesContainer.ActualHeight / 2))
+        $otherPoint = $otherContainer.PointToScreen([System.Windows.Point]::new(10, $otherContainer.ActualHeight / 2))
+        $mainOwner = [System.Windows.Interop.WindowInteropHelper]::new($mainWindow).Handle
+        foreach ($target in @('double', 'same', 'other')) {
+            $mainList.SelectedItems.Clear()
+            $mainList.SelectedItem = $mainNotes
+            $origin = if ($target -eq 'double') { $samePoint } else { $startPoint }
+            $destination = if ($target -eq 'other') { $otherPoint } else { $samePoint }
+            $hitSource = $mainList.InputHitTest($mainList.PointFromScreen($origin))
+            $hitPath = [System.Collections.Generic.List[string]]::new()
+            $hitAncestor = $hitSource
+            while ($null -ne $hitAncestor) {
+                $hitPath.Add($hitAncestor.GetType().Name)
+                $hitAncestor = [System.Windows.Media.VisualTreeHelper]::GetParent($hitAncestor)
+            }
+            $rightClickProbe = [SutShellRightClickProbe]::new($mainOwner, [int] $origin.X, [int] $origin.Y, [int] $destination.X, [int] $destination.Y)
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $deadline = [DateTime]::UtcNow.AddSeconds(7)
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(50)
+            $timer.add_Tick({ if ($rightClickProbe.SecondMenu -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+            $timer.Start()
+            try {
+                [System.Windows.Threading.Dispatcher]::PushFrame($frame)
+                $expectedRow = if ($target -eq 'other') { $mainOther } else { $mainNotes }
+                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and
+                    $rightClickProbe.SecondWasGeneric -eq ($target -eq 'other') -and $mainList.SelectedItems.Count -eq 1 -and
+                    $mainList.SelectedItem.Entry.FullPath -eq $expectedRow.Entry.FullPath) "MainWindow right-click failed for target=$target`: first=$($rightClickProbe.FirstMenu), firstLabel=$($rightClickProbe.ObservedFirstLabel), start=$($origin.X),$($origin.Y), actualStart=$($rightClickProbe.ActualStart -join ','), startClass=$($rightClickProbe.StartClass), hit=$($hitPath -join '/'), second=$($rightClickProbe.SecondMenu), generic=$($rightClickProbe.SecondWasGeneric), targetClass=$($rightClickProbe.TargetClass), selection=$($mainList.SelectedItems.Count), selected=$($mainList.SelectedItem.Entry.FullPath)."
+            } finally { $timer.Stop(); $rightClickProbe.Dispose() }
+        }
     } finally {
         $mainWindow.Close()
         [System.Threading.SynchronizationContext]::SetSynchronizationContext($previousContext)
