@@ -47,9 +47,24 @@ public partial class MainWindow : Window
         ProfilesPane.ProfilesRefreshRequested += ProfilesPane_ProfilesRefreshRequested;
         SourceInitialized += MainWindow_SourceInitialized;
         Closed += MainWindow_Closed;
-        AddPaneview(GetInitialDirectory(), isBrowsable: true);
-        foreach (var entry in _activeProfile.Pathviews.ToArray())
-            AddPaneview(entry.Path, isBrowsable: false, profileEntry: entry, select: false);
+        ContentRendered += MainWindow_ContentRendered;
+    }
+
+    private void MainWindow_ContentRendered(object? sender, EventArgs e)
+    {
+        ContentRendered -= MainWindow_ContentRendered;
+        try
+        {
+            AddPaneview(GetInitialDirectory(), isBrowsable: true);
+            foreach (var entry in _activeProfile.Pathviews.ToArray())
+                AddPaneview(entry.Path, isBrowsable: false, profileEntry: entry, select: false);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, $"Cannot start KIS Explorer: {exception.Message}",
+                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+            Application.Current.Shutdown(1);
+        }
     }
 
     private void ProfilesButton_Click(object sender, RoutedEventArgs e)
@@ -307,7 +322,7 @@ public partial class MainWindow : Window
         if (profileEntry is not null)
             _profileEntriesByPathview.Add(view, profileEntry);
         var hasCurrentPath = !string.IsNullOrWhiteSpace(view.CurrentPath);
-        var navigationFailed = profileEntry is not null && !Directory.Exists(path);
+        var navigationFailed = profileEntry is not null && !hasCurrentPath;
         var title = new TextBlock
         {
             FontSize = 13,
@@ -396,20 +411,6 @@ public partial class MainWindow : Window
                     _browsablePathview?.RecordVisitedLocation(currentPath);
                 RefreshPathChoices();
             }
-        };
-        view.NavigationFailed += (_, _) =>
-        {
-            if (!_tabsByPathview.ContainsKey(view))
-                return;
-            if (!view.IsBrowsable && string.IsNullOrWhiteSpace(view.CurrentPath))
-            {
-                navigationFailed = true;
-                updateTabTitle();
-                title.Foreground = Brushes.Firebrick;
-                tooltipText.Text = $"Cannot open location: {path}";
-            }
-            if (ReferenceEquals(CurrentPathview, view))
-                RefreshPathChoices();
         };
         view.PinRequested += Pathview_PinRequested;
         view.BrowseLocationRequested += Pathview_BrowseLocationRequested;

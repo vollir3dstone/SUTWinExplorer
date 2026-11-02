@@ -1,5 +1,10 @@
 # Shell Explorer Behavior Specification
 
+> **Transition note:** The embedded Shell content view has been replaced by an
+> initial application-owned table. Shell-specific implementation claims and
+> checked implementation statuses below have not yet been revalidated for that
+> table. The current gaps are listed in [SutShell API](SUTSHELL_API.md).
+
 > **Document scope:** This file specifies observable user-facing behavior and acceptance criteria only. It intentionally does not prescribe COM interfaces, WPF controls, class names, or other implementation choices. Those belong in [SHELL_EXPLORER_ARCHITECTURE.md](SHELL_EXPLORER_ARCHITECTURE.md).
 
 ## Priorities
@@ -319,9 +324,9 @@ may show its requested row in light gray without changing the active selection.
   its permissions may change before or during the operation. Such a late
   failure is reported, but a multi-item operation may already have transferred
   some items; Copy and Move are not atomic and do not roll back completed work.
-  **Rename** is enabled only for a single selected item and starts the Shell
-  view's inline rename editor. Enter commits and Escape cancels; name
-  validation, extension handling, and collision behavior remain Shell-owned.
+  **Rename** is enabled only for a single loaded item and starts an inline
+  rename editor. Enter commits and Escape cancels; invalid names and existing
+  target names are reported without overwriting the existing item.
   **Path get** is enabled only for a single selected item and copies that
   item's filesystem path to the clipboard. **Delete** remains selection-aware;
   other selection-dependent actions are disabled when nothing is selected.
@@ -331,10 +336,10 @@ may show its requested row in light gray without changing the active selection.
 - [x] Users can select items and open files with the expected Windows Shell
   behavior. Folder navigation is available only in the browsable Pathview;
   fixed Pathviews retain other native Shell commands and file operations.
-- [ ] Selection supports the expected multi-select and keyboard-focus behavior
-  for common file operations.
-- [ ] Selection remains predictable when the content view refreshes or
-  navigation completes.
+- [x] Selection supports multiple items using the standard extended-selection
+  behavior for common file operations.
+- [x] Refresh preserves selected paths still present in the filtered listing;
+  navigation to another location clears the selection.
 
 ### Context menus and file operations
 
@@ -374,8 +379,8 @@ may show its requested row in light gray without changing the active selection.
 
 ## P1: Expected Conveniences
 
-- [x] Rename starts the native Shell inline editor for one selected item;
-  commit, cancel, validation, and name-collision behavior remain Shell-owned.
+- [x] Rename starts an inline editor for one selected item; Enter commits,
+  Escape cancels, and invalid or conflicting names are reported.
 - [ ] Delete uses the Recycle Bin by default and supports confirmation and
   recovery behavior where available.
 - [ ] Properties, Open with, sharing, and security prompts use their normal
@@ -483,7 +488,8 @@ SUTWinExplorer installation before testing a new installation.
   error, starts no transfer, and preserves the staged workflow. A change after
   preflight may still cause a late failure; multi-item Paste is not atomic and
   may leave already-transferred items in place.
-13. Select exactly one item and click **Rename**. Verify the Shell inline editor
-  opens, Enter commits a valid name, Escape cancels without changing it, and
-  an existing-name collision is handled by the Shell. Verify Rename is disabled
-  with no selection or multiple selected items.
+13. Select exactly one item and click **Rename** or press F2. Verify the inline
+  editor opens with its filesystem name, Enter commits a valid name, Escape
+  cancels without changing it, and a collision is reported without overwriting
+  the target. Verify Rename is disabled with no selection or multiple selected
+  items and that the renamed item remains selected after refresh.

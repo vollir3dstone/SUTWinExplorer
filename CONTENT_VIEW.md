@@ -1,6 +1,168 @@
 # ContentView
 
-## Scope and relationship to the application
+## Current ContentView
+
+ContentView owns the WPF table, its filters, row placeholders, selection, and
+the scheduling of directory-data requests. Pathview owns navigation and supplies
+the committed location. ContentView uses [SutShell](SUTSHELL_API.md) for
+directory data, filesystem observation, and operating-system operations; it does
+not embed a Shell view. The Windows-specific implementation is described in
+[SutShell Windows implementation](SUTSHELL_WINDOWS.md).
+
+The table has one row per item and columns for MT, Shell base icon, Shell
+overlay, Name, Type, Size, and Date modified. The base icon and overlay are
+shown separately; the overlay cell is empty when none is available. The current
+Shell provider exposes at most one overlay per item: Windows selects one when
+classical overlay handlers compete, and SutShell forwards that selected overlay
+without enumerating all applicable handlers. Explorer status-column icons are
+not necessarily icon overlays. The table uses a recycling
+virtualized `ListView` with fixed 22-DIP
+row height. Placeholder rows establish the item count and scroll extent before
+complete row data is available. The status shows `Loading...` while the snapshot
+is prepared, then the total item count, not the number of loaded rows.
+
+### Responsibilities
+
+| Component | Responsibility |
+| --- | --- |
+| Pathview | Validates and commits navigation, supplies the current path, and coordinates refreshes from filesystem notifications. |
+| ContentView | Owns one snapshot and its row placeholders, decides which range to request next, handles scrolling, caching, cancellation, UI updates, and refreshes. |
+| SutShell | Prepares the filtered, sorted snapshot and returns the particular complete range requested. It does not choose ranges, monitor scrolling, or independently preload the rest. |
+
+The background loading policy therefore belongs to ContentView. SutShell runs
+each requested snapshot or range operation asynchronously on a background STA
+thread; it does not run a separate prefetch loop. In the current implementation,
+every call creates its own thread. Completed images are frozen so WPF can use
+them on the UI thread.
+
+### Snapshot and placeholders
+
+1. Pathview validates the location through `EnsureLocationAccessible`, commits
+  it with `SetCurrentPath`, and requests a refresh. Filter changes and filesystem
+  refreshes can also start a new refresh.
+2. ContentView cancels the previous snapshot and range requests, clears the
+  existing rows, captures the current path and filter settings, and calls
+  `SutShell.OpenDirectoryAsync`.
+3. SutShell enumerates immediate children, applies the directory and internal
+  filters, resolves Shell display names for name-pattern filtering and sorting,
+  and creates a snapshot ordered directories first, then by display name. This
+  preparation covers all candidates; the count alone cannot provide a stable
+  mapping from row index to item. This PC enumerates drive roots.
+4. Once the snapshot is ready, ContentView creates one empty `DirectoryRow` per
+  snapshot item, assigns the rows to the table, and schedules range loading.
+  The snapshot fixes the identity and order for these indices, but does not
+  freeze the filesystem: details may change or an item may disappear later.
+
+### Range scheduling
+
+`ScheduleRangeLoad` coalesces requests on the WPF dispatcher at background
+priority. Layout updates, scrolling, completing a range, and loading the control
+can schedule another decision. Only one range request is active per ContentView;
+the scheduler waits for it to finish or observe cancellation before starting the
+next. A missing virtualizing panel or a non-visible list postpones scheduling.
+
+For each decision, `LoadNextRange`:
+
+1. Finds realized list items that intersect the visible panel and chooses the
+  lowest snapshot index whose row has neither data nor a recorded failure.
+2. If no visible row needs data, advances the background cursor to the first
+  remaining unloaded, non-failed row, and stops when none remain.
+3. Requests a contiguous range of at most eight unloaded, non-failed rows from
+  `SutShell.GetDirectoryRangeAsync`. A range beginning at a visible row may
+  include rows just outside the viewport. The batch ends early at the snapshot
+  boundary or an already loaded or failed row.
+4. On completion, verifies that the request was not cancelled and that its
+  snapshot and row array are still current. It then assigns each complete
+  `FileEntry` to its placeholder on the UI thread. Property change notification
+  updates all row bindings, including the separate Shell icon, overlay, and MT icon.
+5. Schedules another decision. Loaded rows remain cached for this snapshot, so
+  scrolling back does not require another request. When all rows have been
+  loaded or marked failed, the background sequence stops.
+
+```mermaid
+sequenceDiagram
+   participant P as Pathview
+   participant C as ContentView / UI dispatcher
+   participant S as SutShell / STA worker
+   P->>C: SetCurrentPath and Refresh
+   C->>S: OpenDirectoryAsync(path, filters, token)
+   S-->>C: Sorted snapshot and count
+   C->>C: Create placeholders and schedule loading
+   loop Until loaded or failed
+      C->>C: Choose visible gap, otherwise background gap
+      C->>S: GetDirectoryRangeAsync(snapshot, start, count, token)
+      S-->>C: Complete FileEntry records
+      C->>C: Check snapshot and publish rows
+   end
+```
+
+Each returned record contains the name, path, directory flag, type, size,
+modification time, Shell icon and overlay, and MT icon and name. Some fields or
+icons can be empty when unavailable. No separate icon-delivery API is used.
+Unloaded placeholders have a snapshot path but no `FileEntry`; selection-based
+toolbar actions wait until all selected rows have loaded. The native context
+menu can use snapshot paths before row details are loaded.
+
+### Selection and inline rename
+
+The table supports extended selection using the standard WPF selection behavior.
+Each placeholder carries its snapshot path, so ContentView can retain selections
+even before their full records are loaded. On refresh it restores the selected
+paths in the new snapshot, including off-screen rows; paths no longer present or
+excluded by the filters are dropped. Navigating to another location clears the
+selection. Copy get and Move get stage all selected paths, while Path get and
+Rename require exactly one loaded selection. Right-clicking an already-selected
+row preserves the selection and opens the native menu for all selected paths;
+right-clicking an unselected row first selects only that row.
+
+Rename starts from the toolbar, `F2`, or the single-item context menu. The
+inline editor uses the actual filesystem name including its extension; the
+filename portion is initially selected for files. Enter or loss of keyboard
+focus commits; Escape cancels. SutShell validates the name and existing-target
+conflicts and delegates the rename to the Windows Shell. A failed operation
+reports the error and leaves the editor active. Drive roots are not renameable
+through this editor. A refresh requested during editing is deferred until the
+edit ends; navigation cancels the edit. After a successful rename, the new path
+is selected in the refreshed snapshot if it still passes the active filters.
+Directory renames are also reported to Pathview so open paths and histories can
+be updated. External renames are not tracked as identity-preserving renames.
+
+### Scroll, cancellation, and errors
+
+- A vertical scroll cancels the active range request and schedules a new
+  decision. After the old request finishes or observes cancellation, unloaded
+  rows in the new visible region take priority over background work. An OS
+  call already in progress cannot be interrupted and may delay that decision.
+- SutShell checks cancellation between items and before returning. A cancelled
+  package is discarded as a whole; partially computed entries are not published.
+- A path or filter refresh creates a new snapshot. Cancellation plus snapshot
+  and row-array identity checks prevent an old range from populating the new
+  table. A previous snapshot request is also checked before publication.
+- Unloading the control cancels its active range. Loading can resume when the
+  list becomes visible again; this is not a promise to prefetch hidden tabs.
+- An enumeration failure is shown in the status. If a range fails unexpectedly,
+  its rows are marked failed, the status reports that some items could not be
+  loaded, and the scheduler moves on. Those rows are not retried until refresh.
+  Individual unavailable metadata or icons can instead produce an entry with
+  empty fields without failing the whole range.
+- SutShell's directory observer is best-effort. ContentView marshals its change
+  callback to the dispatcher; Pathview coalesces notifications and initiates a
+  refresh. Notifications and snapshots do not guarantee an atomic filesystem view.
+
+The focused checks in [SutShell.Tests.ps1](tests/SutShell.Tests.ps1) exercise
+snapshot ranges, cancellation, missing files, background completion without
+scrolling, visible-row priority, scrolling, rapid navigation, and Shell icon
+rendering in the BROWSE startup path. They also cover multiple-selection
+restoration and Copy/Move staging, the multi-item Shell menu, inline rename
+entry points, commit/cancel, validation, and folder-rename notification.
+
+## Historical Shell-Host Reference
+
+Everything below this heading describes the previous Shell-host/private-table
+implementation and is retained for historical reference, not as the current
+ContentView interface or runtime behavior.
+
+## Historical Scope and Relationship
 
 `ContentView` is the content component of one Pathview. Its XAML and code-behind
 live in [ContentView.xaml](./ContentView.xaml) and
@@ -14,7 +176,7 @@ authority for application-visible requirements and acceptance checks. The
 Pathviews, navigation, trees, tabs, and content views work together. This
 document describes the component boundary and its current implementation.
 
-## Behavior
+## Historical Behavior
 
 Each ContentView presents the current directory's Shell content and the
 adjacent experimental private column. The Shell remains authoritative for
@@ -66,7 +228,7 @@ state. An optional Shell Copy integration bridges Shell Copy into the Copy
 workflow; it does not turn Shell Cut into Move. Shell context-menu and
 clipboard operations remain Shell-owned.
 
-## Interface to Pathview
+## Historical Interface to Pathview
 
 These members are the current internal component API, not a separate C#
 interface. The enclosing Pathview owns navigation history and success-gated
@@ -90,7 +252,7 @@ location/tree updates.
 alignment, not a navigation or Shell API. The action buttons do not expose
 the Shell host: ContentView handles them and uses the shared workflow state.
 
-## Implementation
+## Historical Implementation
 
 ### Component ownership and lifetime
 

@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 
@@ -135,16 +136,24 @@ internal static class ShellContextMenu
         }
     }
 
-    public static void Show(string path, IntPtr owner, Action? rename = null) => ShowCore(path, owner, background: false, rename);
+    public static void Show(string path, IntPtr owner, Action? rename = null) => ShowCore([path], owner, background: false, rename);
 
-    public static void ShowBackground(string folderPath, IntPtr owner) => ShowCore(folderPath, owner, background: true, rename: null);
+    internal static void ShowItems(IReadOnlyList<string> paths, IntPtr owner, Action? rename = null) =>
+        ShowCore(paths, owner, background: false, rename);
 
-    private static void ShowCore(string path, IntPtr owner, bool background, Action? rename)
+    public static void ShowBackground(string folderPath, IntPtr owner) => ShowCore([folderPath], owner, background: true, rename: null);
+
+    private static void ShowCore(IReadOnlyList<string> paths, IntPtr owner, bool background, Action? rename)
     {
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
             throw new InvalidOperationException("The Windows Shell context menu must be opened from an STA thread.");
+        if (paths.Count == 0)
+            throw new ArgumentException("At least one item is required.", nameof(paths));
+        if (paths.Count > 1 && paths.Skip(1).Any(path => !string.Equals(Path.GetDirectoryName(path),
+                Path.GetDirectoryName(paths[0]), StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException("Selected items must belong to the same directory.", nameof(paths));
 
-        IntPtr absolutePidl = IntPtr.Zero;
+        var absolutePidls = new List<IntPtr>();
         IntPtr childPidlArray = IntPtr.Zero;
         IntPtr menu = IntPtr.Zero;
         IShellFolder? desktopFolder = null;
@@ -158,13 +167,17 @@ internal static class ShellContextMenu
         try
         {
             Marshal.ThrowExceptionForHR(SHGetDesktopFolder(out desktopFolder));
-            uint attributes = 0;
-            Marshal.ThrowExceptionForHR(desktopFolder.ParseDisplayName(owner, IntPtr.Zero, path, out _, out absolutePidl, ref attributes));
+            foreach (var path in paths)
+            {
+                uint attributes = 0;
+                Marshal.ThrowExceptionForHR(desktopFolder.ParseDisplayName(owner, IntPtr.Zero, path, out _, out var absolutePidl, ref attributes));
+                absolutePidls.Add(absolutePidl);
+            }
             var contextMenuId = typeof(IContextMenu).GUID;
             if (background)
             {
                 var shellFolderId = typeof(IShellFolder).GUID;
-                Marshal.ThrowExceptionForHR(desktopFolder.BindToObject(absolutePidl, IntPtr.Zero, ref shellFolderId, out targetFolder));
+                Marshal.ThrowExceptionForHR(desktopFolder.BindToObject(absolutePidls[0], IntPtr.Zero, ref shellFolderId, out targetFolder));
                 var shellViewId = typeof(IShellView).GUID;
                 Marshal.ThrowExceptionForHR(targetFolder.CreateViewObject(owner, ref shellViewId, out shellView));
                 Marshal.ThrowExceptionForHR(shellView.GetItemObject(ShellViewBackground, ref contextMenuId, out var contextMenuPointer));
@@ -174,11 +187,13 @@ internal static class ShellContextMenu
             else
             {
                 var shellFolderId = typeof(IShellFolder).GUID;
-                Marshal.ThrowExceptionForHR(SHBindToParent(absolutePidl, ref shellFolderId, out parentFolder, out var childPidl));
+                Marshal.ThrowExceptionForHR(SHBindToParent(absolutePidls[0], ref shellFolderId, out parentFolder, out var childPidl));
 
-                childPidlArray = Marshal.AllocCoTaskMem(IntPtr.Size);
+                childPidlArray = Marshal.AllocCoTaskMem(IntPtr.Size * paths.Count);
                 Marshal.WriteIntPtr(childPidlArray, childPidl);
-                Marshal.ThrowExceptionForHR(parentFolder.GetUIObjectOf(owner, 1, childPidlArray, ref contextMenuId, IntPtr.Zero, out contextMenu));
+                for (var index = 1; index < absolutePidls.Count; index++)
+                    Marshal.WriteIntPtr(childPidlArray, index * IntPtr.Size, ILFindLastID(absolutePidls[index]));
+                Marshal.ThrowExceptionForHR(parentFolder.GetUIObjectOf(owner, (uint)paths.Count, childPidlArray, ref contextMenuId, IntPtr.Zero, out contextMenu));
             }
 
             menu = CreatePopupMenu();
@@ -233,8 +248,9 @@ internal static class ShellContextMenu
                 _ = Marshal.FinalReleaseComObject(desktopFolder);
             if (childPidlArray != IntPtr.Zero)
                 Marshal.FreeCoTaskMem(childPidlArray);
-            if (absolutePidl != IntPtr.Zero)
-                Marshal.FreeCoTaskMem(absolutePidl);
+            foreach (var absolutePidl in absolutePidls)
+                if (absolutePidl != IntPtr.Zero)
+                    Marshal.FreeCoTaskMem(absolutePidl);
         }
     }
 
@@ -342,6 +358,9 @@ internal static class ShellContextMenu
     [DllImport("shell32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool ILRemoveLastID(IntPtr itemIdList);
+
+    [DllImport("shell32.dll")]
+    private static extern IntPtr ILFindLastID(IntPtr itemIdList);
 
     [DllImport("shell32.dll")]
     private static extern IntPtr ILCombine(IntPtr parent, IntPtr child);

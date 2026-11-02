@@ -1,68 +1,49 @@
 using System.Diagnostics;
+using System.ComponentModel;
+using System.Globalization;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using static SUTWinExplorer.ViewUtilities;
 
 namespace SUTWinExplorer;
 
-internal sealed record PrivateTableItem(string Path, MediaType MediaType, ImageSource? Icon)
-{
-    public string AccessibleName => MediaTypeMap.GetName(MediaType);
-    public override string ToString() => AccessibleName;
-}
-
 public partial class ContentView : UserControl
 {
-    public static readonly DependencyProperty PrivateTableTopGapOffsetProperty =
-        DependencyProperty.Register(
-            nameof(PrivateTableTopGapOffset),
-            typeof(double),
-            typeof(ContentView),
-            new PropertyMetadata(PrivateTableTopGap));
-
-    // Set true to reactivate the retained WPF ListView.
-    private const bool UseLegacyWpfFileList = false;
-    private static bool IsLegacyWpfFileList => UseLegacyWpfFileList;
-    private const double PrivateTableTopGap = 6;
-
-    private readonly DispatcherTimer _scrollSyncTimer;
-    private bool _privateTableRefreshQueued;
-    private string? _privateTablePendingNavigation;
-    private ScrollViewer? _privateTableScrollViewer;
-    private double? _lastShellScrollOffset;
-    private double _privateTableRowPitch;
-    private ShellExplorerBrowserHost? _shellBrowserHost;
     private bool _initialized;
+    private IDisposable? _directoryObserver;
+    private CancellationTokenSource? _refreshCancellation;
+    private CancellationTokenSource? _rangeCancellation;
+    private DirectorySnapshot? _snapshot;
+    private DirectoryRow[]? _rows;
+    private readonly HashSet<string> _selectedPaths = new(StringComparer.OrdinalIgnoreCase);
+    private bool _restoringSelection;
+    private DirectoryRow? _editingRow;
+    private bool _endingRename;
+    private bool _deferredRefresh;
+    private int _nextBackgroundIndex;
+    private bool _loadingRange;
+    private bool _loadScheduled;
 
     public ContentView()
     {
         InitializeComponent();
-        HideDirectoriesCheckBox.GetCheckBox().Checked += HideDirectoriesCheckBox_StateChanged;
-        HideDirectoriesCheckBox.GetCheckBox().Unchecked += HideDirectoriesCheckBox_StateChanged;
-        HideInternalContentCheckBox.GetCheckBox().Checked += HideInternalContentCheckBox_StateChanged;
-        HideInternalContentCheckBox.GetCheckBox().Unchecked += HideInternalContentCheckBox_StateChanged;
-        _scrollSyncTimer = new DispatcherTimer(DispatcherPriority.Render, Dispatcher)
-        {
-            Interval = TimeSpan.FromMilliseconds(30)
-        };
-        _scrollSyncTimer.Tick += ScrollSyncTimer_Tick;
+        HideDirectoriesCheckBox.GetCheckBox().Checked += FiltersChanged;
+        HideDirectoriesCheckBox.GetCheckBox().Unchecked += FiltersChanged;
+        HideInternalContentCheckBox.GetCheckBox().Checked += FiltersChanged;
+        HideInternalContentCheckBox.GetCheckBox().Unchecked += FiltersChanged;
+        FileList.LayoutUpdated += FileList_LayoutUpdated;
+        FileList.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(FileList_ScrollChanged));
         Loaded += ContentView_Loaded;
         Unloaded += ContentView_Unloaded;
     }
 
-    public double PrivateTableTopGapOffset
-    {
-        get => (double)GetValue(PrivateTableTopGapOffsetProperty);
-        private set => SetValue(PrivateTableTopGapOffsetProperty, value);
-    }
-
-    internal bool UsesSynchronousNavigation => IsLegacyWpfFileList;
-    internal bool FocusContent() => IsLegacyWpfFileList ? FileList.Focus() : _shellBrowserHost?.FocusContents() == true;
+    internal bool FocusContent() => FileList.Focus();
     internal bool? HideInternalItems
     {
         get => HideInternalContentCheckBox.GetCheckBox().IsChecked;
@@ -70,9 +51,8 @@ public partial class ContentView : UserControl
     }
 
     private string CurrentPath { get; set; } = string.Empty;
-    internal event EventHandler<string>? NavigationCompleted;
-    internal event EventHandler<string>? NavigationFailed;
     internal event EventHandler<string>? FolderOpenRequested;
+    internal event Action<string, string>? FolderRenamed;
     internal event EventHandler? FileSystemChanged;
 
     internal void Initialize(bool isBrowsable)
@@ -80,204 +60,239 @@ public partial class ContentView : UserControl
         if (_initialized)
             throw new InvalidOperationException("The content view is already initialized.");
         _initialized = true;
-        FileList.Visibility = IsLegacyWpfFileList ? Visibility.Visible : Visibility.Collapsed;
-        ShellBrowserSlot.Visibility = IsLegacyWpfFileList ? Visibility.Collapsed : Visibility.Visible;
-        PrivateFileTable.Visibility = ShellBrowserSlot.Visibility;
-        StatusLabel.Visibility = IsLegacyWpfFileList ? Visibility.Visible : Visibility.Collapsed;
-        if (!IsLegacyWpfFileList)
-        {
-            _shellBrowserHost = new ShellExplorerBrowserHost(isBrowsable);
-            _shellBrowserHost.NavigationStarting += (_, path) => BeginPrivateTableNavigation(path);
-            _shellBrowserHost.NavigationCompleted += (_, path) =>
-            {
-                EndPrivateTableNavigation(path);
-                NavigationCompleted?.Invoke(this, path);
-            };
-            _shellBrowserHost.NavigationFailed += (_, path) =>
-            {
-                EndPrivateTableNavigation(path);
-                NavigationFailed?.Invoke(this, path);
-            };
-            _shellBrowserHost.FolderOpenRequested += (_, path) => FolderOpenRequested?.Invoke(this, path);
-            _shellBrowserHost.FileSystemChanged += (_, _) => FileSystemChanged?.Invoke(this, EventArgs.Empty);
-            _shellBrowserHost.DisplayedItemsChanged += (_, _) => SchedulePrivateTableRefresh();
-            _shellBrowserHost.SetShowDirectories(HideDirectoriesCheckBox.GetCheckBox().IsChecked != true);
-            _shellBrowserHost.SetHideInternal(HideInternalContentCheckBox.GetCheckBox().IsChecked == true);
-            _shellBrowserHost.SetNamePattern(NamePatternTextBox.Text);
-            ShellBrowserSlot.Content = _shellBrowserHost;
-        }
     }
 
-    internal void NavigateTo(string path)
+    internal void SetCurrentPath(string path)
     {
-        if (_shellBrowserHost is null)
-            throw new InvalidOperationException("Asynchronous content navigation is unavailable.");
-        BeginPrivateTableNavigation(path);
-        try
-        {
-            _shellBrowserHost.NavigateTo(path);
-        }
-        catch
-        {
-            EndPrivateTableNavigation(path);
-            throw;
-        }
+        EndRename(commit: false);
+        _deferredRefresh = false;
+        _refreshCancellation?.Cancel();
+        _rangeCancellation?.Cancel();
+        _snapshot = null;
+        _rows = null;
+        _selectedPaths.Clear();
+        CurrentPath = path;
+        ClearRows();
+        StatusLabel.Text = string.Empty;
     }
 
-    internal void SetCurrentPath(string path) => CurrentPath = path;
+    internal void EnsureLocationAccessible(string path) => SutShell.EnsureDirectoryAccessible(path);
 
-    internal void Refresh(bool refreshView)
+    internal async void Refresh(bool refreshView)
     {
         if (string.IsNullOrWhiteSpace(CurrentPath))
             return;
+        if (_editingRow is not null)
+        {
+            _deferredRefresh = true;
+            return;
+        }
 
-        if (IsLegacyWpfFileList)
-            RefreshFiles();
-        else if (refreshView)
-            _shellBrowserHost?.RefreshContents();
-        RefreshShellStatusCount();
+        _refreshCancellation?.Cancel();
+        _rangeCancellation?.Cancel();
+        _snapshot = null;
+        _rows = null;
+        ClearRows();
+        var cancellation = new CancellationTokenSource();
+        _refreshCancellation = cancellation;
+        var path = CurrentPath;
+        var showDirectories = HideDirectoriesCheckBox.GetCheckBox().IsChecked != true;
+        var hideInternal = HideInternalContentCheckBox.GetCheckBox().IsChecked == true;
+        var namePattern = NamePatternTextBox.Text;
+        StatusLabel.Text = "Loading...";
+        try
+        {
+            var snapshot = await SutShell.OpenDirectoryAsync(path, showDirectories, hideInternal, namePattern, cancellation.Token);
+            if (cancellation.IsCancellationRequested || !ReferenceEquals(_refreshCancellation, cancellation))
+                return;
+
+            _snapshot = snapshot;
+            _rows = snapshot.Items.Select(item => new DirectoryRow(item.FullPath)).ToArray();
+            _nextBackgroundIndex = 0;
+            _restoringSelection = true;
+            try
+            {
+                FileList.ItemsSource = _rows;
+                foreach (var row in _rows)
+                    if (_selectedPaths.Contains(row.FullPath))
+                        FileList.SelectedItems.Add(row);
+                _selectedPaths.IntersectWith(_rows.Select(row => row.FullPath));
+            }
+            finally
+            {
+                _restoringSelection = false;
+            }
+            UpdateToolbarOperationButtons();
+            StatusLabel.Text = $"{snapshot.Count} items";
+            ScheduleRangeLoad();
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            if (ReferenceEquals(_refreshCancellation, cancellation))
+            {
+                FileList.ItemsSource = null;
+                StatusLabel.Text = exception.Message;
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_refreshCancellation, cancellation))
+                _refreshCancellation = null;
+            cancellation.Dispose();
+        }
     }
 
-    internal void RefreshStatus() => RefreshShellStatusCount();
+    private void ClearRows()
+    {
+        _restoringSelection = true;
+        try
+        {
+            FileList.ItemsSource = null;
+        }
+        finally
+        {
+            _restoringSelection = false;
+        }
+        UpdateToolbarOperationButtons();
+    }
 
-    internal void SetObservedDirectories(IEnumerable<string> directories) =>
-        _shellBrowserHost?.SynchronizeChangeNotifications(directories);
+    internal void SetObservedDirectories(IEnumerable<string> directories)
+    {
+        ClearObservedDirectories();
+        _directoryObserver = SutShell.ObserveDirectories(directories, () =>
+        {
+            if (!Dispatcher.HasShutdownStarted)
+                _ = Dispatcher.BeginInvoke(() => FileSystemChanged?.Invoke(this, EventArgs.Empty));
+        });
+    }
 
-    internal void ClearObservedDirectories() => _shellBrowserHost?.ClearChangeNotifications();
+    internal void ClearObservedDirectories()
+    {
+        _directoryObserver?.Dispose();
+        _directoryObserver = null;
+    }
 
     private void ContentView_Loaded(object sender, RoutedEventArgs e)
     {
-        ShellExplorerBrowserHost.ToolbarOperationStateChanged += ShellExplorerBrowserHost_ToolbarOperationStateChanged;
-        _scrollSyncTimer.Start();
-        CopyWorkflowState.Shared.Changed += CopyWorkflowState_Changed;
-        MoveWorkflowState.Shared.Changed += MoveWorkflowState_Changed;
-        _shellBrowserHost?.RefreshSelectionState();
-        if (!IsLegacyWpfFileList)
-            SchedulePrivateTableRefresh();
+        var culture = CultureInfo.CurrentCulture;
+        var typeface = new Typeface(FileList.FontFamily, FileList.FontStyle, FileList.FontWeight, FileList.FontStretch);
+        var pixelsPerDip = VisualTreeHelper.GetDpi(FileList).PixelsPerDip;
+        double Measure(string text) => new FormattedText(text, culture, FileList.FlowDirection,
+            typeface, FileList.FontSize, Brushes.Black, pixelsPerDip).WidthIncludingTrailingWhitespace;
+        var widestDigit = Enumerable.Range(0, 10).Select(value => (char)('0' + value))
+            .MaxBy(digit => Measure(digit.ToString()));
+        var sampleDate = new DateTime(2026, 12, 28, 23, 58, 0).ToString(FileEntry.DateFormat, CultureInfo.InvariantCulture);
+        sampleDate = string.Concat(sampleDate.Select(character => char.IsAsciiDigit(character) ? widestDigit : character));
+        DateColumn.Width = Math.Ceiling(Math.Max(Measure("Date modified"), Measure(sampleDate)) + 16);
+        FileList_SizeChanged(FileList, null!);
+        ScheduleRangeLoad();
+        CopyWorkflowState.Shared.Changed += WorkflowState_Changed;
+        MoveWorkflowState.Shared.Changed += WorkflowState_Changed;
         UpdateToolbarOperationButtons();
     }
 
     private void ContentView_Unloaded(object sender, RoutedEventArgs e)
     {
-        _scrollSyncTimer.Stop();
-        ShellExplorerBrowserHost.ToolbarOperationStateChanged -= ShellExplorerBrowserHost_ToolbarOperationStateChanged;
-        CopyWorkflowState.Shared.Changed -= CopyWorkflowState_Changed;
-        MoveWorkflowState.Shared.Changed -= MoveWorkflowState_Changed;
+        _rangeCancellation?.Cancel();
+        CopyWorkflowState.Shared.Changed -= WorkflowState_Changed;
+        MoveWorkflowState.Shared.Changed -= WorkflowState_Changed;
     }
 
-    private void RefreshFiles()
+    private void FiltersChanged(object sender, RoutedEventArgs e) => Refresh(true);
+
+    private void FileList_LayoutUpdated(object? sender, EventArgs e) => ScheduleRangeLoad();
+
+    private void FileList_ScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        var entries = new List<FileEntry>();
-        var showDirectories = HideDirectoriesCheckBox.GetCheckBox().IsChecked != true;
+        if (e.VerticalChange != 0)
+            _rangeCancellation?.Cancel();
+        ScheduleRangeLoad();
+    }
+
+    private void ScheduleRangeLoad()
+    {
+        if (_loadScheduled || _loadingRange || _snapshot is null || _rows is null || !FileList.IsVisible)
+            return;
+        _loadScheduled = true;
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        {
+            _loadScheduled = false;
+            LoadNextRange();
+        }));
+    }
+
+    private async void LoadNextRange()
+    {
+        var snapshot = _snapshot;
+        var rows = _rows;
+        if (_loadingRange || snapshot is null || rows is null || !FileList.IsVisible)
+            return;
+
+        var panel = FindVisualChild<VirtualizingStackPanel>(FileList);
+        if (panel is null)
+            return;
+        var start = panel.Children.OfType<ListViewItem>()
+            .Where(item => item.IsVisible && item.TransformToAncestor(panel).TransformBounds(new Rect(item.RenderSize))
+                .IntersectsWith(new Rect(panel.RenderSize)))
+            .Select(item => FileList.ItemContainerGenerator.IndexFromContainer(item))
+            .Where(index => index >= 0 && index < rows.Length && rows[index].Entry is null && !rows[index].Failed)
+            .DefaultIfEmpty(-1).Min();
+        if (start < 0)
+        {
+            while (_nextBackgroundIndex < rows.Length &&
+                   (rows[_nextBackgroundIndex].Entry is not null || rows[_nextBackgroundIndex].Failed))
+                _nextBackgroundIndex++;
+            if (_nextBackgroundIndex == rows.Length)
+                return;
+            start = _nextBackgroundIndex;
+        }
+
+        const int batchSize = 8;
+        var count = 0;
+        while (start + count < rows.Length && count < batchSize && rows[start + count].Entry is null && !rows[start + count].Failed)
+            count++;
+
+        var cancellation = new CancellationTokenSource();
+        _rangeCancellation = cancellation;
+        _loadingRange = true;
         try
         {
-            if (showDirectories)
+            var entries = await SutShell.GetDirectoryRangeAsync(snapshot, start, count, cancellation.Token);
+            if (cancellation.IsCancellationRequested || !ReferenceEquals(_snapshot, snapshot) || !ReferenceEquals(_rows, rows))
+                return;
+            for (var index = 0; index < entries.Count; index++)
+                rows[start + index].Entry = entries[index];
+            UpdateToolbarOperationButtons();
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"Could not load content range: {exception}");
+            if (ReferenceEquals(_rows, rows) && !cancellation.IsCancellationRequested)
             {
-                foreach (var directory in Directory.EnumerateDirectories(CurrentPath))
-                {
-                    if (!InternalItemFilter.MatchesNamePattern(directory, NamePatternTextBox.Text))
-                        continue;
-
-                    if (HideInternalContentCheckBox.GetCheckBox().IsChecked == true && InternalItemFilter.IsInternal(directory, true))
-                        continue;
-
-                    try
-                    {
-                        var info = new DirectoryInfo(directory);
-                        var displayName = ShellDisplayNameProvider.GetDisplayName(directory) ?? info.Name;
-                        entries.Add(new FileEntry(displayName, directory, true, "Folder", "", info.LastWriteTime));
-                    }
-                    catch (UnauthorizedAccessException)
-                    {
-                    }
-                }
-            }
-
-            foreach (var file in Directory.EnumerateFiles(CurrentPath))
-            {
-                try
-                {
-                    var info = new FileInfo(file);
-                    var isDirectory = (info.Attributes & FileAttributes.Directory) != 0;
-                    if (!InternalItemFilter.MatchesNamePattern(file, NamePatternTextBox.Text))
-                        continue;
-
-                    if (HideInternalContentCheckBox.GetCheckBox().IsChecked == true && InternalItemFilter.IsInternal(file, isDirectory))
-                        continue;
-
-                    if (isDirectory)
-                    {
-                        if (showDirectories)
-                        {
-                            var displayName = ShellDisplayNameProvider.GetDisplayName(file) ?? info.Name;
-                            entries.Add(new FileEntry(displayName, file, true, "Folder", "", info.LastWriteTime));
-                        }
-                        continue;
-                    }
-
-                    var fileDisplayName = ShellDisplayNameProvider.GetDisplayName(file) ?? info.Name;
-                    entries.Add(new FileEntry(fileDisplayName, file, false, info.Extension, FormatSize(info.Length), info.LastWriteTime));
-                }
-                catch (UnauthorizedAccessException)
-                {
-                }
+                for (var index = 0; index < count; index++)
+                    rows[start + index].Failed = true;
+                StatusLabel.Text = $"{snapshot.Count} items (some could not be loaded)";
             }
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        finally
         {
-            StatusLabel.Text = exception.Message;
+            if (ReferenceEquals(_rangeCancellation, cancellation))
+                _rangeCancellation = null;
+            _loadingRange = false;
+            cancellation.Dispose();
+            ScheduleRangeLoad();
         }
-
-        FileList.ItemsSource = entries.OrderByDescending(entry => entry.IsDirectory)
-            .ThenBy(entry => entry.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
-        StatusLabel.Text = $"{entries.Count} items";
     }
 
-    private void HideDirectoriesCheckBox_StateChanged(object sender, RoutedEventArgs e)
-    {
-        if (string.IsNullOrWhiteSpace(CurrentPath))
-            return;
+    private void NamePatternTextBox_TextChanged(object sender, TextChangedEventArgs e) => Refresh(true);
 
-        if (IsLegacyWpfFileList)
-        {
-            RefreshFiles();
-            return;
-        }
-
-        _shellBrowserHost?.SetShowDirectories(HideDirectoriesCheckBox.GetCheckBox().IsChecked != true);
-        RefreshShellStatusCount();
-    }
-
-    private void HideInternalContentCheckBox_StateChanged(object sender, RoutedEventArgs e)
-    {
-        if (string.IsNullOrWhiteSpace(CurrentPath))
-            return;
-
-        if (IsLegacyWpfFileList)
-            RefreshFiles();
-        else
-            _shellBrowserHost?.SetHideInternal(HideInternalContentCheckBox.GetCheckBox().IsChecked == true);
-
-        RefreshShellStatusCount();
-    }
-
-    private void NamePatternTextBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (string.IsNullOrWhiteSpace(CurrentPath))
-            return;
-
-        if (IsLegacyWpfFileList)
-            RefreshFiles();
-        else
-            _shellBrowserHost?.SetNamePattern(NamePatternTextBox.Text);
-
-        RefreshShellStatusCount();
-    }
-
-    private void ClearNamePatternButton_Click(object sender, RoutedEventArgs e)
-    {
-        NamePatternTextBox.Clear();
-    }
+    private void ClearNamePatternButton_Click(object sender, RoutedEventArgs e) => NamePatternTextBox.Clear();
 
     private void ContentOperationButton_Click(object sender, RoutedEventArgs e)
     {
@@ -286,30 +301,23 @@ public partial class ContentView : UserControl
 
         try
         {
+            var selectedPaths = FileList.SelectedItems.OfType<DirectoryRow>().Select(row => row.Entry)
+                .OfType<FileEntry>().Select(entry => entry.FullPath).ToList();
+            var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
             switch (action)
             {
+                case "Rename":
+                    BeginRename();
+                    break;
                 case "CopyGet":
                     if (MoveWorkflowState.Shared.IsPrepared)
                         throw new InvalidOperationException("Abort or complete the prepared Move before starting a Copy.");
-
-                    var copyPaths = IsLegacyWpfFileList
-                        ? FileList.SelectedItems.OfType<FileEntry>().Select(entry => entry.FullPath).ToList()
-                        : _shellBrowserHost?.GetSelectedFileSystemPaths() ?? [];
-                    CopyWorkflowState.Shared.Prepare(copyPaths);
-                    if (_shellBrowserHost is not null)
-                        (Window.GetWindow(this) as MainWindow)?.InvokeToolbarShellCopy(InvokeShellCopyCommand);
+                    CopyWorkflowState.Shared.Prepare(selectedPaths);
                     break;
                 case "CopyPaste":
-                    var preparedPaths = CopyWorkflowState.Shared.PreparedPaths;
-                    if (string.IsNullOrWhiteSpace(CurrentPath))
-                        throw new InvalidOperationException("The destination folder is not ready.");
-
-                    var owner = Window.GetWindow(this) is { } window
-                        ? new System.Windows.Interop.WindowInteropHelper(window).Handle
-                        : IntPtr.Zero;
-                    ShellFileOperations.Copy(preparedPaths, CurrentPath, owner);
+                    SutShell.Copy(CopyWorkflowState.Shared.PreparedPaths, CurrentPath, owner);
                     CopyWorkflowState.Shared.CompletePaste();
-                    _shellBrowserHost?.RefreshContents();
+                    Refresh(true);
                     break;
                 case "CopyAbort":
                     CopyWorkflowState.Shared.Abort();
@@ -317,88 +325,50 @@ public partial class ContentView : UserControl
                 case "MoveGet":
                     if (CopyWorkflowState.Shared.IsPrepared)
                         throw new InvalidOperationException("Abort or complete the prepared Copy before starting a Move.");
-
-                    var movePaths = IsLegacyWpfFileList
-                        ? FileList.SelectedItems.OfType<FileEntry>().Select(entry => entry.FullPath).ToList()
-                        : _shellBrowserHost?.GetSelectedFileSystemPaths() ?? [];
-                    MoveWorkflowState.Shared.Prepare(movePaths);
+                    MoveWorkflowState.Shared.Prepare(selectedPaths);
                     break;
                 case "MovePaste":
-                    var preparedMovePaths = MoveWorkflowState.Shared.PreparedPaths;
-                    if (string.IsNullOrWhiteSpace(CurrentPath))
-                        throw new InvalidOperationException("The destination folder is not ready.");
-
-                    var moveOwner = Window.GetWindow(this) is { } moveWindow
-                        ? new System.Windows.Interop.WindowInteropHelper(moveWindow).Handle
-                        : IntPtr.Zero;
-                    ShellFileOperations.Move(preparedMovePaths, CurrentPath, moveOwner);
+                    SutShell.Move(MoveWorkflowState.Shared.PreparedPaths, CurrentPath, owner);
                     MoveWorkflowState.Shared.CompletePaste();
-                    _shellBrowserHost?.RefreshContents();
-                    _shellBrowserHost?.RefreshSelectionState();
+                    Refresh(true);
                     break;
                 case "MoveAbort":
                     MoveWorkflowState.Shared.Abort();
                     break;
-                case "Rename":
-                    if (_shellBrowserHost is null)
-                        throw new InvalidOperationException("Rename requires the Shell content view.");
-
-                    _shellBrowserHost.RenameSelection();
-                    break;
                 case "PathGet":
-                    var selectedPaths = IsLegacyWpfFileList
-                        ? FileList.SelectedItems.OfType<FileEntry>().Select(entry => entry.FullPath).ToList()
-                        : _shellBrowserHost?.GetSelectedFileSystemPaths() ?? [];
                     if (selectedPaths.Count != 1)
                         throw new InvalidOperationException("Select exactly one item before using Path get.");
-
                     Clipboard.SetText(selectedPaths[0]);
-                    break;
-                case "Delete":
-                    _shellBrowserHost?.DeleteSelection();
                     break;
             }
         }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Shell operation failed",
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "Operation failed",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
-    private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
-        UpdateToolbarOperationButtons();
-
-    private void InvokeShellCopyCommand() => _shellBrowserHost?.InvokeShellCopyCommand();
-
-    private void ShellBrowserSlot_SizeChanged(object sender, SizeChangedEventArgs e)
+    private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        var dpi = VisualTreeHelper.GetDpi(ShellBrowserSlot);
-        _shellBrowserHost?.SetViewSize(
-            (int)Math.Round(e.NewSize.Width * dpi.DpiScaleX),
-            (int)Math.Round(e.NewSize.Height * dpi.DpiScaleY));
+        if (!_restoringSelection)
+        {
+            _selectedPaths.Clear();
+            _selectedPaths.UnionWith(FileList.SelectedItems.OfType<DirectoryRow>().Select(row => row.FullPath));
+        }
+        UpdateToolbarOperationButtons();
     }
 
-    private void ShellExplorerBrowserHost_ToolbarOperationStateChanged(object? sender, EventArgs e) =>
-        UpdateToolbarOperationButtons();
-
-    private void CopyWorkflowState_Changed(object? sender, EventArgs e) =>
-        UpdateToolbarOperationButtons();
-
-    private void MoveWorkflowState_Changed(object? sender, EventArgs e) =>
-        UpdateToolbarOperationButtons();
+    private void WorkflowState_Changed(object? sender, EventArgs e) => UpdateToolbarOperationButtons();
 
     private void UpdateToolbarOperationButtons()
     {
-        var hasSelection = IsLegacyWpfFileList
-            ? FileList.SelectedItems.Count > 0
-            : _shellBrowserHost?.HasSelection == true;
-        var hasSingleSelection = IsLegacyWpfFileList
-            ? FileList.SelectedItems.Count == 1
-            : _shellBrowserHost?.HasSingleSelection == true;
-        RenameButton.IsEnabled = hasSingleSelection;
-        PathGetButton.IsEnabled = hasSingleSelection;
-        DeleteButton.IsEnabled = hasSelection;
+        var selectedRows = FileList.SelectedItems.OfType<DirectoryRow>().ToArray();
+        var hasSelection = selectedRows.Length > 0 && selectedRows.All(row => row.Entry is not null);
+        RenameButton.IsEnabled = hasSelection && selectedRows.Length == 1 &&
+                     SutShell.GetEditName(selectedRows[0].FullPath) is not null;
+        PathGetButton.IsEnabled = hasSelection && FileList.SelectedItems.Count == 1;
+        DeleteButton.IsEnabled = false;
         var copyPrepared = CopyWorkflowState.Shared.IsPrepared;
         var movePrepared = MoveWorkflowState.Shared.IsPrepared;
         var canStartOperation = !copyPrepared && !movePrepared;
@@ -410,205 +380,32 @@ public partial class ContentView : UserControl
         MoveAbortButton.IsEnabled = movePrepared;
     }
 
-    private void RefreshShellStatusCount()
-    {
-        if (string.IsNullOrWhiteSpace(CurrentPath))
-        {
-            StatusLabel.Text = string.Empty;
-            return;
-        }
-
-        if (!IsLegacyWpfFileList)
-            SchedulePrivateTableRefresh();
-
-        if (ShellLocations.IsTopPath(CurrentPath))
-        {
-            var count = HideDirectoriesCheckBox.GetCheckBox().IsChecked == true
-                ? 0
-                : DriveInfo.GetDrives().Count(drive =>
-                    InternalItemFilter.MatchesName(drive.Name.TrimEnd(Path.DirectorySeparatorChar), NamePatternTextBox.Text) &&
-                    (HideInternalContentCheckBox.GetCheckBox().IsChecked != true ||
-                     !InternalItemFilter.IsInternal(drive.RootDirectory.FullName, true)));
-            StatusLabel.Text = $"{count} items";
-            return;
-        }
-
-        try
-        {
-            var count = Directory.EnumerateFiles(CurrentPath)
-                .Count(path => (File.GetAttributes(path) & FileAttributes.Directory) == 0 &&
-                               InternalItemFilter.MatchesNamePattern(path, NamePatternTextBox.Text) &&
-                               (HideInternalContentCheckBox.GetCheckBox().IsChecked != true || !InternalItemFilter.IsInternal(path, false)));
-            if (HideDirectoriesCheckBox.GetCheckBox().IsChecked != true)
-                count += Directory.EnumerateDirectories(CurrentPath)
-                    .Count(path => InternalItemFilter.MatchesNamePattern(path, NamePatternTextBox.Text) &&
-                                   (HideInternalContentCheckBox.GetCheckBox().IsChecked != true || !InternalItemFilter.IsInternal(path, true)));
-            StatusLabel.Text = $"{count} items";
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            StatusLabel.Text = exception.Message;
-        }
-    }
-
-    private void SchedulePrivateTableRefresh()
-    {
-        if (_privateTableRefreshQueued || Dispatcher.HasShutdownStarted)
-            return;
-        _privateTableRefreshQueued = true;
-        _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(RefreshPrivateTable));
-    }
-
-    private void RefreshPrivateTable()
-    {
-        _privateTableRefreshQueued = false;
-        if (!IsLoaded || _privateTablePendingNavigation is not null)
-            return;
-        try
-        {
-            var items = _shellBrowserHost?.GetDisplayedFileSystemItems() ?? [];
-            var rows = items.Select(item =>
-            {
-                var mediaType = MediaTypeMap.GetMediaType(item.Path, item.IsDirectory);
-                return new PrivateTableItem(item.Path, mediaType, MediaTypeIconMap.GetIcon(mediaType));
-            }).ToList();
-            if (PrivateFileTable.ItemsSource is IEnumerable<PrivateTableItem> currentRows &&
-                currentRows.SequenceEqual(rows))
-                return;
-
-            PrivateFileTable.ItemsSource = rows;
-            _lastShellScrollOffset = null;
-        }
-        catch (Exception exception) when (exception is COMException or InvalidOperationException or IOException or UnauthorizedAccessException)
-        {
-            Debug.WriteLine($"Private table refresh failed: {exception}");
-        }
-    }
-
-    private void BeginPrivateTableNavigation(string path)
-    {
-        _privateTablePendingNavigation = path;
-        PrivateFileTable.ItemsSource = null;
-        _lastShellScrollOffset = null;
-        PrivateTableTopGapOffset = PrivateTableTopGap;
-    }
-
-    private void EndPrivateTableNavigation(string path)
-    {
-        if (_privateTablePendingNavigation is not null &&
-            (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(_privateTablePendingNavigation) ||
-             string.Equals(_privateTablePendingNavigation, path, StringComparison.OrdinalIgnoreCase)))
-        {
-            _privateTablePendingNavigation = null;
-            SchedulePrivateTableRefresh();
-        }
-    }
-
-    private void PrivateFileTable_PreviewMouseWheel(object sender, MouseWheelEventArgs e) =>
-        e.Handled = true;
-
-    private void PrivateFileTable_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key is Key.Up or Key.Down or Key.Left or Key.Right or Key.PageUp or Key.PageDown or Key.Home or Key.End)
-            e.Handled = true;
-    }
-
-    private void PrivateFileTable_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (ReferenceEquals(e.Source, PrivateFileTable) && PrivateFileTable.SelectedIndex >= 0)
-            PrivateFileTable.UnselectAll();
-    }
-
-    private void PrivateFileTable_RequestBringIntoView(object sender, RequestBringIntoViewEventArgs e) =>
-        e.Handled = true;
-
-    private void PrivateFileTable_ScrollChanged(object sender, ScrollChangedEventArgs e)
-    {
-        if (e.OriginalSource is not ScrollViewer scrollViewer ||
-            !ReferenceEquals(scrollViewer, _privateTableScrollViewer) ||
-            _lastShellScrollOffset is not double shellOffset ||
-            _privateTablePendingNavigation is not null)
-            return;
-
-        var target = Math.Clamp(shellOffset, 0, scrollViewer.ScrollableHeight);
-        if (Math.Abs(scrollViewer.VerticalOffset - target) > 0.5)
-            scrollViewer.ScrollToVerticalOffset(target);
-    }
-
-    private void ScrollSyncTimer_Tick(object? sender, EventArgs e)
-    {
-        if (_shellBrowserHost is null || !_shellBrowserHost.TryGetVerticalScrollRange(out var position, out var total))
-            return;
-
-        var itemCount = PrivateFileTable.Items.Count;
-        if (itemCount == 0)
-            return;
-
-        var rowsScrolled = total > 0 ? (double)position * itemCount / total : 0;
-        // The Shell consumes its top gap over the first row; only the rendering moves,
-        // leaving the virtualized panel's uniform item sizes and scroll extent unchanged.
-        PrivateTableTopGapOffset = PrivateTableTopGap * Math.Max(0, 1 - rowsScrolled);
-
-        // Row pitch, not ActualHeight: item containers have a margin/border that adds to the spacing.
-        // Measured once from the first two realized rows, since virtualization recycles them while scrolling.
-        if (_privateTableRowPitch == 0 &&
-            itemCount > 1 &&
-            PrivateFileTable.ItemContainerGenerator.ContainerFromIndex(1) is FrameworkElement secondRow &&
-            PrivateFileTable.ItemContainerGenerator.ContainerFromIndex(0) is FrameworkElement firstRow)
-        {
-            _privateTableRowPitch = secondRow.TranslatePoint(new Point(), firstRow).Y;
-        }
-
-        var rowPitch = _privateTableRowPitch;
-        if (rowPitch == 0 && itemCount == 1 &&
-            PrivateFileTable.ItemContainerGenerator.ContainerFromIndex(0) is FrameworkElement singleRow)
-            rowPitch = singleRow.ActualHeight;
-        if (rowPitch == 0)
-            return;
-
-        _privateTableScrollViewer ??= FindVisualChild<ScrollViewer>(PrivateFileTable);
-        if (_privateTableScrollViewer is null)
-            return;
-
-        var offset = rowsScrolled * rowPitch;
-        if (_lastShellScrollOffset == offset)
-            return;
-
-        _lastShellScrollOffset = offset;
-        _privateTableScrollViewer.ScrollToVerticalOffset(offset);
-    }
-
     private void FileList_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (FileList.View is not GridView gridView || gridView.Columns.Count < 5)
+        if (FileList.View is not GridView gridView || gridView.Columns.Count < 7)
             return;
 
-        const double iconColumnWidth = 34;
-        const double typeColumnWidth = 130;
-        const double sizeColumnWidth = 110;
-        const double modifiedColumnWidth = 170;
+        var fixedColumnWidths = 32 + 34 + 26 + 130 + SizeColumn.Width + DateColumn.Width;
         const double minimumNameWidth = 80;
-
         var scrollViewer = FindVisualChild<ScrollViewer>(FileList);
         var scrollbarWidth = scrollViewer?.ComputedVerticalScrollBarVisibility == Visibility.Visible
-            ? SystemParameters.VerticalScrollBarWidth
-            : 0;
-        var fixedColumnWidths = iconColumnWidth + typeColumnWidth + sizeColumnWidth + modifiedColumnWidth;
+            ? SystemParameters.VerticalScrollBarWidth : 0;
         var availableNameWidth = FileList.ActualWidth - fixedColumnWidths - scrollbarWidth - 8;
-        gridView.Columns[1].Width = Math.Max(minimumNameWidth, availableNameWidth);
+        gridView.Columns[3].Width = Math.Max(minimumNameWidth, availableNameWidth);
     }
 
     private void FileList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (FileList.SelectedItem is not FileEntry entry)
+        if (_editingRow is not null || FileList.SelectedItem is not DirectoryRow { Entry: { } entry })
             return;
 
         try
         {
-            if (entry.IsDirectory)
-                FolderOpenRequested?.Invoke(this, entry.FullPath);
+            var folderTarget = SutShell.GetFolderTarget(entry.FullPath);
+            if (folderTarget is not null)
+                FolderOpenRequested?.Invoke(this, folderTarget);
             else
-                Process.Start(new ProcessStartInfo(entry.FullPath) { UseShellExecute = true });
+                SutShell.Open(entry.FullPath);
         }
         catch (Exception exception)
         {
@@ -616,13 +413,34 @@ public partial class ContentView : UserControl
         }
     }
 
+    private void ShowMenu(DirectoryRow? row)
+    {
+        try
+        {
+            var owner = new WindowInteropHelper(Window.GetWindow(this)!).Handle;
+            if (row is null)
+                SutShell.ShowBackgroundMenu(CurrentPath, owner);
+            else
+                SutShell.ShowItemMenu(FileList.SelectedItems.OfType<DirectoryRow>().Select(item => item.FullPath).ToArray(), owner,
+                    FileList.SelectedItems.Count == 1 && row.Entry is not null && SutShell.GetEditName(row.FullPath) is not null ? BeginRename : null);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "Context menu failed", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private void FileList_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
         var source = e.OriginalSource as DependencyObject;
-        if (FindAncestor<ListViewItem>(source) is { DataContext: FileEntry entry })
+        if (FindAncestor<ListViewItem>(source) is { DataContext: DirectoryRow row })
         {
-            FileList.SelectedItem = entry;
-            ShowNativeMenu(this, entry.FullPath);
+            if (!FileList.SelectedItems.Contains(row))
+            {
+                FileList.SelectedItems.Clear();
+                FileList.SelectedItems.Add(row);
+            }
+            ShowMenu(row);
             e.Handled = true;
             return;
         }
@@ -630,65 +448,165 @@ public partial class ContentView : UserControl
         if (IsListChrome(source))
             return;
 
-        FileList.SelectedItem = null;
-        ShowNativeBackgroundMenu(this, CurrentPath);
+        FileList.SelectedItems.Clear();
+        ShowMenu(null);
         e.Handled = true;
     }
 
     private void FileList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         var source = e.OriginalSource as DependencyObject;
+        if (FindAncestor<Thumb>(source) is not null &&
+            FindAncestor<GridViewColumnHeader>(source) is { } header &&
+            (ReferenceEquals(header.Column, SizeColumn) || ReferenceEquals(header.Column, DateColumn)))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (FindAncestor<ListViewItem>(source) is null && !IsListChrome(source))
-            FileList.SelectedItem = null;
+            FileList.SelectedItems.Clear();
     }
 
     private void FileList_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.F2 && _editingRow is null)
+        {
+            BeginRename();
+            e.Handled = true;
+            return;
+        }
         if (e.Key != Key.Apps && !(e.Key == Key.F10 && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)))
             return;
 
-        if (FileList.SelectedItem is FileEntry entry)
-            ShowNativeMenu(this, entry.FullPath);
-        else
-            ShowNativeBackgroundMenu(this, CurrentPath);
-
+        ShowMenu(FileList.SelectedItem as DirectoryRow);
         e.Handled = true;
     }
 
-    private static string FormatSize(long bytes)
+    private void BeginRename()
     {
-        string[] units = ["B", "KB", "MB", "GB", "TB"];
-        var value = (double)bytes;
-        var unit = 0;
-        while (value >= 1024 && unit < units.Length - 1)
+        if (_editingRow is not null || FileList.SelectedItems.Count != 1 ||
+            FileList.SelectedItem is not DirectoryRow { Entry: not null } row ||
+            SutShell.GetEditName(row.FullPath) is not { } name)
+            return;
+
+        _editingRow = row;
+        row.EditName = name;
+        row.IsEditing = true;
+        FileList.ScrollIntoView(row);
+    }
+
+    private void ItemNameEditor_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (sender is not TextBox { IsVisible: true, DataContext: DirectoryRow row } editor)
+            return;
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
         {
-            value /= 1024;
-            unit++;
+            if (!editor.IsVisible || !ReferenceEquals(row, _editingRow))
+                return;
+            editor.Focus();
+            var extension = row.Entry?.IsDirectory == false ? Path.GetExtension(row.EditName) : string.Empty;
+            var selectionLength = row.EditName.Length - extension.Length;
+            editor.Select(0, selectionLength > 0 ? selectionLength : row.EditName.Length);
+        }));
+    }
+
+    private void ItemNameEditor_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Enter or Key.Escape)
+        {
+            EndRename(commit: e.Key == Key.Enter);
+            e.Handled = true;
+        }
+    }
+
+    private void ItemNameEditor_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is TextBox { DataContext: DirectoryRow row } && ReferenceEquals(row, _editingRow))
+            EndRename(commit: true);
+    }
+
+    private void EndRename(bool commit)
+    {
+        if (_editingRow is not { Entry: { } entry } row || _endingRename)
+            return;
+
+        _endingRename = true;
+        var renamed = false;
+        try
+        {
+            if (commit && !string.Equals(row.EditName, SutShell.GetEditName(row.FullPath), StringComparison.Ordinal))
+            {
+                var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
+                var newPath = SutShell.Rename(row.FullPath, row.EditName, owner);
+                _selectedPaths.Remove(row.FullPath);
+                _selectedPaths.Add(newPath);
+                renamed = true;
+                if (entry.IsDirectory)
+                    FolderRenamed?.Invoke(row.FullPath, newPath);
+            }
+            _editingRow = null;
+            row.IsEditing = false;
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot rename item", MessageBoxButton.OK, MessageBoxImage.Error);
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+            {
+                if (FileList.ItemContainerGenerator.ContainerFromItem(row) is DependencyObject container &&
+                    FindVisualChild<TextBox>(container) is { } editor)
+                    editor.Focus();
+            }));
+            return;
+        }
+        finally
+        {
+            _endingRename = false;
         }
 
-        return $"{value:0.#} {units[unit]}";
+        if (renamed || _deferredRefresh)
+        {
+            _deferredRefresh = false;
+            Refresh(true);
+        }
     }
 }
 
-public sealed class FileEntry
+internal sealed class DirectoryRow : INotifyPropertyChanged
 {
-    public FileEntry(string name, string fullPath, bool isDirectory, string type, string sizeText, DateTime modified)
+    public DirectoryRow() : this(string.Empty) { }
+    internal DirectoryRow(string fullPath) => FullPath = fullPath;
+    internal string FullPath { get; }
+    private FileEntry? _entry;
+    private bool _isEditing;
+    private string _editName = string.Empty;
+    public FileEntry? Entry
     {
-        Name = name;
-        FullPath = fullPath;
-        IsDirectory = isDirectory;
-        Type = type;
-        SizeText = sizeText;
-        Modified = modified;
-        Icons = ShellIconProvider.GetSmallIcons(fullPath);
+        get => _entry;
+        set
+        {
+            _entry = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Entry)));
+        }
     }
-
-    public string Name { get; }
-    public string FullPath { get; }
-    public bool IsDirectory { get; }
-    public string Type { get; }
-    public string SizeText { get; }
-    public DateTime Modified { get; }
-    public ShellIconSet? Icons { get; }
-    public string ModifiedText => Modified.ToString("g");
+    internal bool Failed { get; set; }
+    public bool IsEditing
+    {
+        get => _isEditing;
+        set
+        {
+            _isEditing = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsEditing)));
+        }
+    }
+    public string EditName
+    {
+        get => _editName;
+        set
+        {
+            _editName = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(EditName)));
+        }
+    }
+    public event PropertyChangedEventHandler? PropertyChanged;
 }

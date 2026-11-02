@@ -123,7 +123,9 @@
                     </StackPanel>
                 </Grid>
             </Grid>
-            <ListView x:Name="FileList" Grid.Row="4" Grid.Column="0" SelectionMode="Single"
+            <ListView x:Name="FileList" Grid.Row="4" Grid.Column="0" SelectionMode="Extended"
+                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                      ScrollViewer.CanContentScroll="True"
                       SelectionChanged="FileList_SelectionChanged" SizeChanged="FileList_SizeChanged"
                       PreviewMouseLeftButtonDown="FileList_PreviewMouseLeftButtonDown"
                       MouseDoubleClick="FileList_MouseDoubleClick"
@@ -132,6 +134,7 @@
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
                         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Height" Value="22" />
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="ListViewItem">
@@ -158,95 +161,69 @@
                 </ListView.ItemContainerStyle>
                 <ListView.View>
                     <GridView>
-                        <GridViewColumn Header="" Width="34">
+                        <GridViewColumn Header="MT" Width="32">
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
-                                    <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource ShellIconTemplate}" />
+                                     <Image Width="16" Height="16" Source="{Binding Entry.MediaTypeIcon}"
+                                         AutomationProperties.Name="{Binding Entry.MediaTypeName}" />
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
                         </GridViewColumn>
-                        <GridViewColumn Header="Name" Width="330" DisplayMemberBinding="{Binding Name}" />
-                        <GridViewColumn Header="Type" Width="130" DisplayMemberBinding="{Binding Type}" />
-                        <GridViewColumn Header="Size" Width="110" DisplayMemberBinding="{Binding SizeText}" />
-                        <GridViewColumn Header="Date modified" Width="170" DisplayMemberBinding="{Binding ModifiedText}" />
+                        <GridViewColumn Header="" Width="34">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Image Width="16" Height="16" Source="{Binding Entry.Icons.BaseIcon}" Stretch="None"
+                                           Opacity="{Binding Entry.Icons.Opacity, TargetNullValue=1, FallbackValue=1}" />
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="" Width="26">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Image Width="16" Height="16" Source="{Binding Entry.Icons.OverlayIcon}" Stretch="Uniform"
+                                           Opacity="{Binding Entry.Icons.Opacity, TargetNullValue=1, FallbackValue=1}" />
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="Name" Width="330">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <TextBlock x:Name="ItemName" Text="{Binding Entry.Name}" Foreground="Black" />
+                                        <TextBox x:Name="ItemNameEditor" Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}"
+                                                 Visibility="Collapsed" Padding="1,0" MinWidth="80"
+                                                 IsVisibleChanged="ItemNameEditor_IsVisibleChanged"
+                                                 KeyDown="ItemNameEditor_KeyDown"
+                                                 LostKeyboardFocus="ItemNameEditor_LostKeyboardFocus" />
+                                    </Grid>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                            <Setter TargetName="ItemName" Property="Visibility" Value="Collapsed" />
+                                            <Setter TargetName="ItemNameEditor" Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="Type" Width="130">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate><TextBlock Text="{Binding Entry.Type}" Foreground="#666666" /></DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn x:Name="SizeColumn" Header="Size" Width="110">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate><TextBlock Text="{Binding Entry.SizeText}" Foreground="#666666"
+                                                         HorizontalAlignment="Stretch" TextAlignment="Right" /></DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn x:Name="DateColumn" Header="Date modified" Width="130">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate><TextBlock Text="{Binding Entry.ModifiedText}" Foreground="#666666" /></DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
                     </GridView>
                 </ListView.View>
             </ListView>
-            <Border Grid.Row="4" Grid.Column="0" Margin="10,0,0,0"
-                    BorderBrush="{StaticResource ViewFrameBrush}"
-                    BorderThickness="{StaticResource ViewFrameThickness}"
-                    Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
-                    Visibility="{Binding Visibility, ElementName=ShellBrowserSlot}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="24" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <ListView x:Name="PrivateFileTable" Grid.Column="0" Margin="8,0,0,0" Visibility="Collapsed"
-                          BorderThickness="0" VirtualizingPanel.ScrollUnit="Pixel"
-                          IsTextSearchEnabled="False"
-                          ScrollViewer.VerticalScrollBarVisibility="Hidden"
-                          ScrollViewer.HorizontalScrollBarVisibility="Hidden"
-                          ScrollViewer.PanningMode="None"
-                          PreviewMouseWheel="PrivateFileTable_PreviewMouseWheel"
-                          PreviewKeyDown="PrivateFileTable_PreviewKeyDown"
-                          SelectionChanged="PrivateFileTable_SelectionChanged"
-                          RequestBringIntoView="PrivateFileTable_RequestBringIntoView"
-                          ScrollViewer.ScrollChanged="PrivateFileTable_ScrollChanged">
-                    <ListView.ItemContainerStyle>
-                        <Style TargetType="ListViewItem">
-                            <Setter Property="Focusable" Value="False" />
-                            <Setter Property="IsTabStop" Value="False" />
-                            <Setter Property="IsHitTestVisible" Value="False" />
-                            <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
-                            <Setter Property="RenderTransform">
-                                <Setter.Value>
-                                    <TranslateTransform Y="{Binding PrivateTableTopGapOffset, RelativeSource={RelativeSource AncestorType={x:Type local:ContentView}}}" />
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </ListView.ItemContainerStyle>
-                    <ListView.View>
-                        <GridView>
-                            <GridView.ColumnHeaderContainerStyle>
-                                <!-- The first-row gap is rendered separately so it can scroll away. -->
-                                <Style TargetType="GridViewColumnHeader">
-                                    <Setter Property="Height" Value="25" />
-                                    <Setter Property="Focusable" Value="False" />
-                                    <Setter Property="FontSize" Value="9" />
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="GridViewColumnHeader">
-                                                <Grid Background="White">
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="22" />
-                                                        <RowDefinition Height="*" />
-                                                    </Grid.RowDefinitions>
-                                                    <ContentPresenter HorizontalAlignment="Center"
-                                                                      VerticalAlignment="Center" />
-                                                </Grid>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Style>
-                            </GridView.ColumnHeaderContainerStyle>
-                            <GridViewColumn Header="MT" Width="16">
-                                <GridViewColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <!-- Offset the GridView cell margin and row inset to fit the 16-DIP column. -->
-                                        <Image Width="16" Height="16" Margin="-8,0,-4,0"
-                                               Source="{Binding Icon}" Stretch="Uniform"
-                                               AutomationProperties.Name="{Binding AccessibleName}" />
-                                    </DataTemplate>
-                                </GridViewColumn.CellTemplate>
-                            </GridViewColumn>
-                        </GridView>
-                    </ListView.View>
-                </ListView>
-                <ContentControl x:Name="ShellBrowserSlot" Grid.Column="1" Visibility="Collapsed"
-                                SizeChanged="ShellBrowserSlot_SizeChanged" />
-            </Grid>
-            </Border>
             <Border Grid.Row="4" Grid.Column="1" BorderBrush="#E0E4E8" BorderThickness="1,0,0,0"
                     Background="#F6F7F8" VerticalAlignment="Stretch">
                 <TextBlock x:Name="StatusLabel" Padding="8,6" Foreground="#596675"

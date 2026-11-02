@@ -50,11 +50,6 @@ public partial class Pathview : UserControl
     private bool _suppressTreeBringIntoView;
     private TreeEntry? _pendingTreeNavigationEntry;
     private TreeEntry? _editingTreeEntry;
-    private string? _pendingNavigationPath;
-    private NavigationHistoryAction _pendingNavigationHistoryAction;
-    private bool? _pendingHideSiblings;
-    private bool? _pendingHideInternalDirectories;
-    private bool? _pendingHideInternalContentItems;
     private bool _fileSystemStateDirty = true;
     private bool _contentViewNeedsRefresh = true;
     private readonly List<TreeEntry> _driveRoots = [];
@@ -95,16 +90,21 @@ public partial class Pathview : UserControl
             Interval = TimeSpan.FromMilliseconds(200)
         };
         _fileSystemRefreshTimer.Tick += FileSystemRefreshTimer_Tick;
-        DirectoryContent.NavigationCompleted += ContentView_NavigationCompleted;
-        DirectoryContent.NavigationFailed += ContentView_NavigationFailed;
         DirectoryContent.FolderOpenRequested += ContentView_FolderOpenRequested;
+        DirectoryContent.FolderRenamed += (oldPath, newPath) => DirectoryRenamed?.Invoke(oldPath, newPath);
         DirectoryContent.FileSystemChanged += ContentView_FileSystemChanged;
         DirectoryContent.Initialize(IsBrowsable);
         InitializeActivePathAndSiblingsTree();
         Loaded += Pathview_Loaded;
         Unloaded += Pathview_Unloaded;
         IsVisibleChanged += Pathview_IsVisibleChanged;
-        Navigate(initialPath, NavigationHistoryAction.None);
+        try
+        {
+            Navigate(initialPath, NavigationHistoryAction.None);
+        }
+        catch (Exception exception) when (!isBrowsable && exception is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 
     public bool IsBrowsable { get; }
@@ -118,7 +118,6 @@ public partial class Pathview : UserControl
     internal string? CustomName => _customName;
     internal Color? TabColor { get; private set; }
     public event EventHandler<string>? LocationChanged;
-    public event EventHandler? NavigationFailed;
     public event EventHandler? PinRequested;
     public event Action<Pathview, string, bool?, bool?, bool?, bool?>? BrowseLocationRequested;
     public event Action<string, string>? DirectoryRenamed;
@@ -279,7 +278,7 @@ public partial class Pathview : UserControl
             ClearPendingTreeNavigation();
         }
 
-        if (DirectoryContent.UsesSynchronousNavigation && !Directory.Exists(fullPath))
+        if (!IsTopPath(fullPath) && !Directory.Exists(fullPath))
             throw new DirectoryNotFoundException($"The directory does not exist or is not accessible: {fullPath}");
 
         if (string.Equals(CurrentPath, fullPath, StringComparison.OrdinalIgnoreCase))
@@ -289,31 +288,10 @@ public partial class Pathview : UserControl
             return;
         }
 
-        if (DirectoryContent.UsesSynchronousNavigation)
-        {
-            CommitNavigation(fullPath, historyAction);
-            ApplyNavigationOptions(hideSiblings, hideInternalDirectories, hideInternalContentItems);
-            DirectoryContent.Refresh(true);
-            return;
-        }
-
-        _pendingNavigationPath = fullPath;
-        _pendingNavigationHistoryAction = historyAction;
-        _pendingHideSiblings = hideSiblings;
-        _pendingHideInternalDirectories = hideInternalDirectories;
-        _pendingHideInternalContentItems = hideInternalContentItems;
-        try
-        {
-            DirectoryContent.NavigateTo(fullPath);
-        }
-        catch
-        {
-            _pendingNavigationPath = null;
-            _pendingHideSiblings = null;
-            _pendingHideInternalDirectories = null;
-            _pendingHideInternalContentItems = null;
-            throw;
-        }
+        DirectoryContent.EnsureLocationAccessible(fullPath);
+        CommitNavigation(fullPath, historyAction);
+        ApplyNavigationOptions(hideSiblings, hideInternalDirectories, hideInternalContentItems);
+        DirectoryContent.Refresh(true);
     }
 
     private void ApplyNavigationOptions(
@@ -353,8 +331,6 @@ public partial class Pathview : UserControl
         RefreshActivePathTree();
         SynchronizeContentChangeNotifications();
         LocationChanged?.Invoke(this, CurrentPath);
-        if (!DirectoryContent.UsesSynchronousNavigation)
-            DirectoryContent.RefreshStatus();
     }
 
     private void UpdateHistory(string path, NavigationHistoryAction historyAction)
@@ -657,67 +633,6 @@ public partial class Pathview : UserControl
         _contentViewNeedsRefresh = false;
         RefreshCurrentFileSystemState(refreshContentView);
         SynchronizeContentChangeNotifications();
-    }
-
-    private void ContentView_NavigationCompleted(object? sender, string path)
-    {
-        var fullPath = IsTopPath(path) ? TopPath : Path.GetFullPath(path);
-        if (_pendingTreeNavigationEntry is { } pendingEntry &&
-            string.Equals(pendingEntry.Path, fullPath, StringComparison.OrdinalIgnoreCase))
-        {
-            ClearPendingTreeNavigation();
-        }
-        else if (_pendingTreeNavigationEntry is { } supersededEntry &&
-                 string.Equals(_pendingNavigationPath, supersededEntry.Path, StringComparison.OrdinalIgnoreCase))
-        {
-            ClearPendingTreeNavigation();
-        }
-
-        var isPendingNavigation = string.Equals(_pendingNavigationPath, fullPath, StringComparison.OrdinalIgnoreCase);
-        var historyAction = isPendingNavigation ? _pendingNavigationHistoryAction : NavigationHistoryAction.Normal;
-        var hideSiblings = isPendingNavigation ? _pendingHideSiblings : null;
-        var hideInternalDirectories = isPendingNavigation ? _pendingHideInternalDirectories : null;
-        var hideInternalContentItems = isPendingNavigation ? _pendingHideInternalContentItems : null;
-        if (isPendingNavigation)
-        {
-            _pendingNavigationPath = null;
-            _pendingHideSiblings = null;
-            _pendingHideInternalDirectories = null;
-            _pendingHideInternalContentItems = null;
-        }
-
-        if (string.Equals(CurrentPath, fullPath, StringComparison.OrdinalIgnoreCase))
-        {
-            ApplyNavigationOptions(hideSiblings, hideInternalDirectories, hideInternalContentItems);
-            return;
-        }
-
-        CommitNavigation(fullPath, historyAction);
-        ApplyNavigationOptions(hideSiblings, hideInternalDirectories, hideInternalContentItems);
-    }
-
-    private void ContentView_NavigationFailed(object? sender, string path)
-    {
-        var isCurrentFailure = string.IsNullOrEmpty(path) ||
-            string.Equals(_pendingNavigationPath, path, StringComparison.OrdinalIgnoreCase);
-        if (isCurrentFailure)
-        {
-            _pendingNavigationPath = null;
-            _pendingHideSiblings = null;
-            _pendingHideInternalDirectories = null;
-            _pendingHideInternalContentItems = null;
-        }
-
-        if (_pendingTreeNavigationEntry is { } pendingEntry &&
-            (string.IsNullOrEmpty(path) || string.Equals(pendingEntry.Path, path, StringComparison.OrdinalIgnoreCase)))
-        {
-            ClearPendingTreeNavigation();
-        }
-
-        RefreshActivePathAndSiblingsTree();
-        RefreshActivePathTree();
-        if (isCurrentFailure)
-            NavigationFailed?.Invoke(this, EventArgs.Empty);
     }
 
     private void InitializeActivePathAndSiblingsTree()
@@ -1654,22 +1569,20 @@ internal static class ShellIconProvider
             if (overlayInfo.IconHandle != IntPtr.Zero)
                 _ = DestroyIcon(overlayInfo.IconHandle);
 
-            IImageList? imageList = null;
+            var interfaceId = typeof(IImageList).GUID;
+            Marshal.ThrowExceptionForHR(SHGetImageList(SmallShellImageList, ref interfaceId, out var imageList));
             try
             {
-                var interfaceId = typeof(IImageList).GUID;
-                Marshal.ThrowExceptionForHR(SHGetImageList(SmallShellImageList, ref interfaceId, out imageList));
                 var baseIcon = GetImage(imageList, baseInfo.IconIndex);
                 ImageSource? overlayIcon = null;
-                if (overlaySlot > 0 && imageList.GetOverlayImage(overlaySlot, out var overlayImageIndex) >= 0)
+                if (overlaySlot > 0 && GetImageListMethod<GetOverlayImageDelegate>(imageList, 31)(imageList, overlaySlot, out var overlayImageIndex) >= 0)
                     overlayIcon = GetImage(imageList, overlayImageIndex);
 
                 return new ShellIconSet(baseIcon, overlayIcon, GetOpacity(path));
             }
             finally
             {
-                if (imageList is not null && Marshal.IsComObject(imageList))
-                    _ = Marshal.FinalReleaseComObject(imageList);
+                _ = Marshal.Release(imageList);
             }
         }
         finally
@@ -1691,9 +1604,18 @@ internal static class ShellIconProvider
         }
     }
 
-    private static ImageSource? GetImage(IImageList imageList, int imageIndex)
+    private static T GetImageListMethod<T>(IntPtr imageList, int index) where T : Delegate =>
+        Marshal.GetDelegateForFunctionPointer<T>(Marshal.ReadIntPtr(Marshal.ReadIntPtr(imageList), index * IntPtr.Size));
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int GetImageListIconDelegate(IntPtr imageList, int index, uint flags, out IntPtr icon);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int GetOverlayImageDelegate(IntPtr imageList, int overlayIndex, out int imageIndex);
+
+    private static ImageSource? GetImage(IntPtr imageList, int imageIndex)
     {
-        if (imageList.GetIcon(imageIndex, DrawTransparent, out var iconHandle) < 0)
+        if (GetImageListMethod<GetImageListIconDelegate>(imageList, 10)(imageList, imageIndex, DrawTransparent, out var iconHandle) < 0)
             return null;
         if (iconHandle == IntPtr.Zero)
             return null;
@@ -1733,7 +1655,7 @@ internal static class ShellIconProvider
     private static extern bool DeleteObject(IntPtr handle);
 
     [DllImport("shell32.dll", PreserveSig = true)]
-    private static extern int SHGetImageList(int imageList, ref Guid interfaceId, out IImageList result);
+    private static extern int SHGetImageList(int imageList, ref Guid interfaceId, out IntPtr result);
 
 }
 

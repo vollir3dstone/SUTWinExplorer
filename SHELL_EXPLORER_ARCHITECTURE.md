@@ -1,5 +1,9 @@
 # Shell Explorer Architecture and Decisions
 
+> **Transition note:** The embedded Shell content view is currently inactive.
+> Its architecture below is historical; see [SutShell Windows implementation](SUTSHELL_WINDOWS.md)
+> for the current ContentView data boundary and its limitations.
+
 > **Document scope:** This file records architecture, implementation details, API ownership, technical findings, decisions, and unresolved engineering work. It is not the user-facing behavior specification; see [SHELL_EXPLORER_BEHAVIOR_SPEC.md](SHELL_EXPLORER_BEHAVIOR_SPEC.md) for observable requirements and acceptance criteria.
 
 ## Decision Record
