@@ -48,12 +48,12 @@ For a second right-button-down or right-button-double-click message, its screen
 coordinates are hit-tested against the ContentView list. A handled click closes
 the generic popup before another menu is opened, so each Shell menu and its COM
 objects have separate lifetimes. Ordinarily a click on the popup itself remains
-a popup click. For a quick double-click at the popup's opening point, the code
-also accepts a native menu window on the same thread as a hit on the underlying
-list. The interval is measured from the opening input message using the system
-double-click time, and the click must fall within the system double-click
-rectangle around the popup's opening point. The special popup does not install
-this second-click filter; normal Windows menu tracking applies while it is open.
+a popup click. A right-click within the system double-click rectangle around the
+opening point is also accepted as a hit on the underlying list, even after the
+double-click time has elapsed, provided the window is the active generic popup
+on the same thread. This allows another click without moving the pointer when
+the popup covers the original row. The special popup does not install this
+second-click filter; normal Windows menu tracking applies while it is open.
 
 ## Generic Menu
 

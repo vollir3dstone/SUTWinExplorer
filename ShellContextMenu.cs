@@ -164,7 +164,6 @@ internal static class ShellContextMenu
         IReadOnlyList<ShellMenuAction>? actions = null, IReadOnlyDictionary<string, int>? excludedCommands = null, Func<int, int, bool, bool, bool>? secondRightClick = null)
     {
         var generic = actions is not null;
-        var triggerTime = unchecked((uint)GetMessageTime());
         IReadOnlyDictionary<string, int>? genericCommands = null;
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
             throw new InvalidOperationException("The Windows Shell context menu must be opened from an STA thread.");
@@ -273,14 +272,15 @@ internal static class ShellContextMenu
                             var clickPoint = message.Point;
                             var targetWindow = WindowFromPoint(clickPoint);
                             var overOwner = targetWindow == owner || IsChild(owner, targetWindow);
-                            if (!overOwner && unchecked(message.Time - triggerTime) <= GetDoubleClickTime() &&
+                            if (!overOwner &&
                                 Math.Abs(clickPoint.X - point.X) <= GetSystemMetrics(36) / 2 &&
                                 Math.Abs(clickPoint.Y - point.Y) <= GetSystemMetrics(37) / 2 &&
                                 GetWindowThreadProcessId(targetWindow, out _) == GetCurrentThreadId())
                             {
                                 var className = new StringBuilder(32);
                                 _ = GetClassName(targetWindow, className, className.Capacity);
-                                overOwner = className.ToString() == "#32768";
+                                overOwner = className.ToString() == "#32768" &&
+                                    SendMessage(targetWindow, 0x01E1, IntPtr.Zero, IntPtr.Zero) == menu;
                             }
                             if (secondRightClick(clickPoint.X, clickPoint.Y, overOwner, (message.WParam.ToInt64() & 0x0004) != 0))
                             {
@@ -736,12 +736,6 @@ internal static class ShellContextMenu
     private static extern IntPtr WindowFromPoint(NativePoint point);
 
     [DllImport("user32.dll")]
-    private static extern uint GetDoubleClickTime();
-
-    [DllImport("user32.dll")]
-    private static extern int GetMessageTime();
-
-    [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int index);
 
     [DllImport("user32.dll")]
@@ -758,6 +752,9 @@ internal static class ShellContextMenu
 
     [DllImport("user32.dll")]
     private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
 
     [DllImport("kernel32.dll")]
     private static extern uint GetCurrentThreadId();

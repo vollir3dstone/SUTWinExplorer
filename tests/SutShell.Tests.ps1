@@ -58,6 +58,7 @@ public sealed class SutShellMenuProbe : System.IDisposable
     public uint[] States;
     public int SelectIndex = -1;
     public string SelectLabel;
+    public bool SelectWithRightButton;
     public string AlterSubmenu;
     public bool EmptySubmenu;
     public bool SubmenuAltered;
@@ -118,8 +119,8 @@ public sealed class SutShellMenuProbe : System.IDisposable
                 GetMenuItemRect(window, menu, (uint)SelectIndex, out var rect) && GetCursorPos(out var original))
             {
                 SetCursorPos((rect.Left + rect.Right) / 2, (rect.Top + rect.Bottom) / 2);
-                mouse_event(2, 0, 0, 0, System.UIntPtr.Zero);
-                mouse_event(4, 0, 0, 0, System.UIntPtr.Zero);
+                mouse_event(SelectWithRightButton ? 8u : 2u, 0, 0, 0, System.UIntPtr.Zero);
+                mouse_event(SelectWithRightButton ? 16u : 4u, 0, 0, 0, System.UIntPtr.Zero);
                 SetCursorPos(original.X, original.Y);
             }
             else PostMessage(owner, 0x001F, System.IntPtr.Zero, System.IntPtr.Zero);
@@ -221,6 +222,7 @@ public sealed class SutShellRightClickProbe : System.IDisposable
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetCursorPos(out Point point);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern System.IntPtr WindowFromPoint(Point point);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern uint GetDoubleClickTime();
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern void mouse_event(uint flags, uint dx, uint dy, uint data, System.UIntPtr extra);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern void keybd_event(byte key, byte scan, uint flags, System.UIntPtr extra);
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
@@ -236,10 +238,12 @@ public sealed class SutShellRightClickProbe : System.IDisposable
     private readonly int targetY;
     private int startX;
     private int startY;
+    private long secondClickAt;
     public bool FirstMenu;
     public bool SecondMenu;
     public bool SecondWasGeneric;
     public bool SecondWithShift;
+    public int SecondDelayMilliseconds;
     public string[] SecondItems;
     public string TargetClass;
     public string ObservedFirstLabel;
@@ -304,6 +308,11 @@ public sealed class SutShellRightClickProbe : System.IDisposable
                 {
                     FirstMenu = true;
                     firstMenu = menu;
+                    phase = 3;
+                    secondClickAt = System.Environment.TickCount64 + SecondDelayMilliseconds;
+                }
+                if (phase == 3 && menu == firstMenu && System.Environment.TickCount64 >= secondClickAt)
+                {
                     phase = 1;
                     SetCursorPos(targetX, targetY);
                     var targetName = new System.Text.StringBuilder(64);
@@ -336,7 +345,7 @@ public sealed class SutShellRightClickProbe : System.IDisposable
                 }
                 return false;
             }, System.IntPtr.Zero);
-            if (System.Threading.Interlocked.Increment(ref ticks) > 100)
+            if (System.Threading.Interlocked.Increment(ref ticks) > 300)
                 PostMessage(owner, 0x001F, System.IntPtr.Zero, System.IntPtr.Zero);
         }
         finally { System.Threading.Volatile.Write(ref checking, 0); }
@@ -1016,6 +1025,21 @@ try {
             } finally { $timer.Stop(); $rightClickProbe.Dispose() }
             $list.SelectedItems.Clear()
             $list.SelectedItem = $notesMenuRow
+            $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $samePoint.X, [int] $samePoint.Y, [int] $samePoint.X, [int] $samePoint.Y)
+            $rightClickProbe.SecondDelayMilliseconds = [int] [SutShellRightClickProbe]::GetDoubleClickTime() + 250
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $deadline = [DateTime]::UtcNow.AddMilliseconds($rightClickProbe.SecondDelayMilliseconds + 7000)
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(50)
+            $timer.add_Tick({ if ($rightClickProbe.SecondMenu -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+            $timer.Start()
+            try {
+                [System.Windows.Threading.Dispatcher]::PushFrame($frame)
+                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasGeneric -and
+                    $rightClickProbe.TargetClass -eq '#32768') "A delayed right-click at the popup's opening point did not show the special menu: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), generic=$($rightClickProbe.SecondWasGeneric), targetClass=$($rightClickProbe.TargetClass)."
+            } finally { $timer.Stop(); $rightClickProbe.Dispose() }
+            $list.SelectedItems.Clear()
+            $list.SelectedItem = $notesMenuRow
             $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $startPoint.X, [int] $startPoint.Y, [int] $otherPoint.X, [int] $otherPoint.Y)
             $frame = [System.Windows.Threading.DispatcherFrame]::new()
             $deadline = [DateTime]::UtcNow.AddSeconds(7)
@@ -1048,16 +1072,17 @@ try {
                         $list.SelectedItem.Entry.FullPath -eq $expectedRow.Entry.FullPath) "Actual right-clicks failed for target=$target`: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), generic=$($rightClickProbe.SecondWasGeneric), targetClass=$($rightClickProbe.TargetClass), selection=$($list.SelectedItems.Count)."
                 } finally { $timer.Stop(); $rightClickProbe.Dispose() }
             }
-            foreach ($target in @('same', 'other', 'double')) {
+            foreach ($target in @('same', 'other', 'double', 'delayed')) {
                 $list.SelectedItems.Clear()
                 $list.SelectedItems.Add($notesMenuRow) | Out-Null
                 $list.SelectedItems.Add($otherMenuRow) | Out-Null
-                $origin = if ($target -eq 'double') { $samePoint } else { $startPoint }
+                $origin = if ($target -in @('double', 'delayed')) { $samePoint } else { $startPoint }
                 $targetPoint = if ($target -eq 'other') { $otherPoint } else { $samePoint }
                 $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $origin.X, [int] $origin.Y, [int] $targetPoint.X, [int] $targetPoint.Y)
                 $rightClickProbe.SecondWithShift = $true
+                if ($target -eq 'delayed') { $rightClickProbe.SecondDelayMilliseconds = [int] [SutShellRightClickProbe]::GetDoubleClickTime() + 250 }
                 $frame = [System.Windows.Threading.DispatcherFrame]::new()
-                $deadline = [DateTime]::UtcNow.AddSeconds(7)
+                $deadline = [DateTime]::UtcNow.AddMilliseconds($rightClickProbe.SecondDelayMilliseconds + 7000)
                 $timer = [System.Windows.Threading.DispatcherTimer]::new()
                 $timer.Interval = [TimeSpan]::FromMilliseconds(50)
                 $timer.add_Tick({ if ($rightClickProbe.SecondMenu -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
@@ -1122,6 +1147,20 @@ try {
             } finally { $menuProbe.Dispose() }
             $copyWorkflow = $assembly.GetType('SUTWinExplorer.CopyWorkflowState', $true).GetProperty('Shared').GetValue($null)
             Assert-True (-not $copyWorkflow.IsPrepared) 'The second right-click activated Copy get.'
+            $list.SelectedItems.Clear()
+            $list.SelectedItem = $notesMenuRow
+            [SutShellRightClickProbe]::MovePointer([int] $startPoint.X, [int] $startPoint.Y)
+            $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+            $menuProbe.SelectIndex = 2
+            $menuProbe.SelectWithRightButton = $true
+            try {
+                $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
+                Assert-True ($copyWorkflow.IsPrepared -and @($copyWorkflow.PreparedPaths).Count -eq 1 -and
+                    @($copyWorkflow.PreparedPaths)[0] -eq $notesMenuRow.Entry.FullPath) 'A right-click on a menu command away from the opening point did not invoke it.'
+            } finally {
+                $menuProbe.Dispose()
+                $view.FindName('CopyAbortButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            }
         } finally {
             $window.Left = $originalLeft
             $window.Top = $originalTop
