@@ -34,8 +34,11 @@ public partial class ContentView : UserControl
     private bool _loadingRange;
     private bool _loadScheduled;
     private bool _updatingColumnWidths;
+    private bool _rightColumnsHidden;
+    private bool _automaticallyHideRightColumns;
     private double _nameTypeWidth;
     private double _preferredTypeWidth = 130;
+    private const double MinimumNameColumnWidth = 80;
     private readonly SutContextMenuController<DirectoryRow> _contextMenu;
 
     public ContentView()
@@ -64,6 +67,9 @@ public partial class ContentView : UserControl
         HideDirectoriesCheckBox.GetCheckBox().Unchecked += FiltersChanged;
         HideInternalContentCheckBox.GetCheckBox().Checked += FiltersChanged;
         HideInternalContentCheckBox.GetCheckBox().Unchecked += FiltersChanged;
+        HideRightColumnsCheckBox.GetCheckBox().IsChecked = false;
+        HideRightColumnsCheckBox.GetCheckBox().Checked += RightColumnsVisibilityChanged;
+        HideRightColumnsCheckBox.GetCheckBox().Unchecked += RightColumnsVisibilityChanged;
         FileList.LayoutUpdated += FileList_LayoutUpdated;
         FileList.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(FileList_ScrollChanged));
         Loaded += ContentView_Loaded;
@@ -298,9 +304,9 @@ public partial class ContentView : UserControl
         _sorting.Update([new DirectorySortPair(column, criterion)]);
         foreach (var (indicator, indicatorColumn) in new[]
         {
-            (NameSortIndicator, DirectorySortColumn.Name), (TypeSortIndicator, DirectorySortColumn.Type),
+            (NameSortIndicator, DirectorySortColumn.Name), (TypeApp2NameSortIndicator, DirectorySortColumn.TypeApp2Name),
             (SizeSortIndicator, DirectorySortColumn.Size), (DateSortIndicator, DirectorySortColumn.DateModified),
-            (MediaTypeSortIndicator, DirectorySortColumn.MediaType), (IconSortIndicator, DirectorySortColumn.ShellIcon),
+            (MediaTypeIconSortIndicator, DirectorySortColumn.MediaTypeIcon), (TypeApp1IconSortIndicator, DirectorySortColumn.TypeApp1Icon),
             (OverlaySortIndicator, DirectorySortColumn.Overlay)
         })
         {
@@ -519,21 +525,31 @@ public partial class ContentView : UserControl
 
     private void UpdateColumnWidths()
     {
-        if (_updatingColumnWidths || FileList.View is not GridView gridView || gridView.Columns.Count != 7)
+        if (_updatingColumnWidths || FileList.View is not GridView gridView)
             return;
         var scrollViewer = FindVisualChild<ScrollViewer>(FileList);
-        if (scrollViewer is null || scrollViewer.ViewportWidth <= 0)
-            return;
-
-        var fixedColumnWidths = gridView.Columns.Where(column => column != NameColumn && column != TypeColumn).Sum(column => column.Width);
-        _nameTypeWidth = Math.Max(0, scrollViewer.ViewportWidth - fixedColumnWidths);
-        var minimum = Math.Min(40, _nameTypeWidth / 2);
-        var typeWidth = Math.Clamp(_preferredTypeWidth, minimum, _nameTypeWidth - minimum);
         _updatingColumnWidths = true;
         try
         {
+            if (scrollViewer is { ViewportWidth: > 0 })
+            {
+                var leftWidth = gridView.Columns.Where(column => column != NameColumn && column != TypeApp2Name &&
+                    column != SizeColumn && column != DateColumn).Sum(column => column.Width);
+                var normalPairWidth = Math.Max(0, scrollViewer.ViewportWidth - leftWidth - SizeColumn.Width - DateColumn.Width);
+                var minimumType = Math.Min(40, normalPairWidth / 2);
+                var normalTypeWidth = Math.Clamp(_preferredTypeWidth, minimumType, normalPairWidth - minimumType);
+                _automaticallyHideRightColumns = normalPairWidth - normalTypeWidth < MinimumNameColumnWidth;
+            }
+            SetRightColumnsHidden(gridView, HideRightColumnsCheckBox.GetCheckBox().IsChecked == true || _automaticallyHideRightColumns);
+            if (scrollViewer is null || scrollViewer.ViewportWidth <= 0)
+                return;
+
+            var fixedColumnWidths = gridView.Columns.Where(column => column != NameColumn && column != TypeApp2Name).Sum(column => column.Width);
+            _nameTypeWidth = Math.Max(0, scrollViewer.ViewportWidth - fixedColumnWidths);
+            var minimum = Math.Min(40, _nameTypeWidth / 2);
+            var typeWidth = _rightColumnsHidden ? 0 : Math.Clamp(_preferredTypeWidth, minimum, _nameTypeWidth - minimum);
             NameColumn.Width = _nameTypeWidth - typeWidth;
-            TypeColumn.Width = typeWidth;
+            if (!_rightColumnsHidden) TypeApp2Name.Width = typeWidth;
         }
         finally { _updatingColumnWidths = false; }
     }
@@ -542,14 +558,20 @@ public partial class ContentView : UserControl
     {
         if (_updatingColumnWidths || _nameTypeWidth <= 0 || !double.IsFinite(NameColumn.Width))
             return;
-        var minimum = Math.Min(40, _nameTypeWidth / 2);
-        var nameWidth = Math.Clamp(NameColumn.Width, minimum, _nameTypeWidth - minimum);
+        if (_rightColumnsHidden)
+        {
+            UpdateColumnWidths();
+            return;
+        }
+        var minimumType = Math.Min(40, _nameTypeWidth / 2);
+        var minimumName = Math.Min(MinimumNameColumnWidth, _nameTypeWidth - minimumType);
+        var nameWidth = Math.Clamp(NameColumn.Width, minimumName, _nameTypeWidth - minimumType);
         _preferredTypeWidth = _nameTypeWidth - nameWidth;
         _updatingColumnWidths = true;
         try
         {
             NameColumn.Width = nameWidth;
-            TypeColumn.Width = _preferredTypeWidth;
+            TypeApp2Name.Width = _preferredTypeWidth;
         }
         finally { _updatingColumnWidths = false; }
     }
@@ -558,7 +580,31 @@ public partial class ContentView : UserControl
     {
         if (sender is GridViewColumnHeader header &&
             header.Template.FindName("PART_HeaderGripper", header) is Thumb gripper)
-            gripper.IsEnabled = false;
+            gripper.IsEnabled = ReferenceEquals(header.Column, NameColumn) && !_rightColumnsHidden;
+    }
+
+    private void RightColumnsVisibilityChanged(object sender, RoutedEventArgs e) => UpdateColumnWidths();
+
+    private void SetRightColumnsHidden(GridView gridView, bool hidden)
+    {
+        if (_rightColumnsHidden == hidden)
+            return;
+        _rightColumnsHidden = hidden;
+        if (hidden)
+        {
+            gridView.Columns.Remove(TypeApp2Name);
+            gridView.Columns.Remove(SizeColumn);
+            gridView.Columns.Remove(DateColumn);
+        }
+        else
+        {
+            gridView.Columns.Add(TypeApp2Name);
+            gridView.Columns.Add(SizeColumn);
+            gridView.Columns.Add(DateColumn);
+        }
+        if (NameColumn.Header is GridViewColumnHeader header &&
+            header.Template?.FindName("PART_HeaderGripper", header) is Thumb gripper)
+            gripper.IsEnabled = !hidden;
     }
 
     private void FileList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -622,7 +668,7 @@ public partial class ContentView : UserControl
         var source = e.OriginalSource as DependencyObject;
         if (FindAncestor<Thumb>(source) is not null &&
             FindAncestor<GridViewColumnHeader>(source) is { } header &&
-            (!ReferenceEquals(header.Column, NameColumn) || e.ClickCount > 1))
+            (!ReferenceEquals(header.Column, NameColumn) || _rightColumnsHidden || e.ClickCount > 1))
         {
             e.Handled = true;
             return;

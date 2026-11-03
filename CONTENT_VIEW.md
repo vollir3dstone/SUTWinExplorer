@@ -11,8 +11,20 @@ for directory data, filesystem observation, and operating-system operations;
 it does not embed a Shell view. The Windows-specific implementation is described
 in [SutShell Windows implementation](SUTSHELL_WINDOWS.md).
 
-The table has one row per item and columns for MT, Shell base icon, Shell
-overlay, Name, Type, Size, and Date modified. The base icon and overlay are
+The table has one row per item and columns for MT, TA1, MO, Name, TA2,
+Size, and Date modified. The names describe the columns as follows:
+
+| Header | Name | Content |
+| --- | --- | --- |
+| MT | Media type | Application-defined media category, displayed as an icon. |
+| TA1 | Type and/or default app, coarse | Windows Shell base icon. |
+| MO | Modifier | Windows Shell overlay icon. |
+| TA2 | TypeApp2: Type and/or default app, fine | Windows Shell type description. |
+
+TA1 and TA2 are approximate descriptions, not guarantees that either value
+identifies the type or the default app. Windows can supply item-specific icons
+and type descriptions, and the media type is an application-defined category.
+The base icon and overlay are
 shown separately; the overlay cell is empty when none is available. The current
 Shell provider exposes at most one overlay per item: Windows selects one when
 classical overlay handlers compete, and SutShell forwards that selected overlay
@@ -25,12 +37,18 @@ and file counts beneath its badge; `-` indicates that a snapshot is being prepar
 The counts include items hidden by any ContentView filter and do not depend on
 how many rows have loaded. At This PC, drive roots count as directories.
 
-The fixed-width columns retain their widths; Name and Type share the remaining
+The fixed-width columns retain their widths; Name and TA2 share the remaining
 table viewport. The divider between them is draggable and changing one width
-adjusts the other. The chosen Type width is retained when the viewport changes,
+adjusts the other. The chosen TA2 width is retained when the viewport changes,
 subject to the available space. Other column dividers and reordering are disabled.
-When the viewport is narrower than the fixed columns alone, Name and Type shrink
-to zero and the fixed columns are clipped; no horizontal scrollbar is shown.
+The **Hide right columns** checkbox removes TA2, Size, and Date modified from
+this ContentView, gives Name the remaining width, and disables its divider.
+Showing the columns again restores their order and the chosen TA2 width without
+changing the rows, selection, or sort state. The VIEW controls scroll horizontally
+when the available width cannot display them all. The same columns also hide
+automatically when Name would be narrower than 80 DIP. They reappear when enough
+space is available again, unless the checkbox is checked. The automatic behavior
+does not change the checkbox or the chosen TA2 width.
 
 ### Responsibilities
 
@@ -68,8 +86,8 @@ freshness limitations are described in [Directory Cache](SUTSHELL_API.md#directo
 ### Sorting
 
 Each ContentView has its own initially empty SutShell sort history, retained on
-refresh, filtering and navigation while that view exists. Clicking Name, Type,
-Size, Date modified, MT, Shell base icon or overlay submits one column/criterion
+refresh, filtering and navigation while that view exists. Clicking Name, TA2,
+Size, Date modified, MT, TA1 or MO submits one column/criterion
 pair. Clicking the active
 column toggles ascending and descending; choosing another starts ascending. A
 triangle marks only the primary pair. SutShell moves each submitted pair to the

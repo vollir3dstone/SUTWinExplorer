@@ -972,7 +972,7 @@ try {
         $invalid = $false
         try { Set-TestSort $sortState @((New-SortPair 'Name' 'Ascending'), (New-SortPair 'Name' 'Descending')) } catch { $invalid = $true }
         Assert-True ($invalid -and (@($pairsProperty.GetValue($sortState)).Column -join ',') -ceq 'DateModified,Name,Size') 'Duplicate columns were accepted or changed sort history.'
-        foreach ($column in @('Type', 'MediaType')) {
+        foreach ($column in @('TypeApp2Name', 'MediaTypeIcon')) {
             Set-TestSort $sortState @((New-SortPair $column 'Ascending'))
             $sortedNames = Get-SortedNames $sortState
             Assert-True ($sortedNames.Count -eq 6 -and $sortedNames[0] -in @('A-folder', 'Z-folder') -and $sortedNames[1] -in @('A-folder', 'Z-folder')) "$column sort lost items or directory grouping."
@@ -980,11 +980,11 @@ try {
             $previous = $null
             foreach ($name in $sortedNames[2..5]) {
                 $path = Join-Path $sortDirectory $name
-                $key = if ($column -eq 'Type') { [SutShellTestTypeName]::Get($path) } else {
+                $key = if ($column -eq 'TypeApp2Name') { [SutShellTestTypeName]::Get($path) } else {
                     $mediaType = $mediaMap.GetMethod('GetMediaType').Invoke($null, [object[]] @([string] $path, [bool] $false))
                     if ([int] $mediaType -eq 0) { [int]::MaxValue } else { [int] $mediaType }
                 }
-                $inOrder = if ($null -eq $previous) { $true } elseif ($column -eq 'Type') {
+                $inOrder = if ($null -eq $previous) { $true } elseif ($column -eq 'TypeApp2Name') {
                     [StringComparer]::CurrentCultureIgnoreCase.Compare($previous, $key) -le 0
                 } else { $previous -le $key }
                 Assert-True $inOrder "$column keys are not in ascending order."
@@ -994,14 +994,14 @@ try {
         [System.IO.File]::WriteAllBytes((Join-Path $sortDirectory 'picture.png'), [byte[]]::new(0))
         [System.IO.File]::WriteAllBytes((Join-Path $sortDirectory 'archive.zip'), [byte[]]::new(0))
         $mediaOrder = [Activator]::CreateInstance($sortStateType, $true)
-        Set-TestSort $mediaOrder @((New-SortPair 'MediaType' 'Ascending'))
+        Set-TestSort $mediaOrder @((New-SortPair 'MediaTypeIcon' 'Ascending'))
         $mediaNames = Get-SortedNames $mediaOrder
         Assert-True ([Array]::IndexOf($mediaNames, 'picture.png') -lt [Array]::IndexOf($mediaNames, 'archive.zip')) 'Media types are not sorted by enum order.'
         Assert-True (($mediaNames[2..7] -join ',') -ceq 'c.txt,d.txt,picture.png,archive.zip,a.bin,b.bin') 'Files without a media type must follow known media types in ascending order.'
-        Set-TestSort $mediaOrder @((New-SortPair 'MediaType' 'Descending'))
+        Set-TestSort $mediaOrder @((New-SortPair 'MediaTypeIcon' 'Descending'))
         $mediaNames = Get-SortedNames $mediaOrder
         Assert-True (($mediaNames[2..7] -join ',') -ceq 'archive.zip,picture.png,c.txt,d.txt,a.bin,b.bin') 'Files without a media type must follow known media types in descending order.'
-        Set-TestSort $mediaOrder @((New-SortPair 'Size' 'Ascending'), (New-SortPair 'MediaType' 'Ascending'))
+        Set-TestSort $mediaOrder @((New-SortPair 'Size' 'Ascending'), (New-SortPair 'MediaTypeIcon' 'Ascending'))
         $mediaNames = Get-SortedNames $mediaOrder
         Assert-True (($mediaNames[2..7] -join ',') -ceq 'picture.png,archive.zip,d.txt,a.bin,b.bin,c.txt') 'A secondary media-type sort must not override the primary size sort.'
         [System.IO.File]::Delete((Join-Path $sortDirectory 'picture.png'))
@@ -1029,10 +1029,10 @@ try {
         $reusedFile = @($reusedEntries | Where-Object { $_.FullPath -eq $cachedFile.FullPath })[0]
         Assert-True ($reusedSnapshot.Count -eq 6 -and [object]::ReferenceEquals($cachedFile, $reusedFile) -and
             $reusedFile.SizeText -ceq $cachedFile.SizeText -and [object]::ReferenceEquals($reusedFile.Icons, $cachedFile.Icons)) 'Filtering or sorting discarded cached entry data.'
-        foreach ($column in @('ShellIcon', 'Overlay')) {
+        foreach ($column in @('TypeApp1Icon', 'Overlay')) {
             Set-TestSort $cacheSort @((New-SortPair $column 'Ascending'))
             $iconEntries = Get-SnapshotEntries (Get-CachedSnapshot '')
-            $iconKeyName = if ($column -eq 'ShellIcon') { 'BaseIconIndex' } else { 'OverlaySlot' }
+            $iconKeyName = if ($column -eq 'TypeApp1Icon') { 'BaseIconIndex' } else { 'OverlaySlot' }
             $iconProperty = $assembly.GetType('SUTWinExplorer.ShellIconSet').GetProperty($iconKeyName, $instanceFlags)
             $previous = $null
             foreach ($entry in @($iconEntries | Where-Object { -not $_.IsDirectory })) {
@@ -1057,7 +1057,7 @@ try {
             $refreshedFile.SizeText -ceq ('{0:N0} KB' -f 2)) 'Invalidation did not refresh directory membership and metadata.'
         $freshCache = [Activator]::CreateInstance($cacheType, $true)
         $iconSort = [Activator]::CreateInstance($sortStateType, $true)
-        Set-TestSort $iconSort @((New-SortPair 'ShellIcon' 'Ascending'))
+        Set-TestSort $iconSort @((New-SortPair 'TypeApp1Icon' 'Ascending'))
         $firstIconSnapshot = $openCachedDirectory.Invoke($null, [object[]] @([string] $sortDirectory, [bool] $true,
             [bool] $false, [string] '', $iconSort, $freshCache, [Threading.CancellationToken]::None)).GetAwaiter().GetResult()
         $itemsProperty = $firstIconSnapshot.GetType().GetProperty('Items', $instanceFlags)
@@ -1242,6 +1242,9 @@ try {
         $columns = $list.View.Columns
         Assert-True ($columns.Count -eq 7 -and $columns[3].Header.Tag -eq 'Name' -and
             $columns[3].Width -gt 80 -and $columns[4].Width -eq 130) 'Shell column order or name-column sizing is incorrect.'
+        foreach ($headerCase in @(@(0, 'MT'), @(1, 'TA1'), @(2, 'MO'), @(4, 'TA2'))) {
+            Assert-True ($columns[$headerCase[0]].Header.Content.Children[0].Text -ceq $headerCase[1]) "Column $($headerCase[0]) has an incorrect header."
+        }
         $scroll = Find-VisualType $list ([System.Windows.Controls.ScrollViewer])
         $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
         Assert-True (-not $list.View.AllowsColumnReorder -and $scroll.HorizontalScrollBarVisibility -eq 'Disabled' -and
@@ -1260,7 +1263,7 @@ try {
         $columns[3].Width = 10000
         Assert-True ($columns[4].Width -ge 40 -and [Math]::Abs($columns[3].Width + $columns[4].Width - $originalNameWidth - $originalTypeWidth) -lt 1) 'The splitter allowed Type to collapse or changed the combined width.'
         $columns[3].Width = 1
-        Assert-True ($columns[3].Width -ge 40 -and [Math]::Abs($columns[3].Width + $columns[4].Width - $originalNameWidth - $originalTypeWidth) -lt 1) 'The splitter allowed Name to collapse or changed the combined width.'
+        Assert-True ($columns[3].Width -ge 80 -and [Math]::Abs($columns[3].Width + $columns[4].Width - $originalNameWidth - $originalTypeWidth) -lt 1) 'The splitter allowed Name below its minimum or changed the combined width.'
         $columns[3].Width = $originalNameWidth
         $window.Width += 100
         $window.UpdateLayout()
@@ -1277,12 +1280,37 @@ try {
         $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
         Assert-True ([Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and $scroll.ScrollableWidth -lt 1) 'The columns did not adapt when the vertical scrollbar appeared.'
         $originalWindowWidth = $window.Width
+        $hideRightColumns = $view.FindName('HideRightColumnsCheckBox').GetCheckBox()
+        $list.SelectedItem = $list.Items[0]
+        $selectedBeforeResize = $list.SelectedItem
+        $itemsBeforeResize = $list.ItemsSource
+        $thresholdViewport = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum - $columns[3].Width + 80
+        $window.Width = $originalWindowWidth - ($scroll.ViewportWidth - $thresholdViewport) + 2
+        $window.UpdateLayout()
+        Assert-True ($columns.Count -eq 7 -and $columns[3].Width -ge 80 -and -not $hideRightColumns.IsChecked) 'Right columns disappeared above the minimum Name width.'
+        $window.Width -= 4
+        $window.UpdateLayout()
+        Assert-True ($columns.Count -eq 4 -and -not $hideRightColumns.IsChecked) 'Right columns did not disappear below the minimum Name width.'
+        $window.Width += 4
+        $window.UpdateLayout()
+        Assert-True ($columns.Count -eq 7 -and -not $hideRightColumns.IsChecked -and [Math]::Abs($columns[4].Width - $originalTypeWidth) -lt 1) 'Right columns did not automatically reappear above the minimum Name width.'
         $window.Width = 500
         $window.UpdateLayout()
         $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
-        Assert-True ([Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and $columns[3].Width -ge 0 -and $columns[4].Width -ge 0) 'The Name/Type pair did not fit a narrow viewport.'
+        Assert-True ($columns.Count -eq 4 -and -not $hideRightColumns.IsChecked -and
+            [Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and $scroll.ScrollableWidth -lt 1 -and
+            [object]::ReferenceEquals($itemsBeforeResize, $list.ItemsSource) -and [object]::ReferenceEquals($selectedBeforeResize, $list.SelectedItem)) 'The right columns did not hide automatically in a narrow viewport.'
+        $hideRightColumns.IsChecked = $true
+        $hideRightColumns.IsChecked = $false
+        Assert-True ($columns.Count -eq 4 -and -not $hideRightColumns.IsChecked) 'Unchecking the checkbox overrode automatic hiding in a narrow viewport.'
+        $hideRightColumns.IsChecked = $true
         $window.Width = $originalWindowWidth
         $window.UpdateLayout()
+        Assert-True ($columns.Count -eq 4 -and $hideRightColumns.IsChecked) 'Automatically hidden columns reappeared despite the checkbox.'
+        $hideRightColumns.IsChecked = $false
+        $window.UpdateLayout()
+        Assert-True ($columns.Count -eq 7 -and [Math]::Abs($columns[4].Width - $originalTypeWidth) -lt 1) 'Columns or the chosen Type width were not restored after widening.'
+        $list.SelectedItems.Clear()
         $originalCursor = [SutShellRightClickProbe]::CursorPosition()
         $originalLeft = $window.Left
         $originalTop = $window.Top
@@ -1321,6 +1349,46 @@ try {
             $window.Top = $originalTop
             $columns[3].Width = $originalNameWidth
         }
+        $hideRightColumns = $view.FindName('HideRightColumnsCheckBox').GetCheckBox()
+        $hideRightWrapper = $view.FindName('HideRightColumnsCheckBox')
+        $patternEditor = $view.FindName('NamePatternTextBox')
+        Assert-True (-not $hideRightColumns.IsChecked -and $hideRightWrapper.Label -eq 'Hide right columns' -and
+            $hideRightWrapper.TranslatePoint([System.Windows.Point]::new(0, 0), $view).X -gt $patternEditor.TranslatePoint([System.Windows.Point]::new(0, 0), $view).X) 'The right-column checkbox was not positioned after the name pattern or initially unchecked.'
+        $list.SelectedItem = $list.Items[0]
+        $selectedBeforeToggle = $list.SelectedItem
+        $itemsBeforeToggle = $list.ItemsSource
+        $hideRightColumns.IsChecked = $true
+        $window.UpdateLayout()
+        $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
+        $nameGripper = $columns[3].Header.Template.FindName('PART_HeaderGripper', $columns[3].Header)
+        Assert-True ($columns.Count -eq 4 -and $columns[3].Header.Tag -eq 'Name' -and -not $nameGripper.IsEnabled -and
+            [Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and $scroll.ScrollableWidth -lt 1 -and
+            $columns[3].Width -gt $originalNameWidth -and [object]::ReferenceEquals($itemsBeforeToggle, $list.ItemsSource) -and
+            [object]::ReferenceEquals($selectedBeforeToggle, $list.SelectedItem)) 'Hiding right columns did not expand Name or preserved rows and selection.'
+        $window.Width += 100
+        $window.UpdateLayout()
+        $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
+        Assert-True ([Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and $scroll.ScrollableWidth -lt 1) 'Name did not fill the viewport after resizing with right columns hidden.'
+        $window.Width -= 100
+        $window.Width = 500
+        $window.UpdateLayout()
+        $controlsScroll = $view.FindName('ViewControlsScroll')
+        Assert-True ($controlsScroll.ScrollableWidth -gt 0 -and $controlsScroll.ComputedHorizontalScrollBarVisibility -eq 'Visible') 'The view controls were not scrollable in a narrow pane.'
+        $controlsScroll.ScrollToRightEnd()
+        $window.UpdateLayout()
+        $checkboxPosition = $hideRightWrapper.TranslatePoint([System.Windows.Point]::new(0, 0), $controlsScroll)
+        Assert-True ($checkboxPosition.X -ge 0 -and $checkboxPosition.X + $hideRightWrapper.ActualWidth -le $controlsScroll.ViewportWidth + 1) 'The right-column checkbox was not reachable in a narrow pane.'
+        $controlsScroll.ScrollToHome()
+        $window.Width = $originalWindowWidth
+        $window.UpdateLayout()
+        $hideRightColumns.IsChecked = $false
+        $window.UpdateLayout()
+        $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
+        Assert-True ($columns.Count -eq 7 -and $columns[4].Header.Tag -eq 'TypeApp2Name' -and $columns[5].Header.Tag -eq 'Size' -and
+            $columns[6].Header.Tag -eq 'DateModified' -and $nameGripper.IsEnabled -and
+            [Math]::Abs($columns[4].Width - $originalTypeWidth) -lt 1 -and [Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and
+            [object]::ReferenceEquals($selectedBeforeToggle, $list.SelectedItem)) 'Restoring right columns did not preserve their order, splitter and selection.'
+        $list.SelectedItems.Clear()
         $iconSetType = $assembly.GetType('SUTWinExplorer.ShellIconSet', $true)
         $iconSet = $iconSetType.GetConstructor([type[]] @([System.Windows.Media.ImageSource], [System.Windows.Media.ImageSource], [double])).Invoke(
             [object[]] @($notes.Icons.BaseIcon, $notes.MediaTypeIcon, [double] 0.55))
@@ -1375,16 +1443,28 @@ try {
             $view.FindName('NameSortIndicator').Text -ceq [string] [char] 0x25B2) 'Primary sort indicator did not move to the new column.'
         $viewSort = $view.GetType().GetField('_sorting', $viewFlags).GetValue($view)
         Assert-True ((@($pairsProperty.GetValue($viewSort)).Column -join ',') -ceq 'Name,Size') 'Column clicks did not preserve the secondary sort.'
-        foreach ($iconColumn in @(@(1, 'IconSortIndicator'), @(2, 'OverlaySortIndicator'))) {
-            $columns[$iconColumn[0]].Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-            $list.UpdateLayout()
-            $indicator = $view.FindName($iconColumn[1])
-            Assert-True ($indicator.IsVisible -and $indicator.Text -ceq [string] [char] 0x25B2) 'Icon header did not select ascending sort.'
+        foreach ($iconColumn in @(@(0, 'MediaTypeIconSortIndicator'), @(1, 'TypeApp1IconSortIndicator'), @(2, 'OverlaySortIndicator'))) {
+            $header = $columns[$iconColumn[0]].Header
+            foreach ($direction in @([char] 0x25B2, [char] 0x25BC)) {
+                $header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+                $list.UpdateLayout()
+                $indicator = $view.FindName($iconColumn[1])
+                $indicatorPosition = $indicator.TranslatePoint([System.Windows.Point]::new(0, 0), $header)
+                $label = $header.Content.Children[0]
+                Assert-True ($indicator.IsVisible -and $indicator.Text -ceq [string] $direction -and
+                    $indicator.ActualWidth + $indicator.Margin.Left + $indicator.Margin.Right -ge $indicator.DesiredSize.Width -and
+                    $label.ActualWidth -ge $label.DesiredSize.Width -and
+                    $indicatorPosition.X + $indicator.ActualWidth -le $header.ActualWidth) "Icon header $($iconColumn[0]) did not fit: direction=$direction, text=$($indicator.Text), label=$($label.ActualWidth)/$($label.DesiredSize.Width), indicator=$($indicator.ActualWidth)/$($indicator.DesiredSize.Width), right=$($indicatorPosition.X + $indicator.ActualWidth), header=$($header.ActualWidth)."
+            }
+            $header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         }
         $columns[3].Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         $view.FindName('NamePatternTextBox').Text = '*'
         $view.FindName('NamePatternTextBox').Text = ''
         $otherView = [Activator]::CreateInstance($view.GetType())
+        $otherView.FindName('HideRightColumnsCheckBox').GetCheckBox().IsChecked = $true
+        Assert-True ($otherView.FindName('FileList').View.Columns.Count -eq 4 -and $columns.Count -eq 7 -and -not $hideRightColumns.IsChecked) 'Right-column visibility leaked between ContentViews.'
+        $otherView.FindName('HideRightColumnsCheckBox').GetCheckBox().IsChecked = $false
         $null = $otherView.GetType().GetMethod('SetCurrentPath', $viewFlags).Invoke($otherView, [object[]] @([string] '::{20D04FE0-3AEA-1069-A2D8-08002B30309D}'))
         Assert-True (-not $otherView.FindName('NewButton').IsEnabled) 'New was enabled for the virtual This PC location.'
         $otherSort = $otherView.GetType().GetField('_sorting', $viewFlags).GetValue($otherView)

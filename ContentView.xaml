@@ -27,7 +27,9 @@
                         <TextBlock Text="VIEW:" FontWeight="Bold" Foreground="#4E5963"
                                    VerticalAlignment="Center" />
                     </Border>
-                    <TextBlock Grid.Column="1" TextWrapping="NoWrap">
+                    <ScrollViewer x:Name="ViewControlsScroll" Grid.Column="1" HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Disabled" Focusable="False">
+                    <TextBlock TextWrapping="NoWrap">
                         <InlineUIContainer BaselineAlignment="Baseline">
                             <local:CheckBoxWrapper x:Name="HideDirectoriesCheckBox"
                                                    Label="Hide directories" Margin="0,0,16,0" />
@@ -62,7 +64,12 @@
                                 </Grid>
                             </Border>
                         </InlineUIContainer>
+                        <InlineUIContainer BaselineAlignment="Baseline">
+                            <local:CheckBoxWrapper x:Name="HideRightColumnsCheckBox"
+                                                   Label="Hide right columns" Margin="16,0,0,0" />
+                        </InlineUIContainer>
                     </TextBlock>
+                    </ScrollViewer>
                 </Grid>
             <Grid x:Name="SelectionControlsRow" Grid.Row="2">
                 <Grid.ColumnDefinitions>
@@ -206,10 +213,10 @@
                 </ListView.ItemContainerStyle>
                 <ListView.View>
                     <GridView AllowsColumnReorder="False">
-                        <GridViewColumn Width="42">
+                        <GridViewColumn x:Name="MediaTypeIcon" Width="30">
                             <GridViewColumn.Header>
-                                <GridViewColumnHeader Tag="MediaType" ToolTip="Sort by media type" Loaded="FileList_HeaderLoaded">
-                                    <StackPanel Orientation="Horizontal"><TextBlock Text="MT" /><TextBlock x:Name="MediaTypeSortIndicator" Visibility="Collapsed" Margin="3,0,0,0" FontSize="9" /></StackPanel>
+                                <GridViewColumnHeader Tag="MediaTypeIcon" Padding="1,0" ToolTip="Sort by media type" Loaded="FileList_HeaderLoaded">
+                                    <StackPanel Orientation="Horizontal"><TextBlock Text="MT" /><TextBlock x:Name="MediaTypeIconSortIndicator" Visibility="Collapsed" Margin="1,0,0,0" FontSize="9" /></StackPanel>
                                 </GridViewColumnHeader>
                             </GridViewColumn.Header>
                             <GridViewColumn.CellTemplate>
@@ -219,10 +226,10 @@
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
                         </GridViewColumn>
-                        <GridViewColumn Width="34">
+                        <GridViewColumn x:Name="TypeApp1Icon" Width="36">
                             <GridViewColumn.Header>
-                                <GridViewColumnHeader Tag="ShellIcon" ToolTip="Sort by Shell icon" Loaded="FileList_HeaderLoaded">
-                                    <TextBlock x:Name="IconSortIndicator" Visibility="Collapsed" FontSize="9" />
+                                <GridViewColumnHeader Tag="TypeApp1Icon" Padding="1,0" ToolTip="Sort by TA1 (type and/or default app, coarse)" Loaded="FileList_HeaderLoaded">
+                                    <StackPanel Orientation="Horizontal"><TextBlock Text="TA1" /><TextBlock x:Name="TypeApp1IconSortIndicator" Visibility="Collapsed" Margin="1,0,0,0" FontSize="9" /></StackPanel>
                                 </GridViewColumnHeader>
                             </GridViewColumn.Header>
                             <GridViewColumn.CellTemplate>
@@ -232,10 +239,10 @@
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
                         </GridViewColumn>
-                        <GridViewColumn Width="26">
+                        <GridViewColumn Width="32">
                             <GridViewColumn.Header>
-                                <GridViewColumnHeader Tag="Overlay" ToolTip="Sort by Shell overlay" Loaded="FileList_HeaderLoaded">
-                                    <TextBlock x:Name="OverlaySortIndicator" Visibility="Collapsed" FontSize="9" />
+                                <GridViewColumnHeader Tag="Overlay" Padding="1,0" ToolTip="Sort by MO (modifier)" Loaded="FileList_HeaderLoaded">
+                                    <StackPanel Orientation="Horizontal"><TextBlock Text="MO" /><TextBlock x:Name="OverlaySortIndicator" Visibility="Collapsed" Margin="1,0,0,0" FontSize="9" /></StackPanel>
                                 </GridViewColumnHeader>
                             </GridViewColumn.Header>
                             <GridViewColumn.CellTemplate>
@@ -247,7 +254,7 @@
                         </GridViewColumn>
                         <GridViewColumn x:Name="NameColumn" Width="330">
                             <GridViewColumn.Header>
-                                <GridViewColumnHeader Tag="Name" ToolTip="Sort by name">
+                                <GridViewColumnHeader Tag="Name" ToolTip="Sort by name" Loaded="FileList_HeaderLoaded">
                                     <StackPanel Orientation="Horizontal"><TextBlock Text="Name" /><TextBlock x:Name="NameSortIndicator" Visibility="Collapsed" Margin="3,0,0,0" FontSize="9" /></StackPanel>
                                 </GridViewColumnHeader>
                             </GridViewColumn.Header>
@@ -270,10 +277,10 @@
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
                         </GridViewColumn>
-                        <GridViewColumn x:Name="TypeColumn" Width="130">
+                        <GridViewColumn x:Name="TypeApp2Name" Width="130">
                             <GridViewColumn.Header>
-                                <GridViewColumnHeader Tag="Type" ToolTip="Sort by type" Loaded="FileList_HeaderLoaded">
-                                    <StackPanel Orientation="Horizontal"><TextBlock Text="Type" /><TextBlock x:Name="TypeSortIndicator" Visibility="Collapsed" Margin="3,0,0,0" FontSize="9" /></StackPanel>
+                                <GridViewColumnHeader Tag="TypeApp2Name" ToolTip="Sort by TA2 (type and/or default app, fine)" Loaded="FileList_HeaderLoaded">
+                                    <StackPanel Orientation="Horizontal"><TextBlock Text="TA2" /><TextBlock x:Name="TypeApp2NameSortIndicator" Visibility="Collapsed" Margin="3,0,0,0" FontSize="9" /></StackPanel>
                                 </GridViewColumnHeader>
                             </GridViewColumn.Header>
                             <GridViewColumn.CellTemplate>

@@ -43,8 +43,8 @@ can change or disappear before their range is loaded. A refresh creates a new
 snapshot; results from an older snapshot must not be applied to it. Filtering and
 sorting require Shell display names for all candidates before the count is known.
 
-`DirectorySortColumn` identifies Name, Type, Size, DateModified, MediaType,
-ShellIcon and Overlay;
+`DirectorySortColumn` identifies Name, TypeApp2Name, Size, DateModified,
+MediaTypeIcon, TypeApp1Icon and Overlay;
 `DirectorySortCriterion` currently offers Ascending and Descending. A
 `DirectorySortPair` combines them. Each view holds a `DirectorySortState`;
 `Update` prepends the supplied list in its given priority order and removes
@@ -53,9 +53,9 @@ update are rejected. The state starts empty and survives refresh and navigation
 within that view, but is not persisted across sessions. The snapshot operation
 copies the current ordered pairs before starting its background work.
 
-Type uses the localized Shell type name, MediaType the declared `MediaType` enum
+TypeApp2Name uses the localized Shell type name, MediaTypeIcon the declared `MediaType` enum
 order with `None` after known types in both directions, Size the numeric byte
-count, and DateModified the local modification time. ShellIcon uses the Windows
+count, and DateModified the local modification time. TypeApp1Icon uses the Windows
 system-image-list index; Overlay uses the classical overlay slot (zero means no
 overlay). These Windows icon keys are not
 stable identifiers across sessions. Text comparison is culture-aware and

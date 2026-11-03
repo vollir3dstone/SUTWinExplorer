@@ -58,12 +58,12 @@ internal static class SutShell
             foreach (var item in items)
             {
                 token.ThrowIfCancellationRequested();
-                var icons = sortColumns.Contains(DirectorySortColumn.ShellIcon) || sortColumns.Contains(DirectorySortColumn.Overlay)
+                var icons = sortColumns.Contains(DirectorySortColumn.TypeApp1Icon) || sortColumns.Contains(DirectorySortColumn.Overlay)
                     ? item.Icons : null;
                 values.Add(new DirectorySortValues(item,
                     sortColumns.Contains(DirectorySortColumn.Size) ? item.Size : null,
                     sortColumns.Contains(DirectorySortColumn.DateModified) ? item.Modified : null,
-                    sortColumns.Contains(DirectorySortColumn.Type) ? item.Type : string.Empty,
+                    sortColumns.Contains(DirectorySortColumn.TypeApp2Name) ? item.Type : string.Empty,
                     item.MediaType, icons?.BaseIconIndex, icons?.OverlaySlot));
             }
 
@@ -76,17 +76,17 @@ internal static class SutShell
                     DirectorySortColumn.Name => ascending
                         ? ordered.ThenBy(value => value.Item.Name, StringComparer.CurrentCultureIgnoreCase)
                         : ordered.ThenByDescending(value => value.Item.Name, StringComparer.CurrentCultureIgnoreCase),
-                    DirectorySortColumn.Type => ascending
+                    DirectorySortColumn.TypeApp2Name => ascending
                         ? ordered.ThenBy(value => value.Type, StringComparer.CurrentCultureIgnoreCase)
                         : ordered.ThenByDescending(value => value.Type, StringComparer.CurrentCultureIgnoreCase),
-                    DirectorySortColumn.MediaType => ascending
+                    DirectorySortColumn.MediaTypeIcon => ascending
                         ? ordered.ThenBy(value => value.MediaType == MediaType.None).ThenBy(value => value.MediaType)
                         : ordered.ThenBy(value => value.MediaType == MediaType.None).ThenByDescending(value => value.MediaType),
                     DirectorySortColumn.Size => ascending
                         ? ordered.ThenBy(value => value.Size) : ordered.ThenByDescending(value => value.Size),
                     DirectorySortColumn.DateModified => ascending
                         ? ordered.ThenBy(value => value.Modified) : ordered.ThenByDescending(value => value.Modified),
-                    DirectorySortColumn.ShellIcon => ascending
+                    DirectorySortColumn.TypeApp1Icon => ascending
                         ? ordered.ThenBy(value => value.BaseIconIndex) : ordered.ThenByDescending(value => value.BaseIconIndex),
                     DirectorySortColumn.Overlay => ascending
                         ? ordered.ThenBy(value => value.OverlaySlot) : ordered.ThenByDescending(value => value.OverlaySlot),
@@ -435,7 +435,7 @@ internal sealed class DirectoryItem(string name, string fullPath, bool isDirecto
     }
 }
 
-internal enum DirectorySortColumn { Name, Type, Size, DateModified, MediaType, ShellIcon, Overlay }
+internal enum DirectorySortColumn { Name, TypeApp2Name, Size, DateModified, MediaTypeIcon, TypeApp1Icon, Overlay }
 
 internal enum DirectorySortCriterion { Ascending, Descending }
 
