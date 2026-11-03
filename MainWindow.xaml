@@ -50,7 +50,7 @@
                 <Button x:Name="ProfilesButton" Style="{StaticResource TabCloseButtonStyle}"
                         Width="24" Height="24" Margin="0,0,6,0" Click="ProfilesButton_Click"
                         ToolTip="Profiles" AutomationProperties.Name="Profiles">
-                    <Image Width="24" Height="24" Source="/Assets/profile 24.png" />
+                    <Image Width="24" Height="24" Source="/Assets/usecase 24.png" />
                 </Button>
                 <TextBlock x:Name="ProfileNameLabel" Style="{StaticResource PathHeaderDisplayStyle}"
                            VerticalAlignment="Center" MaxWidth="200" TextTrimming="CharacterEllipsis"
