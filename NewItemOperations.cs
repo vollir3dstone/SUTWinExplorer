@@ -59,9 +59,11 @@ internal static class NewItemOperations
             }
         }
         if (!types.Any(type => type.Extension.Equals(".txt", StringComparison.OrdinalIgnoreCase)))
-            types.Add(new NewItemType("Text file (.txt)", ".txt", NewItemKind.EmptyFile));
-        return types.OrderBy(type => type.Extension.Equals(".txt", StringComparison.OrdinalIgnoreCase) ? 0 :
-                type.Kind == NewItemKind.Directory ? 1 : 2)
+            types.Add(new NewItemType("Textfile", ".txt", NewItemKind.EmptyFile));
+        return types.Select(type => type.Extension.Equals(".txt", StringComparison.OrdinalIgnoreCase)
+                ? type with { Name = "Textfile" } : type)
+            .OrderBy(type => type.Kind == NewItemKind.Directory ? 0 :
+                type.Extension.Equals(".txt", StringComparison.OrdinalIgnoreCase) ? 1 : 2)
             .ThenBy(type => type.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
     }
 

@@ -244,10 +244,11 @@ the Windows Shell properties for one loaded selected item. Button availability
 depends on the local selection and on the shared transfer state.
 
 The dialog presents types in a fixed-height, scrollable list with Shell type
-icons. Text file is listed and selected first, followed by Folder and the other
-available types. Clicking a type returns keyboard focus to the name editor.
-Selecting Folder immediately clears the current ContentView's **Hide directories**
-filter, including when the dialog is subsequently cancelled.
+icons. Folder and Textfile appear first, separated from the other available
+types by a line; Textfile is initially selected. Clicking a type returns keyboard focus to the name editor.
+After creation, the item is selected and brought into view in the current
+ContentView. Filters that would hide it are cleared; cancelling the dialog
+leaves the filters unchanged.
 
 New supports folders and directly creatable ShellNew registrations: empty
 files, binary data and available file templates. A plain text type is also

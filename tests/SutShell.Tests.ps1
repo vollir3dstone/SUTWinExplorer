@@ -695,14 +695,21 @@ function Start-NewDialogProbe([string] $mode) {
                 $secondItem = $picker.ItemContainerGenerator.ContainerFromIndex(1)
                 $firstIcon = if ($null -ne $firstItem) { Find-VisualType $firstItem ([System.Windows.Controls.Image]) } else { $null }
                 $secondIcon = if ($null -ne $secondItem) { Find-VisualType $secondItem ([System.Windows.Controls.Image]) } else { $null }
+                $divider = $picker.ItemContainerGenerator.ContainerFromIndex(2)
+                $dividerLine = Find-VisualType $divider ([System.Windows.Controls.Border])
+                $dividerCorrect = $divider -is [System.Windows.Controls.ListBoxItem] -and -not $divider.IsEnabled -and
+                    -not $divider.Focusable -and $divider.ActualHeight -gt $dividerLine.ActualHeight -and $dividerLine.ActualHeight -eq 1
                 $baseItems = @($picker.Items)
+                $initialSelection = $picker.SelectedIndex
                 $picker.ItemsSource = @($baseItems + @($baseItems[0]) * 12)
                 $picker.UpdateLayout()
                 $scroll = Find-VisualType $picker ([System.Windows.Controls.ScrollViewer])
                 $scroll.ScrollToEnd()
                 $picker.UpdateLayout()
-                $result.ListDetails = "first=$($baseItems[0].Extension), height=$($picker.ActualHeight), firstIcon=$($null -ne $firstIcon.Source), secondIcon=$($null -ne $secondIcon.Source), offset=$($scroll.VerticalOffset), count=$($picker.Items.Count)"
-                $result.ListCorrect = $picker -is [System.Windows.Controls.ListBox] -and $baseItems[0].Extension -eq '.txt' -and
+                $result.ListDetails = "first=$($baseItems[0].Name), second=$($baseItems[1].Name), selected=$initialSelection, divider=$dividerCorrect, height=$($picker.ActualHeight), firstIcon=$($null -ne $firstIcon.Source), secondIcon=$($null -ne $secondIcon.Source), offset=$($scroll.VerticalOffset), count=$($picker.Items.Count)"
+                $result.ListCorrect = $picker -is [System.Windows.Controls.ListBox] -and $baseItems[0].Kind.ToString() -eq 'Directory' -and
+                    $baseItems[0].Name -eq 'Folder' -and $baseItems[1].Name -eq 'Textfile' -and $baseItems[1].Extension -eq '.txt' -and
+                    $initialSelection -eq 1 -and $dividerCorrect -and
                     $picker.ActualHeight -le 262 -and $null -ne $firstIcon.Source -and $null -ne $secondIcon.Source -and
                     $null -ne $scroll -and $scroll.VerticalOffset -gt 0
                 $dialog.DialogResult = $false
@@ -713,7 +720,7 @@ function Start-NewDialogProbe([string] $mode) {
                 return
             }
             if ($mode -eq 'CancelFolder') {
-                $picker.SelectedItem = @($picker.Items | Where-Object { $_.Kind.ToString() -eq 'Directory' })[0]
+                $picker.SelectedItem = @($picker.Items | Where-Object { $null -ne $_.Kind -and $_.Kind.ToString() -eq 'Directory' })[0]
                 $dialog.DialogResult = $false
                 return
             }
@@ -725,7 +732,7 @@ function Start-NewDialogProbe([string] $mode) {
                     $null = $dialog.Activate()
                     $dialog.UpdateLayout()
                     $focused = $true
-                    foreach ($index in @(1, 0, 0)) {
+                    foreach ($index in @(0, 1, 1)) {
                         $item = $picker.ItemContainerGenerator.ContainerFromIndex($index)
                         $point = $item.PointToScreen([System.Windows.Point]::new(30, $item.ActualHeight / 2))
                         [SutShellMenuProbe]::LeftClickAt([int] $point.X, [int] $point.Y)
@@ -737,14 +744,24 @@ function Start-NewDialogProbe([string] $mode) {
                         try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $wait.Stop() }
                         $focused = $focused -and $picker.SelectedIndex -eq $index -and $editor.IsKeyboardFocused
                     }
+                    $divider = $picker.ItemContainerGenerator.ContainerFromIndex(2)
+                    $point = $divider.PointToScreen([System.Windows.Point]::new(30, $divider.ActualHeight / 2))
+                    [SutShellMenuProbe]::LeftClickAt([int] $point.X, [int] $point.Y)
+                    $frame = [System.Windows.Threading.DispatcherFrame]::new()
+                    $wait = [System.Windows.Threading.DispatcherTimer]::new()
+                    $wait.Interval = [TimeSpan]::FromMilliseconds(150)
+                    $wait.add_Tick({ $frame.Continue = $false }.GetNewClosure())
+                    $wait.Start()
+                    try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $wait.Stop() }
+                    $focused = $focused -and $picker.SelectedIndex -eq 1
                     $result.FocusCorrect = $focused
                 } finally { [SutShellRightClickProbe]::MovePointer($originalCursor[0], $originalCursor[1]) }
                 $dialog.DialogResult = $false
                 return
             }
-            if ($mode -in @('Text', 'Mismatch')) {
+            if ($mode -in @('Text', 'Mismatch', 'HiddenText', 'ScrollText')) {
                 $textType = @($picker.Items | Where-Object { $_.Extension -eq '.txt' })[0]
-                $folderType = @($picker.Items | Where-Object { $_.Kind.ToString() -eq 'Directory' })[0]
+                $folderType = @($picker.Items | Where-Object { $null -ne $_.Kind -and $_.Kind.ToString() -eq 'Directory' })[0]
                 $picker.SelectedItem = $folderType
                 $editor.Text = 'chosen-name'
                 $picker.SelectedItem = $textType
@@ -765,9 +782,9 @@ function Start-NewDialogProbe([string] $mode) {
                         $result.MismatchRejected = $confirmProbe.Seen -and $dialog.IsVisible -and -not [IO.File]::Exists((Join-Path $target 'custom.md'))
                     } finally { $confirmProbe.Dispose() }
                 }
-                $editor.Text = 'chosen-name.txt'
+                $editor.Text = if ($mode -eq 'HiddenText') { '.chosen-hidden.txt' } elseif ($mode -eq 'ScrollText') { 'zzzz-last.txt' } else { 'chosen-name.txt' }
             } else {
-                $picker.SelectedItem = @($picker.Items | Where-Object { $_.Kind.ToString() -eq 'Directory' })[0]
+                $picker.SelectedItem = @($picker.Items | Where-Object { $null -ne $_.Kind -and $_.Kind.ToString() -eq 'Directory' })[0]
                 $editor.Text = 'chosen-folder'
             }
             (Find-VisualName $dialog 'CreateButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
@@ -858,7 +875,7 @@ try {
         }
         $newOperations = $assembly.GetType('SUTWinExplorer.NewItemOperations', $true)
         $newTypes = @($newOperations.GetMethod('GetTypes', $flags).Invoke($null, @()))
-        Assert-True ($newTypes[0].Extension -eq '.txt') 'The text-file type was not first.'
+        Assert-True ($newTypes[0].Kind.ToString() -eq 'Directory' -and $newTypes[1].Extension -eq '.txt') 'Folder and text-file types were not first.'
         $createNew = $newOperations.GetMethod('Create', $flags)
         for ($index = 0; $index -lt 3; $index++) {
             $type = @($newTypes | Where-Object { $_.Extension -eq $extensions[$index] })
@@ -1346,19 +1363,50 @@ try {
         $hideDirectories = $view.FindName('HideDirectoriesCheckBox').GetCheckBox()
         $otherHideDirectories = $otherView.FindName('HideDirectoriesCheckBox').GetCheckBox()
         Assert-True ($hideDirectories.IsChecked -and $otherHideDirectories.IsChecked) 'The directory filter was not set before the New dialog test.'
-        foreach ($mode in @('Cancel', 'Focus', 'Folder', 'Mismatch')) {
+        foreach ($mode in @('Cancel', 'CancelFolder', 'Focus', 'Folder', 'Mismatch', 'HiddenText', 'ScrollText')) {
+            if ($mode -eq 'Folder' -or $mode -eq 'HiddenText') { $view.FindName('NamePatternTextBox').Text = 'notes*.txt' }
+            if ($mode -eq 'HiddenText') { $view.FindName('HideInternalContentCheckBox').GetCheckBox().IsChecked = $true }
             $newProbe = Start-NewDialogProbe $mode
             try {
                 $view.FindName('NewButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
                 Assert-True ($newProbe.Seen -and $null -eq $newProbe.Error) "The New button did not complete the $mode dialog: $($newProbe.Error)."
                 if ($mode -eq 'Cancel') { Assert-True ($newProbe.ListCorrect -and -not (Test-Path -LiteralPath (Join-Path $directory 'chosen-folder'))) "The type list, icons, scrolling or cancel state was incorrect: $($newProbe.ListDetails)." }
+                if ($mode -eq 'CancelFolder' -or $mode -eq 'Focus') { Assert-True $hideDirectories.IsChecked 'Choosing Folder before cancelling changed the directory filter.' }
                 if ($mode -eq 'Focus') { Assert-True $newProbe.FocusCorrect 'Clicking a type, including the selected type, did not focus the name editor.' }
-                if ($mode -eq 'Folder') { Assert-True ([IO.Directory]::Exists((Join-Path $directory 'chosen-folder')) -and -not $hideDirectories.IsChecked -and $otherHideDirectories.IsChecked) 'Selecting Folder did not create the directory or update only its ContentView filter.' }
+                if ($mode -eq 'Folder') { Assert-True ([IO.Directory]::Exists((Join-Path $directory 'chosen-folder')) -and -not $hideDirectories.IsChecked -and $otherHideDirectories.IsChecked -and $view.FindName('NamePatternTextBox').Text -eq '') 'Creating Folder did not update only the necessary local filters.' }
                 if ($mode -eq 'Mismatch') { Assert-True ($newProbe.ExtensionChanged -and $newProbe.MismatchRejected -and [IO.File]::Exists((Join-Path $directory 'chosen-name.txt'))) 'Extension changes, mismatch confirmation or named text creation failed.' }
+                if ($mode -eq 'HiddenText') { Assert-True (-not $view.FindName('HideInternalContentCheckBox').GetCheckBox().IsChecked -and $view.FindName('NamePatternTextBox').Text -eq '') 'Creating an internal item did not clear the filters hiding it.' }
+                if ($mode -in @('Folder', 'Mismatch', 'HiddenText', 'ScrollText')) {
+                    $createdName = switch ($mode) { 'Folder' { 'chosen-folder' } 'Mismatch' { 'chosen-name.txt' } 'HiddenText' { '.chosen-hidden.txt' } 'ScrollText' { 'zzzz-last.txt' } }
+                    foreach ($refresh in @($false, $true)) {
+                        if ($refresh) { $null = $view.GetType().GetMethod('Refresh', $viewFlags).Invoke($view, [object[]] @([bool] $true)) }
+                        $frame = [System.Windows.Threading.DispatcherFrame]::new()
+                        $probe = [SutShellUiProbe]::new()
+                        $probe.List = $list
+                        $probe.AwaitAll = $true
+                        $probe.Frame = $frame
+                        $timer = [System.Windows.Threading.DispatcherTimer]::new()
+                        $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+                        $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
+                        $timer.Start()
+                        try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+                        $selected = $list.SelectedItem
+                        $container = if ($null -ne $selected) { $list.ItemContainerGenerator.ContainerFromItem($selected) } else { $null }
+                        Assert-True ($probe.Ready -and $list.SelectedItems.Count -eq 1 -and $selected.Entry.FullPath -eq (Join-Path $directory $createdName) -and
+                            $null -ne $selected.Entry -and $null -ne $container -and $container.IsVisible) "The created $mode item was not visible and selected after refresh=$refresh`: ready=$($probe.Ready), error=$($probe.Error), count=$($list.SelectedItems.Count), selected=$($selected.Entry.FullPath), loaded=$($null -ne $selected.Entry), container=$($null -ne $container), visible=$($container.IsVisible)."
+                        if ($mode -eq 'ScrollText') {
+                            $scroll = Find-VisualType $list ([System.Windows.Controls.ScrollViewer])
+                            $position = $container.TranslatePoint([System.Windows.Point]::new(0, 0), $scroll)
+                            Assert-True ($scroll.VerticalOffset -gt 0 -and $position.Y -ge 0 -and $position.Y + $container.ActualHeight -le $scroll.ActualHeight) 'The created item was not scrolled into the visible viewport.'
+                        }
+                    }
+                }
             } finally { $newProbe.Timer.Stop() }
         }
         [IO.Directory]::Delete((Join-Path $directory 'chosen-folder'))
         [IO.File]::Delete((Join-Path $directory 'chosen-name.txt'))
+        [IO.File]::Delete((Join-Path $directory '.chosen-hidden.txt'))
+        [IO.File]::Delete((Join-Path $directory 'zzzz-last.txt'))
         $hideDirectories.IsChecked = $true
         $frame = [System.Windows.Threading.DispatcherFrame]::new()
         $probe = [SutShellUiProbe]::new()
@@ -2709,8 +2757,32 @@ try {
         $menuProbe.SelectLabel = $newParent[0].Text
         try {
             $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $true))
-            Assert-True ($menuProbe.SelectIndex -ge 0 -and $newProbe.Seen -and $null -eq $newProbe.Error -and -not $sidebarHideDirectories.IsChecked) 'The sidebar background New action did not open the shared dialog or unhide directories.'
+            Assert-True ($menuProbe.SelectIndex -ge 0 -and $newProbe.Seen -and $null -eq $newProbe.Error -and $sidebarHideDirectories.IsChecked) 'Cancelling the sidebar New dialog changed the directory filter.'
         } finally { $newProbe.Timer.Stop(); $menuProbe.Dispose() }
+        $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
+        $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
+        try { $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $true)) }
+        finally { $menuProbe.Dispose() }
+        $newProbe = Start-NewDialogProbe 'Folder'
+        $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
+        $menuProbe.SelectLabel = $newParent[0].Text
+        try {
+            $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $true))
+            Assert-True ($menuProbe.SelectIndex -ge 0 -and $newProbe.Seen -and $null -eq $newProbe.Error -and -not $sidebarHideDirectories.IsChecked) 'Creating a sidebar folder did not clear the local directory filter.'
+        } finally { $newProbe.Timer.Stop(); $menuProbe.Dispose() }
+        $sidebarList = $sidebarContent.FindName('FileList')
+        $frame = [System.Windows.Threading.DispatcherFrame]::new()
+        $probe = [SutShellUiProbe]::new()
+        $probe.List = $sidebarList
+        $probe.AwaitAll = $true
+        $probe.Frame = $frame
+        $timer = [System.Windows.Threading.DispatcherTimer]::new()
+        $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+        $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
+        $timer.Start()
+        try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+        Assert-True ($probe.Ready -and $sidebarList.SelectedItems.Count -eq 1 -and $sidebarList.SelectedItem.Entry.FullPath -eq (Join-Path $directory 'chosen-folder')) 'The sidebar-created folder was not selected in its ContentView.'
+        [IO.Directory]::Delete((Join-Path $directory 'chosen-folder'))
         $sidebarHideDirectories.IsChecked = $true
         foreach ($operation in @('Copy', 'Move')) {
             $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)

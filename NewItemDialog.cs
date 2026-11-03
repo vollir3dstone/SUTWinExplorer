@@ -14,14 +14,12 @@ internal sealed class NewItemDialog : Window
     private readonly string _directory;
     private readonly ListBox _typePicker;
     private readonly TextBox _nameEditor;
-    private readonly Action _showDirectories;
     private string _previousExtension = "";
     private Point _windowsMenuPoint;
 
-    private NewItemDialog(string directory, Action showDirectories)
+    private NewItemDialog(string directory)
     {
         _directory = directory;
-        _showDirectories = showDirectories;
         Title = "New item";
         Width = 480;
         SizeToContent = SizeToContent.Height;
@@ -46,11 +44,19 @@ internal sealed class NewItemDialog : Window
         text.SetValue(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis);
         text.SetBinding(TextBlock.TextProperty, new Binding(nameof(NewItemType.Name)));
         typeRow.AppendChild(text);
+        var dividerLine = new FrameworkElementFactory(typeof(Border));
+        dividerLine.SetValue(FrameworkElement.HeightProperty, 1d);
+        dividerLine.SetValue(FrameworkElement.MarginProperty, new Thickness(6, 0, 6, 0));
+        dividerLine.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+        dividerLine.SetValue(Border.BackgroundProperty, new SolidColorBrush(Color.FromRgb(190, 195, 200)));
+        var types = NewItemOperations.GetTypes().Cast<object>().ToList();
+        types.Insert(2, new ListBoxItem { IsEnabled = false, Focusable = false, IsHitTestVisible = false, Height = 9,
+            Template = new ControlTemplate(typeof(ListBoxItem)) { VisualTree = dividerLine } });
         var itemStyle = new Style(typeof(ListBoxItem));
         itemStyle.Setters.Add(new Setter(FrameworkElement.HeightProperty, 26d));
         itemStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(6, 2, 6, 2)));
         itemStyle.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
-        _typePicker = new ListBox { Name = "TypePicker", ItemsSource = NewItemOperations.GetTypes(), Margin = new Thickness(0, 0, 0, 12), Height = 262,
+        _typePicker = new ListBox { Name = "TypePicker", ItemsSource = types, Margin = new Thickness(0, 0, 0, 12), Height = 262,
             ItemTemplate = new DataTemplate { VisualTree = typeRow }, ItemContainerStyle = itemStyle };
         ScrollViewer.SetVerticalScrollBarVisibility(_typePicker, ScrollBarVisibility.Auto);
         ScrollViewer.SetHorizontalScrollBarVisibility(_typePicker, ScrollBarVisibility.Disabled);
@@ -87,19 +93,21 @@ internal sealed class NewItemDialog : Window
         Content = root;
         _typePicker.SelectionChanged += TypePicker_SelectionChanged;
         _typePicker.AddHandler(MouseLeftButtonUpEvent, new MouseButtonEventHandler(TypePicker_MouseLeftButtonUp), true);
-        _typePicker.SelectedIndex = 0;
+        _typePicker.SelectedIndex = 1;
         Loaded += (_, _) => _nameEditor.Focus();
     }
 
     internal bool UseWindowsMenu { get; private set; }
     internal string? CreatedPath { get; private set; }
+    private bool CreatedDirectory { get; set; }
 
-    internal static void ShowForDirectory(string directory, Window owner, Action showDirectories)
+    internal static (string Path, bool IsDirectory)? ShowForDirectory(string directory, Window owner)
     {
-        var dialog = new NewItemDialog(directory, showDirectories) { Owner = owner };
+        var dialog = new NewItemDialog(directory) { Owner = owner };
         dialog.ShowDialog();
         if (dialog.UseWindowsMenu)
             SutShell.ShowNewMenu(directory, new WindowInteropHelper(owner).Handle, (int)dialog._windowsMenuPoint.X, (int)dialog._windowsMenuPoint.Y);
+        return dialog.CreatedPath is { } path ? (path, dialog.CreatedDirectory) : null;
     }
 
     private void TypePicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -114,8 +122,6 @@ internal sealed class NewItemDialog : Window
         _nameEditor.Text = customExtension ? name : name + type.Extension;
         _previousExtension = type.Extension;
         _nameEditor.CaretIndex = Math.Max(0, _nameEditor.Text.Length - (customExtension ? 0 : type.Extension.Length));
-        if (type.Kind == NewItemKind.Directory)
-            _showDirectories();
     }
 
     private void TypePicker_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -135,6 +141,7 @@ internal sealed class NewItemDialog : Window
         try
         {
             CreatedPath = NewItemOperations.Create(_directory, name, type);
+            CreatedDirectory = type.Kind == NewItemKind.Directory;
             DialogResult = true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or System.ComponentModel.Win32Exception or InvalidOperationException)

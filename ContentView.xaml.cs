@@ -25,6 +25,8 @@ public partial class ContentView : UserControl
     private readonly DirectoryDataCache _directoryCache = new();
     private readonly HashSet<string> _selectedPaths = new(StringComparer.OrdinalIgnoreCase);
     private bool _restoringSelection;
+    private bool _suppressFilterRefresh;
+    private string? _revealedPath;
     private DirectoryRow? _editingRow;
     private bool _endingRename;
     private bool _deferredRefresh;
@@ -71,8 +73,31 @@ public partial class ContentView : UserControl
                 System.Windows.Automation.AutomationProperties.GetName(button), button.IsEnabled,
                 () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)))).ToArray();
 
-    internal void ShowNewItemDialog(string path) => NewItemDialog.ShowForDirectory(path, Window.GetWindow(this)!,
-        () => HideDirectoriesCheckBox.GetCheckBox().IsChecked = false);
+    internal void ShowNewItemDialog(string path)
+    {
+        var created = NewItemDialog.ShowForDirectory(path, Window.GetWindow(this)!);
+        if (created is not { } item || !string.Equals(path, CurrentPath, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _suppressFilterRefresh = true;
+        try
+        {
+            if (item.IsDirectory)
+                HideDirectoriesCheckBox.GetCheckBox().IsChecked = false;
+            if (InternalItemFilter.IsInternal(item.Path, item.IsDirectory))
+                HideInternalContentCheckBox.GetCheckBox().IsChecked = false;
+            if (!InternalItemFilter.MatchesNamePattern(item.Path, NamePatternTextBox.Text))
+                NamePatternTextBox.Clear();
+        }
+        finally
+        {
+            _suppressFilterRefresh = false;
+        }
+        _selectedPaths.Clear();
+        _selectedPaths.Add(item.Path);
+        _revealedPath = item.Path;
+        RefreshCore(invalidate: true);
+    }
 
     internal bool FocusContent() => FileList.Focus();
     internal bool? HideInternalItems
@@ -103,6 +128,7 @@ public partial class ContentView : UserControl
         _snapshot = null;
         _rows = null;
         _selectedPaths.Clear();
+        _revealedPath = null;
         CurrentPath = path;
         ClearRows();
         StatusLabel.Text = string.Empty;
@@ -152,6 +178,9 @@ public partial class ContentView : UserControl
                 foreach (var row in _rows)
                     if (_selectedPaths.Contains(row.FullPath))
                         FileList.SelectedItems.Add(row);
+                if (_revealedPath is { } revealedPath &&
+                    _rows.FirstOrDefault(row => string.Equals(row.FullPath, revealedPath, StringComparison.OrdinalIgnoreCase)) is { } revealedRow)
+                    FileList.ScrollIntoView(revealedRow);
                 _selectedPaths.IntersectWith(_rows.Select(row => row.FullPath));
             }
             finally
@@ -237,7 +266,10 @@ public partial class ContentView : UserControl
         MoveWorkflowState.Shared.Changed -= WorkflowState_Changed;
     }
 
-    private void FiltersChanged(object sender, RoutedEventArgs e) => RefreshCore(invalidate: false);
+    private void FiltersChanged(object sender, RoutedEventArgs e)
+    {
+        if (!_suppressFilterRefresh) RefreshCore(invalidate: false);
+    }
 
     private void FileList_ColumnHeaderClick(object sender, RoutedEventArgs e)
     {
@@ -350,7 +382,10 @@ public partial class ContentView : UserControl
         }
     }
 
-    private void NamePatternTextBox_TextChanged(object sender, TextChangedEventArgs e) => RefreshCore(invalidate: false);
+    private void NamePatternTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!_suppressFilterRefresh) RefreshCore(invalidate: false);
+    }
 
     private void ClearNamePatternButton_Click(object sender, RoutedEventArgs e) => NamePatternTextBox.Clear();
 
@@ -429,6 +464,7 @@ public partial class ContentView : UserControl
         _contextMenu.Reset();
         if (!_restoringSelection)
         {
+            _revealedPath = null;
             _selectedPaths.Clear();
             _selectedPaths.UnionWith(FileList.SelectedItems.OfType<DirectoryRow>().Select(row => row.FullPath));
         }
