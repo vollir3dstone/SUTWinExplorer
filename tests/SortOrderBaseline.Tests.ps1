@@ -1,3 +1,5 @@
+param([switch] $SkipDrag)
+
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
 Add-Type -TypeDefinition @'
@@ -56,10 +58,28 @@ function Assert-Baselines($view) {
     }
     if ($null -eq $parent) { throw 'The sort editor is not in the VIEW text line.' }
     $lineBaseline = $parent.TranslatePoint([System.Windows.Point]::new(0, $parent.BaselineOffset), $view).Y
+    $headerContent = $view.FindName('FileList').View.Columns[3].Header.Content
+    $headerLabel = $headerContent.Children[0]
+    $headerArrow = $headerContent.Children[1]
+    $headerOffset = $headerArrow.TranslatePoint([System.Windows.Point]::new(0, $headerArrow.BaselineOffset), $view).Y -
+        $headerLabel.TranslatePoint([System.Windows.Point]::new(0, $headerLabel.BaselineOffset), $view).Y
     foreach ($button in $boxes.Children) {
-        if ($button.Content -notmatch '^\S+[\u25B2\u25BC]$') { throw "Sort box has a gap before its arrow: $($button.Content)." }
+        $texts = @($button.Content.Children)
+        if ($texts.Count -ne 2 -or $texts[0].Text -notmatch '^\S+$' -or
+            $texts[1].Text -notmatch '^[\u25B2\u25BC]$' -or $texts[1].FontSize -ne $headerArrow.FontSize -or
+            $texts[1].FontSize -ge $texts[0].FontSize -or $texts[1].Margin.Left -ne 0) {
+            throw 'Sort box arrow does not match the table arrow size or has a gap.'
+        }
+        $outline = $button.Template.FindName('outline', $button)
+        if ($null -eq $outline -or $outline.BorderThickness -ne [System.Windows.Thickness]::new(1, 0, 0, 0) -or
+            $outline.CornerRadius -ne [System.Windows.CornerRadius]::new(0)) { throw 'A sort box has a border other than its straight left line.' }
         $text = Find-VisualChild $button ([System.Windows.Controls.TextBlock])
         if ($null -eq $text) { throw 'A sort box has no rendered text.' }
+        $arrowOffset = $texts[1].TranslatePoint([System.Windows.Point]::new(0, $texts[1].BaselineOffset), $view).Y -
+            $texts[0].TranslatePoint([System.Windows.Point]::new(0, $texts[0].BaselineOffset), $view).Y
+        if ([Math]::Abs($arrowOffset - $headerOffset) -gt 0.5) {
+            throw "Sort arrow vertical offset $arrowOffset differs from table header offset $headerOffset."
+        }
         $baseline = $text.TranslatePoint([System.Windows.Point]::new(0, $text.BaselineOffset), $view).Y
         if ([Math]::Abs($baseline - $lineBaseline) -gt 0.5) {
             throw "Sort box baseline $baseline differs from the surrounding text baseline $lineBaseline."
@@ -75,6 +95,8 @@ $application = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.App
 $application.InitializeComponent()
 $application.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
 $widget = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.SortOrderWidget', $true))
+$widget.Foreground = [System.Windows.Media.Brushes]::DarkGreen
+$widget.Background = [System.Windows.Media.Brushes]::Ivory
 $changed = [pscustomobject] @{ Count = 0 }
 $widget.add_Changed({ $changed.Count++ }.GetNewClosure())
 $names = [string[]] @('alpha beta', 'same', 'same', 'other')
@@ -82,7 +104,16 @@ $widget.Configure($names)
 $names[0] = 'changed outside'
 if ((@($widget.Items).Index -join ',') -cne '0,1,2,3' -or
     @($widget.Items | Where-Object { $_.Direction -ne 'Ascending' }).Count -ne 0 -or
-    $widget.Child.Children[0].Content -cne ('alpha beta' + [char] 0x25B2)) { throw 'Configuring arbitrary names did not create stable ascending indices.' }
+    $widget.Child.Children[0].Content.Children[0].Text -cne 'alpha beta' -or
+    $widget.Child.Children[0].Content.Children[1].Text -cne [string] [char] 0x25B2) { throw 'Configuring arbitrary names did not create stable ascending indices.' }
+foreach ($button in $widget.Child.Children) {
+    if ($button.Foreground -ne $widget.Foreground -or $button.Background -ne $widget.Background) { throw 'Sort box colors did not use the widget colors.' }
+}
+$widget.Foreground = [System.Windows.Media.Brushes]::DarkBlue
+$widget.Background = [System.Windows.Media.Brushes]::LightYellow
+foreach ($button in $widget.Child.Children) {
+    if ($button.Foreground -ne $widget.Foreground -or $button.Background -ne $widget.Background) { throw 'Changing widget colors did not update existing boxes.' }
+}
 $initialSnapshot = $widget.Items
 $widget.Child.Children[2].RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
 if (@($widget.Items)[2].Direction -ne 'Descending' -or @($initialSnapshot)[2].Direction -ne 'Ascending') { throw 'Box clicks or immutable snapshots failed.' }
@@ -93,6 +124,14 @@ if (@($widget.Items)[0].Direction -ne 'Ascending') { throw 'Selecting the primar
 $genericMove = $widget.GetType().GetMethod('MoveItem', [System.Reflection.BindingFlags]'Instance,NonPublic')
 $null = $genericMove.Invoke($widget, [object[]] @([int] 2, [int] 4))
 if ((@($widget.Items).Index -join ',') -cne '0,1,3,2' -or $changed.Count -ne 5) { throw 'Moving an index or change notifications failed.' }
+foreach ($button in $widget.Child.Children) {
+    if ($button.Foreground -ne $widget.Foreground -or $button.Background -ne $widget.Background -or
+        $button.BorderThickness -ne [System.Windows.Thickness]::new(1, 0, 0, 0)) { throw 'Recreated boxes lost their configured colors or left border.' }
+}
+$widget.Child.Children[0].BorderThickness = [System.Windows.Thickness]::new(1, 0, 3, 0)
+$clearMarker = $widget.GetType().GetMethod('ClearDropMarker', [System.Reflection.BindingFlags]'Instance,NonPublic')
+$null = $clearMarker.Invoke($widget, @())
+if ($widget.Child.Children[0].BorderThickness -ne [System.Windows.Thickness]::new(1, 0, 0, 0)) { throw 'Clearing a drag marker did not restore the left border.' }
 $widget.Configure([string[]] @())
 if (@($widget.Items).Count -ne 0) { throw 'An empty widget must have no sort pairs.' }
 $invalid = $false
@@ -113,6 +152,10 @@ try {
     Assert-Baselines $view
     $editor = $view.FindName('SortOrderEditor')
     $boxes = $editor.Child
+    foreach ($button in $boxes.Children) {
+        if ($button.Foreground -ne [System.Windows.SystemColors]::WindowTextBrush -or
+            $button.Background -ne [System.Windows.SystemColors]::WindowBrush) { throw 'ContentView did not use normal text and editor colors.' }
+    }
     $boxes.Children[0].RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
     $move = $editor.GetType().GetMethod('MoveItem', [System.Reflection.BindingFlags]'Instance,NonPublic')
     $null = $move.Invoke($editor, [object[]] @([int] 0, [int] 7))
@@ -129,6 +172,10 @@ try {
     [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([action] {}, [System.Windows.Threading.DispatcherPriority]::ApplicationIdle)
     $window.UpdateLayout()
     Assert-Baselines $view
+    if ($SkipDrag) {
+        Write-Output 'Sort order widget and baseline tests passed.'
+        return
+    }
     $editor.Configure([string[]] @('Name', 'MT', 'TA1', 'TA2', 'Date', 'Size', 'MO'))
     $cursor = [SortOrderMouseProbe+Point]::new()
     $null = [SortOrderMouseProbe]::GetCursorPos([ref] $cursor)

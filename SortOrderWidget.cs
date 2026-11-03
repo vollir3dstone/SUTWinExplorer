@@ -1,5 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using static SUTWinExplorer.ViewUtilities;
@@ -12,6 +14,9 @@ public readonly record struct SortOrderItem(int Index, SortOrderDirection Direct
 
 public sealed class SortOrderWidget : Border
 {
+    public static readonly DependencyProperty ForegroundProperty =
+        TextElement.ForegroundProperty.AddOwner(typeof(SortOrderWidget));
+
     private const string DragFormat = "SUTWinExplorer.SortOrderWidget.Item";
     private readonly StackPanel _boxes = new() { Orientation = Orientation.Horizontal };
     private string[] _names = [];
@@ -38,6 +43,12 @@ public sealed class SortOrderWidget : Border
     }
 
     public event EventHandler? Changed;
+
+    public Brush Foreground
+    {
+        get => (Brush)GetValue(ForegroundProperty);
+        set => SetValue(ForegroundProperty, value);
+    }
 
     public IReadOnlyList<SortOrderItem> Items => _items.ToArray();
 
@@ -78,17 +89,28 @@ public sealed class SortOrderWidget : Border
         foreach (var item in _items)
         {
             var name = _names[item.Index];
+            var content = new StackPanel { Orientation = Orientation.Horizontal };
+            content.Children.Add(new TextBlock { Text = name });
+            content.Children.Add(new TextBlock
+            {
+                Text = item.Direction == SortOrderDirection.Ascending ? "\u25B2" : "\u25BC",
+                FontSize = 9
+            });
             var button = new Button
             {
                 Tag = item.Index,
-                Content = name + (item.Direction == SortOrderDirection.Ascending ? "\u25B2" : "\u25BC"),
+                Content = content,
                 Height = 20,
                 MinHeight = 20,
+                BorderThickness = new Thickness(1, 0, 0, 0),
                 Padding = new Thickness(4, 0, 4, 0),
                 Margin = new Thickness(0, 0, 1, 0),
                 ToolTip = "Click to reverse; drag or use Alt+Left/Right to reorder"
             };
             if (TryFindResource("ContentPaneButtonStyle") is Style style) button.Style = style;
+            InputChrome.SetCornerRadius(button, new CornerRadius(0));
+            button.SetBinding(Control.BackgroundProperty, new Binding(nameof(Background)) { Source = this });
+            button.SetBinding(Control.ForegroundProperty, new Binding(nameof(Foreground)) { Source = this });
             System.Windows.Automation.AutomationProperties.SetName(button, $"{name}, {item.Direction}, priority {_boxes.Children.Count + 1}");
             button.Click += OnItemClick;
             button.PreviewMouseLeftButtonDown += OnItemMouseDown;
@@ -188,7 +210,7 @@ public sealed class SortOrderWidget : Border
         var last = index == _boxes.Children.Count;
         var button = (Button)_boxes.Children[last ? index - 1 : index];
         button.BorderBrush = TryFindResource("Input.FocusBorder") as Brush ?? SystemColors.HighlightBrush;
-        button.BorderThickness = last ? new Thickness(1, 1, 3, 1) : new Thickness(3, 1, 1, 1);
+        button.BorderThickness = last ? new Thickness(1, 0, 3, 0) : new Thickness(3, 0, 0, 0);
         e.Effects = DragDropEffects.Move;
         e.Handled = true;
     }
@@ -200,7 +222,7 @@ public sealed class SortOrderWidget : Border
         foreach (Button button in _boxes.Children)
         {
             button.ClearValue(BorderBrushProperty);
-            button.ClearValue(BorderThicknessProperty);
+            button.BorderThickness = new Thickness(1, 0, 0, 0);
         }
     }
 

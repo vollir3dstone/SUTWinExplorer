@@ -92,7 +92,9 @@ of display names and exposes ordered `(index, direction)` pairs; indices refer
 to the original input positions, including when names are duplicated. Its
 `Changed` event reports configuration, direction, and order changes. ContentView
 maps the indices and directions to its own SutShell sort pairs, and uses the
-widget's `Select` method to synchronize table-header clicks.
+widget's `Select` method to synchronize table-header clicks. The widget's
+`Foreground` and `Background` configure its box text and background colors;
+ContentView uses the system window text and editor background colors.
 
 Each ContentView has its own sort sequence, retained on refresh, filtering and
 navigation while that view exists. The **Sort order** editor follows the Name

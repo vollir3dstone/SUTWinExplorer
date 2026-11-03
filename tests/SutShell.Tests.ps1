@@ -1178,11 +1178,11 @@ try {
         $sortBoxes = $sortWidget.Child
         Assert-True ((@($pairsProperty.GetValue($viewSort)).Column -join ',') -ceq $defaultOrder -and
             @($pairsProperty.GetValue($viewSort) | Where-Object { $_.Criterion -ne 'Ascending' }).Count -eq 0 -and
-            ($sortBoxes.Children | ForEach-Object { $_.Content.TrimEnd([char] 0x25B2) }) -join ',' -ceq 'Name,MT,TA1,TA2,Date,Size,MO' -and
+            ($sortBoxes.Children | ForEach-Object { $_.Content.Children[0].Text }) -join ',' -ceq 'Name,MT,TA1,TA2,Date,Size,MO' -and
             $view.FindName('NameSortIndicator').Visibility -eq 'Visible') 'The initial sort widget or its criteria are incorrect.'
         $sortBoxes.Children[1].RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         Assert-True (@($pairsProperty.GetValue($viewSort))[1].Criterion -eq 'Descending' -and
-            $sortBoxes.Children[1].Content -match ([string] [char] 0x25BC)) 'Clicking a sort box did not reverse its direction.'
+            $sortBoxes.Children[1].Content.Children[1].Text -ceq [string] [char] 0x25BC) 'Clicking a sort box did not reverse its direction.'
         $view.FindName('FileList').View.Columns[0].Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         Assert-True (@($pairsProperty.GetValue($viewSort))[0].Column -eq 'MediaTypeIcon' -and
             @($pairsProperty.GetValue($viewSort))[0].Criterion -eq 'Descending' -and
