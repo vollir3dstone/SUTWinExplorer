@@ -66,6 +66,14 @@ SutShell, which validates the name and delegates to `IShellFolder::SetNameOf`
 through `ShellContextMenu`. Opening uses shell execution. These are separate
 from the application-owned staged transfer state.
 
+Copy and Move queue individual items with an `IFileOperationProgressSink`.
+Successful Shell callbacks provide the actual resulting filesystem paths,
+including names chosen by the Shell during conflict resolution. Only direct
+children of the destination are collected, not nested callbacks from copied
+folders. The caller retains reported paths even if a later operation fails and
+passes them to ContentView's shared insertion completion. Native menu and
+extension operations do not pass through this completion.
+
 `FileSystemWatcher` subscriptions cover the directory paths supplied by
 Pathview, without recursive monitoring. The caller marshals callbacks to the
 WPF dispatcher; Pathview coalesces updates with its existing refresh timer.

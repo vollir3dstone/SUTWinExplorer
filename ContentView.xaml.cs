@@ -98,14 +98,27 @@ public partial class ContentView : UserControl
         if (created is not { } item || !string.Equals(path, CurrentPath, StringComparison.OrdinalIgnoreCase))
             return;
 
+        RevealInsertedItems([item.Path]);
+    }
+
+    internal void RevealInsertedItems(IEnumerable<string> paths)
+    {
+        var currentDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(CurrentPath));
+        var insertedPaths = paths.Where(path =>
+            string.Equals(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(path))),
+                currentDirectory, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        if (insertedPaths.Length == 0)
+            return;
+
         _suppressFilterRefresh = true;
         try
         {
-            if (item.IsDirectory)
+            if (insertedPaths.Any(Directory.Exists))
                 HideDirectoriesCheckBox.GetCheckBox().IsChecked = false;
-            if (InternalItemFilter.IsInternal(item.Path, item.IsDirectory))
+            if (insertedPaths.Any(path => InternalItemFilter.IsInternal(path, Directory.Exists(path))))
                 HideInternalContentCheckBox.GetCheckBox().IsChecked = false;
-            if (!InternalItemFilter.MatchesNamePattern(item.Path, NamePatternTextBox.Text))
+            if (insertedPaths.Any(path => !InternalItemFilter.MatchesNamePattern(path, NamePatternTextBox.Text)))
                 NamePatternTextBox.Clear();
         }
         finally
@@ -113,8 +126,8 @@ public partial class ContentView : UserControl
             _suppressFilterRefresh = false;
         }
         _selectedPaths.Clear();
-        _selectedPaths.Add(item.Path);
-        _revealedPath = item.Path;
+        _selectedPaths.UnionWith(insertedPaths);
+        _revealedPath = insertedPaths[0];
         RefreshCore(invalidate: true);
     }
 
@@ -467,9 +480,13 @@ public partial class ContentView : UserControl
                     CopyWorkflowState.Shared.Prepare(selectedPaths);
                     break;
                 case "CopyPaste":
-                    SutShell.Copy(CopyWorkflowState.Shared.PreparedPaths, CurrentPath, owner);
-                    CopyWorkflowState.Shared.CompletePaste();
-                    Refresh(true);
+                    var copied = new List<string>();
+                    try
+                    {
+                        SutShell.Copy(CopyWorkflowState.Shared.PreparedPaths, CurrentPath, owner, copied);
+                        CopyWorkflowState.Shared.CompletePaste();
+                    }
+                    finally { RevealInsertedItems(copied); }
                     break;
                 case "CopyAbort":
                     CopyWorkflowState.Shared.Abort();
@@ -480,9 +497,13 @@ public partial class ContentView : UserControl
                     MoveWorkflowState.Shared.Prepare(selectedPaths);
                     break;
                 case "MovePaste":
-                    SutShell.Move(MoveWorkflowState.Shared.PreparedPaths, CurrentPath, owner);
-                    MoveWorkflowState.Shared.CompletePaste();
-                    Refresh(true);
+                    var moved = new List<string>();
+                    try
+                    {
+                        SutShell.Move(MoveWorkflowState.Shared.PreparedPaths, CurrentPath, owner, moved);
+                        MoveWorkflowState.Shared.CompletePaste();
+                    }
+                    finally { RevealInsertedItems(moved); }
                     break;
                 case "MoveAbort":
                     MoveWorkflowState.Shared.Abort();

@@ -329,6 +329,17 @@ may show its requested row in light gray without changing the active selection.
   **Path get** is enabled only for a single selected item and copies that
   item's filesystem path to the clipboard. **Delete** remains selection-aware;
   other selection-dependent actions are disabled when nothing is selected.
+- [x] After the application-owned **New**, **Copy paste**, or **Move paste**
+  inserts items into the current directory, the destination ContentView selects
+  all inserted items and scrolls the first into view. It turns off **Hide
+  directories** if an inserted item is a directory, turns off **Hide internal**
+  if an inserted item is internal, and clears **Name pattern** if any inserted
+  item does not match it. Other filters remain unchanged, as do the settings of
+  other views. This also applies to items already transferred before a later
+  failure. Copy and Move use the destination paths reported by the Shell,
+  including names resulting from conflict resolution. The application-owned
+  toolbar and paired-menu actions use the same completion; native Windows
+  menus and extensions do not use it.
 
 ### Selection and opening
 
@@ -488,6 +499,12 @@ SUTWinExplorer installation before testing a new installation.
   error, starts no transfer, and preserves the staged workflow. A change after
   preflight may still cause a late failure; multi-item Paste is not atomic and
   may leave already-transferred items in place.
+  For New, Copy paste and Move paste, verify inserted items are selected, the
+  first is scrolled into view, and only filters hiding an inserted item are
+  reset. Include a directory, an internal item, a nonmatching name, multiple
+  items, and a paste from a paired directory menu. Verify unaffected filters
+  and other views retain their settings; test partial transfers and Shell
+  conflict decisions where available.
 13. Select exactly one item and click **Rename** or press F2. Verify the inline
   editor opens with its filesystem name, Enter commits a valid name, Escape
   cancels without changing it, and a collision is reported without overwriting

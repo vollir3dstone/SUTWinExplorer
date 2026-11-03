@@ -170,11 +170,11 @@ internal static class SutShell
 
     internal static void Open(string path) => Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
 
-    internal static void Copy(IReadOnlyList<string> paths, string destination, IntPtr owner) =>
-        ShellFileOperations.Copy(paths, destination, owner);
+    internal static void Copy(IReadOnlyList<string> paths, string destination, IntPtr owner, IList<string> insertedPaths) =>
+        ShellFileOperations.Copy(paths, destination, owner, insertedPaths);
 
-    internal static void Move(IReadOnlyList<string> paths, string destination, IntPtr owner) =>
-        ShellFileOperations.Move(paths, destination, owner);
+    internal static void Move(IReadOnlyList<string> paths, string destination, IntPtr owner, IList<string> insertedPaths) =>
+        ShellFileOperations.Move(paths, destination, owner, insertedPaths);
 
     internal static void Delete(IReadOnlyList<string> paths, IntPtr owner) =>
         ShellFileOperations.Delete(paths, owner);

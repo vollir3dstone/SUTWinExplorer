@@ -225,7 +225,12 @@ and no prepared Copy or Move. Their respective paste and abort actions require
 that workflow to be prepared. Copy and Move use the application's mutually
 exclusive prepared-operation workflows, not the Windows clipboard: get prepares
 selected paths, paste operates in the current folder, and abort clears the
-prepared operation. Delete uses the Shell file-operation API; it requires loaded,
+prepared operation. The application-owned New, Copy paste and Move paste
+actions use the same ContentView insertion completion as the toolbar: they
+reset filters that hide inserted items, select the inserted items and scroll the
+first into view. This includes items transferred before a later failure. Native
+Windows menu and extension actions do not use that completion. Delete uses the
+Shell file-operation API; it requires loaded,
 deletable targets and is disabled during a prepared Copy or Move. The Shell
 controls confirmation and recycling, which depends on the location.
 

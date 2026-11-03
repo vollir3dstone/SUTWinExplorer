@@ -98,13 +98,13 @@ internal static class ShellFileOperations
         }
     }
 
-    public static void Copy(IReadOnlyList<string> sourcePaths, string destinationPath, IntPtr ownerWindow) =>
-        Transfer(sourcePaths, destinationPath, ownerWindow, "copy",
-            (operation, source, destination) => operation.CopyItem(source, destination, null, IntPtr.Zero));
+    public static void Copy(IReadOnlyList<string> sourcePaths, string destinationPath, IntPtr ownerWindow, IList<string> insertedPaths) =>
+        Transfer(sourcePaths, destinationPath, ownerWindow, "copy", insertedPaths,
+            (operation, source, destination, sink) => operation.CopyItem(source, destination, null, sink));
 
-    public static void Move(IReadOnlyList<string> sourcePaths, string destinationPath, IntPtr ownerWindow) =>
-        Transfer(sourcePaths, destinationPath, ownerWindow, "move",
-            (operation, source, destination) => operation.MoveItem(source, destination, null, IntPtr.Zero));
+    public static void Move(IReadOnlyList<string> sourcePaths, string destinationPath, IntPtr ownerWindow, IList<string> insertedPaths) =>
+        Transfer(sourcePaths, destinationPath, ownerWindow, "move", insertedPaths,
+            (operation, source, destination, sink) => operation.MoveItem(source, destination, null, sink));
 
     internal static bool CanDelete(string path)
     {
@@ -178,7 +178,8 @@ internal static class ShellFileOperations
         string destinationPath,
         IntPtr ownerWindow,
         string operationName,
-        Func<IFileOperationNative, IShellItemNative, IShellItemNative, int> queueOperation)
+        IList<string> insertedPaths,
+        Func<IFileOperationNative, IShellItemNative, IShellItemNative, IntPtr, int> queueOperation)
     {
         if (sourcePaths.Count == 0)
             throw new InvalidOperationException($"Select one or more items to {operationName}.");
@@ -188,8 +189,11 @@ internal static class ShellFileOperations
         IFileOperationNative? operation = null;
         IShellItemNative? destination = null;
         var sources = new List<IShellItemNative>(sourcePaths.Count);
+        var sink = new TransferProgressSink(destinationPath, insertedPaths);
+        var sinkPointer = IntPtr.Zero;
         try
         {
+            sinkPointer = Marshal.GetComInterfaceForObject(sink, typeof(IFileOperationProgressSink));
             var operationInterfaceId = typeof(IFileOperationNative).GUID;
             var classId = FileOperationClassId;
             Marshal.ThrowExceptionForHR(CoCreateInstance(
@@ -218,7 +222,7 @@ internal static class ShellFileOperations
 
             foreach (var source in sources)
             {
-                Marshal.ThrowExceptionForHR(queueOperation(operation, source, destination));
+                Marshal.ThrowExceptionForHR(queueOperation(operation, source, destination, sinkPointer));
             }
 
             Marshal.ThrowExceptionForHR(operation.PerformOperations());
@@ -237,6 +241,8 @@ internal static class ShellFileOperations
                 _ = Marshal.ReleaseComObject(destination);
             if (operation is not null && Marshal.IsComObject(operation))
                 _ = Marshal.ReleaseComObject(operation);
+            if (sinkPointer != IntPtr.Zero)
+                _ = Marshal.Release(sinkPointer);
         }
     }
 
@@ -330,6 +336,47 @@ internal static class ShellFileOperations
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IShellItemNative
     {
+        [PreserveSig] int BindToHandler(IntPtr bindContext, ref Guid handlerId, ref Guid interfaceId, out IntPtr result);
+        [PreserveSig] int GetParent(out IntPtr parent);
+        [PreserveSig] int GetDisplayName(uint displayNameType, out IntPtr name);
+    }
+
+    [ComVisible(true)]
+    [ClassInterface(ClassInterfaceType.None)]
+    private sealed class TransferProgressSink(string destinationPath, IList<string> insertedPaths) : IFileOperationProgressSink
+    {
+        public int StartOperations() => 0;
+        public int FinishOperations(int result) => 0;
+        public int PreRenameItem(uint flags, IntPtr item, IntPtr newName) => 0;
+        public int PostRenameItem(uint flags, IntPtr item, IntPtr newName, int result, IntPtr newItem) => 0;
+        public int PreMoveItem(uint flags, IntPtr item, IntPtr destination, IntPtr newName) => 0;
+        public int PostMoveItem(uint flags, IntPtr item, IntPtr destination, IntPtr newName, int result, IntPtr newItem) => Record(result, newItem);
+        public int PreCopyItem(uint flags, IntPtr item, IntPtr destination, IntPtr newName) => 0;
+        public int PostCopyItem(uint flags, IntPtr item, IntPtr destination, IntPtr newName, int result, IntPtr newItem) => Record(result, newItem);
+        public int PreDeleteItem(uint flags, IntPtr item) => 0;
+        public int PostDeleteItem(uint flags, IntPtr item, int result, IntPtr newItem) => 0;
+        public int PreNewItem(uint flags, IntPtr destination, IntPtr newName) => 0;
+        public int PostNewItem(uint flags, IntPtr destination, IntPtr newName, IntPtr templateName, uint attributes, int result, IntPtr newItem) => 0;
+        public int UpdateProgress(uint totalWork, uint workSoFar) => 0;
+        public int ResetTimer() => 0;
+        public int PauseTimer() => 0;
+        public int ResumeTimer() => 0;
+
+        private int Record(int result, IntPtr newItem)
+        {
+            if (result < 0 || newItem == IntPtr.Zero ||
+                ((IShellViewItemNative)Marshal.GetObjectForIUnknown(newItem)).GetDisplayName(0x80058000, out var name) < 0)
+                return 0;
+            try
+            {
+                if (Marshal.PtrToStringUni(name) is { } path &&
+                    string.Equals(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(path)),
+                        Path.TrimEndingDirectorySeparator(Path.GetFullPath(destinationPath)), StringComparison.OrdinalIgnoreCase))
+                    insertedPaths.Add(path);
+            }
+            finally { Marshal.FreeCoTaskMem(name); }
+            return 0;
+        }
     }
 
     [ComImport]
@@ -396,4 +443,27 @@ internal static class ShellFileOperations
         [PreserveSig] int PerformOperations();
         [PreserveSig] int GetAnyOperationsAborted([MarshalAs(UnmanagedType.Bool)] out bool aborted);
     }
+}
+
+[ComVisible(true)]
+[Guid("04B0F1A7-9490-44BC-96E1-4296A31252E2")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface IFileOperationProgressSink
+{
+    [PreserveSig] int StartOperations();
+    [PreserveSig] int FinishOperations(int result);
+    [PreserveSig] int PreRenameItem(uint flags, IntPtr item, IntPtr newName);
+    [PreserveSig] int PostRenameItem(uint flags, IntPtr item, IntPtr newName, int result, IntPtr newItem);
+    [PreserveSig] int PreMoveItem(uint flags, IntPtr item, IntPtr destination, IntPtr newName);
+    [PreserveSig] int PostMoveItem(uint flags, IntPtr item, IntPtr destination, IntPtr newName, int result, IntPtr newItem);
+    [PreserveSig] int PreCopyItem(uint flags, IntPtr item, IntPtr destination, IntPtr newName);
+    [PreserveSig] int PostCopyItem(uint flags, IntPtr item, IntPtr destination, IntPtr newName, int result, IntPtr newItem);
+    [PreserveSig] int PreDeleteItem(uint flags, IntPtr item);
+    [PreserveSig] int PostDeleteItem(uint flags, IntPtr item, int result, IntPtr newItem);
+    [PreserveSig] int PreNewItem(uint flags, IntPtr destination, IntPtr newName);
+    [PreserveSig] int PostNewItem(uint flags, IntPtr destination, IntPtr newName, IntPtr templateName, uint attributes, int result, IntPtr newItem);
+    [PreserveSig] int UpdateProgress(uint totalWork, uint workSoFar);
+    [PreserveSig] int ResetTimer();
+    [PreserveSig] int PauseTimer();
+    [PreserveSig] int ResumeTimer();
 }

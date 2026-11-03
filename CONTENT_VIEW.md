@@ -320,6 +320,16 @@ a prepared Move does the converse. Abort clears the prepared paths; a
 successful paste clears them after the operation returns. Selection and filter
 settings remain local to each view.
 
+New and application-owned Copy/Move pastes finish through the same ContentView
+operation, `RevealInsertedItems`. It disables Hide directories for inserted
+directories, disables Hide internal for inserted internal items, and clears the
+name pattern if any inserted item does not match. Other filters and other views
+are unchanged. It selects all inserted items in the current directory and
+scrolls the first into view. The Shell reports the actual destination names,
+including conflict resolutions; items already transferred are handled even if
+a later item fails. Native Shell menu and extension operations remain
+Shell-owned and do not use this completion.
+
 Staging stores paths, not handles or reservations. Paste performs preflight
 checks, but paths and permissions can change afterward; a multi-item operation
 is not atomic and can partially complete before a later error. Failed preflight

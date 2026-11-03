@@ -1044,9 +1044,18 @@ public partial class Pathview : UserControl
                     break;
                 case "CopyAbort": CopyWorkflowState.Shared.Abort(); break;
                 case "CopyPaste":
-                    SutShell.Copy(CopyWorkflowState.Shared.PreparedPaths, CurrentPath, owner);
-                    CopyWorkflowState.Shared.CompletePaste();
-                    RefreshCurrentFileSystemState(true);
+                    var copied = new List<string>();
+                    try
+                    {
+                        SutShell.Copy(CopyWorkflowState.Shared.PreparedPaths, CurrentPath, owner, copied);
+                        CopyWorkflowState.Shared.CompletePaste();
+                    }
+                    finally
+                    {
+                        DirectoryContent.RevealInsertedItems(copied);
+                        RefreshActivePathTree();
+                        RefreshCurrentRouteTree();
+                    }
                     break;
                 case "MoveGet":
                     if (CopyWorkflowState.Shared.IsPrepared)
@@ -1055,9 +1064,18 @@ public partial class Pathview : UserControl
                     break;
                 case "MoveAbort": MoveWorkflowState.Shared.Abort(); break;
                 case "MovePaste":
-                    SutShell.Move(MoveWorkflowState.Shared.PreparedPaths, CurrentPath, owner);
-                    MoveWorkflowState.Shared.CompletePaste();
-                    RefreshCurrentFileSystemState(true);
+                    var moved = new List<string>();
+                    try
+                    {
+                        SutShell.Move(MoveWorkflowState.Shared.PreparedPaths, CurrentPath, owner, moved);
+                        MoveWorkflowState.Shared.CompletePaste();
+                    }
+                    finally
+                    {
+                        DirectoryContent.RevealInsertedItems(moved);
+                        RefreshActivePathTree();
+                        RefreshCurrentRouteTree();
+                    }
                     break;
                 case "Delete":
                     try { SutShell.Delete([entry!.Path], owner); }
