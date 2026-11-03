@@ -55,7 +55,7 @@ internal static class ShellFileOperations
     }
 
     public static List<string> GetSelectedFileSystemPaths(IShellView shellView) =>
-        GetFileSystemPaths(shellView, ShellContextMenu.ShellViewSelection);
+        GetFileSystemPaths(shellView, ShellViewOperations.Selection);
 
     private static List<string> GetFileSystemPaths(IShellView shellView, uint selectionKind)
     {

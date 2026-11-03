@@ -167,17 +167,17 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
 
     public void DeleteSelection()
     {
-        InvokeCurrentViewCommand(ShellContextMenu.ShellViewSelection, "delete");
+        InvokeCurrentViewCommand(ShellViewOperations.Selection, "delete");
     }
 
     public void RenameSelection()
     {
         _ = Focus();
-        InvokeCurrentView(ShellContextMenu.RenameSelection);
+        InvokeCurrentView(ShellViewOperations.RenameSelection);
     }
 
     public void InvokeShellCopyCommand() =>
-        InvokeCurrentViewCommand(ShellContextMenu.ShellViewSelection, "copy");
+        InvokeCurrentViewCommand(ShellViewOperations.Selection, "copy");
 
     public List<string> GetSelectedFileSystemPaths() =>
         QueryCurrentView(ShellFileOperations.GetSelectedFileSystemPaths);
@@ -357,7 +357,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(RefreshSelectionState));
 
     private void InvokeCurrentViewCommand(uint selectionKind, string verb) =>
-        InvokeCurrentView(view => ShellContextMenu.InvokeViewCommand(view, selectionKind, _hostWindow, verb));
+        InvokeCurrentView(view => ShellViewOperations.InvokeCommand(view, selectionKind, _hostWindow, verb));
 
     private void InvokeCurrentView(Action<IShellView> command)
     {

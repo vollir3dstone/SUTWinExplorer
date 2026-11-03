@@ -3,7 +3,9 @@
 ## Scope and Intent
 
 ContentView provides a Base Menu (Basismenü) and a Content Menu (Inhaltsmenü)
-for a selection of one or more existing files and/or directories. The Base Menu puts the
+for a selection of one or more existing files and/or directories. The same menu
+pair is available for filesystem directories in the **Active path and siblings**
+tree and the **Sub directories** list in **Active path**. The Base Menu puts the
 application's common file operations first and includes generally applicable
 Shell commands. The Content Menu provides the remaining item-specific Shell
 commands. Windows constructs and invokes the Shell portions of both menus; KIS
@@ -27,10 +29,77 @@ This specification describes the implemented behavior, not a promise that every
 installed extension or every Windows 11 compact-menu command is available. The
 separate [diagnostic spike](CONTEXT_MENU_SPIKE.md) retains the investigations,
 including unsuccessful approaches and machine-specific observations. The main
-implementation is in [ContentView.xaml.cs](ContentView.xaml.cs) and
-[ShellContextMenu.cs](ShellContextMenu.cs).
+implementation is in [ContentView.xaml.cs](ContentView.xaml.cs),
+[ExplorerTabView.xaml.cs](ExplorerTabView.xaml.cs),
+[SutContextMenuController.cs](SutContextMenuController.cs) and
+[SutContextMenuFactory.cs](SutContextMenuFactory.cs), with popup handling in
+[SutContextMenu.cs](SutContextMenu.cs).
+
+## Responsibilities and Lifetime
+
+### View and Controller
+
+Each participating widget owns a `SutContextMenuController<T>` for its own
+target type and menu-series state. The view constructs and calls the controller;
+the controller is therefore the view's integration point, not an implementation
+detail hidden from the view. The existing views do not call
+`SutContextMenuFactory` or use `SutContextMenu` directly for the paired menus.
+All three classes are `internal` to the application, not public APIs. The
+factory and menu instance are separate internal collaborators, not nested or
+private classes belonging exclusively to the controller.
+
+The view supplies these callbacks when constructing the controller:
+
+- Resolve a target to its filesystem path and return the current selected paths.
+- Hit-test screen coordinates against the widget, distinguishing an item from
+  its background, and select a target or clear the selection when requested.
+- Supply the target-specific `ShellMenuAction` entries, each with a label,
+  enabled state and application callback. The view owns their behavior.
+- Show the original native item or background menu when the controller requests
+  a fallback. The item callback receives the target and current selected paths.
+
+The view remains responsible for its own input events, initial selection and
+navigation. It calls `Show(target, owner, alternate)` with the owner window
+handle; `alternate` enables the mouse-driven Base/Content sequence. It calls
+`Reset()` when a selection or navigation change invalidates that sequence.
+`IsDifferentTarget(target)` lets a view distinguish a new target from the
+remembered Base Menu target when applying its selection rules. The controller
+owns the sequence, rechecks selection after a Base Menu closes, and requests
+hit-testing, selection changes and fallbacks through the supplied callbacks.
+
+### Factory and Menu Instance
+
+`SutContextMenuFactory` creates menus and applies the Shell registration and
+filtering rules. `GetBaseMenu` accepts the selected paths, owner window and
+widget-provided actions; `GetContentMenu` accepts the same paths and owner plus
+the Base Menu snapshot. The factory also creates native item and background
+menus. Paths in a multiple selection must share a parent directory. For the
+paired menus the controller calls the factory and owns the returned instances;
+for native item and background menus, `SutShell` also calls the factory and
+provides the display wrappers used by the views. Thus the factory is not solely
+a helper for the controller, although paired-menu views need not know it.
+
+Each returned `SutContextMenu` owns one native menu and its Shell resources.
+It displays the popup, forwards native menu messages and selected commands, and
+delegates application actions to callbacks supplied by the widget. It does not
+define those actions or the factory's menu composition rules. A factory callback
+applies the exclusion rules again when the Shell populates a submenu lazily.
+The caller disposes each instance after showing it; creation and display run on
+the UI STA thread. The view supplies action callbacks but does not manage the
+paired menu's native resources.
+
+`SutContextMenuController<T>` owns the alternating menu sequence and selection
+validation separately for each participating widget and Pathview. The Base Menu
+captures comparable commands after the popup closes and before a selected command
+is invoked, including submenus populated during display. The controller retains
+that managed snapshot, disposes the Base Menu and creates the Content Menu only
+when needed. It never transfers native
+handles or command IDs between menu instances. Native Shell view commands and
+item renaming are handled separately from the factory.
 
 ## Selection and Menu Sequence
+
+ContentView uses the following selection rules:
 
 - On an initial right-click, an unselected row becomes the sole selection; a
   selected row preserves an existing multiple selection.
@@ -58,9 +127,20 @@ implementation is in [ContentView.xaml.cs](ContentView.xaml.cs) and
   The keyboard context-menu key or Shift+F10 opens the applicable menu without
   starting a mouse-driven alternation series.
 
+The two sidebar widgets use the same menu series for the clicked directory,
+with independent controller state per widget and Pathview. Each has a single
+target rather than ContentView's multiple selection. Selecting a different
+tree target or navigating resets the corresponding series. The Sub directories
+list clears its visual selection after its menu closes, while preserving the
+series for a subsequent right-click on the same folder. Its background keeps
+the native background menu; the tree in the **Active path** tab retains its
+native item menu. Virtual or unavailable sidebar targets fall back to the
+native item menu. Shift-right-click uses that native menu; in the Sub directories
+list the Apps key opens the applicable item menu and Shift+F10 the native menu.
+
 Both popups are tracked using a thread-local Windows menu message filter. For a
 right-button-down or right-button-double-click message, its screen coordinates
-are hit-tested against the ContentView list. A handled click closes the current
+are hit-tested against the originating widget. A handled click closes the current
 popup before another menu is opened, so each Shell menu and its COM objects have
 separate lifetimes. Ordinarily a click on the popup itself remains a popup click.
 A right-click within the system double-click rectangle around the opening point
@@ -75,7 +155,11 @@ button or the keyboard, but not with the right mouse button.
 The first section is, in order, `Rename`, `Path get`, `Copy get`, `Copy abort`,
 `Copy paste`, `Move get`, `Move abort`, `Move paste` and `Delete`. Each entry
 uses the corresponding toolbar button's current label, enabled state and click
-handler. Rename requires one loaded item with an editable Shell name; Path get
+handler in ContentView. In the sidebar, the same labels are used but the
+actions operate on the clicked directory rather than the ContentView selection;
+Rename uses the sidebar inline editor. Copy paste and Move paste use the current
+Pathview directory as their destination, not necessarily the clicked directory.
+Rename requires one loaded item with an editable Shell name; Path get
 requires one loaded item. Copy get and Move get require loaded selected items
 and no prepared Copy or Move. Their respective paste and abort actions require
 that workflow to be prepared. Copy and Move use the application's mutually
@@ -403,7 +487,9 @@ alternatives and their limitations.
 
 [SutShell.Tests.ps1](tests/SutShell.Tests.ps1) exercises menu contents, filtering,
 toolbar actions, Shell invocation, selection and menu switching for single,
-multiple and mixed files and directories. It includes native popup and mouse-input probes in WPF windows;
+multiple and mixed files and directories. It also checks the independent sidebar
+menu series, target-specific actions and unchanged native Active path tree.
+It includes native popup and mouse-input probes in WPF windows;
 these tests display windows and move the pointer. Manual verification in the
 actual application remains useful for installed extensions, Windows versions and
 interaction timings not represented by the test environment.

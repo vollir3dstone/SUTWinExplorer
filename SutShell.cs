@@ -163,7 +163,7 @@ internal static class SutShell
         if (!string.Equals(path, target, StringComparison.OrdinalIgnoreCase) &&
             (File.Exists(target) || Directory.Exists(target)))
             throw new IOException("An item with that name already exists.");
-        return ShellContextMenu.Rename(path, name, owner);
+        return ShellItemOperations.Rename(path, name, owner);
     }
 
     internal static void Open(string path) => Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
@@ -177,16 +177,17 @@ internal static class SutShell
     internal static void Delete(IReadOnlyList<string> paths, IntPtr owner) =>
         ShellFileOperations.Delete(paths, owner);
 
-    internal static IReadOnlyDictionary<string, int> ShowBaseMenu(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions, Func<int, int, bool, bool, bool>? secondRightClick) =>
-        ShellContextMenu.ShowBase(paths, owner, actions, secondRightClick);
+    internal static void ShowItemMenu(IReadOnlyList<string> paths, IntPtr owner, Action? rename = null)
+    {
+        using var menu = SutContextMenuFactory.GetItemMenu(paths, owner, rename);
+        menu.Show();
+    }
 
-    internal static void ShowContentMenu(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands, Func<int, int, bool, bool, bool>? secondRightClick = null) =>
-        ShellContextMenu.ShowContent(paths, owner, baseCommands, secondRightClick);
-
-    internal static void ShowItemMenu(IReadOnlyList<string> paths, IntPtr owner, Action? rename = null) =>
-        ShellContextMenu.ShowItems(paths, owner, rename);
-
-    internal static void ShowBackgroundMenu(string path, IntPtr owner) => ShellContextMenu.ShowBackground(path, owner);
+    internal static void ShowBackgroundMenu(string path, IntPtr owner)
+    {
+        using var menu = SutContextMenuFactory.GetBackgroundMenu(path, owner);
+        menu.Show();
+    }
 
     internal static IDisposable ObserveDirectories(IEnumerable<string> paths, Action changed) =>
         new DirectoryObserver(paths, changed);

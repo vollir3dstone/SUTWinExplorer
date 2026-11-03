@@ -106,14 +106,16 @@ public sealed class SutShellMenuProbe : System.IDisposable
             var name = new System.Text.StringBuilder(64);
             GetClassName(window, name, name.Capacity);
             if (name.ToString() != "#32768") return true;
+            var menu = SendMessage(window, 0x01E1, System.IntPtr.Zero, System.IntPtr.Zero);
+            var itemCount = GetMenuItemCount(menu);
+            if (itemCount < 0) return true;
             if (System.Threading.Interlocked.Exchange(ref handled, 1) != 0)
             {
                 if (SelectWithRightButton && ticks >= 4)
                     PostMessage(owner, 0x001F, System.IntPtr.Zero, System.IntPtr.Zero);
                 return false;
             }
-            var menu = SendMessage(window, 0x01E1, System.IntPtr.Zero, System.IntPtr.Zero);
-            ItemCount = GetMenuItemCount(menu);
+            ItemCount = itemCount;
             Items = new string[ItemCount];
             States = new uint[ItemCount];
             for (var index = 0; index < ItemCount; index++)
@@ -557,6 +559,26 @@ function Find-VisualName($parent, [string] $name) {
     return $null
 }
 
+function Find-TreeEntry($entry, [string] $path) {
+    if ($entry.Path -eq $path) { return $entry }
+    foreach ($child in $entry.Children) {
+        $found = Find-TreeEntry $child $path
+        if ($null -ne $found) { return $found }
+    }
+    return $null
+}
+
+function Find-TreeContainer($control, $entry) {
+    foreach ($item in $control.Items) {
+        $container = $control.ItemContainerGenerator.ContainerFromItem($item)
+        if ($null -eq $container) { continue }
+        if ([object]::ReferenceEquals($item, $entry)) { return $container }
+        $found = Find-TreeContainer $container $entry
+        if ($null -ne $found) { return $found }
+    }
+    return $null
+}
+
 $assemblyPath = Join-Path $PSScriptRoot '..\bin\Debug\net10.0-windows\SUTWinExplorer.dll'
 $assembly = [System.Reflection.Assembly]::Load([System.IO.File]::ReadAllBytes($assemblyPath))
 [System.Windows.Application].GetField('_resourceAssembly', [System.Reflection.BindingFlags]'Static,NonPublic').SetValue($null, $assembly)
@@ -565,7 +587,7 @@ $application.InitializeComponent()
 $application.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
 $shell = $assembly.GetType('SUTWinExplorer.SutShell', $true)
 $flags = [System.Reflection.BindingFlags]'Static,NonPublic'
-$menuType = $assembly.GetType('SUTWinExplorer.ShellContextMenu', $true)
+$menuType = $assembly.GetType('SUTWinExplorer.SutContextMenuFactory', $true)
 $whitelistJson = '{"_type":"directoryMenuWhitelist","extensions":[{"_type":"shellExtension","name":"test","verbs":["TestVerb"],"clsids":["{11111111-2222-3333-4444-555555555555}"]}]}'
 $whitelistDocument = [System.Text.Json.JsonDocument]::Parse($whitelistJson)
 try {
@@ -993,6 +1015,34 @@ try {
         $otherFileRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'exact.bin') })[0]
         $showMenu = $view.GetType().GetMethod('ShowMenu', $viewFlags)
         $ownerHandle = [System.Windows.Interop.WindowInteropHelper]::new($window).Handle
+        $menuInstanceType = $assembly.GetType('SUTWinExplorer.SutContextMenu', $true)
+        $showInstance = $menuInstanceType.GetMethod('Show', $viewFlags)
+        $emptyActions = [Array]::CreateInstance($assembly.GetType('SUTWinExplorer.ShellMenuAction', $true), 0)
+        $factoryPaths = [string[]] @((Join-Path $directory 'notes.txt'))
+        $baseInstance = $menuType.GetMethod('GetBaseMenu', $flags).Invoke($null, [object[]] @($factoryPaths, $ownerHandle, $emptyActions))
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        try {
+            $baseSnapshot = $showInstance.Invoke($baseInstance, [object[]] @($null))
+            Assert-True ($menuProbe.ItemCount -gt 0 -and $null -ne $baseSnapshot) 'The factory Base Menu did not return a snapshot after display.'
+        } finally {
+            $menuProbe.Dispose()
+            ([IDisposable] $baseInstance).Dispose()
+            ([IDisposable] $baseInstance).Dispose()
+        }
+        $disposedRejected = $false
+        try { $null = $showInstance.Invoke($baseInstance, [object[]] @($null)) } catch {
+            $disposedRejected = $_.Exception.InnerException -is [ObjectDisposedException]
+        }
+        Assert-True $disposedRejected 'A disposed menu instance was still usable.'
+        $contentInstance = $menuType.GetMethod('GetContentMenu', $flags).Invoke($null, [object[]] @($factoryPaths, $ownerHandle, $baseSnapshot))
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        try {
+            $null = $showInstance.Invoke($contentInstance, [object[]] @($null))
+            Assert-True ($menuProbe.ItemCount -gt 0) 'The Content Menu could not use the snapshot after the Base Menu was disposed.'
+        } finally {
+            $menuProbe.Dispose()
+            ([IDisposable] $contentInstance).Dispose()
+        }
         $multiPaths = @($notesMenuRow.Entry.FullPath, $otherFileRow.Entry.FullPath)
         $list.SelectedItems.Clear()
         $list.SelectedItems.Add($notesMenuRow) | Out-Null
@@ -1362,7 +1412,7 @@ try {
             $menuProbe.Dispose()
             $propertiesProbe.Dispose()
         }
-        $contextMenuType = $assembly.GetType('SUTWinExplorer.ShellContextMenu', $true)
+        $contextMenuType = $assembly.GetType('SUTWinExplorer.SutContextMenuFactory', $true)
         $blacklist = $contextMenuType.GetField('BlacklistedVerbs', [System.Reflection.BindingFlags]'Static,NonPublic').GetValue($null).Value
         Assert-True ($blacklist.Contains('anotepad++64') -and -not $blacklist.Contains('view SUTTextViewer')) 'The embedded blacklist did not load the expected case-insensitive verbs.'
         $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
@@ -2002,6 +2052,112 @@ try {
         }
     } finally {
         $window.Close()
+        [System.Threading.SynchronizationContext]::SetSynchronizationContext($previousContext)
+    }
+    $previousContext = [System.Threading.SynchronizationContext]::Current
+    [System.Threading.SynchronizationContext]::SetSynchronizationContext(
+        [System.Windows.Threading.DispatcherSynchronizationContext]::new([System.Windows.Threading.Dispatcher]::CurrentDispatcher))
+    $pathviewType = $assembly.GetType('SUTWinExplorer.Pathview', $true)
+    $pathviewConstructor = $pathviewType.GetConstructors()[0]
+    $fixedPathview = $pathviewConstructor.Invoke([object[]] @([string] $directory, [bool] $false, $null, $null, $null, $null))
+    $browsePathview = $pathviewConstructor.Invoke([object[]] @([string] $directory, [bool] $true, $null, $null, $null, $null))
+    $fixedWindow = [System.Windows.Window]::new()
+    try {
+        $fixedWindow.ShowInTaskbar = $false
+        $fixedWindow.Left = -20000
+        $fixedWindow.Top = -20000
+        $fixedWindow.Width = 1600
+        $fixedWindow.Height = 650
+        $sidebarGrid = [System.Windows.Controls.Grid]::new()
+        $sidebarGrid.ColumnDefinitions.Add([System.Windows.Controls.ColumnDefinition]::new())
+        $sidebarGrid.ColumnDefinitions.Add([System.Windows.Controls.ColumnDefinition]::new())
+        [System.Windows.Controls.Grid]::SetColumn($browsePathview, 1)
+        $null = $sidebarGrid.Children.Add($fixedPathview)
+        $null = $sidebarGrid.Children.Add($browsePathview)
+        $fixedWindow.Content = $sidebarGrid
+        $fixedWindow.Show()
+        $fixedWindow.UpdateLayout()
+        $subfolderList = $fixedPathview.FindName('ActivePathSubfoldersList')
+        $subfolderEntry = @($subfolderList.Items | Where-Object { $_.Path -eq (Join-Path $directory 'OtherFolder') })[0]
+        $siblingsTree = $browsePathview.FindName('ActivePathAndSiblingsTree')
+        $treeEntry = Find-TreeEntry $siblingsTree.Items[0] (Join-Path $directory 'RenamedFolder')
+        Assert-True ($null -ne $subfolderEntry -and $null -ne $treeEntry) 'Directory sidebar menu test entries were not found.'
+        $showDirectoryMenu = $pathviewType.GetMethod('ShowDirectoryMenu', $viewFlags)
+        foreach ($menuKind in @('base', 'content', 'base')) {
+            foreach ($case in @(@{ View = $fixedPathview; Window = $fixedWindow; Entry = $subfolderEntry; Tree = $false },
+                                @{ View = $browsePathview; Window = $fixedWindow; Entry = $treeEntry; Tree = $true })) {
+                $sidebarOwner = [System.Windows.Interop.WindowInteropHelper]::new($case.Window).Handle
+                $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
+                try {
+                    $null = $showDirectoryMenu.Invoke($case.View, [object[]] @($case.Entry.PSObject.BaseObject, [bool] $case.Tree, [bool] $true))
+                    $isBase = $menuProbe.ItemCount -ge 9 -and ($menuProbe.Items[0..8] -join ',') -ceq 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete'
+                    Assert-True ($isBase -eq ($menuKind -eq 'base')) "Sidebar menu did not alternate independently: tree=$($case.Tree), expected=$menuKind, count=$($menuProbe.ItemCount), path=$($case.Entry.Path), exists=$([IO.Directory]::Exists($case.Entry.Path)), items=$($menuProbe.Items -join '|')."
+                    if ($isBase) {
+                        Assert-True (($menuProbe.States[0] -band 3) -eq 0 -and ($menuProbe.States[1] -band 3) -eq 0 -and
+                            ($menuProbe.States[2] -band 3) -eq 0 -and ($menuProbe.States[8] -band 3) -eq 0) 'Sidebar directory action states were incorrect.'
+                    }
+                } finally { $menuProbe.Dispose() }
+            }
+        }
+        foreach ($case in @(@{ View = $fixedPathview; Window = $fixedWindow; Entry = $subfolderEntry; Tree = $false },
+                            @{ View = $browsePathview; Window = $fixedWindow; Entry = $treeEntry; Tree = $true })) {
+            $sidebarOwner = [System.Windows.Interop.WindowInteropHelper]::new($case.Window).Handle
+            foreach ($operation in @('Copy', 'Move')) {
+                $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
+                $menuProbe.SelectIndex = if ($operation -eq 'Copy') { 2 } else { 5 }
+                try { $null = $showDirectoryMenu.Invoke($case.View, [object[]] @($case.Entry.PSObject.BaseObject, [bool] $case.Tree, [bool] $false)) }
+                finally { $menuProbe.Dispose() }
+                $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
+                Assert-True ($workflow.IsPrepared -and @($workflow.PreparedPaths).Count -eq 1 -and
+                    @($workflow.PreparedPaths)[0] -eq $case.Entry.Path) "Sidebar $operation targeted the wrong selection."
+                $workflow.Abort()
+            }
+        }
+        $originalCursor = [SutShellRightClickProbe]::CursorPosition()
+        try {
+            $fixedWindow.Left = 20
+            $fixedWindow.Top = 20
+            $fixedWindow.Activate() | Out-Null
+            $subfolderEntry = @($subfolderList.Items | Where-Object { $_.Path -eq (Join-Path $directory 'OtherFolder') })[0]
+            $treeEntry = Find-TreeEntry $siblingsTree.Items[0] (Join-Path $directory 'RenamedFolder')
+            $subfolderList.ScrollIntoView($subfolderEntry)
+            $fixedWindow.UpdateLayout()
+            $subfolderContainer = $subfolderList.ItemContainerGenerator.ContainerFromItem($subfolderEntry)
+            $treeContainer = Find-TreeContainer $siblingsTree $treeEntry
+            Assert-True ($null -ne $subfolderContainer -and $null -ne $treeContainer) "Sidebar right-click test entries were not realized: list=$($null -ne $subfolderContainer), tree=$($null -ne $treeContainer), treeEntry=$($null -ne $treeEntry)."
+            foreach ($container in @($subfolderContainer, $treeContainer)) {
+                $container.BringIntoView()
+                $fixedWindow.UpdateLayout()
+                $point = $container.PointToScreen([System.Windows.Point]::new(10, $container.ActualHeight / 2))
+                $rightClickProbe = [SutShellRightClickProbe]::new([System.Windows.Interop.WindowInteropHelper]::new($fixedWindow).Handle,
+                    [int] $point.X, [int] $point.Y, [int] $point.X, [int] $point.Y)
+                $rightClickProbe.AdditionalClicks = 1
+                $frame = [System.Windows.Threading.DispatcherFrame]::new()
+                $deadline = [DateTime]::UtcNow.AddSeconds(10)
+                $timer = [System.Windows.Threading.DispatcherTimer]::new()
+                $timer.Interval = [TimeSpan]::FromMilliseconds(50)
+                $timer.add_Tick({ if ($rightClickProbe.AdditionalMenuCount -eq 1 -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+                $timer.Start()
+                try {
+                    [System.Windows.Threading.Dispatcher]::PushFrame($frame)
+                    Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasBase -and
+                        $rightClickProbe.AdditionalMenuCount -eq 1 -and $rightClickProbe.AdditionalMenuWasBase[0]) "Sidebar right-click alternation failed: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu)."
+                } finally { $timer.Stop(); $rightClickProbe.Dispose() }
+            }
+        } finally { [SutShellRightClickProbe]::MovePointer($originalCursor[0], $originalCursor[1]) }
+        $activeTree = $fixedPathview.FindName('ActivePathTree')
+        $treeItem = $activeTree.ItemContainerGenerator.ContainerFromIndex(0)
+        Assert-True ($null -ne $treeItem) 'The fixed Active path tree was not realized.'
+        $menuProbe = [SutShellMenuProbe]::new([System.Windows.Interop.WindowInteropHelper]::new($fixedWindow).Handle)
+        try {
+            $event = [System.Windows.Input.MouseButtonEventArgs]::new([System.Windows.Input.Mouse]::PrimaryDevice, 0, [System.Windows.Input.MouseButton]::Right)
+            $event.RoutedEvent = [System.Windows.Input.Mouse]::PreviewMouseDownEvent
+            $treeItem.RaiseEvent($event)
+            Assert-True ($menuProbe.ItemCount -gt 0 -and ($menuProbe.ItemCount -lt 9 -or
+                ($menuProbe.Items[0..8] -join ',') -cne 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete')) "The fixed Active path tree did not show a native menu: count=$($menuProbe.ItemCount), items=$($menuProbe.Items -join '|')."
+        } finally { $menuProbe.Dispose() }
+    } finally {
+        $fixedWindow.Close()
         [System.Threading.SynchronizationContext]::SetSynchronizationContext($previousContext)
     }
     $previousContext = [System.Threading.SynchronizationContext]::Current

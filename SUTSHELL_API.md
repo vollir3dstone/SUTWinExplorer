@@ -23,12 +23,17 @@ Shell helpers directly.
 | `Copy(paths, destination, owner)` / `Move(...)` | Run the existing native transfer operation; failures propagate and a transfer is not atomic. |
 | `Delete(paths, owner)` | Delete selected filesystem items using `IFileOperation`, requesting recycling and undo. Rejects drive/share roots; the Shell controls confirmation and may not support recycling for every location. Failures and cancellation propagate, and deletion is not atomic. |
 | `ShowItemMenu(paths, owner, rename)` / `ShowBackgroundMenu(path, owner)` | Show a native Windows context menu for one or more items from the same directory, or for a folder background. The optional single-item rename callback starts the caller's editor. |
-| `ShowBaseMenu(paths, owner, actions, secondRightClick)` | Base Menu for one or more files and/or directories from the same parent: caller-provided actions precede a Shell menu using `*` and `AllFilesystemObjects` for files and mixed selections. For directory-only selections, the native item menu is filtered using `AllFilesystemObjects`, shared `*`/`Directory`/`Folder` registrations and the directory whitelist. Returns comparable displayed commands and optionally forwards a subsequent right-click's screen coordinates, owner-window hit state and Shift state to the caller. |
-| `ShowContentMenu(paths, owner, baseCommands, secondRightClick)` | Shows the Content Menu based on the native item menu, conservatively removing commands also identified in the Base Menu and the Shell verbs `copy`, `cut`, `paste`, `copyaspath`, `delete`, `rename` and `properties`; `link` is also removed for files and mixed selections. Optionally forwards subsequent right-clicks to the caller in the same way as the Base Menu. |
 | `ObserveDirectories(paths, changed)` | Observes immediate changes in the supplied directories and returns an `IDisposable` subscription. The callback may run on a background thread; callers must marshal UI work. Observation failures are logged and do not abort other subscriptions. |
 
-The [file context menu specification](CONTEXT_MENU_SPEC.md) defines the menu
-sequence, filtering, comparison rules and Shell integration limitations.
+The paired menus are created directly by `SutContextMenuFactory`, not by
+`SutShell`: `GetBaseMenu(paths, owner, actions)` creates the Base Menu and
+`GetContentMenu(paths, owner, baseCommands)` creates the filtered Content Menu.
+Each returns a disposable `SutContextMenu`; its `Show(secondRightClick)` displays
+the popup and, for the Base Menu, returns a snapshot after the popup closes.
+The optional callback receives subsequent right-click coordinates, owner-window
+hit state and Shift state. The snapshot can outlive its menu and is used to
+create the Content Menu. The [file context menu specification](CONTEXT_MENU_SPEC.md)
+defines the sequence, filtering, comparison rules and Shell integration limitations.
 
 The snapshot fixes item identities and ordering, not filesystem contents: items
 can change or disappear before their range is loaded. A refresh creates a new

@@ -31,13 +31,31 @@ public partial class ContentView : UserControl
     private int _nextBackgroundIndex;
     private bool _loadingRange;
     private bool _loadScheduled;
-    private IReadOnlyDictionary<string, int>? _baseMenuCommands;
-    private string? _baseMenuPath;
-    private int _selectionVersion;
+    private readonly SutContextMenuController<DirectoryRow> _contextMenu;
 
     public ContentView()
     {
         InitializeComponent();
+        _contextMenu = new SutContextMenuController<DirectoryRow>(
+            row => row.FullPath,
+            () => FileList.SelectedItems.OfType<DirectoryRow>().Select(row => row.FullPath).ToArray(),
+            (screenX, screenY) =>
+            {
+                var source = FileList.InputHitTest(FileList.PointFromScreen(new Point(screenX, screenY))) as DependencyObject;
+                return (FindAncestor<ListViewItem>(source)?.DataContext as DirectoryRow, source is not null && !IsListChrome(source));
+            },
+            row =>
+            {
+                FileList.SelectedItems.Clear();
+                if (row is not null) FileList.SelectedItems.Add(row);
+            },
+            row => new[] { RenameButton, PathGetButton, CopyGetButton, CopyAbortButton, CopyPasteButton,
+                MoveGetButton, MoveAbortButton, MovePasteButton, DeleteButton }.Select(button => new ShellMenuAction(
+                    System.Windows.Automation.AutomationProperties.GetName(button), button.IsEnabled,
+                    () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)))).ToArray(),
+            (row, paths) => SutShell.ShowItemMenu(paths, new WindowInteropHelper(Window.GetWindow(this)!).Handle,
+                paths.Count == 1 && row.Entry is not null && SutShell.GetEditName(row.FullPath) is not null ? BeginRename : null),
+            () => SutShell.ShowBackgroundMenu(CurrentPath, new WindowInteropHelper(Window.GetWindow(this)!).Handle));
         HideDirectoriesCheckBox.GetCheckBox().Checked += FiltersChanged;
         HideDirectoriesCheckBox.GetCheckBox().Unchecked += FiltersChanged;
         HideInternalContentCheckBox.GetCheckBox().Checked += FiltersChanged;
@@ -392,9 +410,7 @@ public partial class ContentView : UserControl
 
     private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        _baseMenuCommands = null;
-        _baseMenuPath = null;
-        _selectionVersion++;
+        _contextMenu.Reset();
         if (!_restoringSelection)
         {
             _selectedPaths.Clear();
@@ -463,127 +479,7 @@ public partial class ContentView : UserControl
     {
         try
         {
-            var owner = new WindowInteropHelper(Window.GetWindow(this)!).Handle;
-            var forceNativeMenu = false;
-            while (true)
-            {
-                if (row is null)
-                {
-                    _baseMenuCommands = null;
-                    _baseMenuPath = null;
-                    SutShell.ShowBackgroundMenu(CurrentPath, owner);
-                    return;
-                }
-                var selectedPaths = FileList.SelectedItems.OfType<DirectoryRow>().Select(item => item.FullPath).ToArray();
-                if (!forceNativeMenu && selectedPaths.Length > 0 &&
-                    selectedPaths.All(path => System.IO.File.Exists(path) || System.IO.Directory.Exists(path)) &&
-                    (Keyboard.Modifiers & ModifierKeys.Shift) == 0)
-                {
-                    if (alternate && _baseMenuCommands is { } baseCommands &&
-                        string.Equals(_baseMenuPath, row.FullPath, StringComparison.OrdinalIgnoreCase))
-                    {
-                        _baseMenuCommands = null;
-                        _baseMenuPath = null;
-                        var selectionVersion = _selectionVersion;
-                        var repeatOnSameRow = false;
-                        var clickedWithShift = false;
-                        SutShell.ShowContentMenu(selectedPaths, owner, baseCommands,
-                            (screenX, screenY, overOwner, shiftPressed) =>
-                            {
-                                if (!overOwner)
-                                    return false;
-                                var source = FileList.InputHitTest(FileList.PointFromScreen(new Point(screenX, screenY))) as DependencyObject;
-                                if (FindAncestor<ListViewItem>(source) is not { DataContext: DirectoryRow targetRow } ||
-                                    !string.Equals(targetRow.FullPath, row.FullPath, StringComparison.OrdinalIgnoreCase))
-                                    return false;
-                                repeatOnSameRow = true;
-                                clickedWithShift = shiftPressed;
-                                return true;
-                            });
-                        if (repeatOnSameRow && selectionVersion == _selectionVersion)
-                        {
-                            forceNativeMenu = clickedWithShift;
-                            continue;
-                        }
-                        return;
-                    }
-                    else
-                    {
-                        _baseMenuCommands = null;
-                        _baseMenuPath = null;
-                        var buttons = new[] { RenameButton, PathGetButton, CopyGetButton, CopyAbortButton, CopyPasteButton,
-                            MoveGetButton, MoveAbortButton, MovePasteButton, DeleteButton };
-                        var actions = buttons.Select(button => new ShellMenuAction(
-                            System.Windows.Automation.AutomationProperties.GetName(button), button.IsEnabled,
-                            () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)))).ToArray();
-                        var selectionVersion = _selectionVersion;
-                        DirectoryRow? clickedRow = null;
-                        var clickedBackground = false;
-                        var clickedElsewhere = false;
-                        var clickedWithShift = false;
-                        var shownCommands = SutShell.ShowBaseMenu(selectedPaths, owner, actions,
-                            alternate ? (screenX, screenY, overOwner, shiftPressed) =>
-                            {
-                                if (overOwner)
-                                {
-                                    var source = FileList.InputHitTest(FileList.PointFromScreen(new Point(screenX, screenY))) as DependencyObject;
-                                    if (FindAncestor<ListViewItem>(source) is { DataContext: DirectoryRow targetRow })
-                                    {
-                                        clickedRow = targetRow;
-                                        clickedWithShift = shiftPressed;
-                                        return true;
-                                    }
-                                    if (source is not null && !IsListChrome(source))
-                                    {
-                                        clickedBackground = true;
-                                        return true;
-                                    }
-                                }
-                                clickedElsewhere = true;
-                                return false;
-                            } : null);
-                        if (alternate && !clickedElsewhere && selectionVersion == _selectionVersion && selectedPaths.Length == FileList.SelectedItems.Count &&
-                            selectedPaths.All(path => FileList.SelectedItems.OfType<DirectoryRow>().Any(item =>
-                                string.Equals(item.FullPath, path, StringComparison.OrdinalIgnoreCase))))
-                        {
-                            _baseMenuCommands = shownCommands;
-                            _baseMenuPath = row.FullPath;
-                            if (clickedRow is not null && clickedWithShift)
-                            {
-                                if (!string.Equals(clickedRow.FullPath, row.FullPath, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    FileList.SelectedItems.Clear();
-                                    FileList.SelectedItems.Add(clickedRow);
-                                }
-                                row = clickedRow;
-                                forceNativeMenu = true;
-                                continue;
-                            }
-                            if (clickedRow is not null && string.Equals(clickedRow.FullPath, row.FullPath, StringComparison.OrdinalIgnoreCase))
-                            {
-                                continue;
-                            }
-                            if (clickedRow is not null || clickedBackground)
-                            {
-                                FileList.SelectedItems.Clear();
-                                if (clickedRow is not null)
-                                    FileList.SelectedItems.Add(clickedRow);
-                                row = clickedRow;
-                                continue;
-                            }
-                        }
-                        return;
-                    }
-                }
-                else
-                {
-                    _baseMenuCommands = null;
-                    _baseMenuPath = null;
-                    SutShell.ShowItemMenu(selectedPaths, owner,
-                        FileList.SelectedItems.Count == 1 && row.Entry is not null && SutShell.GetEditName(row.FullPath) is not null ? BeginRename : null);
-                    return;
-                }
-            }
+            _contextMenu.Show(row, new WindowInteropHelper(Window.GetWindow(this)!).Handle, alternate);
         }
         catch (Exception exception)
         {
@@ -596,8 +492,7 @@ public partial class ContentView : UserControl
         var source = e.OriginalSource as DependencyObject;
         if (FindAncestor<ListViewItem>(source) is { DataContext: DirectoryRow row })
         {
-            if (!FileList.SelectedItems.Contains(row) || (_baseMenuCommands is not null &&
-                !string.Equals(_baseMenuPath, row.FullPath, StringComparison.OrdinalIgnoreCase)))
+            if (!FileList.SelectedItems.Contains(row) || _contextMenu.IsDifferentTarget(row))
             {
                 FileList.SelectedItems.Clear();
                 FileList.SelectedItems.Add(row);
@@ -611,8 +506,7 @@ public partial class ContentView : UserControl
             return;
 
         FileList.SelectedItems.Clear();
-        _baseMenuCommands = null;
-        _baseMenuPath = null;
+        _contextMenu.Reset();
         ShowMenu(null);
         e.Handled = true;
     }

@@ -57,11 +57,26 @@ public partial class Pathview : UserControl
     private readonly Action<Color>? _tabColorChanged;
     private string? _customName;
     private Window? _inputWindow;
+    private readonly SutContextMenuController<TreeEntry> _treeContextMenu;
+    private readonly SutContextMenuController<TreeEntry> _subfolderContextMenu;
+    private TreeEntry? _treeMenuTarget;
+    private TreeEntry? _subfolderMenuTarget;
 
     public Pathview(string initialPath, bool isBrowsable, string? customName, Action<string?>? customNameChanged,
         Color? tabColor, Action<Color>? tabColorChanged)
     {
         InitializeComponent();
+        _treeContextMenu = CreateDirectoryMenuController(ActivePathAndSiblingsTree, true);
+        _subfolderContextMenu = CreateDirectoryMenuController(ActivePathSubfoldersList, false);
+        ActivePathAndSiblingsTree.SelectedItemChanged += (_, args) =>
+        {
+            if (args.NewValue is not TreeEntry entry || _treeMenuTarget is null ||
+                !string.Equals(entry.Path, _treeMenuTarget.Path, StringComparison.OrdinalIgnoreCase))
+            {
+                _treeContextMenu.Reset();
+                _treeMenuTarget = args.NewValue as TreeEntry;
+            }
+        };
         _customName = customName;
         _customNameChanged = customNameChanged;
         _tabColorChanged = tabColorChanged;
@@ -312,6 +327,10 @@ public partial class Pathview : UserControl
 
     private void CommitNavigation(string path, NavigationHistoryAction historyAction)
     {
+        _treeContextMenu.Reset();
+        _subfolderContextMenu.Reset();
+        _treeMenuTarget = null;
+        _subfolderMenuTarget = null;
         if (_pendingTreeNavigationEntry is { } pendingEntry &&
             string.Equals(pendingEntry.Path, path, StringComparison.OrdinalIgnoreCase))
         {
@@ -939,6 +958,117 @@ public partial class Pathview : UserControl
 
     private static void AddPlaceholder(TreeEntry entry) => entry.Children.Add(TreeEntry.Placeholder());
 
+    private SutContextMenuController<TreeEntry> CreateDirectoryMenuController(ItemsControl control, bool tree)
+    {
+        return new SutContextMenuController<TreeEntry>(entry => entry.Path,
+            () => (tree ? _treeMenuTarget : _subfolderMenuTarget) is { } target ? [target.Path] : [],
+            (screenX, screenY) =>
+            {
+                var source = control.InputHitTest(control.PointFromScreen(new Point(screenX, screenY))) as DependencyObject;
+                var entry = tree ? FindAncestor<TreeViewItem>(source)?.DataContext as TreeEntry :
+                    FindAncestor<ListViewItem>(source)?.DataContext as TreeEntry;
+                return (entry is { IsPlaceholder: false } ? entry : null,
+                    !tree && source is not null && !IsListChrome(source));
+            },
+            entry => SelectDirectoryMenuTarget(entry, tree),
+            CreateDirectoryMenuActions,
+            (entry, _) => ShowNativeMenu(this, entry.Path, !entry.IsTop ? () => BeginTreeRename(entry) : null),
+            () => { if (!tree) ShowNativeBackgroundMenu(this, CurrentPath); });
+    }
+
+    private void SelectDirectoryMenuTarget(TreeEntry? entry, bool tree)
+    {
+        var previous = tree ? _treeMenuTarget : _subfolderMenuTarget;
+        if (previous is null || entry is null || !string.Equals(previous.Path, entry.Path, StringComparison.OrdinalIgnoreCase))
+            (tree ? _treeContextMenu : _subfolderContextMenu).Reset();
+        if (tree)
+        {
+            _treeMenuTarget = entry;
+            if (entry is not null) entry.IsSelected = true;
+        }
+        else
+        {
+            _subfolderMenuTarget = entry;
+            ActivePathSubfoldersList.SelectedItem = entry;
+        }
+    }
+
+    private IReadOnlyList<ShellMenuAction> CreateDirectoryMenuActions(TreeEntry entry)
+    {
+        var copyPrepared = CopyWorkflowState.Shared.IsPrepared;
+        var movePrepared = MoveWorkflowState.Shared.IsPrepared;
+        var canStart = !copyPrepared && !movePrepared;
+        var actions = new (string Name, bool Enabled)[]
+        {
+            ("Rename", !entry.IsTop && Directory.Exists(entry.Path)),
+            ("PathGet", Directory.Exists(entry.Path)),
+            ("CopyGet", canStart), ("CopyAbort", copyPrepared), ("CopyPaste", copyPrepared),
+            ("MoveGet", canStart), ("MoveAbort", movePrepared), ("MovePaste", movePrepared),
+            ("Delete", canStart && ShellFileOperations.CanDelete(entry.Path))
+        };
+        return actions.Select(action => new ShellMenuAction(
+            System.Windows.Automation.AutomationProperties.GetName((Button)DirectoryContent.FindName(action.Name + "Button")),
+            action.Enabled, () => ExecuteDirectoryMenuAction(action.Name, entry))).ToArray();
+    }
+
+    private void ExecuteDirectoryMenuAction(string action, TreeEntry entry)
+    {
+        try
+        {
+            var owner = new WindowInteropHelper(Window.GetWindow(this)!).Handle;
+            switch (action)
+            {
+                case "Rename": BeginTreeRename(entry); break;
+                case "PathGet": Clipboard.SetText(entry.Path); break;
+                case "CopyGet":
+                    if (MoveWorkflowState.Shared.IsPrepared)
+                        throw new InvalidOperationException("Abort or complete the prepared Move before starting a Copy.");
+                    CopyWorkflowState.Shared.Prepare([entry.Path]);
+                    break;
+                case "CopyAbort": CopyWorkflowState.Shared.Abort(); break;
+                case "CopyPaste":
+                    SutShell.Copy(CopyWorkflowState.Shared.PreparedPaths, CurrentPath, owner);
+                    CopyWorkflowState.Shared.CompletePaste();
+                    RefreshCurrentFileSystemState(true);
+                    break;
+                case "MoveGet":
+                    if (CopyWorkflowState.Shared.IsPrepared)
+                        throw new InvalidOperationException("Abort or complete the prepared Copy before starting a Move.");
+                    MoveWorkflowState.Shared.Prepare([entry.Path]);
+                    break;
+                case "MoveAbort": MoveWorkflowState.Shared.Abort(); break;
+                case "MovePaste":
+                    SutShell.Move(MoveWorkflowState.Shared.PreparedPaths, CurrentPath, owner);
+                    MoveWorkflowState.Shared.CompletePaste();
+                    RefreshCurrentFileSystemState(true);
+                    break;
+                case "Delete":
+                    try { SutShell.Delete([entry.Path], owner); }
+                    finally { RefreshCurrentFileSystemState(true); }
+                    break;
+            }
+        }
+        catch (OperationCanceledException) when (action == "Delete") { }
+        catch (Exception exception)
+        {
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "Operation failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void ShowDirectoryMenu(TreeEntry entry, bool tree, bool alternate)
+    {
+        try
+        {
+            SelectDirectoryMenuTarget(entry, tree);
+            (tree ? _treeContextMenu : _subfolderContextMenu).Show(entry,
+                new WindowInteropHelper(Window.GetWindow(this)!).Handle, alternate);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "Context menu failed", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private void ActivePathSubfoldersListItem_MouseEnter(object sender, MouseEventArgs e)
     {
         ActivePathSubfoldersList.SelectedItem = null;
@@ -949,8 +1079,7 @@ public partial class Pathview : UserControl
         var source = e.OriginalSource as DependencyObject;
         if (FindAncestor<ListViewItem>(source) is { DataContext: TreeEntry entry } && !entry.IsPlaceholder)
         {
-            ActivePathSubfoldersList.SelectedItem = entry;
-            ShowSubfolderNativeMenu(entry);
+            ShowSubfolderMenu(entry, alternate: true);
             e.Handled = true;
             return;
         }
@@ -959,6 +1088,8 @@ public partial class Pathview : UserControl
             return;
 
         ActivePathSubfoldersList.SelectedItem = null;
+        _subfolderContextMenu.Reset();
+        _subfolderMenuTarget = null;
         ShowNativeBackgroundMenu(this, CurrentPath);
         e.Handled = true;
     }
@@ -970,18 +1101,18 @@ public partial class Pathview : UserControl
             return;
 
         if (ActivePathSubfoldersList.SelectedItem is TreeEntry entry && !entry.IsPlaceholder)
-            ShowSubfolderNativeMenu(entry);
+            ShowSubfolderMenu(entry, alternate: false);
         else
             ShowNativeBackgroundMenu(this, CurrentPath);
 
         e.Handled = true;
     }
 
-    private void ShowSubfolderNativeMenu(TreeEntry entry)
+    private void ShowSubfolderMenu(TreeEntry entry, bool alternate)
     {
         try
         {
-            ShowNativeMenu(this, entry.Path, () => BeginTreeRename(entry));
+            ShowDirectoryMenu(entry, tree: false, alternate);
         }
         finally
         {
@@ -996,7 +1127,11 @@ public partial class Pathview : UserControl
 
         if (FindAncestor<ListViewItem>(e.OriginalSource as DependencyObject) is
             { DataContext: TreeEntry { IsPlaceholder: false } entry })
+        {
+            _subfolderContextMenu.Reset();
+            _subfolderMenuTarget = null;
             RequestBrowseLocation(entry.Path);
+        }
     }
 
     private void Tree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
@@ -1004,8 +1139,13 @@ public partial class Pathview : UserControl
         if (sender is not TreeView || FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { DataContext: TreeEntry entry } || entry.IsPlaceholder)
             return;
 
-        entry.IsSelected = true;
-        ShowNativeMenu(this, entry.Path, !entry.IsTop ? () => BeginTreeRename(entry) : null);
+        if (ReferenceEquals(sender, ActivePathAndSiblingsTree))
+            ShowDirectoryMenu(entry, tree: true, alternate: true);
+        else
+        {
+            entry.IsSelected = true;
+            ShowNativeMenu(this, entry.Path, !entry.IsTop ? () => BeginTreeRename(entry) : null);
+        }
         e.Handled = true;
     }
 
@@ -1229,7 +1369,7 @@ public partial class Pathview : UserControl
                     throw new ArgumentException("Enter a valid folder name.");
 
                 var owner = new WindowInteropHelper(Window.GetWindow(this)!).Handle;
-                var newPath = ShellContextMenu.Rename(entry.Path, entry.EditName, owner);
+                var newPath = ShellItemOperations.Rename(entry.Path, entry.EditName, owner);
                 DirectoryRenamed?.Invoke(entry.Path, newPath);
             }
         }

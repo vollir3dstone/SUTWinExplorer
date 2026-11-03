@@ -43,7 +43,7 @@ internal static class ViewUtilities
         try
         {
             var owner = new WindowInteropHelper(Window.GetWindow(element)!).Handle;
-            ShellContextMenu.Show(path, owner, rename);
+            SutShell.ShowItemMenu([path], owner, rename);
         }
         catch (Exception exception)
         {
@@ -56,7 +56,7 @@ internal static class ViewUtilities
         try
         {
             var owner = new WindowInteropHelper(Window.GetWindow(element)!).Handle;
-            ShellContextMenu.ShowBackground(path, owner);
+            SutShell.ShowBackgroundMenu(path, owner);
         }
         catch (Exception exception)
         {

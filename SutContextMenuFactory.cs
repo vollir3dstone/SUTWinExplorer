@@ -6,167 +6,40 @@ using System.Text.Json;
 
 namespace SUTWinExplorer;
 
-internal static class ShellContextMenu
+internal static class SutContextMenuFactory
 {
     private const uint FirstCommandId = 1;
     private const uint LastCommandId = 0x7FFF;
-    private const uint PopupFlags = 0x0100 | 0x0002;
     private const uint MenuFlags = 0;
     private const uint MenuCanRename = 0x00000010;
     private const uint GetVerbUnicode = 0x00000004;
-    private const uint InvokeUnicode = 0x00004000;
     private const uint MenuByPosition = 0x00000400;
     private const uint MenuDisabled = 0x00000003;
     private const uint MenuSeparator = 0x00000800;
     private const uint MenuOwnerDrawn = 0x00000100;
     private const uint BaseMenuCommandFirst = 0x8000;
-    private const uint ShellViewSelectEdit = 0x0003;
-    private const string ShellIdListArrayFormat = "Shell IDList Array";
     private const string BlacklistResourceName = "SUTWinExplorer.ShellExtensionBlacklist.json";
     private const string DirectoryWhitelistResourceName = "SUTWinExplorer.DirectoryMenuWhitelist.json";
     private static readonly Lazy<HashSet<string>> BlacklistedVerbs = new(LoadBlacklistedVerbs);
     private static readonly Lazy<DirectoryMenuWhitelist> DirectoryWhitelist = new(LoadDirectoryWhitelist);
     private static readonly HashSet<string> ExcludedFileVerbs = new(StringComparer.OrdinalIgnoreCase)
         { "copy", "cut", "paste", "copyaspath", "link", "delete", "rename" };
-    internal const uint ShellViewBackground = 0;
-    internal const uint ShellViewSelection = 1;
+    internal static SutContextMenu GetItemMenu(IReadOnlyList<string> paths, IntPtr owner, Action? rename = null) =>
+        CreateCore(paths, owner, background: false, rename);
 
-    internal static void InvokeViewCommand(IShellView shellView, uint selectionKind, IntPtr owner, string verb)
-    {
-        IntPtr contextMenuPointer = IntPtr.Zero;
-        IntPtr menu = IntPtr.Zero;
-        IntPtr ansiVerbPointer = IntPtr.Zero;
-        IntPtr verbPointer = IntPtr.Zero;
-        IContextMenu? contextMenu = null;
-        var operationStage = "getting the selection context menu";
-        try
-        {
-            var interfaceId = typeof(IContextMenu).GUID;
-            Marshal.ThrowExceptionForHR(shellView.GetItemObject(selectionKind, ref interfaceId, out contextMenuPointer));
-            if (contextMenuPointer == IntPtr.Zero)
-                throw new InvalidOperationException("The Shell did not provide a context menu for this command.");
+    internal static SutContextMenu GetBackgroundMenu(string folderPath, IntPtr owner) =>
+        CreateCore([folderPath], owner, background: true, rename: null);
 
-            contextMenu = (IContextMenu)Marshal.GetObjectForIUnknown(contextMenuPointer);
-            operationStage = "creating the context menu";
-            menu = CreatePopupMenu();
-            if (menu == IntPtr.Zero)
-                throw new InvalidOperationException("CreatePopupMenu failed.");
+    internal static SutContextMenu GetBaseMenu(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions) =>
+        CreateCore(paths, owner, background: false, rename: null, actions);
 
-            operationStage = "querying the context menu";
-            Marshal.ThrowExceptionForHR(contextMenu.QueryContextMenu(menu, 0, FirstCommandId, LastCommandId, MenuFlags));
-            ansiVerbPointer = Marshal.StringToHGlobalAnsi(verb);
-            verbPointer = Marshal.StringToHGlobalUni(verb);
-            var commandInfo = new CMINVOKECOMMANDINFOEX
-            {
-                Size = (uint)Marshal.SizeOf<CMINVOKECOMMANDINFOEX>(),
-                Mask = InvokeUnicode,
-                Owner = owner,
-                Verb = ansiVerbPointer,
-                VerbW = verbPointer,
-                Show = (int)ShowWindowCommand.Normal
-            };
-            operationStage = $"invoking the '{verb}' verb";
-            Marshal.ThrowExceptionForHR(contextMenu.InvokeCommand(ref commandInfo));
-        }
-        catch (Exception exception)
-        {
-            throw new InvalidOperationException(
-                $"The Shell failed while {operationStage} ({exception.GetType().Name}, HRESULT 0x{exception.HResult:X8}): {exception.Message}",
-                exception);
-        }
-        finally
-        {
-            if (verbPointer != IntPtr.Zero)
-                Marshal.FreeHGlobal(verbPointer);
-            if (ansiVerbPointer != IntPtr.Zero)
-                Marshal.FreeHGlobal(ansiVerbPointer);
-            if (menu != IntPtr.Zero)
-                _ = DestroyMenu(menu);
-            if (contextMenu is not null && Marshal.IsComObject(contextMenu))
-                _ = Marshal.ReleaseComObject(contextMenu);
-            if (contextMenuPointer != IntPtr.Zero)
-                _ = Marshal.Release(contextMenuPointer);
-        }
-    }
+    internal static SutContextMenu GetContentMenu(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands) =>
+        CreateCore(paths, owner, background: false, rename: null, excludedCommands: baseCommands);
 
-    internal static void RenameSelection(IShellView shellView)
-    {
-        IntPtr dataObjectPointer = IntPtr.Zero;
-        IDataObject? dataObject = null;
-        STGMEDIUM storageMedium = default;
-        var hasStorageMedium = false;
-        IntPtr lockedData = IntPtr.Zero;
-        try
-        {
-            var interfaceId = typeof(IDataObject).GUID;
-            Marshal.ThrowExceptionForHR(shellView.GetItemObject(
-                ShellViewSelection, ref interfaceId, out dataObjectPointer));
-            if (dataObjectPointer == IntPtr.Zero)
-                throw new InvalidOperationException("The Shell did not provide the selected items for Rename.");
-
-            dataObject = (IDataObject)Marshal.GetObjectForIUnknown(dataObjectPointer);
-            var formatId = RegisterClipboardFormat(ShellIdListArrayFormat);
-            if (formatId == 0)
-                throw new InvalidOperationException("Could not register the Shell item list format.");
-
-            var format = new FORMATETC
-            {
-                cfFormat = unchecked((short)formatId),
-                ptd = IntPtr.Zero,
-                dwAspect = DVASPECT.DVASPECT_CONTENT,
-                lindex = -1,
-                tymed = TYMED.TYMED_HGLOBAL
-            };
-            dataObject.GetData(ref format, out storageMedium);
-            hasStorageMedium = true;
-
-            lockedData = GlobalLock(storageMedium.unionmember);
-            if (lockedData == IntPtr.Zero)
-                throw new InvalidOperationException("Could not access the selected Shell item list.");
-
-            var itemCount = Marshal.ReadInt32(lockedData);
-            if (itemCount != 1)
-                throw new InvalidOperationException("Select exactly one item to rename it.");
-
-            var childOffset = Marshal.ReadInt32(lockedData, sizeof(int) * 2);
-            var headerSize = sizeof(int) * (itemCount + 2);
-            if (childOffset < headerSize)
-                throw new InvalidOperationException("The Shell returned an invalid selected item list.");
-
-            Marshal.ThrowExceptionForHR(shellView.SelectItem(
-                IntPtr.Add(lockedData, childOffset), ShellViewSelectEdit));
-        }
-        finally
-        {
-            if (lockedData != IntPtr.Zero)
-                _ = GlobalUnlock(storageMedium.unionmember);
-            if (hasStorageMedium)
-                ReleaseStgMedium(ref storageMedium);
-            if (dataObject is not null && Marshal.IsComObject(dataObject))
-                _ = Marshal.ReleaseComObject(dataObject);
-            if (dataObjectPointer != IntPtr.Zero)
-                _ = Marshal.Release(dataObjectPointer);
-        }
-    }
-
-    public static void Show(string path, IntPtr owner, Action? rename = null) => ShowCore([path], owner, background: false, rename);
-
-    internal static void ShowItems(IReadOnlyList<string> paths, IntPtr owner, Action? rename = null) =>
-        ShowCore(paths, owner, background: false, rename);
-
-    internal static IReadOnlyDictionary<string, int> ShowBase(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions, Func<int, int, bool, bool, bool>? secondRightClick) =>
-        ShowCore(paths, owner, background: false, rename: null, actions, secondRightClick: secondRightClick)!;
-
-    internal static void ShowContent(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands, Func<int, int, bool, bool, bool>? secondRightClick = null) =>
-        ShowCore(paths, owner, background: false, rename: null, excludedCommands: baseCommands, secondRightClick: secondRightClick);
-
-    public static void ShowBackground(string folderPath, IntPtr owner) => ShowCore([folderPath], owner, background: true, rename: null);
-
-    private static IReadOnlyDictionary<string, int>? ShowCore(IReadOnlyList<string> paths, IntPtr owner, bool background, Action? rename,
-        IReadOnlyList<ShellMenuAction>? actions = null, IReadOnlyDictionary<string, int>? excludedCommands = null, Func<int, int, bool, bool, bool>? secondRightClick = null)
+    private static SutContextMenu CreateCore(IReadOnlyList<string> paths, IntPtr owner, bool background, Action? rename,
+        IReadOnlyList<ShellMenuAction>? actions = null, IReadOnlyDictionary<string, int>? excludedCommands = null)
     {
         var isBaseMenu = actions is not null;
-        IReadOnlyDictionary<string, int>? baseCommands = null;
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
             throw new InvalidOperationException("The Windows Shell context menu must be opened from an STA thread.");
         if (paths.Count == 0)
@@ -186,15 +59,29 @@ internal static class ShellContextMenu
         IShellFolder? targetFolder = null;
         IShellView? shellView = null;
         IContextMenu? contextMenu = null;
-        SubclassProc? subclassProc = null;
-        MenuMessageFilter? menuFilter = null;
-        IntPtr menuHook = IntPtr.Zero;
-        var subclassInstalled = false;
-        using var fileClass = isBaseMenu && !directorySelection ? Microsoft.Win32.Registry.ClassesRoot.OpenSubKey("*") : null;
-        using var filesystemClass = isBaseMenu ? Microsoft.Win32.Registry.ClassesRoot.OpenSubKey("AllFilesystemObjects") : null;
+        Microsoft.Win32.RegistryKey? fileClass = null;
+        Microsoft.Win32.RegistryKey? filesystemClass = null;
+
+        void Release()
+        {
+            if (menu != IntPtr.Zero) _ = DestroyMenu(menu);
+            if (contextMenu is not null && Marshal.IsComObject(contextMenu)) _ = Marshal.FinalReleaseComObject(contextMenu);
+            if (parentFolder is not null && Marshal.IsComObject(parentFolder)) _ = Marshal.FinalReleaseComObject(parentFolder);
+            if (targetFolder is not null && Marshal.IsComObject(targetFolder)) _ = Marshal.FinalReleaseComObject(targetFolder);
+            if (shellView is not null && Marshal.IsComObject(shellView)) _ = Marshal.FinalReleaseComObject(shellView);
+            if (desktopFolder is not null && Marshal.IsComObject(desktopFolder)) _ = Marshal.FinalReleaseComObject(desktopFolder);
+            if (parentPointer != IntPtr.Zero) _ = Marshal.Release(parentPointer);
+            if (keyArray != IntPtr.Zero) Marshal.FreeCoTaskMem(keyArray);
+            if (childPidlArray != IntPtr.Zero) Marshal.FreeCoTaskMem(childPidlArray);
+            foreach (var absolutePidl in absolutePidls) Marshal.FreeCoTaskMem(absolutePidl);
+            fileClass?.Dispose();
+            filesystemClass?.Dispose();
+        }
 
         try
         {
+            fileClass = isBaseMenu && !directorySelection ? Microsoft.Win32.Registry.ClassesRoot.OpenSubKey("*") : null;
+            filesystemClass = isBaseMenu ? Microsoft.Win32.Registry.ClassesRoot.OpenSubKey("AllFilesystemObjects") : null;
             Marshal.ThrowExceptionForHR(SHGetDesktopFolder(out desktopFolder));
             foreach (var path in paths)
             {
@@ -209,7 +96,7 @@ internal static class ShellContextMenu
                 Marshal.ThrowExceptionForHR(desktopFolder.BindToObject(absolutePidls[0], IntPtr.Zero, ref shellFolderId, out targetFolder));
                 var shellViewId = typeof(IShellView).GUID;
                 Marshal.ThrowExceptionForHR(targetFolder.CreateViewObject(owner, ref shellViewId, out shellView));
-                Marshal.ThrowExceptionForHR(shellView.GetItemObject(ShellViewBackground, ref contextMenuId, out var contextMenuPointer));
+                Marshal.ThrowExceptionForHR(shellView.GetItemObject(ShellViewOperations.Background, ref contextMenuId, out var contextMenuPointer));
                 contextMenu = (IContextMenu)Marshal.GetObjectForIUnknown(contextMenuPointer);
                 _ = Marshal.Release(contextMenuPointer);
             }
@@ -283,110 +170,17 @@ internal static class ShellContextMenu
             }
             else if (excludedCommands is not null)
                 PrepareContentMenu(menu, contextMenu, excludedCommands, directorySelection);
-            InstallMenuMessageForwarder(owner, contextMenu, isBaseMenu || excludedCommands is not null, excludedCommands is not null, directorySelection, out subclassProc);
-            subclassInstalled = true;
-            var point = GetCursorPosition();
-            if (secondRightClick is not null)
-            {
-                menuFilter = (code, wParam, lParam) =>
-                {
-                    if (code == 2 && lParam != IntPtr.Zero && Marshal.PtrToStructure<MenuMessage>(lParam) is { Message: 0x0204 or 0x0206 } message)
-                    {
-                        try
-                        {
-                            var clickPoint = message.Point;
-                            var targetWindow = WindowFromPoint(clickPoint);
-                            var overOwner = targetWindow == owner || IsChild(owner, targetWindow);
-                            if (!overOwner &&
-                                Math.Abs(clickPoint.X - point.X) <= GetSystemMetrics(36) / 2 &&
-                                Math.Abs(clickPoint.Y - point.Y) <= GetSystemMetrics(37) / 2 &&
-                                GetWindowThreadProcessId(targetWindow, out _) == GetCurrentThreadId())
-                            {
-                                var className = new StringBuilder(32);
-                                _ = GetClassName(targetWindow, className, className.Capacity);
-                                overOwner = className.ToString() == "#32768" &&
-                                    SendMessage(targetWindow, 0x01E1, IntPtr.Zero, IntPtr.Zero) == menu;
-                            }
-                            if (secondRightClick(clickPoint.X, clickPoint.Y, overOwner, (message.WParam.ToInt64() & 0x0004) != 0))
-                            {
-                                _ = PostMessage(owner, 0x001F, IntPtr.Zero, IntPtr.Zero);
-                                return new IntPtr(1);
-                            }
-                        }
-                        catch (Exception exception)
-                        {
-                            System.Diagnostics.Trace.TraceError("Context menu right-click handling failed: {0}", exception);
-                        }
-                    }
-                    return CallNextHookEx(IntPtr.Zero, code, wParam, lParam);
-                };
-                menuHook = SetWindowsHookEx(-1, menuFilter, IntPtr.Zero, GetCurrentThreadId());
-                if (menuHook == IntPtr.Zero)
-                    throw new InvalidOperationException("Could not monitor the native menu for a second right-click.");
-            }
-
-            _ = SetForegroundWindow(owner);
-            var commandId = TrackPopupMenuEx(menu, isBaseMenu || excludedCommands is not null ? PopupFlags & ~0x0002u : PopupFlags, point.X, point.Y, owner, IntPtr.Zero);
-            if (isBaseMenu)
-                baseCommands = CollectComparableCommands(menu, contextMenu, allowVerbless: directorySelection);
-            _ = PostMessage(owner, 0, IntPtr.Zero, IntPtr.Zero);
-
-            if (commandId != 0)
-            {
-                if (actions is not null && commandId >= BaseMenuCommandFirst)
-                {
-                    var index = commandId - BaseMenuCommandFirst;
-                    if (index < actions.Count && actions[(int)index].IsEnabled)
-                        actions[(int)index].Invoke();
-                    return baseCommands;
-                }
-                if (rename is not null && IsRenameCommand(contextMenu, commandId - FirstCommandId))
-                {
-                    rename();
-                    return baseCommands;
-                }
-
-                var invokeInfo = new CMINVOKECOMMANDINFOEX
-                {
-                    Size = (uint)Marshal.SizeOf<CMINVOKECOMMANDINFOEX>(),
-                    Mask = InvokeUnicode,
-                    Owner = owner,
-                    Verb = new IntPtr(commandId - FirstCommandId),
-                    VerbW = new IntPtr(commandId - FirstCommandId),
-                    Show = (int)ShowWindowCommand.Normal
-                };
-                Marshal.ThrowExceptionForHR(contextMenu.InvokeCommand(ref invokeInfo));
-            }
-            return baseCommands;
+            return new SutContextMenu(owner, menu, contextMenu, actions, rename,
+                offset => IsRenameCommand(contextMenu, offset),
+                isBaseMenu ? () => CollectComparableCommands(menu, contextMenu, allowVerbless: directorySelection) : null,
+                isBaseMenu || excludedCommands is not null
+                    ? submenu => RemoveExcludedFileCommands(submenu, contextMenu, directorySelection, excludedCommands is not null) : null,
+                Release);
         }
-        finally
+        catch
         {
-            if (menuHook != IntPtr.Zero)
-                _ = UnhookWindowsHookEx(menuHook);
-            GC.KeepAlive(menuFilter);
-            if (subclassInstalled && subclassProc is not null)
-                _ = RemoveWindowSubclass(owner, subclassProc, UIntPtr.Zero);
-            if (menu != IntPtr.Zero)
-                _ = DestroyMenu(menu);
-            if (contextMenu is not null && Marshal.IsComObject(contextMenu))
-                _ = Marshal.FinalReleaseComObject(contextMenu);
-            if (parentFolder is not null && Marshal.IsComObject(parentFolder))
-                _ = Marshal.FinalReleaseComObject(parentFolder);
-            if (targetFolder is not null && Marshal.IsComObject(targetFolder))
-                _ = Marshal.FinalReleaseComObject(targetFolder);
-            if (shellView is not null && Marshal.IsComObject(shellView))
-                _ = Marshal.FinalReleaseComObject(shellView);
-            if (desktopFolder is not null && Marshal.IsComObject(desktopFolder))
-                _ = Marshal.FinalReleaseComObject(desktopFolder);
-            if (parentPointer != IntPtr.Zero)
-                _ = Marshal.Release(parentPointer);
-            if (keyArray != IntPtr.Zero)
-                Marshal.FreeCoTaskMem(keyArray);
-            if (childPidlArray != IntPtr.Zero)
-                Marshal.FreeCoTaskMem(childPidlArray);
-            foreach (var absolutePidl in absolutePidls)
-                if (absolutePidl != IntPtr.Zero)
-                    Marshal.FreeCoTaskMem(absolutePidl);
+            Release();
+            throw;
         }
     }
 
@@ -810,7 +604,7 @@ internal static class ShellContextMenu
 
     private static HashSet<string> LoadBlacklistedVerbs()
     {
-        using var stream = typeof(ShellContextMenu).Assembly.GetManifestResourceStream(BlacklistResourceName)
+        using var stream = typeof(SutContextMenuFactory).Assembly.GetManifestResourceStream(BlacklistResourceName)
             ?? throw new InvalidOperationException($"Embedded Shell extension blacklist '{BlacklistResourceName}' is missing.");
         using var document = JsonDocument.Parse(stream);
         if (document.RootElement.GetProperty("_type").GetString() != "shellExtensionBlacklist")
@@ -834,7 +628,7 @@ internal static class ShellContextMenu
 
     private static DirectoryMenuWhitelist LoadDirectoryWhitelist()
     {
-        using var stream = typeof(ShellContextMenu).Assembly.GetManifestResourceStream(DirectoryWhitelistResourceName)
+        using var stream = typeof(SutContextMenuFactory).Assembly.GetManifestResourceStream(DirectoryWhitelistResourceName)
             ?? throw new InvalidOperationException($"Embedded directory menu whitelist '{DirectoryWhitelistResourceName}' is missing.");
         using var document = JsonDocument.Parse(stream);
         return ParseDirectoryWhitelist(document);
@@ -870,91 +664,6 @@ internal static class ShellContextMenu
 
     private sealed record DirectoryMenuWhitelist(HashSet<string> Verbs, HashSet<Guid> HandlerIds);
 
-    internal static string Rename(string path, string name, IntPtr owner)
-    {
-        IntPtr absolutePidl = IntPtr.Zero;
-        IntPtr renamedPidl = IntPtr.Zero;
-        IntPtr renamedAbsolutePidl = IntPtr.Zero;
-        IntPtr namePointer = IntPtr.Zero;
-        IntPtr resultPointer = IntPtr.Zero;
-        IShellFolder? desktop = null;
-        IShellFolder? parent = null;
-        try
-        {
-            Marshal.ThrowExceptionForHR(SHGetDesktopFolder(out desktop));
-            uint attributes = 0;
-            Marshal.ThrowExceptionForHR(desktop.ParseDisplayName(owner, IntPtr.Zero, path, out _, out absolutePidl, ref attributes));
-            var folderId = typeof(IShellFolder).GUID;
-            Marshal.ThrowExceptionForHR(SHBindToParent(absolutePidl, ref folderId, out parent, out var childPidl));
-            namePointer = Marshal.StringToCoTaskMemUni(name);
-            Marshal.ThrowExceptionForHR(parent.SetNameOf(owner, childPidl, namePointer, 1, out renamedPidl));
-            if (renamedPidl == IntPtr.Zero)
-                throw new InvalidOperationException("The Shell did not return the renamed folder.");
-            if (!ILRemoveLastID(absolutePidl))
-                throw new InvalidOperationException("Could not resolve the renamed folder's parent.");
-            renamedAbsolutePidl = ILCombine(absolutePidl, renamedPidl);
-            if (renamedAbsolutePidl == IntPtr.Zero)
-                throw new InvalidOperationException("Could not resolve the renamed folder.");
-            Marshal.ThrowExceptionForHR(SHGetNameFromIDList(renamedAbsolutePidl, 0x80058000, out resultPointer));
-            return Marshal.PtrToStringUni(resultPointer) ?? throw new InvalidOperationException("The renamed folder has no filesystem path.");
-        }
-        finally
-        {
-            if (resultPointer != IntPtr.Zero) Marshal.FreeCoTaskMem(resultPointer);
-            if (namePointer != IntPtr.Zero) Marshal.FreeCoTaskMem(namePointer);
-            if (renamedAbsolutePidl != IntPtr.Zero) Marshal.FreeCoTaskMem(renamedAbsolutePidl);
-            if (renamedPidl != IntPtr.Zero) Marshal.FreeCoTaskMem(renamedPidl);
-            if (absolutePidl != IntPtr.Zero) Marshal.FreeCoTaskMem(absolutePidl);
-            if (parent is not null && Marshal.IsComObject(parent)) _ = Marshal.ReleaseComObject(parent);
-            if (desktop is not null && Marshal.IsComObject(desktop)) _ = Marshal.ReleaseComObject(desktop);
-        }
-    }
-
-    private static void InstallMenuMessageForwarder(IntPtr owner, IContextMenu contextMenu, bool excludeFileCommands, bool isContentMenu, bool directorySelection, out SubclassProc callback)
-    {
-        var menu3 = contextMenu as IContextMenu3;
-        var menu2 = contextMenu as IContextMenu2;
-        callback = (hwnd, message, wParam, lParam, subclassId, referenceData) =>
-        {
-            try
-            {
-                if (message is 0x0117 or 0x002B or 0x002C or 0x0120)
-                {
-                    var handled = false;
-                    var menuResult = IntPtr.Zero;
-                    if (menu3 is not null)
-                    {
-                        handled = menu3.HandleMenuMsg2(message, wParam, lParam, out menuResult) >= 0;
-                    }
-                    else if (menu2 is not null && menu2.HandleMenuMsg(message, wParam, lParam) >= 0)
-                    {
-                        handled = true;
-                    }
-                    if (excludeFileCommands && message == 0x0117 && wParam != IntPtr.Zero)
-                        RemoveExcludedFileCommands(wParam, contextMenu, directorySelection, isContentMenu);
-                    if (handled)
-                        return menuResult;
-                }
-            }
-            catch (Exception exception)
-            {
-                System.Diagnostics.Trace.TraceError("Context menu message forwarding failed: {0}", exception);
-            }
-
-            return DefSubclassProc(hwnd, message, wParam, lParam);
-        };
-
-        if (!SetWindowSubclass(owner, callback, UIntPtr.Zero, UIntPtr.Zero))
-            throw new InvalidOperationException("Could not install the native menu message handler.");
-    }
-
-    private static NativePoint GetCursorPosition()
-    {
-        if (!GetCursorPos(out var point))
-            throw new InvalidOperationException("Could not read the pointer position.");
-        return point;
-    }
-
     [DllImport("shell32.dll", PreserveSig = true)]
     private static extern int SHGetDesktopFolder(out IShellFolder desktopFolder);
 
@@ -976,12 +685,6 @@ internal static class ShellContextMenu
 
     [DllImport("ole32.dll")]
     private static extern int CoCreateInstance(ref Guid classId, IntPtr outer, uint context, ref Guid interfaceId, out IntPtr result);
-
-    [DllImport("shell32.dll")]
-    private static extern IntPtr ILCombine(IntPtr parent, IntPtr child);
-
-    [DllImport("shell32.dll", PreserveSig = true)]
-    private static extern int SHGetNameFromIDList(IntPtr itemIdList, uint nameType, out IntPtr name);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr CreatePopupMenu();
@@ -1019,87 +722,6 @@ internal static class ShellContextMenu
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern bool InsertMenu(IntPtr menu, uint position, uint flags, UIntPtr id, string? text);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern uint TrackPopupMenuEx(IntPtr menu, uint flags, int x, int y, IntPtr owner, IntPtr parameters);
-
-    [DllImport("user32.dll")]
-    private static extern bool GetCursorPos(out NativePoint point);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr WindowFromPoint(NativePoint point);
-
-    [DllImport("user32.dll")]
-    private static extern int GetSystemMetrics(int index);
-
-    [DllImport("user32.dll")]
-    private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetClassName(IntPtr window, StringBuilder className, int maximum);
-
-    [DllImport("user32.dll")]
-    private static extern bool IsChild(IntPtr parent, IntPtr window);
-
-    [DllImport("user32.dll")]
-    private static extern bool SetForegroundWindow(IntPtr window);
-
-    [DllImport("user32.dll")]
-    private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("kernel32.dll")]
-    private static extern uint GetCurrentThreadId();
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr SetWindowsHookEx(int hook, MenuMessageFilter callback, IntPtr module, uint threadId);
-
-    [DllImport("user32.dll")]
-    private static extern bool UnhookWindowsHookEx(IntPtr hook);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern uint RegisterClipboardFormat(string format);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr GlobalLock(IntPtr memory);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GlobalUnlock(IntPtr memory);
-
-    [DllImport("ole32.dll")]
-    private static extern void ReleaseStgMedium(ref STGMEDIUM medium);
-
-    [DllImport("comctl32.dll", SetLastError = true)]
-    private static extern bool SetWindowSubclass(IntPtr window, SubclassProc callback, UIntPtr subclassId, UIntPtr referenceData);
-
-    [DllImport("comctl32.dll", SetLastError = true)]
-    private static extern bool RemoveWindowSubclass(IntPtr window, SubclassProc callback, UIntPtr subclassId);
-
-    [DllImport("comctl32.dll")]
-    private static extern IntPtr DefSubclassProc(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
-
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate IntPtr SubclassProc(IntPtr window, uint message, IntPtr wParam, IntPtr lParam, UIntPtr subclassId, UIntPtr referenceData);
-
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate IntPtr MenuMessageFilter(int code, IntPtr wParam, IntPtr lParam);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MenuMessage
-    {
-        public IntPtr Window;
-        public uint Message;
-        public IntPtr WParam;
-        public IntPtr LParam;
-        public uint Time;
-        public NativePoint Point;
-    }
-
     [StructLayout(LayoutKind.Sequential)]
     private struct DefaultContextMenu
     {
@@ -1114,40 +736,36 @@ internal static class ShellContextMenu
         public IntPtr Keys;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct CMINVOKECOMMANDINFOEX
-    {
-        public uint Size;
-        public uint Mask;
-        public IntPtr Owner;
-        public IntPtr Verb;
-        public IntPtr Parameters;
-        public IntPtr Directory;
-        public int Show;
-        public uint HotKey;
-        public IntPtr Icon;
-        public IntPtr Title;
-        public IntPtr VerbW;
-        public IntPtr ParametersW;
-        public IntPtr DirectoryW;
-        public IntPtr TitleW;
-        public NativePoint InvokePoint;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct NativePoint
-    {
-        public int X;
-        public int Y;
-    }
-
-    private enum ShowWindowCommand
-    {
-        Normal = 1
-    }
 }
 
 internal sealed record ShellMenuAction(string Label, bool IsEnabled, Action Invoke);
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct ShellCommandInvokeInfo
+{
+    public uint Size;
+    public uint Mask;
+    public IntPtr Owner;
+    public IntPtr Verb;
+    public IntPtr Parameters;
+    public IntPtr Directory;
+    public int Show;
+    public uint HotKey;
+    public IntPtr Icon;
+    public IntPtr Title;
+    public IntPtr VerbW;
+    public IntPtr ParametersW;
+    public IntPtr DirectoryW;
+    public IntPtr TitleW;
+    public ShellInvokePoint InvokePoint;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct ShellInvokePoint
+{
+    public int X;
+    public int Y;
+}
 
 [ComImport]
 [Guid("000214E6-0000-0000-C000-000000000046")]
@@ -1192,7 +810,7 @@ public interface IShellView
 internal interface IContextMenu
 {
     [PreserveSig] int QueryContextMenu(IntPtr menu, uint indexMenu, uint idCommandFirst, uint idCommandLast, uint flags);
-    [PreserveSig] int InvokeCommand(ref ShellContextMenu.CMINVOKECOMMANDINFOEX commandInfo);
+    [PreserveSig] int InvokeCommand(ref ShellCommandInvokeInfo commandInfo);
     [PreserveSig] int GetCommandString(UIntPtr commandOffset, uint flags, IntPtr reserved, IntPtr name, uint maximumLength);
 }
 
@@ -1202,7 +820,7 @@ internal interface IContextMenu
 internal interface IContextMenu2
 {
     [PreserveSig] int QueryContextMenu(IntPtr menu, uint indexMenu, uint idCommandFirst, uint idCommandLast, uint flags);
-    [PreserveSig] int InvokeCommand(ref ShellContextMenu.CMINVOKECOMMANDINFOEX commandInfo);
+    [PreserveSig] int InvokeCommand(ref ShellCommandInvokeInfo commandInfo);
     [PreserveSig] int GetCommandString(UIntPtr commandOffset, uint flags, IntPtr reserved, IntPtr name, uint maximumLength);
     [PreserveSig] int HandleMenuMsg(uint message, IntPtr wParam, IntPtr lParam);
 }
@@ -1213,7 +831,7 @@ internal interface IContextMenu2
 internal interface IContextMenu3
 {
     [PreserveSig] int QueryContextMenu(IntPtr menu, uint indexMenu, uint idCommandFirst, uint idCommandLast, uint flags);
-    [PreserveSig] int InvokeCommand(ref ShellContextMenu.CMINVOKECOMMANDINFOEX commandInfo);
+    [PreserveSig] int InvokeCommand(ref ShellCommandInvokeInfo commandInfo);
     [PreserveSig] int GetCommandString(UIntPtr commandOffset, uint flags, IntPtr reserved, IntPtr name, uint maximumLength);
     [PreserveSig] int HandleMenuMsg(uint message, IntPtr wParam, IntPtr lParam);
     [PreserveSig] int HandleMenuMsg2(uint message, IntPtr wParam, IntPtr lParam, out IntPtr result);

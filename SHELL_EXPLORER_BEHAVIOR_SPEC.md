@@ -342,14 +342,16 @@ may show its requested row in light gray without changing the active selection.
 
 ### Context menus and file operations
 
-- [x] Right-clicking a file/folder shows its native Windows Shell context menu.
+- [x] ContentView file and folder selections use the Base and Content Menu pair
+  described in [CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md).
 - [x] Right-clicking empty content space shows the active folder's native
   background menu.
-- [x] Tree folders show their native Shell context menu. Where the Shell permits
-  renaming, **Rename** starts an inline editor in the tree; Enter commits and
-  Escape cancels. Renamed active paths and open tabs are updated.
+- [x] The **Active path and siblings** tree uses the directory Base and Content
+  Menu pair. The **Active path** tree retains its native Shell menu. Where
+  renaming is available, **Rename** starts an inline editor in the tree; Enter
+  commits and Escape cancels. Renamed active paths and open tabs are updated.
 - [x] In a fixed Pathview's **Sub directories** list, right-clicking a folder
-  shows its native Shell context menu; right-clicking empty list space shows
+  shows the directory Base and Content Menu pair; right-clicking empty list space shows
   the active folder's native background menu. The Apps key and Shift+F10 show
   the selected folder's menu or, when no folder is selected, the background
   menu. Closing a folder's context menu clears the list selection. Where the
