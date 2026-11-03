@@ -15,6 +15,7 @@ internal sealed class SutContextMenuController<T> where T : class
     private readonly Func<string> _backgroundPath;
     private readonly Func<IReadOnlyList<ShellMenuAction>> _backgroundActions;
     private readonly Action<string> _showNew;
+    private readonly Func<IReadOnlyList<string>, ShellMenuAction?>? _openLocation;
     private IReadOnlyDictionary<string, int>? _baseCommands;
     private string? _basePath;
     private bool _baseIsBackground;
@@ -24,7 +25,8 @@ internal sealed class SutContextMenuController<T> where T : class
     internal SutContextMenuController(Func<T, string> path, Func<IReadOnlyList<string>> selection,
         Func<int, int, (T? Target, bool Background)> hitTest, Action<T?> select,
         Func<T, IReadOnlyList<ShellMenuAction>> actions, Action<T, IReadOnlyList<string>> showNative,
-        Action showBackground, Func<string> backgroundPath, Func<IReadOnlyList<ShellMenuAction>> backgroundActions, Action<string> showNew)
+        Action showBackground, Func<string> backgroundPath, Func<IReadOnlyList<ShellMenuAction>> backgroundActions, Action<string> showNew,
+        Func<IReadOnlyList<string>, ShellMenuAction?>? openLocation = null)
     {
         _path = path;
         _selection = selection;
@@ -36,6 +38,7 @@ internal sealed class SutContextMenuController<T> where T : class
         _backgroundPath = backgroundPath;
         _backgroundActions = backgroundActions;
         _showNew = showNew;
+        _openLocation = openLocation;
     }
 
     internal bool IsDifferentTarget(T target) => _basePath is not null &&
@@ -87,7 +90,8 @@ internal sealed class SutContextMenuController<T> where T : class
                 var repeat = false;
                 var shift = false;
                 var newAction = background ? new ShellMenuAction("New", "New…", true, () => _showNew(targetPath)) : null;
-                using var contentMenu = SutContextMenuFactory.GetContentMenuForContext(selectedPaths, owner, baseCommands, background, newAction);
+                using var contentMenu = SutContextMenuFactory.GetContentMenuForContext(selectedPaths, owner, baseCommands, background, newAction,
+                    background ? null : _openLocation?.Invoke(selectedPaths));
                 contentMenu.Show((screenX, screenY, overOwner, shiftPressed) =>
                 {
                     if (!overOwner)

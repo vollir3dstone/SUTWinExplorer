@@ -21,6 +21,12 @@ internal static class ShellFileOperations
     {
         if (Directory.Exists(path))
             return Path.GetFullPath(path);
+        var target = GetLinkTarget(path);
+        return target is not null && Directory.Exists(target) ? target : null;
+    }
+
+    public static string? GetLinkTarget(string path)
+    {
         if (!string.Equals(Path.GetExtension(path), ".lnk", StringComparison.OrdinalIgnoreCase))
             return null;
 
@@ -42,7 +48,8 @@ internal static class ShellFileOperations
             var targetBuffer = new StringBuilder(32768);
             Marshal.ThrowExceptionForHR(shellLink.GetPath(targetBuffer, targetBuffer.Capacity, IntPtr.Zero, 0));
             var targetPath = targetBuffer.ToString();
-            return Directory.Exists(targetPath) ? Path.GetFullPath(targetPath) : null;
+            return targetPath.Length > 0 && (File.Exists(targetPath) || Directory.Exists(targetPath))
+                ? Path.GetFullPath(targetPath) : null;
         }
         catch (COMException)
         {

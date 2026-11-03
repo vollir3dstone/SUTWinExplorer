@@ -60,8 +60,9 @@ The view supplies these callbacks when constructing the controller:
   within a menu and are not derived from their displayed labels.
 - Supply the current background directory and its application actions when no
   item is targeted.
-- Show the original native item or background menu when the controller requests
-  a fallback. The item callback receives the target and current selected paths.
+- Show the native item or background menu when the controller requests a
+  fallback. The ContentView item callback replaces Open file location for `.lnk`
+  selections; it receives the target and current selected paths.
 
 The view remains responsible for its own input events, initial selection and
 navigation. It calls `Show(target, owner, alternate)` with the owner window
@@ -129,12 +130,14 @@ ContentView uses the following selection rules:
   Switching between an item and the background starts a new series. List chrome
   such as headers and scrollbars is not treated as an item or background. Clicks
   outside the owner are not consumed as menu-series clicks.
-- Shift-right-click on an item uses the original Windows item menu, including
+- Shift-right-click on an item uses the Windows item menu, including
   on the same row while either popup is open. It preserves the current selection;
   on another row while the Base Menu is open it selects only that row. The
   modifier is taken from the mouse message, even if Shift is released before the
   new menu opens. Shift-right-click on the background uses the original Windows
   background menu, including its view commands.
+  For `.lnk` selections, the item menu replaces Open file location with the
+  application action described below.
   The keyboard context-menu key or Shift+F10 opens the applicable menu without
   starting a mouse-driven alternation series.
 
@@ -453,7 +456,8 @@ purpose or provider.
 Matching uses Shell command verbs obtained from `IContextMenu::GetCommandString`,
 case-insensitively. A menu command without a usable verb cannot be reliably
 classified this way. These rules apply to the file, directory and mixed menu
-pairs, not the original Shift menus or the background pairs. In this table, "files"
+pairs, not the Shift menus or the background pairs, except for the `.lnk`
+Open file location rule below. In this table, "files"
 includes mixed selections; "directories" means directory-only selections.
 
 | Shell action and verb | Base Menu | Content Menu | Reason or application equivalent |
@@ -468,14 +472,25 @@ includes mixed selections; "directories" means directory-only selections.
 | Properties `properties` | Top-level entry excluded when application actions are supplied | Excluded | Application Properties invokes the Shell command. |
 | Open `open`, Edit `edit` | Files: top-level entries excluded; directories: retained when matched | Retained unless separately identified as a duplicate | File content-specific operations belong in the Content Menu. |
 | Open With `openas` | Files: top-level entry excluded; directories: retained when matched | Retained unless separately identified as a duplicate | File content-specific operation belongs in the Content Menu. |
+| Open file location `opencontaining` | Excluded for selections containing `.lnk` | Replaced by the application action for selections containing `.lnk` | Open the shortcut target's containing folder in KIS Explorer. |
+
+For `.lnk` selections, the application also replaces `opencontaining` in the
+Shift item menu. The replacement uses the action ID `opencontaining` and the
+visible label **Open parent**, and is disabled for multiple selections. If the Shell does not supply the command,
+the application adds its own entry. A single shortcut's file or directory target
+is resolved when invoked; its parent directory opens in the browsable Pathview,
+including when the target itself is a directory.
+Unavailable, virtual or root targets report an error without invoking the Shell
+command. Matching depends on the Shell exposing the canonical verb; commands
+without an identifiable verb cannot be reliably classified.
 
 The exclusions for `copy`, `cut`, `paste`, `copyaspath`, `rename` and `delete`
 are applied recursively to currently populated submenus in both menus and again
 after a submenu is initialized. The same applies to `link` for files and mixed
 selections. `properties` is filtered recursively in the Content Menu and at the
 top level in the Base Menu when application actions are supplied. Paired background
-menus also remove the top-level Shell Properties entry; the original Shift menu
-remains unfiltered. For files and mixed selections, the
+menus also remove the top-level Shell Properties entry; the Shift menu retains
+Shell Properties. For files and mixed selections, the
 Base Menu-only exclusions for `open`, `edit`, `openas` and the blacklist are
 applied only to top-level commands when the Base Menu is prepared; they are not
 recursive or reapplied to lazy submenus. Consequently a nested or subsequently

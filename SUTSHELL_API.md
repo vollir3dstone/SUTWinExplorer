@@ -18,6 +18,7 @@ Shell helpers directly.
 | `OpenDirectoryAsync(path, showDirectories, hideInternal, namePattern, cancellationToken)` | Opens a snapshot with no explicit sort pairs, using the default name order. |
 | `GetDirectoryRangeAsync(snapshot, start, count, cancellationToken)` | Returns complete entries for the requested zero-based range in snapshot order on a background STA thread. Invalid ranges throw. Unavailable details or icons can be empty; images returned across threads are frozen. |
 | `GetFolderTarget(path)` | Returns a directory path for a directory or a directory shortcut, otherwise `null`. |
+| `GetLinkTarget(path)` | Resolves a `.lnk` to an existing filesystem file or directory; returns `null` for unavailable or non-filesystem targets. |
 | `GetEditName(path)` / `Rename(path, name, owner)` | Obtain the filesystem leaf name for editing, or `null` for a drive root; validate and rename an item through the Windows Shell, returning its new filesystem path. Invalid names and existing targets fail; case-only changes are allowed. |
 | `Open(path)` | Opens an item using the OS shell. |
 | `Link(paths, destination, insertedPaths)` | Create Shell shortcuts for the selected paths in the destination, without overwriting existing items. Appends created paths; a later failure can leave earlier shortcuts in place. |

@@ -184,8 +184,12 @@ and no menu, then restart with the Base Menu. This includes clicks while either
 menu is open and the pointer stays at the opening position. A
 right-click on another row while the Base Menu is open ends the series,
 selects only that row and starts its applicable menu; changing the selection
-also resets the series. Shift-right-click opens the original Windows menu,
-including on the same row while either menu is open. Right-clicking the empty
+also resets the series. Shift-right-click opens the Windows menu, including on
+the same row while either menu is open. For `.lnk` selections its Shell Open file
+location command is replaced by the application action **Open parent**, as in the Content Menu.
+That action opens the target's parent directory, including for folder targets, in the browsable Pathview and
+reports an unavailable or non-filesystem target instead of launching Windows
+Explorer; it is disabled for multiple selections. Right-clicking the empty
 background starts its own Base/Content/no-menu sequence; Shift-right-click keeps
 the original Windows background menu.
 

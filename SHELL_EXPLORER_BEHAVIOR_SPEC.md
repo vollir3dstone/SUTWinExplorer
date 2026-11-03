@@ -408,6 +408,13 @@ may show its requested row in light gray without changing the active selection.
   sidebar menus and their backgrounds.
 - [x] ContentView file and folder selections use the Base and Content Menu pair
   described in [CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md).
+- [x] For a single `.lnk` selection, **Open parent** in the Content Menu
+  opens the parent directory of the shortcut's file or folder target in KIS
+  Explorer. For a folder target, it opens the folder's parent, not the target
+  folder itself. The same application action replaces the Windows command in the
+  Shift item menu. In a fixed Pathview it opens the location in the browsable
+  Pathview. Multiple selections disable the action. An unavailable or
+  non-filesystem target reports an error without opening Windows Explorer.
 - [x] Right-clicking empty content space cycles through the active folder's
   background Base Menu, Content Menu and no menu; Shift opens the native menu.
 - [x] The **Active path and siblings** tree uses the directory Base and Content

@@ -71,11 +71,12 @@ public partial class ContentView : UserControl
                 if (row is not null) FileList.SelectedItems.Add(row);
             },
             row => CreateContextMenuActions(),
-            (row, paths) => SutShell.ShowItemMenu(paths, new WindowInteropHelper(Window.GetWindow(this)!).Handle,
-                paths.Count == 1 && row.Entry is not null && SutShell.GetEditName(row.FullPath) is not null ? BeginRename : null),
+            (row, paths) => SutShell.ShowItemMenuWithOpenLocation(paths, new WindowInteropHelper(Window.GetWindow(this)!).Handle,
+                paths.Count == 1 && row.Entry is not null && SutShell.GetEditName(row.FullPath) is not null ? BeginRename : null,
+                CreateOpenLocationAction(paths)),
             () => SutShell.ShowBackgroundMenu(CurrentPath, new WindowInteropHelper(Window.GetWindow(this)!).Handle),
             () => CurrentPath, CreateContextMenuActions,
-            ShowNewItemDialog);
+            ShowNewItemDialog, CreateOpenLocationAction);
         HideDirectoriesCheckBox.GetCheckBox().Checked += FiltersChanged;
         HideDirectoriesCheckBox.GetCheckBox().Unchecked += FiltersChanged;
         HideInternalContentCheckBox.GetCheckBox().Checked += FiltersChanged;
@@ -93,6 +94,30 @@ public partial class ContentView : UserControl
                 () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)),
                 IsTransfer: button.Tag is string action && (action.StartsWith("Link", StringComparison.Ordinal) || action.StartsWith("Copy", StringComparison.Ordinal) || action.StartsWith("Move", StringComparison.Ordinal)),
                 SeparatorBefore: button == NameGetButton || button == DeleteButton)).ToArray();
+
+    private ShellMenuAction? CreateOpenLocationAction(IReadOnlyList<string> paths)
+    {
+        if (!paths.Any(path => string.Equals(Path.GetExtension(path), ".lnk", StringComparison.OrdinalIgnoreCase)))
+            return null;
+
+        var shortcutPath = paths[0];
+        return new ShellMenuAction("opencontaining", "Open parent", paths.Count == 1, () =>
+        {
+            try
+            {
+                var target = SutShell.GetLinkTarget(shortcutPath) ??
+                    throw new InvalidOperationException("The shortcut target is unavailable or is not a filesystem item.");
+                var directory = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(target)) ??
+                    throw new InvalidOperationException("The shortcut target does not have a containing folder.");
+                FolderOpenRequested?.Invoke(this, directory);
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot open parent",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        });
+    }
 
     internal void ShowNewItemDialog(string path)
     {

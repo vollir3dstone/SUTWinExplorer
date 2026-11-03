@@ -31,6 +31,9 @@ internal static class SutContextMenuFactory
     internal static SutContextMenu GetItemMenu(IReadOnlyList<string> paths, IntPtr owner, Action? rename = null) =>
         CreateCore(paths, owner, background: false, rename);
 
+    internal static SutContextMenu GetItemMenuWithOpenLocation(IReadOnlyList<string> paths, IntPtr owner, Action? rename, ShellMenuAction? openLocation) =>
+        CreateCore(paths, owner, background: false, rename, openLocationAction: openLocation);
+
     internal static SutContextMenu GetBackgroundMenu(string folderPath, IntPtr owner) =>
         CreateCore([folderPath], owner, background: true, rename: null);
 
@@ -53,12 +56,14 @@ internal static class SutContextMenuFactory
     internal static SutContextMenu GetBaseMenuForContext(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions, bool background) =>
         background ? GetBackgroundBaseMenu(paths[0], owner, actions) : GetBaseMenu(paths, owner, actions);
 
-    internal static SutContextMenu GetContentMenuForContext(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands, bool background, ShellMenuAction? newAction) =>
-        background ? GetBackgroundContentMenu(paths[0], owner, baseCommands, newAction) : GetContentMenu(paths, owner, baseCommands);
+    internal static SutContextMenu GetContentMenuForContext(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands, bool background, ShellMenuAction? newAction, ShellMenuAction? openLocation) =>
+        background ? GetBackgroundContentMenu(paths[0], owner, baseCommands, newAction) :
+            CreateCore(paths, owner, background: false, rename: null, excludedCommands: baseCommands, openLocationAction: openLocation);
 
     private static SutContextMenu CreateCore(IReadOnlyList<string> paths, IntPtr owner, bool background, Action? rename,
         IReadOnlyList<ShellMenuAction>? actions = null, IReadOnlyDictionary<string, int>? excludedCommands = null,
-        IReadOnlyDictionary<string, int>? backgroundBaseCommands = null, ShellMenuAction? backgroundNewAction = null)
+        IReadOnlyDictionary<string, int>? backgroundBaseCommands = null, ShellMenuAction? backgroundNewAction = null,
+        ShellMenuAction? openLocationAction = null)
     {
         var isBaseMenu = actions is not null;
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
@@ -70,6 +75,7 @@ internal static class SutContextMenuFactory
             throw new ArgumentException("Selected items must belong to the same directory.", nameof(paths));
 
         var directorySelection = !background && paths.All(Directory.Exists);
+        var shortcutSelection = !background && paths.Any(path => string.Equals(Path.GetExtension(path), ".lnk", StringComparison.OrdinalIgnoreCase));
         var absolutePidls = new List<IntPtr>();
         IntPtr childPidlArray = IntPtr.Zero;
         IntPtr menu = IntPtr.Zero;
@@ -197,6 +203,7 @@ internal static class SutContextMenuFactory
                 {
                     PrepareBaseMenu(menu, contextMenu, directorySelection, actions!.Count > 0);
                     RemoveExcludedFileCommands(menu, contextMenu, directorySelection);
+                    if (shortcutSelection) RemoveOpenContaining(menu, contextMenu);
                 }
                 if (actions!.Count > 0)
                     InsertActions(menu, actions);
@@ -211,13 +218,30 @@ internal static class SutContextMenuFactory
                 ReplaceBackgroundNew(menu, backgroundNewAction);
                 actions = [backgroundNewAction];
             }
+            if (openLocationAction is not null)
+            {
+                if (!ReplaceOpenContaining(menu, contextMenu, openLocationAction))
+                {
+                    if (!InsertMenu(menu, (uint)GetMenuItemCount(menu), MenuByPosition | (openLocationAction.IsEnabled ? 0u : MenuDisabled),
+                        (UIntPtr)BaseMenuCommandFirst, openLocationAction.Label))
+                        throw new InvalidOperationException("Could not insert the Open file location action.");
+                }
+                actions = [openLocationAction];
+            }
             return new SutContextMenu(owner, menu, contextMenu, actions, rename,
                 offset => IsRenameCommand(contextMenu, offset),
                 isBaseMenu ? () => CollectComparableCommands(menu, contextMenu, allowVerbless: directorySelection || background) : null,
                 background && (isBaseMenu || excludedCommands is not null)
                     ? submenu => RemoveBackgroundViewMenus(submenu, contextMenu)
-                    : isBaseMenu || excludedCommands is not null
-                        ? submenu => RemoveExcludedFileCommands(submenu, contextMenu, directorySelection, excludedCommands is not null) : null,
+                    : isBaseMenu || excludedCommands is not null || openLocationAction is not null
+                        ? submenu =>
+                        {
+                            if (isBaseMenu || excludedCommands is not null)
+                                RemoveExcludedFileCommands(submenu, contextMenu, directorySelection, excludedCommands is not null);
+                            if (isBaseMenu && shortcutSelection) RemoveOpenContaining(submenu, contextMenu);
+                            if (openLocationAction is not null) ReplaceOpenContaining(submenu, contextMenu, openLocationAction);
+                        } : null,
+                    allowRightButton: !isBaseMenu && excludedCommands is null,
                 Release);
         }
         catch
@@ -491,6 +515,40 @@ internal static class SutContextMenuFactory
         }
 
         RemoveRedundantSeparators(menu);
+    }
+
+    private static void RemoveOpenContaining(IntPtr menu, IContextMenu contextMenu)
+    {
+        for (var index = GetMenuItemCount(menu) - 1; index >= 0; index--)
+        {
+            var submenu = GetSubMenu(menu, index);
+            if (submenu != IntPtr.Zero) RemoveOpenContaining(submenu, contextMenu);
+            var id = GetMenuItemID(menu, index);
+            if (id >= FirstCommandId && id <= LastCommandId &&
+                string.Equals(GetCommandVerb(contextMenu, id - FirstCommandId), "opencontaining", StringComparison.OrdinalIgnoreCase) &&
+                !RemoveMenu(menu, (uint)index, MenuByPosition))
+                throw new InvalidOperationException("Could not remove the Shell Open file location command.");
+        }
+        RemoveRedundantSeparators(menu);
+    }
+
+    private static bool ReplaceOpenContaining(IntPtr menu, IContextMenu contextMenu, ShellMenuAction action)
+    {
+        var replaced = false;
+        for (var index = GetMenuItemCount(menu) - 1; index >= 0; index--)
+        {
+            var submenu = GetSubMenu(menu, index);
+            if (submenu != IntPtr.Zero) replaced |= ReplaceOpenContaining(submenu, contextMenu, action);
+            var id = GetMenuItemID(menu, index);
+            if (id < FirstCommandId || id > LastCommandId ||
+                !string.Equals(GetCommandVerb(contextMenu, id - FirstCommandId), "opencontaining", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!RemoveMenu(menu, (uint)index, MenuByPosition) ||
+                !InsertMenu(menu, (uint)index, MenuByPosition | (action.IsEnabled ? 0u : MenuDisabled), (UIntPtr)BaseMenuCommandFirst, action.Label))
+                throw new InvalidOperationException("Could not replace the Shell Open file location command.");
+            replaced = true;
+        }
+        return replaced;
     }
 
     private static void RemoveShellProperties(IntPtr menu, IContextMenu contextMenu)

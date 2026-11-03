@@ -35,6 +35,13 @@ try {
     } finally { [void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell) }
     $getFolderTarget = $operations.GetMethod('GetFolderTarget', [Reflection.BindingFlags]'Static,Public')
     if ($getFolderTarget.Invoke($null, [object[]] @($inserted[1])) -cne $folder) { throw 'The folder shortcut did not resolve to its folder.' }
+    $getLinkTarget = $operations.GetMethod('GetLinkTarget', [Reflection.BindingFlags]'Static,Public')
+    if ($getLinkTarget.Invoke($null, [object[]] @($inserted[0])) -cne $file -or
+        $getLinkTarget.Invoke($null, [object[]] @($inserted[1])) -cne $folder -or
+        $null -ne $getLinkTarget.Invoke($null, [object[]] @([string] $file))) { throw 'Shortcut target resolution returned an incorrect target.' }
+    [IO.File]::Delete($file)
+    if ($null -ne $getLinkTarget.Invoke($null, [object[]] @($inserted[0]))) { throw 'A broken shortcut returned an available target.' }
+    [IO.File]::WriteAllText($file, 'original')
     $before = @(Get-ChildItem -LiteralPath $destination).Count
     $rejected = $false
     try {

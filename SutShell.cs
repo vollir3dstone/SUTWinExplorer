@@ -147,6 +147,8 @@ internal static class SutShell
 
     internal static string? GetFolderTarget(string path) => ShellFileOperations.GetFolderTarget(path);
 
+    internal static string? GetLinkTarget(string path) => ShellFileOperations.GetLinkTarget(path);
+
     internal static string GetFileSystemName(string path)
     {
         var trimmedPath = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -192,6 +194,12 @@ internal static class SutShell
     internal static void ShowItemMenu(IReadOnlyList<string> paths, IntPtr owner, Action? rename = null)
     {
         using var menu = SutContextMenuFactory.GetItemMenu(paths, owner, rename);
+        menu.Show();
+    }
+
+    internal static void ShowItemMenuWithOpenLocation(IReadOnlyList<string> paths, IntPtr owner, Action? rename, ShellMenuAction? openLocation)
+    {
+        using var menu = SutContextMenuFactory.GetItemMenuWithOpenLocation(paths, owner, rename, openLocation);
         menu.Show();
     }
 

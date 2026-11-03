@@ -13,12 +13,13 @@ internal sealed class SutContextMenu : IDisposable
     private readonly Func<uint, bool> _isRename;
     private readonly Func<IReadOnlyDictionary<string, int>>? _captureSnapshot;
     private readonly Action<IntPtr>? _filterSubmenu;
+    private readonly bool _allowRightButton;
     private readonly Action _release;
     private bool _disposed;
 
     internal SutContextMenu(IntPtr owner, IntPtr menu, IContextMenu contextMenu,
         IReadOnlyList<ShellMenuAction>? actions, Action? rename, Func<uint, bool> isRename,
-        Func<IReadOnlyDictionary<string, int>>? captureSnapshot, Action<IntPtr>? filterSubmenu, Action release)
+        Func<IReadOnlyDictionary<string, int>>? captureSnapshot, Action<IntPtr>? filterSubmenu, bool allowRightButton, Action release)
     {
         _owner = owner;
         _menu = menu;
@@ -28,6 +29,7 @@ internal sealed class SutContextMenu : IDisposable
         _isRename = isRename;
         _captureSnapshot = captureSnapshot;
         _filterSubmenu = filterSubmenu;
+        _allowRightButton = allowRightButton;
         _release = release;
     }
 
@@ -125,25 +127,12 @@ internal sealed class SutContextMenu : IDisposable
             }
 
             _ = SetForegroundWindow(_owner);
-            var flags = _filterSubmenu is not null ? 0x0100u : 0x0102u;
+            var flags = _allowRightButton ? 0x0102u : 0x0100u;
             var commandId = TrackPopupMenuEx(popup, flags, point.X, point.Y, _owner, IntPtr.Zero);
             var snapshot = _captureSnapshot?.Invoke();
             _ = PostMessage(_owner, 0, IntPtr.Zero, IntPtr.Zero);
             if (commandId != 0)
-            {
-                if (_actions is not null && commandId >= 0x8000)
-                {
-                    var index = commandId - 0x8000;
-                    if (index < _actions.Count && _actions[(int)index].IsEnabled)
-                        _actions[(int)index].Invoke();
-                }
-                else if (_rename is not null && _isRename(commandId - 1))
-                    _rename();
-                else
-                {
-                    InvokeCommand(commandId - 1);
-                }
-            }
+                ExecuteCommand(commandId);
             return snapshot;
         }
         finally
@@ -153,6 +142,20 @@ internal sealed class SutContextMenu : IDisposable
             if (subclassInstalled && subclassProc is not null)
                 _ = RemoveWindowSubclass(_owner, subclassProc, UIntPtr.Zero);
         }
+    }
+
+    private void ExecuteCommand(uint commandId)
+    {
+        if (_actions is not null && commandId >= 0x8000)
+        {
+            var index = commandId - 0x8000;
+            if (index < _actions.Count && _actions[(int)index].IsEnabled)
+                _actions[(int)index].Invoke();
+        }
+        else if (_rename is not null && _isRename(commandId - 1))
+            _rename();
+        else
+            InvokeCommand(commandId - 1);
     }
 
     internal void InvokeVerb(string verb)
