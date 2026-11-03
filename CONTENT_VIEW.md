@@ -235,12 +235,34 @@ repopulated from the retained Shell view.
 The **VIEW** row controls the content's **Hide directories**, **Hide internal**,
 and **Name pattern** filters. These settings are local to the Pathview; the
 content **Hide internal** setting is independent of the tree filters. The
-**FOR DIRECTORY** row offers New and Copy/Move abort and paste. New opens the
-Windows Shell New submenu for the current filesystem directory and is disabled
-for virtual or unavailable locations. The **FOR SELECTED** row offers
+**FOR DIRECTORY** row offers New and Copy/Move abort and paste. New opens a
+dialog to choose a type and name before creating the item in the current
+filesystem directory. It is disabled for virtual or unavailable locations.
+The background Content Menu opens the same dialog. The **FOR SELECTED** row offers
 Properties, Rename, Path get, Copy get, Move get, and Delete. Properties opens
 the Windows Shell properties for one loaded selected item. Button availability
 depends on the local selection and on the shared transfer state.
+
+The dialog presents types in a fixed-height, scrollable list with Shell type
+icons. Text file is listed and selected first, followed by Folder and the other
+available types. Clicking a type returns keyboard focus to the name editor.
+Selecting Folder immediately clears the current ContentView's **Hide directories**
+filter, including when the dialog is subsequently cancelled.
+
+New supports folders and directly creatable ShellNew registrations: empty
+files, binary data and available file templates. A plain text type is also
+available when not registered. Command-based, unsupported or unavailable
+templates are not offered as direct types. The separate **More types via
+Windows** action opens the original Shell New submenu, where Windows or an
+extension chooses the name and may display its own wizard. Shift-right-click
+also retains the native background menu. The list depends on registrations and
+available templates; it is not guaranteed to match every Windows New entry.
+
+The selected type proposes an extension. Switching types replaces an unchanged
+proposed extension; a manually changed extension is preserved and requires
+confirmation if it differs from the selected type. Invalid or reserved names
+and existing destinations are rejected. Cancelling creates nothing, and
+creation never overwrites an existing item.
 
 ### Copy and Move across ContentViews
 

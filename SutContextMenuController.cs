@@ -14,6 +14,7 @@ internal sealed class SutContextMenuController<T> where T : class
     private readonly Action _showBackground;
     private readonly Func<string> _backgroundPath;
     private readonly Func<IReadOnlyList<ShellMenuAction>> _backgroundActions;
+    private readonly Action<string> _showNew;
     private IReadOnlyDictionary<string, int>? _baseCommands;
     private string? _basePath;
     private bool _baseIsBackground;
@@ -23,7 +24,7 @@ internal sealed class SutContextMenuController<T> where T : class
     internal SutContextMenuController(Func<T, string> path, Func<IReadOnlyList<string>> selection,
         Func<int, int, (T? Target, bool Background)> hitTest, Action<T?> select,
         Func<T, IReadOnlyList<ShellMenuAction>> actions, Action<T, IReadOnlyList<string>> showNative,
-        Action showBackground, Func<string> backgroundPath, Func<IReadOnlyList<ShellMenuAction>> backgroundActions)
+        Action showBackground, Func<string> backgroundPath, Func<IReadOnlyList<ShellMenuAction>> backgroundActions, Action<string> showNew)
     {
         _path = path;
         _selection = selection;
@@ -34,6 +35,7 @@ internal sealed class SutContextMenuController<T> where T : class
         _showBackground = showBackground;
         _backgroundPath = backgroundPath;
         _backgroundActions = backgroundActions;
+        _showNew = showNew;
     }
 
     internal bool IsDifferentTarget(T target) => _basePath is not null &&
@@ -84,7 +86,8 @@ internal sealed class SutContextMenuController<T> where T : class
                 var selectionVersion = _selectionVersion;
                 var repeat = false;
                 var shift = false;
-                using var contentMenu = SutContextMenuFactory.GetContentMenuForContext(selectedPaths, owner, baseCommands, background);
+                var newAction = background ? new ShellMenuAction("New…", true, () => _showNew(targetPath)) : null;
+                using var contentMenu = SutContextMenuFactory.GetContentMenuForContext(selectedPaths, owner, baseCommands, background, newAction);
                 contentMenu.Show((screenX, screenY, overOwner, shiftPressed) =>
                 {
                     if (!overOwner)

@@ -66,6 +66,13 @@ public sealed class SutShellMenuProbe : System.IDisposable
     public bool EmptySubmenu;
     public bool SubmenuAltered;
 
+    public static void LeftClickAt(int x, int y)
+    {
+        SetCursorPos(x, y);
+        mouse_event(2, 0, 0, 0, System.UIntPtr.Zero);
+        mouse_event(4, 0, 0, 0, System.UIntPtr.Zero);
+    }
+
     public static System.IntPtr CreateAmbiguousMenu()
     {
         var menu = CreatePopupMenu();
@@ -243,6 +250,35 @@ public sealed class SutShellDeleteConfirmProbe : System.IDisposable
         }, System.IntPtr.Zero);
     }
 
+    public void Dispose() => timer.Dispose();
+}
+
+public sealed class SutShellExtensionConfirmProbe : System.IDisposable
+{
+    private delegate bool EnumWindowProc(System.IntPtr window, System.IntPtr parameter);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern uint GetCurrentProcessId();
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowProc callback, System.IntPtr parameter);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(System.IntPtr window, out uint process);
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern int GetWindowText(System.IntPtr window, System.Text.StringBuilder text, int maximum);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool PostMessage(System.IntPtr window, uint message, System.IntPtr wparam, System.IntPtr lparam);
+    private readonly uint process = GetCurrentProcessId();
+    private readonly System.Threading.Timer timer;
+    public bool Seen;
+    public SutShellExtensionConfirmProbe() => timer = new System.Threading.Timer(Check, null, 50, 50);
+    private void Check(object state)
+    {
+        EnumWindows((window, parameter) =>
+        {
+            GetWindowThreadProcessId(window, out var ownerProcess);
+            if (ownerProcess != process) return true;
+            var title = new System.Text.StringBuilder(256);
+            GetWindowText(window, title, title.Capacity);
+            if (title.ToString() != "File extension") return true;
+            Seen = true;
+            PostMessage(window, 0x0111, new System.IntPtr(7), System.IntPtr.Zero);
+            return false;
+        }, System.IntPtr.Zero);
+    }
     public void Dispose() => timer.Dispose();
 }
 
@@ -581,6 +617,16 @@ function Find-VisualName($parent, [string] $name) {
     return $null
 }
 
+function Find-VisualType($parent, [type] $type) {
+    for ($index = 0; $index -lt [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($parent); $index++) {
+        $child = [System.Windows.Media.VisualTreeHelper]::GetChild($parent, $index)
+        if ($type.IsInstanceOfType($child)) { return $child }
+        $match = Find-VisualType $child $type
+        if ($null -ne $match) { return $match }
+    }
+    return $null
+}
+
 function Find-TreeEntry($entry, [string] $path) {
     if ($entry.Path -eq $path) { return $entry }
     foreach ($child in $entry.Children) {
@@ -628,6 +674,107 @@ function Wait-ListCount($control, [int] $expectedCount) {
     try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
     Assert-True ($control.Items.Count -eq $expectedCount) "The list did not reach $expectedCount items."
     $control.UpdateLayout()
+}
+
+function Start-NewDialogProbe([string] $mode) {
+    $result = [pscustomobject] @{ Seen = $false; Error = $null; ExtensionChanged = $false; MismatchRejected = $false; ListCorrect = $false; ListDetails = ''; FocusCorrect = $false; Timer = $null }
+    $timer = [System.Windows.Threading.DispatcherTimer]::new()
+    $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+    $result.Timer = $timer
+    $timer.add_Tick({
+        $dialog = @([System.Windows.Application]::Current.Windows | Where-Object { $_.GetType().FullName -eq 'SUTWinExplorer.NewItemDialog' }) | Select-Object -First 1
+        if ($null -eq $dialog) { return }
+        $timer.Stop()
+        $result.Seen = $true
+        try {
+            $picker = Find-VisualName $dialog 'TypePicker'
+            $editor = Find-VisualName $dialog 'NameEditor'
+            if ($mode -eq 'Cancel') {
+                $picker.UpdateLayout()
+                $firstItem = $picker.ItemContainerGenerator.ContainerFromIndex(0)
+                $secondItem = $picker.ItemContainerGenerator.ContainerFromIndex(1)
+                $firstIcon = if ($null -ne $firstItem) { Find-VisualType $firstItem ([System.Windows.Controls.Image]) } else { $null }
+                $secondIcon = if ($null -ne $secondItem) { Find-VisualType $secondItem ([System.Windows.Controls.Image]) } else { $null }
+                $baseItems = @($picker.Items)
+                $picker.ItemsSource = @($baseItems + @($baseItems[0]) * 12)
+                $picker.UpdateLayout()
+                $scroll = Find-VisualType $picker ([System.Windows.Controls.ScrollViewer])
+                $scroll.ScrollToEnd()
+                $picker.UpdateLayout()
+                $result.ListDetails = "first=$($baseItems[0].Extension), height=$($picker.ActualHeight), firstIcon=$($null -ne $firstIcon.Source), secondIcon=$($null -ne $secondIcon.Source), offset=$($scroll.VerticalOffset), count=$($picker.Items.Count)"
+                $result.ListCorrect = $picker -is [System.Windows.Controls.ListBox] -and $baseItems[0].Extension -eq '.txt' -and
+                    $picker.ActualHeight -le 262 -and $null -ne $firstIcon.Source -and $null -ne $secondIcon.Source -and
+                    $null -ne $scroll -and $scroll.VerticalOffset -gt 0
+                $dialog.DialogResult = $false
+                return
+            }
+            if ($mode -eq 'Windows') {
+                (Find-VisualName $dialog 'WindowsButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+                return
+            }
+            if ($mode -eq 'CancelFolder') {
+                $picker.SelectedItem = @($picker.Items | Where-Object { $_.Kind.ToString() -eq 'Directory' })[0]
+                $dialog.DialogResult = $false
+                return
+            }
+            if ($mode -eq 'Focus') {
+                $originalCursor = [SutShellRightClickProbe]::CursorPosition()
+                try {
+                    $dialog.Left = 30
+                    $dialog.Top = 30
+                    $null = $dialog.Activate()
+                    $dialog.UpdateLayout()
+                    $focused = $true
+                    foreach ($index in @(1, 0, 0)) {
+                        $item = $picker.ItemContainerGenerator.ContainerFromIndex($index)
+                        $point = $item.PointToScreen([System.Windows.Point]::new(30, $item.ActualHeight / 2))
+                        [SutShellMenuProbe]::LeftClickAt([int] $point.X, [int] $point.Y)
+                        $frame = [System.Windows.Threading.DispatcherFrame]::new()
+                        $wait = [System.Windows.Threading.DispatcherTimer]::new()
+                        $wait.Interval = [TimeSpan]::FromMilliseconds(150)
+                        $wait.add_Tick({ $frame.Continue = $false }.GetNewClosure())
+                        $wait.Start()
+                        try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $wait.Stop() }
+                        $focused = $focused -and $picker.SelectedIndex -eq $index -and $editor.IsKeyboardFocused
+                    }
+                    $result.FocusCorrect = $focused
+                } finally { [SutShellRightClickProbe]::MovePointer($originalCursor[0], $originalCursor[1]) }
+                $dialog.DialogResult = $false
+                return
+            }
+            if ($mode -in @('Text', 'Mismatch')) {
+                $textType = @($picker.Items | Where-Object { $_.Extension -eq '.txt' })[0]
+                $folderType = @($picker.Items | Where-Object { $_.Kind.ToString() -eq 'Directory' })[0]
+                $picker.SelectedItem = $folderType
+                $editor.Text = 'chosen-name'
+                $picker.SelectedItem = $textType
+                $changed = $editor.Text -ceq 'chosen-name.txt'
+                $picker.SelectedItem = $folderType
+                $changed = $changed -and $editor.Text -ceq 'chosen-name'
+                $picker.SelectedItem = $textType
+                $changed = $changed -and $editor.Text -ceq 'chosen-name.txt'
+                $editor.Text = 'custom.md'
+                $picker.SelectedItem = $folderType
+                $picker.SelectedItem = $textType
+                $result.ExtensionChanged = $changed -and $editor.Text -ceq 'custom.md'
+                if ($mode -eq 'Mismatch') {
+                    $confirmProbe = [SutShellExtensionConfirmProbe]::new()
+                    try {
+                        (Find-VisualName $dialog 'CreateButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+                        $target = $dialog.GetType().GetField('_directory', [System.Reflection.BindingFlags]'Instance,NonPublic').GetValue($dialog)
+                        $result.MismatchRejected = $confirmProbe.Seen -and $dialog.IsVisible -and -not [IO.File]::Exists((Join-Path $target 'custom.md'))
+                    } finally { $confirmProbe.Dispose() }
+                }
+                $editor.Text = 'chosen-name.txt'
+            } else {
+                $picker.SelectedItem = @($picker.Items | Where-Object { $_.Kind.ToString() -eq 'Directory' })[0]
+                $editor.Text = 'chosen-folder'
+            }
+            (Find-VisualName $dialog 'CreateButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        } catch { $result.Error = $_.Exception.ToString(); $dialog.Close() }
+    }.GetNewClosure())
+    $timer.Start()
+    return $result
 }
 
 $assemblyPath = Join-Path $PSScriptRoot '..\bin\Debug\net10.0-windows\SUTWinExplorer.dll'
@@ -689,6 +836,56 @@ $directory = Join-Path ([System.IO.Path]::GetTempPath()) ('kis-shell-test-' + [g
 
 try {
     [System.IO.Directory]::CreateDirectory($directory) | Out-Null
+    $newFixture = Join-Path $directory 'new-fixture'
+    [IO.Directory]::CreateDirectory($newFixture) | Out-Null
+    $templatePath = Join-Path $newFixture 'template.bin'
+    [IO.File]::WriteAllBytes($templatePath, [byte[]] @(4, 5, 6))
+    $suffix = [guid]::NewGuid().ToString('N')
+    $extensions = @(".kis${suffix}empty", ".kis${suffix}data", ".kis${suffix}template", ".kis${suffix}command", ".kis${suffix}missing")
+    $registryPaths = @($extensions | ForEach-Object { "Software\Classes\$_" })
+    try {
+        for ($index = 0; $index -lt $registryPaths.Count; $index++) {
+            $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($registryPaths[$index] + '\ShellNew')
+            try {
+                switch ($index) {
+                    0 { $key.SetValue('NullFile', '') }
+                    1 { $key.SetValue('Data', [byte[]] @(1, 2, 3), [Microsoft.Win32.RegistryValueKind]::Binary) }
+                    2 { $key.SetValue('FileName', $templatePath) }
+                    3 { $key.SetValue('Command', 'not-executed'); $key.SetValue('NullFile', '') }
+                    4 { $key.SetValue('FileName', (Join-Path $newFixture 'missing-template')) }
+                }
+            } finally { $key.Dispose() }
+        }
+        $newOperations = $assembly.GetType('SUTWinExplorer.NewItemOperations', $true)
+        $newTypes = @($newOperations.GetMethod('GetTypes', $flags).Invoke($null, @()))
+        Assert-True ($newTypes[0].Extension -eq '.txt') 'The text-file type was not first.'
+        $createNew = $newOperations.GetMethod('Create', $flags)
+        for ($index = 0; $index -lt 3; $index++) {
+            $type = @($newTypes | Where-Object { $_.Extension -eq $extensions[$index] })
+            Assert-True ($type.Count -eq 1) "Direct ShellNew type was not discovered: $($extensions[$index])."
+            $created = $createNew.Invoke($null, [object[]] @([string] $newFixture, [string] ("created" + $extensions[$index]), $type[0].PSObject.BaseObject))
+            $bytes = [IO.File]::ReadAllBytes($created)
+            $expected = switch ($index) { 0 { '' } 1 { '1,2,3' } 2 { '4,5,6' } }
+            Assert-True (($bytes -join ',') -ceq $expected) "The ShellNew contents were wrong for $($extensions[$index])."
+            $failed = $false
+            try { $null = $createNew.Invoke($null, [object[]] @([string] $newFixture, [string] ("created" + $extensions[$index]), $type[0].PSObject.BaseObject)) } catch { $failed = $true }
+            Assert-True ($failed -and (([IO.File]::ReadAllBytes($created) -join ',') -ceq $expected)) 'A name conflict overwrote an existing file.'
+        }
+        Assert-True (@($newTypes | Where-Object { $_.Extension -in $extensions[3..4] }).Count -eq 0) 'A command or missing template was offered as a direct type.'
+        $folderType = @($newTypes | Where-Object { $_.Kind.ToString() -eq 'Directory' })[0]
+        foreach ($badName in @('', '..', 'invalid/name', 'CON.txt', 'trailing.', 'trailing ')) {
+            $failed = $false
+            try { $null = $createNew.Invoke($null, [object[]] @([string] $newFixture, [string] $badName, $folderType.PSObject.BaseObject)) } catch { $failed = $true }
+            Assert-True $failed "An invalid Windows name was accepted: $badName"
+        }
+        $null = $createNew.Invoke($null, [object[]] @([string] $newFixture, [string] 'folder', $folderType.PSObject.BaseObject))
+        $failed = $false
+        try { $null = $createNew.Invoke($null, [object[]] @([string] $newFixture, [string] 'folder', $folderType.PSObject.BaseObject)) } catch { $failed = $true }
+        Assert-True $failed 'A folder name conflict was accepted.'
+    } finally {
+        foreach ($registryPath in $registryPaths) { [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($registryPath, $false) }
+        [IO.Directory]::Delete($newFixture, $true)
+    }
     [System.IO.Directory]::CreateDirectory((Join-Path $directory 'Folder')) | Out-Null
     [System.IO.File]::WriteAllText((Join-Path $directory 'notes.txt'), 'hello')
     [System.IO.File]::SetLastWriteTime((Join-Path $directory 'notes.txt'), [datetime]::new(2026, 11, 2, 9, 5, 0))
@@ -1128,24 +1325,42 @@ try {
         })
         Assert-True ($newParent.Count -eq 1) 'The Shell New submenu could not be identified.'
         Assert-True ($view.FindName('NewButton').IsEnabled -and -not $view.FindName('PropertiesButton').IsEnabled) 'Directory New or multi-selection Properties state was incorrect.'
-        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-        try {
-            $view.FindName('NewButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-            Assert-True ($menuProbe.ItemCount -gt 1) "The New button did not open a populated Shell New menu: $($menuProbe.Items -join ',')."
-        } finally { $menuProbe.Dispose() }
-        $existingFolders = [IO.Directory]::GetDirectories($directory)
-        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-        $menuProbe.SelectIndex = 0
-        try {
-            $view.FindName('NewButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-            $createdFolders = @([IO.Directory]::GetDirectories($directory) | Where-Object { $_ -notin $existingFolders })
-            Assert-True ($createdFolders.Count -eq 1) "The New menu did not create a folder in the current directory: $($menuProbe.Items -join ',')."
-        } finally {
-            $menuProbe.Dispose()
-            foreach ($createdFolder in @([IO.Directory]::GetDirectories($directory) | Where-Object { $_ -notin $existingFolders })) {
-                [IO.Directory]::Delete($createdFolder)
-            }
+        $hideDirectories = $view.FindName('HideDirectoriesCheckBox').GetCheckBox()
+        $otherHideDirectories = $otherView.FindName('HideDirectoriesCheckBox').GetCheckBox()
+        Assert-True ($hideDirectories.IsChecked -and $otherHideDirectories.IsChecked) 'The directory filter was not set before the New dialog test.'
+        foreach ($mode in @('Cancel', 'Focus', 'Folder', 'Mismatch')) {
+            $newProbe = Start-NewDialogProbe $mode
+            try {
+                $view.FindName('NewButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+                Assert-True ($newProbe.Seen -and $null -eq $newProbe.Error) "The New button did not complete the $mode dialog: $($newProbe.Error)."
+                if ($mode -eq 'Cancel') { Assert-True ($newProbe.ListCorrect -and -not (Test-Path -LiteralPath (Join-Path $directory 'chosen-folder'))) "The type list, icons, scrolling or cancel state was incorrect: $($newProbe.ListDetails)." }
+                if ($mode -eq 'Focus') { Assert-True $newProbe.FocusCorrect 'Clicking a type, including the selected type, did not focus the name editor.' }
+                if ($mode -eq 'Folder') { Assert-True ([IO.Directory]::Exists((Join-Path $directory 'chosen-folder')) -and -not $hideDirectories.IsChecked -and $otherHideDirectories.IsChecked) 'Selecting Folder did not create the directory or update only its ContentView filter.' }
+                if ($mode -eq 'Mismatch') { Assert-True ($newProbe.ExtensionChanged -and $newProbe.MismatchRejected -and [IO.File]::Exists((Join-Path $directory 'chosen-name.txt'))) 'Extension changes, mismatch confirmation or named text creation failed.' }
+            } finally { $newProbe.Timer.Stop() }
         }
+        [IO.Directory]::Delete((Join-Path $directory 'chosen-folder'))
+        [IO.File]::Delete((Join-Path $directory 'chosen-name.txt'))
+        $hideDirectories.IsChecked = $true
+        $frame = [System.Windows.Threading.DispatcherFrame]::new()
+        $probe = [SutShellUiProbe]::new()
+        $probe.List = $list
+        $probe.AwaitAll = $true
+        $probe.Frame = $frame
+        $timer = [System.Windows.Threading.DispatcherTimer]::new()
+        $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+        $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
+        $timer.Start()
+        try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+        Assert-True $probe.Ready 'The content list did not reload after the directory filter changed.'
+        $notesMenuRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'notes.txt') })[0]
+        $otherFileRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'exact.bin') })[0]
+        $newProbe = Start-NewDialogProbe 'Windows'
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        try {
+            $view.FindName('NewButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            Assert-True ($newProbe.Seen -and $null -eq $newProbe.Error -and $menuProbe.ItemCount -gt 1) 'The explicit Windows fallback did not open the native New submenu.'
+        } finally { $newProbe.Timer.Stop(); $menuProbe.Dispose() }
         $list.SelectedItems.Clear()
         Assert-True (-not $view.FindName('PropertiesButton').IsEnabled) 'Properties was enabled without a selection.'
         $list.SelectedItem = $notesMenuRow
@@ -1166,7 +1381,7 @@ try {
         $list.SelectedItems.Add($notesMenuRow) | Out-Null
         $list.SelectedItems.Add($otherFileRow) | Out-Null
         $emptyCommands = [System.Collections.Generic.Dictionary[string, int]]::new()
-        $backgroundInstance = $menuType.GetMethod('GetBackgroundContentMenu', $flags).Invoke($null, [object[]] @([string] $directory, $ownerHandle, $emptyCommands))
+        $backgroundInstance = $menuType.GetMethod('GetBackgroundContentMenu', $flags).Invoke($null, [object[]] @([string] $directory, $ownerHandle, $emptyCommands, $null))
         $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
         try {
             $null = $showInstance.Invoke($backgroundInstance, [object[]] @($null))
@@ -1199,7 +1414,7 @@ try {
             $menuProbe.Dispose()
             ([IDisposable] $backgroundBase).Dispose()
         }
-        $backgroundInstance = $menuType.GetMethod('GetBackgroundContentMenu', $flags).Invoke($null, [object[]] @([string] $directory, $ownerHandle, $backgroundSnapshot))
+        $backgroundInstance = $menuType.GetMethod('GetBackgroundContentMenu', $flags).Invoke($null, [object[]] @([string] $directory, $ownerHandle, $backgroundSnapshot, $null))
         $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
         try {
             $null = $showInstance.Invoke($backgroundInstance, [object[]] @($null))
@@ -1235,7 +1450,7 @@ try {
                 $backgroundSnapshot = $showInstance.Invoke($backgroundBase, [object[]] @($null))
                 Assert-True ($sharedBackgroundLabel -in $menuProbe.Items -and $backgroundOnlyLabel -notin $menuProbe.Items) 'Shared and background-only registrations were classified incorrectly in the Base Menu.'
             } finally { $menuProbe.Dispose(); ([IDisposable] $backgroundBase).Dispose() }
-            $backgroundInstance = $menuType.GetMethod('GetBackgroundContentMenu', $flags).Invoke($null, [object[]] @([string] $directory, $ownerHandle, $backgroundSnapshot))
+            $backgroundInstance = $menuType.GetMethod('GetBackgroundContentMenu', $flags).Invoke($null, [object[]] @([string] $directory, $ownerHandle, $backgroundSnapshot, $null))
             $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
             try {
                 $null = $showInstance.Invoke($backgroundInstance, [object[]] @($null))
@@ -1265,6 +1480,13 @@ try {
                 }
             } finally { $menuProbe.Dispose() }
         }
+        $newProbe = Start-NewDialogProbe 'Cancel'
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        $menuProbe.SelectLabel = $newParent[0].Text
+        try {
+            $null = $showMenuCore.Invoke($view, [object[]] @($null, $true))
+            Assert-True ($menuProbe.SelectIndex -ge 0 -and $newProbe.Seen -and $null -eq $newProbe.Error) 'The ContentView background New action did not open the shared dialog.'
+        } finally { $newProbe.Timer.Stop(); $menuProbe.Dispose() }
         $multiPaths = @($notesMenuRow.Entry.FullPath, $otherFileRow.Entry.FullPath)
         $list.SelectedItems.Clear()
         $list.SelectedItems.Add($notesMenuRow) | Out-Null
@@ -2456,6 +2678,22 @@ try {
             }
         }
         $sidebarController = $pathviewType.GetField('_subfolderContextMenu', $viewFlags).GetValue($fixedPathview)
+        $sidebarOwner = [System.Windows.Interop.WindowInteropHelper]::new($fixedWindow).Handle
+        $sidebarContent = $fixedPathview.FindName('DirectoryContent')
+        $sidebarHideDirectories = $sidebarContent.FindName('HideDirectoriesCheckBox').GetCheckBox()
+        $sidebarHideDirectories.IsChecked = $true
+        $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
+        $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
+        try { $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $true)) }
+        finally { $menuProbe.Dispose() }
+        $newProbe = Start-NewDialogProbe 'CancelFolder'
+        $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
+        $menuProbe.SelectLabel = $newParent[0].Text
+        try {
+            $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $true))
+            Assert-True ($menuProbe.SelectIndex -ge 0 -and $newProbe.Seen -and $null -eq $newProbe.Error -and -not $sidebarHideDirectories.IsChecked) 'The sidebar background New action did not open the shared dialog or unhide directories.'
+        } finally { $newProbe.Timer.Stop(); $menuProbe.Dispose() }
+        $sidebarHideDirectories.IsChecked = $true
         foreach ($operation in @('Copy', 'Move')) {
             $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
             $workflow.Prepare([string[]] @($subfolderEntry.Path))

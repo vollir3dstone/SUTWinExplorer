@@ -186,7 +186,12 @@ item, Rename, Path get, Copy get, Move get and Delete are disabled; prepared
 Copy/Move abort and paste actions remain available according to workflow state.
 Paste targets the current directory. The background Content Menu starts with a
 fresh native background menu and removes unique matches to the displayed Base
-Menu snapshot. `New` is kept in the Content Menu, not the Base Menu. Background
+Menu snapshot. `New` is in the Content Menu, not the Base Menu, and opens the
+same application-owned type and name dialog as the ContentView New button.
+The factory replaces the native New submenu with the supplied application
+action; it keeps the original Windows menu for Shift and the dialog's explicit
+Windows fallback. Supported direct types and their limits are described in
+[CONTENT_VIEW.md](CONTENT_VIEW.md). Background
 commands such as Windows clipboard Paste are not subjected to the selected-item
 file-verb exclusion list; they are distinct from the application's prepared
 Copy/Move workflows.
@@ -545,7 +550,7 @@ toolbar actions, Shell invocation, selection and menu switching for single,
 multiple and mixed files and directories. It also checks the independent sidebar
 menu series, target-specific actions and unchanged native Active path tree. It
 exercises both background sequences, native Shift fallback, view filtering,
-New, shared/background-only registry fixtures and background action states.
+the shared New dialog, shared/background-only registry fixtures and background action states.
 It includes native popup and mouse-input probes in WPF windows;
 these tests display windows and move the pointer. Manual verification in the
 actual application remains useful for installed extensions, Windows versions and

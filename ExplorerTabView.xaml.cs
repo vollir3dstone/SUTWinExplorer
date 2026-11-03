@@ -974,7 +974,8 @@ public partial class Pathview : UserControl
             CreateDirectoryMenuActions,
             (entry, _) => ShowNativeMenu(this, entry.Path, !entry.IsTop ? () => BeginTreeRename(entry) : null),
             () => { if (!tree) ShowNativeBackgroundMenu(this, CurrentPath); },
-            () => CurrentPath, CreateBackgroundMenuActions);
+            () => CurrentPath, CreateBackgroundMenuActions,
+            DirectoryContent.ShowNewItemDialog);
     }
 
     private void SelectDirectoryMenuTarget(TreeEntry? entry, bool tree)
@@ -1670,7 +1671,28 @@ internal static class ShellIconProvider
     private const uint AddOverlays = 0x00000020;
     private const uint DrawTransparent = 0x00000001;
     private const uint ShellItemImageIconOnly = 0x00000004;
+    private const uint UseFileAttributes = 0x00000010;
     private const int SmallShellImageList = 1;
+
+    public static ImageSource? GetTypeIcon(string extension, bool directory)
+    {
+        var info = new ShellFileInfo();
+        var attributes = directory ? 0x10u : 0x80u;
+        var path = directory ? "folder" : "file" + extension;
+        if (SHGetFileInfo(path, attributes, ref info, (uint)Marshal.SizeOf<ShellFileInfo>(), Icon | SmallIcon | UseFileAttributes) == IntPtr.Zero ||
+            info.IconHandle == IntPtr.Zero)
+            return null;
+        try
+        {
+            var bitmap = Imaging.CreateBitmapSourceFromHIcon(info.IconHandle, Int32Rect.Empty, BitmapSizeOptions.FromWidthAndHeight(16, 16));
+            bitmap.Freeze();
+            return bitmap;
+        }
+        finally
+        {
+            _ = DestroyIcon(info.IconHandle);
+        }
+    }
 
     public static ImageSource? GetIconAtSize(string path, int width, int height)
     {

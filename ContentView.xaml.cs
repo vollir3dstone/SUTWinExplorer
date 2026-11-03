@@ -53,7 +53,8 @@ public partial class ContentView : UserControl
             (row, paths) => SutShell.ShowItemMenu(paths, new WindowInteropHelper(Window.GetWindow(this)!).Handle,
                 paths.Count == 1 && row.Entry is not null && SutShell.GetEditName(row.FullPath) is not null ? BeginRename : null),
             () => SutShell.ShowBackgroundMenu(CurrentPath, new WindowInteropHelper(Window.GetWindow(this)!).Handle),
-            () => CurrentPath, CreateContextMenuActions);
+            () => CurrentPath, CreateContextMenuActions,
+            ShowNewItemDialog);
         HideDirectoriesCheckBox.GetCheckBox().Checked += FiltersChanged;
         HideDirectoriesCheckBox.GetCheckBox().Unchecked += FiltersChanged;
         HideInternalContentCheckBox.GetCheckBox().Checked += FiltersChanged;
@@ -69,6 +70,9 @@ public partial class ContentView : UserControl
             MoveGetButton, MoveAbortButton, MovePasteButton, DeleteButton }.Select(button => new ShellMenuAction(
                 System.Windows.Automation.AutomationProperties.GetName(button), button.IsEnabled,
                 () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)))).ToArray();
+
+    internal void ShowNewItemDialog(string path) => NewItemDialog.ShowForDirectory(path, Window.GetWindow(this)!,
+        () => HideDirectoriesCheckBox.GetCheckBox().IsChecked = false);
 
     internal bool FocusContent() => FileList.Focus();
     internal bool? HideInternalItems
@@ -363,8 +367,7 @@ public partial class ContentView : UserControl
             switch (action)
             {
                 case "New":
-                    var point = NewButton.PointToScreen(new Point(0, NewButton.ActualHeight));
-                    SutShell.ShowNewMenu(CurrentPath, owner, (int)point.X, (int)point.Y);
+                    ShowNewItemDialog(CurrentPath);
                     break;
                 case "Properties":
                     if (selectedPaths.Count != 1)

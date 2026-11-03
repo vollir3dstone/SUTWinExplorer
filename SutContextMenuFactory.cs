@@ -41,8 +41,8 @@ internal static class SutContextMenuFactory
             backgroundBaseCommands: directoryMenu.CaptureSnapshot());
     }
 
-    internal static SutContextMenu GetBackgroundContentMenu(string folderPath, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands) =>
-        CreateCore([folderPath], owner, background: true, rename: null, excludedCommands: baseCommands);
+    internal static SutContextMenu GetBackgroundContentMenu(string folderPath, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands, ShellMenuAction? newAction) =>
+        CreateCore([folderPath], owner, background: true, rename: null, excludedCommands: baseCommands, backgroundNewAction: newAction);
 
     internal static SutContextMenu GetBaseMenu(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions) =>
         CreateCore(paths, owner, background: false, rename: null, actions);
@@ -53,12 +53,12 @@ internal static class SutContextMenuFactory
     internal static SutContextMenu GetBaseMenuForContext(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions, bool background) =>
         background ? GetBackgroundBaseMenu(paths[0], owner, actions) : GetBaseMenu(paths, owner, actions);
 
-    internal static SutContextMenu GetContentMenuForContext(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands, bool background) =>
-        background ? GetBackgroundContentMenu(paths[0], owner, baseCommands) : GetContentMenu(paths, owner, baseCommands);
+    internal static SutContextMenu GetContentMenuForContext(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands, bool background, ShellMenuAction? newAction) =>
+        background ? GetBackgroundContentMenu(paths[0], owner, baseCommands, newAction) : GetContentMenu(paths, owner, baseCommands);
 
     private static SutContextMenu CreateCore(IReadOnlyList<string> paths, IntPtr owner, bool background, Action? rename,
         IReadOnlyList<ShellMenuAction>? actions = null, IReadOnlyDictionary<string, int>? excludedCommands = null,
-        IReadOnlyDictionary<string, int>? backgroundBaseCommands = null)
+        IReadOnlyDictionary<string, int>? backgroundBaseCommands = null, ShellMenuAction? backgroundNewAction = null)
     {
         var isBaseMenu = actions is not null;
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
@@ -201,6 +201,11 @@ internal static class SutContextMenuFactory
             }
             else if (excludedCommands is not null)
                 PrepareContentMenu(menu, contextMenu, excludedCommands, directorySelection, background);
+            if (background && excludedCommands is not null && backgroundNewAction is not null)
+            {
+                ReplaceBackgroundNew(menu, backgroundNewAction);
+                actions = [backgroundNewAction];
+            }
             return new SutContextMenu(owner, menu, contextMenu, actions, rename,
                 offset => IsRenameCommand(contextMenu, offset),
                 isBaseMenu ? () => CollectComparableCommands(menu, contextMenu, allowVerbless: directorySelection || background) : null,
@@ -681,6 +686,25 @@ internal static class SutContextMenuFactory
             result = submenu;
         }
         return result != IntPtr.Zero ? result : throw new InvalidOperationException("The Shell did not provide a New menu.");
+    }
+
+    private static void ReplaceBackgroundNew(IntPtr menu, ShellMenuAction action)
+    {
+        var position = GetMenuItemCount(menu);
+        var label = action.Label;
+        for (var index = GetMenuItemCount(menu) - 1; index >= 0; index--)
+        {
+            if (GetSubMenu(menu, index) == IntPtr.Zero || !HasShellMenuLabel(menu, index, BackgroundNewLabels.Value)) continue;
+            var shellLabel = new StringBuilder(512);
+            if (GetMenuString(menu, (uint)index, shellLabel, shellLabel.Capacity, MenuByPosition) > 0)
+                label = shellLabel.ToString();
+            if (!DeleteMenu(menu, (uint)index, MenuByPosition))
+                throw new InvalidOperationException("Could not replace the Shell New menu.");
+            position = index;
+        }
+        if (!InsertMenu(menu, (uint)position, MenuByPosition | (action.IsEnabled ? 0u : MenuDisabled), (UIntPtr)BaseMenuCommandFirst, label))
+            throw new InvalidOperationException("Could not insert the New action.");
+        RemoveRedundantSeparators(menu);
     }
 
     private static bool ContainsBackgroundViewCommand(IntPtr menu, IContextMenu contextMenu)
