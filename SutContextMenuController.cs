@@ -86,7 +86,7 @@ internal sealed class SutContextMenuController<T> where T : class
                 var selectionVersion = _selectionVersion;
                 var repeat = false;
                 var shift = false;
-                var newAction = background ? new ShellMenuAction("New…", true, () => _showNew(targetPath)) : null;
+                var newAction = background ? new ShellMenuAction("New", "New…", true, () => _showNew(targetPath)) : null;
                 using var contentMenu = SutContextMenuFactory.GetContentMenuForContext(selectedPaths, owner, baseCommands, background, newAction);
                 contentMenu.Show((screenX, screenY, overOwner, shiftPressed) =>
                 {

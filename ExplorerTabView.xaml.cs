@@ -1009,8 +1009,11 @@ public partial class Pathview : UserControl
             ("Delete", canStart && ShellFileOperations.CanDelete(entry.Path))
         };
         return actions.Select(action => new ShellMenuAction(
+            action.Name,
             System.Windows.Automation.AutomationProperties.GetName((Button)DirectoryContent.FindName(action.Name + "Button")),
-            action.Enabled, () => ExecuteDirectoryMenuAction(action.Name, entry))).ToArray();
+            action.Enabled, () => ExecuteDirectoryMenuAction(action.Name, entry),
+            IsTransfer: action.Name.StartsWith("Copy", StringComparison.Ordinal) || action.Name.StartsWith("Move", StringComparison.Ordinal),
+            SeparatorBefore: action.Name is "PathGet" or "Delete")).ToArray();
     }
 
     private IReadOnlyList<ShellMenuAction> CreateBackgroundMenuActions()
@@ -1024,8 +1027,11 @@ public partial class Pathview : UserControl
             ("MoveAbort", movePrepared), ("MovePaste", movePrepared), ("Delete", false)
         };
         return actions.Select(action => new ShellMenuAction(
+            action.Name,
             System.Windows.Automation.AutomationProperties.GetName((Button)DirectoryContent.FindName(action.Name + "Button")),
-            action.Enabled, () => ExecuteDirectoryMenuAction(action.Name, null))).ToArray();
+            action.Enabled, () => ExecuteDirectoryMenuAction(action.Name, null),
+            IsTransfer: action.Name.StartsWith("Copy", StringComparison.Ordinal) || action.Name.StartsWith("Move", StringComparison.Ordinal),
+            SeparatorBefore: action.Name is "PathGet" or "Delete")).ToArray();
     }
 
     private void ExecuteDirectoryMenuAction(string action, TreeEntry? entry)

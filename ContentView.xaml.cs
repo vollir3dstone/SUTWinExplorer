@@ -89,8 +89,10 @@ public partial class ContentView : UserControl
     private IReadOnlyList<ShellMenuAction> CreateContextMenuActions() =>
         new[] { RenameButton, PathGetButton, CopyGetButton, CopyAbortButton, CopyPasteButton,
             MoveGetButton, MoveAbortButton, MovePasteButton, DeleteButton }.Select(button => new ShellMenuAction(
-                System.Windows.Automation.AutomationProperties.GetName(button), button.IsEnabled,
-                () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)))).ToArray();
+                (string)button.Tag, System.Windows.Automation.AutomationProperties.GetName(button), button.IsEnabled,
+                () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)),
+                IsTransfer: button.Tag is string action && (action.StartsWith("Copy", StringComparison.Ordinal) || action.StartsWith("Move", StringComparison.Ordinal)),
+                SeparatorBefore: button == PathGetButton || button == DeleteButton)).ToArray();
 
     internal void ShowNewItemDialog(string path)
     {

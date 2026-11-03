@@ -25,6 +25,20 @@ tab-scoped; sort history is also tab-scoped and remains in effect on navigation.
 A Pathview is either browsable or non-browsable; that role is assigned
 when it is created and cannot be changed by the user.
 
+A **transfer operation** is the application's Copy or Move workflow. Each
+consists of three suboperations:
+
+- **Get** prepares the selected files and directories as sources without
+  copying or moving them.
+- **Paste** copies or moves the prepared sources into the current directory.
+- **Abort** discards the prepared sources without transferring them.
+
+The prepared transfer is shared across tabs, so its sources can be selected in
+one Pathview and pasted in another. Only one Copy or Move can be prepared at a
+time. A successful Paste or Abort returns the transfer to its idle state; if
+Paste fails, the prepared sources remain available. A failed transfer may
+already have completed some items.
+
 ## P0: Core Behavior
 
 ### Product identity
@@ -306,7 +320,7 @@ may show its requested row in light gray without changing the active selection.
   selection, while Paste and Abort are disabled. A prepared Copy disables all
   Move buttons and enables only Copy paste/abort in its group. A prepared Move
   disables all Copy buttons and enables only Move paste/abort in its group.
-  Paste or Abort returns that workflow to idle. Copy uses native file copy and
+  Successful Paste or Abort returns that workflow to idle. Copy uses native file copy and
   Move uses native file move; neither workflow reads or writes Shell clipboard
   state. As an optional integration, toolbar **Copy get** also invokes the
   Shell Copy verb, and an external Shell Copy stages its file paths through the
@@ -353,6 +367,13 @@ may show its requested row in light gray without changing the active selection.
 
 ### Context menus and file operations
 
+- [x] The application's actions at the top of the Base Menu have a separator
+  after **Rename** and before **Delete**. Unavailable transfer actions are
+  omitted; other unavailable actions remain visible and disabled. With an
+  eligible selection and no prepared transfer, Copy get and Move get are
+  available. A prepared Copy shows Copy abort and Copy paste; a prepared Move
+  shows Move abort and Move paste. The same rules apply to the content and
+  sidebar menus and their backgrounds.
 - [x] ContentView file and folder selections use the Base and Content Menu pair
   described in [CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md).
 - [x] Right-clicking empty content space cycles through the active folder's

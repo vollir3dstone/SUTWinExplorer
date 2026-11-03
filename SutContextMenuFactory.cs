@@ -495,9 +495,13 @@ internal static class SutContextMenuFactory
 
         for (var index = actions.Count - 1; index >= 0; index--)
         {
+            if (actions[index].IsTransfer && !actions[index].IsEnabled)
+                continue;
             var id = BaseMenuCommandFirst + (uint)index;
             if (!InsertMenu(menu, 0, MenuByPosition | (actions[index].IsEnabled ? 0u : MenuDisabled), (UIntPtr)id, actions[index].Label))
                 throw new InvalidOperationException("Could not insert a standard menu command.");
+            if (actions[index].SeparatorBefore && !InsertMenu(menu, 0, MenuByPosition | MenuSeparator, UIntPtr.Zero, null))
+                throw new InvalidOperationException("Could not insert the menu separator.");
         }
     }
 
@@ -900,7 +904,7 @@ internal static class SutContextMenuFactory
 
 }
 
-internal sealed record ShellMenuAction(string Label, bool IsEnabled, Action Invoke);
+internal sealed record ShellMenuAction(string Id, string Label, bool IsEnabled, Action Invoke, bool IsTransfer = false, bool SeparatorBefore = false);
 
 [StructLayout(LayoutKind.Sequential)]
 internal struct ShellCommandInvokeInfo

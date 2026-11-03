@@ -54,8 +54,10 @@ The view supplies these callbacks when constructing the controller:
 - Resolve a target to its filesystem path and return the current selected paths.
 - Hit-test screen coordinates against the widget, distinguishing an item from
   its background, and select a target or clear the selection when requested.
-- Supply the target-specific `ShellMenuAction` entries, each with a label,
-  enabled state and application callback. The view owns their behavior.
+- Supply the target-specific `ShellMenuAction` entries, each with a stable
+  internal ID, independently localizable label, enabled state and application
+  callback. The view owns their behavior. Native command IDs identify entries
+  within a menu and are not derived from their displayed labels.
 - Supply the current background directory and its application actions when no
   item is targeted.
 - Show the original native item or background menu when the controller requests
@@ -181,9 +183,10 @@ a verb. Matching is conservative: different labels, empty or lazy submenus,
 ambiguous commands and provider-specific differences can prevent a match; the
 presence of a registration alone is not proof of an identical command.
 
-The Base Menu prepends the application's nine common actions. With no selected
-item, Rename, Path get, Copy get, Move get and Delete are disabled; prepared
-Copy/Move abort and paste actions remain available according to workflow state.
+The Base Menu prepends the application's common actions. With no selected
+item, Rename, Path get and Delete are disabled; unavailable Copy/Move actions
+are omitted, while prepared abort and paste actions remain available according
+to workflow state.
 Paste targets the current directory. The background Content Menu starts with a
 fresh native background menu and removes unique matches to the displayed Base
 Menu snapshot. `New` is in the Content Menu, not the Base Menu, and opens the
@@ -212,10 +215,14 @@ Shift background menu is not filtered.
 
 ## Base Menu
 
-The first section is, in order, `Rename`, `Path get`, `Copy get`, `Copy abort`,
-`Copy paste`, `Move get`, `Move abort`, `Move paste` and `Delete`. Each entry
-uses the corresponding toolbar button's current label, enabled state and click
-handler in ContentView. In the sidebar, the same labels are used but the
+The first section is ordered as `Rename`, a separator, `Path get`, the available
+Copy and Move actions, a separator, and `Delete`. Disabled transfer actions are
+omitted rather than grayed out; other unavailable actions remain visible and
+disabled. In the idle state with an eligible selection, Copy get and Move get
+are shown. A prepared Copy shows Copy abort and Copy paste instead; a prepared
+Move shows Move abort and Move paste instead. Each entry uses the corresponding
+toolbar button's current label, enabled state and click handler in ContentView.
+In the sidebar, the same labels are used but the
 actions operate on the clicked directory rather than the ContentView selection;
 Rename uses the sidebar inline editor. Copy paste and Move paste use the current
 Pathview directory as their destination, not necessarily the clicked directory.
