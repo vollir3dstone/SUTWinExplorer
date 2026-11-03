@@ -96,6 +96,23 @@ directory. `CMF_CANRENAME` is supplied for single and multiple selections; on
 the investigated installation this avoids Link Shell Extension presenting its
 drag-and-drop-only menu instead of the appropriate selection menu.
 
+The file Base Menu request can be interpreted as: "Build a context menu for
+the selected files x, y and z, using the menu registrations directly associated
+with the `*` and `AllFilesystemObjects` classes." These sources include
+declarative verbs as well as classic handlers. This is an explanatory
+interpretation of the call, not a guarantee about every resulting entry: the
+Shell can also supply built-in commands, and the Shell and extensions determine
+what to offer for the selection.
+
+In the `DEFCONTEXTMENU` passed to `SHCreateDefaultContextMenu`, the selected
+items and the two registry keys are separate inputs. The keys select
+registration sources; they do not change the files' types or impose additional
+type conditions on them. After the Shell returns the context menu object,
+`QueryContextMenu` populates its entries for the selection, and KIS Explorer
+applies the exclusions described below. File-type-specific association keys are
+not explicitly supplied in this request. The Content Menu instead starts from
+the normal Windows item menu for the complete selection.
+
 ### Directory Classification: Three Alternative Criteria
 
 For a directory-only selection, a Shell entry can qualify for the Base Menu
