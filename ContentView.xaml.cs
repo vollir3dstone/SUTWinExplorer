@@ -131,7 +131,10 @@ public partial class ContentView : UserControl
         _revealedPath = null;
         CurrentPath = path;
         ClearRows();
+        DirectoryCountLabel.Text = "-";
+        FileCountLabel.Text = "-";
         StatusLabel.Text = string.Empty;
+        StatusLabel.ToolTip = null;
     }
 
     internal void EnsureLocationAccessible(string path) => SutShell.EnsureDirectoryAccessible(path);
@@ -161,7 +164,10 @@ public partial class ContentView : UserControl
         var showDirectories = HideDirectoriesCheckBox.GetCheckBox().IsChecked != true;
         var hideInternal = HideInternalContentCheckBox.GetCheckBox().IsChecked == true;
         var namePattern = NamePatternTextBox.Text;
-        StatusLabel.Text = "Loading...";
+        DirectoryCountLabel.Text = "-";
+        FileCountLabel.Text = "-";
+        StatusLabel.Text = string.Empty;
+        StatusLabel.ToolTip = null;
         try
         {
             var snapshot = await SutShell.OpenCachedDirectoryAsync(path, showDirectories, hideInternal, namePattern, _sorting, _directoryCache, cancellation.Token);
@@ -188,7 +194,8 @@ public partial class ContentView : UserControl
                 _restoringSelection = false;
             }
             UpdateToolbarOperationButtons();
-            StatusLabel.Text = $"{snapshot.Count} items";
+            DirectoryCountLabel.Text = snapshot.DirectoryCount.ToString(CultureInfo.CurrentCulture);
+            FileCountLabel.Text = snapshot.FileCount.ToString(CultureInfo.CurrentCulture);
             ScheduleRangeLoad();
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
@@ -199,7 +206,8 @@ public partial class ContentView : UserControl
             if (ReferenceEquals(_refreshCancellation, cancellation))
             {
                 FileList.ItemsSource = null;
-                StatusLabel.Text = exception.Message;
+                StatusLabel.Text = "!";
+                StatusLabel.ToolTip = exception.Message;
             }
         }
         finally
@@ -369,7 +377,8 @@ public partial class ContentView : UserControl
             {
                 for (var index = 0; index < count; index++)
                     rows[start + index].Failed = true;
-                StatusLabel.Text = $"{snapshot.Count} items (some could not be loaded)";
+                StatusLabel.Text = "!";
+                StatusLabel.ToolTip = "Some item details could not be loaded.";
             }
         }
         finally

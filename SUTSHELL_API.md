@@ -13,7 +13,7 @@ Shell helpers directly.
 | Operation | Contract |
 | --- | --- |
 | `EnsureDirectoryAccessible(path)` | Checks that enumeration can start; recognizes the virtual This PC location. Throws on access or enumeration errors. It cannot guarantee that a later enumeration succeeds. |
-| `OpenCachedDirectoryAsync(path, showDirectories, hideInternal, namePattern, sorting, cache, cancellationToken)` | Reuses the cache's unfiltered current-directory records and their loaded data, then prepares a filtered, sorted snapshot. |
+| `OpenCachedDirectoryAsync(path, showDirectories, hideInternal, namePattern, sorting, cache, cancellationToken)` | Reuses the cache's unfiltered current-directory records and their loaded data, then prepares a filtered, sorted snapshot. Its `DirectoryCount` and `FileCount` describe unfiltered records; `Count` describes filtered items. |
 | `OpenSortedDirectoryAsync(path, showDirectories, hideInternal, namePattern, sorting, cancellationToken)` | Prepares a filtered snapshot using the ordered pairs in a `DirectorySortState`. Directories always precede files; criteria apply within both groups. This PC contains drive roots. Enumeration errors propagate; inaccessible individual items may be skipped. |
 | `OpenDirectoryAsync(path, showDirectories, hideInternal, namePattern, cancellationToken)` | Opens a snapshot with no explicit sort pairs, using the default name order. |
 | `GetDirectoryRangeAsync(snapshot, start, count, cancellationToken)` | Returns complete entries for the requested zero-based range in snapshot order on a background STA thread. Invalid ranges throw. Unavailable details or icons can be empty; images returned across threads are frozen. |

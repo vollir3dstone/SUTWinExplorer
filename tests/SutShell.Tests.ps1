@@ -1019,7 +1019,7 @@ try {
         [System.IO.File]::WriteAllBytes((Join-Path $sortDirectory 'a.bin'), [byte[]]::new(2048))
         [System.IO.File]::WriteAllText((Join-Path $sortDirectory 'new-file.txt'), 'new')
         $filteredCache = Get-CachedSnapshot '*.txt'
-        Assert-True ($filteredCache.Count -eq 2) 'A filter unexpectedly re-enumerated the directory.'
+        Assert-True ($filteredCache.Count -eq 2 -and $filteredCache.DirectoryCount -eq 2 -and $filteredCache.FileCount -eq 4) 'Filtered snapshots must preserve unfiltered cached directory and file counts.'
         Set-TestSort $cacheSort @((New-SortPair 'Size' 'Descending'))
         $reusedSnapshot = Get-CachedSnapshot ''
         $reusedEntries = Get-SnapshotEntries $reusedSnapshot
@@ -1050,7 +1050,7 @@ try {
         $refreshedSnapshot = Get-CachedSnapshot ''
         $refreshedEntries = Get-SnapshotEntries $refreshedSnapshot
         $refreshedFile = @($refreshedEntries | Where-Object { $_.FullPath -eq $cachedFile.FullPath })[0]
-        Assert-True ($refreshedSnapshot.Count -eq 7 -and -not [object]::ReferenceEquals($cachedFile, $refreshedFile) -and
+        Assert-True ($refreshedSnapshot.Count -eq 7 -and $refreshedSnapshot.DirectoryCount -eq 2 -and $refreshedSnapshot.FileCount -eq 5 -and -not [object]::ReferenceEquals($cachedFile, $refreshedFile) -and
             $refreshedFile.SizeText -ceq ('{0:N0} KB' -f 2)) 'Invalidation did not refresh directory membership and metadata.'
         $freshCache = [Activator]::CreateInstance($cacheType, $true)
         $iconSort = [Activator]::CreateInstance($sortStateType, $true)
@@ -1130,9 +1130,11 @@ try {
 
     $filteredSnapshot = $openDirectory.Invoke($null, [object[]] @([string] $directory, [bool] $false, [bool] $true, [string] 'notes*.TXT', [Threading.CancellationToken]::None)).GetAwaiter().GetResult()
     $filtered = @($getRange.Invoke($null, [object[]] @($filteredSnapshot, [int] 0, [int] $filteredSnapshot.Count, [Threading.CancellationToken]::None)).GetAwaiter().GetResult())
-    Assert-True ($filtered.Count -eq 1 -and $filtered[0].FullPath -eq $notes.FullPath) 'Directory, internal, or case-insensitive pattern filtering failed.'
+    Assert-True ($filtered.Count -eq 1 -and $filtered[0].FullPath -eq $notes.FullPath -and
+        $filteredSnapshot.DirectoryCount -eq @([IO.Directory]::EnumerateDirectories($directory)).Count -and
+        $filteredSnapshot.FileCount -eq @([IO.Directory]::EnumerateFiles($directory)).Count) 'Filters changed the unfiltered counts or failed to filter the displayed items.'
     $top = $openDirectory.Invoke($null, [object[]] @([string] '::{20D04FE0-3AEA-1069-A2D8-08002B30309D}', [bool] $false, [bool] $true, [string] '', [Threading.CancellationToken]::None)).GetAwaiter().GetResult()
-    Assert-True ($top.Count -eq 0) 'This PC must respect Hide directories.'
+    Assert-True ($top.Count -eq 0 -and $top.DirectoryCount -eq [IO.DriveInfo]::GetDrives().Count -and $top.FileCount -eq 0) 'This PC must filter its list without changing the drive count.'
 
     $failed = $false
     try { $ensureAccessible.Invoke($null, @((Join-Path $directory 'missing'))) } catch { $failed = $true }
@@ -1186,8 +1188,30 @@ try {
         $newPosition = $newButton.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
         $propertiesPosition = $propertiesButton.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
         $listPosition = $list.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+        $header = $view.FindName('HeaderArea')
+        $layout = $header.Parent
+        $viewRow = $view.FindName('ViewControlsRow')
+        $selectionRow = $view.FindName('SelectionControlsRow')
+        $directoryActions = $view.FindName('DirectoryActions')
+        $headerPosition = $header.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+        Assert-True ($layout.RowDefinitions.Count -eq 2 -and $layout.ColumnDefinitions.Count -eq 2 -and
+            @($layout.Children | Where-Object { [System.Windows.Controls.Grid]::GetRow($_) -eq 0 -and [System.Windows.Controls.Grid]::GetColumn($_) -eq 0 }).Count -eq 0 -and
+            [System.Windows.Controls.Grid]::GetRow($header) -eq 0 -and [System.Windows.Controls.Grid]::GetColumn($header) -eq 1 -and
+            [System.Windows.Controls.Grid]::GetRow($directoryActions) -eq 1 -and [System.Windows.Controls.Grid]::GetColumn($directoryActions) -eq 0 -and
+            [System.Windows.Controls.Grid]::GetRow($list) -eq 1 -and [System.Windows.Controls.Grid]::GetColumn($list) -eq 1 -and
+            [Math]::Abs($headerPosition.X - $listPosition.X) -lt 1 -and $viewRow.TranslatePoint([System.Windows.Point]::new(0, 0), $view).Y -lt
+            $selectionRow.TranslatePoint([System.Windows.Point]::new(0, 0), $view).Y) "The ContentView grid is incorrect: rows=$($layout.RowDefinitions.Count), columns=$($layout.ColumnDefinitions.Count), header=$([System.Windows.Controls.Grid]::GetRow($header))/$([System.Windows.Controls.Grid]::GetColumn($header)), directory=$([System.Windows.Controls.Grid]::GetRow($directoryActions))/$([System.Windows.Controls.Grid]::GetColumn($directoryActions)), list=$([System.Windows.Controls.Grid]::GetRow($list))/$([System.Windows.Controls.Grid]::GetColumn($list)), x=$($headerPosition.X)/$($listPosition.X), y=$($viewRow.TranslatePoint([System.Windows.Point]::new(0, 0), $view).Y)/$($selectionRow.TranslatePoint([System.Windows.Point]::new(0, 0), $view).Y)."
         $badge = $view.FindName('DirectoryBadge')
         $badgePosition = $badge.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+        $heading = $view.FindName('DirectoryHeading')
+        $headingPosition = $heading.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+        $dirCount = $view.FindName('DirectoryCountLabel')
+        $fileCount = $view.FindName('FileCountLabel')
+        $expectedDirs = @([IO.Directory]::EnumerateDirectories($directory)).Count
+        $expectedFiles = @([IO.Directory]::EnumerateFiles($directory)).Count
+        Assert-True ($dirCount.Text -eq "$expectedDirs" -and $fileCount.Text -eq "$expectedFiles" -and
+            $dirCount.TranslatePoint([System.Windows.Point]::new(0, 0), $view).Y -ge $badgePosition.Y + $badge.ActualHeight -and
+            $fileCount.TranslatePoint([System.Windows.Point]::new(0, 0), $view).Y -gt $dirCount.TranslatePoint([System.Windows.Point]::new(0, 0), $view).Y) 'The unfiltered directory and file counts were incorrect or misplaced.'
         Assert-True ($newButton.IsEnabled -and -not $propertiesButton.IsEnabled -and
             $newPosition.X + $newButton.ActualWidth -le $listPosition.X -and $propertiesPosition.Y -lt $listPosition.Y -and
             $badge.Child.Text -eq 'DIRECTORY') 'The directory column, selection row or initial button states were incorrect.'
@@ -1195,7 +1219,7 @@ try {
             $button = $view.FindName($buttonName)
             Assert-True ([Math]::Abs($button.ActualWidth - $badge.ActualWidth) -lt 1) "$buttonName did not match the directory badge width."
         }
-        $previousBottom = $badgePosition.Y + $badge.ActualHeight
+        $previousBottom = $headingPosition.Y + $heading.ActualHeight
         $gaps = @()
         foreach ($group in @(@('NewButton'), @('CopyAbortButton', 'CopyPasteButton'), @('MoveAbortButton', 'MovePasteButton'))) {
             $first = $view.FindName($group[0])
@@ -1394,6 +1418,8 @@ try {
                         $container = if ($null -ne $selected) { $list.ItemContainerGenerator.ContainerFromItem($selected) } else { $null }
                         Assert-True ($probe.Ready -and $list.SelectedItems.Count -eq 1 -and $selected.Entry.FullPath -eq (Join-Path $directory $createdName) -and
                             $null -ne $selected.Entry -and $null -ne $container -and $container.IsVisible) "The created $mode item was not visible and selected after refresh=$refresh`: ready=$($probe.Ready), error=$($probe.Error), count=$($list.SelectedItems.Count), selected=$($selected.Entry.FullPath), loaded=$($null -ne $selected.Entry), container=$($null -ne $container), visible=$($container.IsVisible)."
+                        Assert-True ($dirCount.Text -eq "$(@([IO.Directory]::EnumerateDirectories($directory)).Count)" -and
+                            $fileCount.Text -eq "$(@([IO.Directory]::EnumerateFiles($directory)).Count)") 'The unfiltered counts did not update after creating an item.'
                         if ($mode -eq 'ScrollText') {
                             $scroll = Find-VisualType $list ([System.Windows.Controls.ScrollViewer])
                             $position = $container.TranslatePoint([System.Windows.Point]::new(0, 0), $scroll)
@@ -1682,9 +1708,12 @@ try {
             $window.Activate() | Out-Null
             $list.SelectedItems.Clear()
             $unfilteredCount = $list.Items.Count
+            $unfilteredDirectoryCount = $dirCount.Text
+            $unfilteredFileCount = $fileCount.Text
             $namePattern = $view.FindName('NamePatternTextBox')
             $namePattern.Text = 'notes*.txt'
             Wait-ListCount $list 1
+            Assert-True ($dirCount.Text -eq $unfilteredDirectoryCount -and $fileCount.Text -eq $unfilteredFileCount) 'The displayed counts changed when the name filter was applied.'
             $backgroundPoint = Find-ListBackgroundPoint $list
             $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $backgroundPoint.X, [int] $backgroundPoint.Y, [int] $backgroundPoint.X, [int] $backgroundPoint.Y)
             $rightClickProbe.AdditionalClicks = 2
@@ -1769,9 +1798,12 @@ try {
             $notesContainer = $list.ItemContainerGenerator.ContainerFromItem($notesMenuRow)
             $otherContainer = $list.ItemContainerGenerator.ContainerFromItem($otherMenuRow)
             Assert-True ($null -ne $notesContainer -and $null -ne $otherContainer) 'The right-click test rows were not realized.'
-            $startPoint = $notesContainer.PointToScreen([System.Windows.Point]::new($notesContainer.ActualWidth - 10, $notesContainer.ActualHeight / 2))
+            $startX = [Math]::Min($notesContainer.ActualWidth - 10, $list.ActualWidth - [System.Windows.SystemParameters]::VerticalScrollBarWidth - 12)
+            $startPoint = $notesContainer.PointToScreen([System.Windows.Point]::new($startX, $notesContainer.ActualHeight / 2))
             $samePoint = $notesContainer.PointToScreen([System.Windows.Point]::new(10, $notesContainer.ActualHeight / 2))
             $otherPoint = $otherContainer.PointToScreen([System.Windows.Point]::new(10, $otherContainer.ActualHeight / 2))
+            $startInList = $list.PointFromScreen($startPoint)
+            Assert-True ($startInList.X -lt $list.ActualWidth -and $startInList.X -ge 0) "The right-click start point is outside the visible table: x=$($startInList.X), table=$($list.ActualWidth), row=$($notesContainer.ActualWidth)."
             $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $samePoint.X, [int] $samePoint.Y, [int] $samePoint.X, [int] $samePoint.Y)
             $frame = [System.Windows.Threading.DispatcherFrame]::new()
             $deadline = [DateTime]::UtcNow.AddSeconds(7)

@@ -20,8 +20,10 @@ without enumerating all applicable handlers. Explorer status-column icons are
 not necessarily icon overlays. The table uses a recycling
 virtualized `ListView` with fixed 22-DIP
 row height. Placeholder rows establish the item count and scroll extent before
-complete row data is available. The status shows `Loading...` while the snapshot
-is prepared, then the total item count, not the number of loaded rows.
+complete row data is available. The DIRECTORY column shows unfiltered directory
+and file counts beneath its badge; `-` indicates that a snapshot is being prepared.
+The counts include items hidden by any ContentView filter and do not depend on
+how many rows have loaded. At This PC, drive roots count as directories.
 
 ### Responsibilities
 
@@ -169,8 +171,9 @@ be updated. External renames are not tracked as identity-preserving renames.
   table. A previous snapshot request is also checked before publication.
 - Unloading the control cancels its active range. Loading can resume when the
   list becomes visible again; this is not a promise to prefetch hidden tabs.
-- An enumeration failure is shown in the status. If a range fails unexpectedly,
-  its rows are marked failed, the status reports that some items could not be
+- An enumeration failure is shown by `!` beneath the directory counts, with
+  details in its tooltip. If a range fails unexpectedly,
+  its rows are marked failed, the indicator reports that some items could not be
   loaded, and the scheduler moves on. Those rows are not retried until refresh.
   Individual unavailable metadata or icons can instead produce an entry with
   empty fields without failing the whole range.
@@ -232,7 +235,8 @@ items appear; it does not wait for the entire folder to finish loading. If
 navigation fails, the current location remains unchanged and the column is
 repopulated from the retained Shell view.
 
-The **VIEW** row controls the content's **Hide directories**, **Hide internal**,
+The **VIEW** and **FOR SELECTED** rows are above the table; the area above the
+DIRECTORY column is empty. The **VIEW** row controls the content's **Hide directories**, **Hide internal**,
 and **Name pattern** filters. These settings are local to the Pathview; the
 content **Hide internal** setting is independent of the tree filters. The
 **DIRECTORY** column to the left of the table offers New and Copy/Move abort and paste. New opens a

@@ -36,9 +36,11 @@ internal static class SutShell
         {
             var source = cache.GetDirectory(path, token);
             var items = new List<DirectoryItem>();
+            var directoryCount = 0;
             foreach (var item in source)
             {
                 token.ThrowIfCancellationRequested();
+                if (item.IsDirectory) directoryCount++;
                 try
                 {
                     if ((!showDirectories && item.IsDirectory) || (hideInternal && !item.IsDrive && item.IsInternal))
@@ -95,7 +97,7 @@ internal static class SutShell
                 .ThenBy(value => value.Item.FullPath, StringComparer.OrdinalIgnoreCase)
                 .Select(value => value.Item).ToArray();
             token.ThrowIfCancellationRequested();
-            return new DirectorySnapshot(result);
+            return new DirectorySnapshot(result, directoryCount, source.Length - directoryCount);
         }, cancellationToken);
     }
 
@@ -464,10 +466,12 @@ internal sealed class DirectorySortState
 internal sealed record DirectorySortValues(DirectoryItem Item, long? Size, DateTime? Modified, string Type,
     MediaType MediaType, int? BaseIconIndex, int? OverlaySlot);
 
-internal sealed class DirectorySnapshot(DirectoryItem[] items)
+internal sealed class DirectorySnapshot(DirectoryItem[] items, int directoryCount, int fileCount)
 {
     internal IReadOnlyList<DirectoryItem> Items { get; } = items;
     public int Count => Items.Count;
+    public int DirectoryCount { get; } = directoryCount;
+    public int FileCount { get; } = fileCount;
 }
 
 internal sealed record FileEntry(

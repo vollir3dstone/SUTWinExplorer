@@ -5,17 +5,19 @@
     <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="8" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="8" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-                <Grid Grid.Row="0" Grid.ColumnSpan="3" Margin="10,0,10,0">
+            <Grid x:Name="HeaderArea" Grid.Row="0" Grid.Column="1" Margin="0,0,10,8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="8" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid x:Name="ViewControlsRow" Grid.Row="0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
@@ -62,36 +64,7 @@
                         </InlineUIContainer>
                     </TextBlock>
                 </Grid>
-            <Grid Grid.Row="4" Grid.Column="0" Margin="4,0,8,0" MinWidth="72">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" MinHeight="4" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" MinHeight="4" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" MinHeight="4" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" MinHeight="4" />
-                </Grid.RowDefinitions>
-                <Border x:Name="DirectoryBadge" Grid.Row="0" Background="#E1E4E7" Padding="6,3">
-                    <TextBlock Text="DIRECTORY" FontWeight="Bold" Foreground="#4E5963" TextAlignment="Center" />
-                </Border>
-                <Button x:Name="NewButton" Grid.Row="2" Content="New…" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="New" ToolTip="New"
-                        Tag="New" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
-                <StackPanel Grid.Row="4">
-                    <Button x:Name="CopyAbortButton" Content="Copy✕" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Copy abort" ToolTip="Copy abort"
-                        Tag="CopyAbort" Width="Auto" HorizontalAlignment="Stretch" Padding="0" Margin="0,0,0,4" IsEnabled="False" Click="ContentOperationButton_Click" />
-                    <Button x:Name="CopyPasteButton" Content="Copy🠟" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Copy paste" ToolTip="Copy paste"
-                        Tag="CopyPaste" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
-                </StackPanel>
-                <StackPanel Grid.Row="6">
-                    <Button x:Name="MoveAbortButton" Content="Move✕" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Move abort" ToolTip="Move abort"
-                        Tag="MoveAbort" Width="Auto" HorizontalAlignment="Stretch" Padding="0" Margin="0,0,0,4" IsEnabled="False" Click="ContentOperationButton_Click" />
-                    <Button x:Name="MovePasteButton" Content="Move🠟" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Move paste" ToolTip="Move paste"
-                        Tag="MovePaste" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
-                </StackPanel>
-            </Grid>
-            <Grid Grid.Row="2" Grid.ColumnSpan="3" Margin="10,0,10,0">
+            <Grid x:Name="SelectionControlsRow" Grid.Row="2">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -147,7 +120,54 @@
                     </StackPanel>
                 </Grid>
             </Grid>
-            <ListView x:Name="FileList" Grid.Row="4" Grid.Column="1" SelectionMode="Extended"
+            </Grid>
+            <Grid x:Name="DirectoryActions" Grid.Row="1" Grid.Column="0" Margin="4,0,8,0" MinWidth="72">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" MinHeight="4" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" MinHeight="4" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" MinHeight="4" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" MinHeight="4" />
+                </Grid.RowDefinitions>
+                <StackPanel x:Name="DirectoryHeading" Grid.Row="0">
+                    <Border x:Name="DirectoryBadge" Background="#E1E4E7" Padding="6,3">
+                        <TextBlock Text="DIRECTORY" FontWeight="Bold" Foreground="#4E5963" TextAlignment="Center" />
+                    </Border>
+                    <Grid Margin="0,4,0,0" HorizontalAlignment="Center" ToolTip="Unfiltered items in this directory">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock x:Name="DirectoryCountLabel" Text="-" TextAlignment="Right" Foreground="#596675" />
+                        <TextBlock Grid.Column="1" Text=" dirs" Foreground="#596675" />
+                        <TextBlock x:Name="FileCountLabel" Grid.Row="1" Text="-" TextAlignment="Right" Foreground="#596675" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text=" files" Foreground="#596675" />
+                    </Grid>
+                    <TextBlock x:Name="StatusLabel" Foreground="#A12727" HorizontalAlignment="Center" />
+                </StackPanel>
+                <Button x:Name="NewButton" Grid.Row="2" Content="New…" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="New" ToolTip="New"
+                        Tag="New" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
+                <StackPanel Grid.Row="4">
+                    <Button x:Name="CopyAbortButton" Content="Copy✕" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Copy abort" ToolTip="Copy abort"
+                        Tag="CopyAbort" Width="Auto" HorizontalAlignment="Stretch" Padding="0" Margin="0,0,0,4" IsEnabled="False" Click="ContentOperationButton_Click" />
+                    <Button x:Name="CopyPasteButton" Content="Copy🠟" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Copy paste" ToolTip="Copy paste"
+                        Tag="CopyPaste" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
+                </StackPanel>
+                <StackPanel Grid.Row="6">
+                    <Button x:Name="MoveAbortButton" Content="Move✕" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Move abort" ToolTip="Move abort"
+                        Tag="MoveAbort" Width="Auto" HorizontalAlignment="Stretch" Padding="0" Margin="0,0,0,4" IsEnabled="False" Click="ContentOperationButton_Click" />
+                    <Button x:Name="MovePasteButton" Content="Move🠟" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Move paste" ToolTip="Move paste"
+                        Tag="MovePaste" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
+                </StackPanel>
+            </Grid>
+            <ListView x:Name="FileList" Grid.Row="1" Grid.Column="1" SelectionMode="Extended"
                       VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                       ScrollViewer.CanContentScroll="True"
                       SelectionChanged="FileList_SelectionChanged" SizeChanged="FileList_SizeChanged"
@@ -284,10 +304,5 @@
                     </GridView>
                 </ListView.View>
             </ListView>
-            <Border Grid.Row="4" Grid.Column="2" BorderBrush="#E0E4E8" BorderThickness="1,0,0,0"
-                    Background="#F6F7F8" VerticalAlignment="Stretch">
-                <TextBlock x:Name="StatusLabel" Padding="8,6" Foreground="#596675"
-                           VerticalAlignment="Top" HorizontalAlignment="Center" />
-            </Border>
             </Grid>
 </UserControl>
