@@ -87,12 +87,12 @@ public partial class ContentView : UserControl
     }
 
     private IReadOnlyList<ShellMenuAction> CreateContextMenuActions() =>
-        new[] { RenameButton, PathGetButton, CopyGetButton, CopyAbortButton, CopyPasteButton,
+        new[] { RenameButton, NameGetButton, PathGetButton, CopyGetButton, CopyAbortButton, CopyPasteButton,
             MoveGetButton, MoveAbortButton, MovePasteButton, DeleteButton }.Select(button => new ShellMenuAction(
                 (string)button.Tag, System.Windows.Automation.AutomationProperties.GetName(button), button.IsEnabled,
                 () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)),
                 IsTransfer: button.Tag is string action && (action.StartsWith("Copy", StringComparison.Ordinal) || action.StartsWith("Move", StringComparison.Ordinal)),
-                SeparatorBefore: button == PathGetButton || button == DeleteButton)).ToArray();
+                SeparatorBefore: button == NameGetButton || button == DeleteButton)).ToArray();
 
     internal void ShowNewItemDialog(string path)
     {
@@ -510,10 +510,15 @@ public partial class ContentView : UserControl
                 case "MoveAbort":
                     MoveWorkflowState.Shared.Abort();
                     break;
+                case "NameGet":
+                    if (selectedPaths.Count == 0)
+                        throw new InvalidOperationException("Select one or more items before using Name get.");
+                    Clipboard.SetText(string.Join(Environment.NewLine, selectedPaths.Select(SutShell.GetFileSystemName)));
+                    break;
                 case "PathGet":
-                    if (selectedPaths.Count != 1)
-                        throw new InvalidOperationException("Select exactly one item before using Path get.");
-                    Clipboard.SetText(selectedPaths[0]);
+                    if (selectedPaths.Count == 0)
+                        throw new InvalidOperationException("Select one or more items before using Path get.");
+                    Clipboard.SetText(string.Join(Environment.NewLine, selectedPaths));
                     break;
                 case "Delete":
                     try { SutShell.Delete(selectedPaths, owner); }
@@ -553,7 +558,7 @@ public partial class ContentView : UserControl
         PropertiesButton.IsEnabled = hasSelection && selectedRows.Length == 1;
         RenameButton.IsEnabled = hasSelection && selectedRows.Length == 1 &&
                      SutShell.GetEditName(selectedRows[0].FullPath) is not null;
-        PathGetButton.IsEnabled = hasSelection && FileList.SelectedItems.Count == 1;
+        NameGetButton.IsEnabled = PathGetButton.IsEnabled = hasSelection;
         var copyPrepared = CopyWorkflowState.Shared.IsPrepared;
         var movePrepared = MoveWorkflowState.Shared.IsPrepared;
         var canStartOperation = !copyPrepared && !movePrepared;

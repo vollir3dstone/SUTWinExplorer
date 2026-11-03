@@ -108,6 +108,9 @@
                                 Click="ContentOperationButton_Click" />
                     </StackPanel>
                     <StackPanel Grid.Column="5" Orientation="Horizontal">
+                        <Button x:Name="NameGetButton" Content="Name🠝" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Name get" ToolTip="Name get"
+                            Tag="NameGet" Width="54" Padding="0" IsEnabled="False"
+                                Click="ContentOperationButton_Click" />
                         <Button x:Name="PathGetButton" Content="Path🠝" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Path get" ToolTip="Path get"
                             Tag="PathGet" Width="48" Padding="0" IsEnabled="False"
                                 Click="ContentOperationButton_Click" />

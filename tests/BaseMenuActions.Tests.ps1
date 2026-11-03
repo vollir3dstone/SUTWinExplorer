@@ -26,9 +26,42 @@ $previousContext = [System.Threading.SynchronizationContext]::Current
 $flags = [Reflection.BindingFlags]'Instance,NonPublic'
 $factory = $assembly.GetType('SUTWinExplorer.SutContextMenuFactory', $true)
 $insert = $factory.GetMethod('InsertActions', [Reflection.BindingFlags]'Static,NonPublic')
-$actionIds = @('Rename', 'PathGet', 'CopyGet', 'CopyAbort', 'CopyPaste', 'MoveGet', 'MoveAbort', 'MovePaste', 'Delete')
+$actionIds = @('Rename', 'NameGet', 'PathGet', 'CopyGet', 'CopyAbort', 'CopyPaste', 'MoveGet', 'MoveAbort', 'MovePaste', 'Delete')
 $directory = Join-Path ([IO.Path]::GetTempPath()) ('SutBaseMenu-' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($directory) | Out-Null
+function Wait-SelectedPaths($view, [string[]] $expected) {
+    $list = $view.FindName('FileList')
+    $frame = [System.Windows.Threading.DispatcherFrame]::new()
+    $timer = [System.Windows.Threading.DispatcherTimer]::new()
+    $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+    $deadline = [DateTime]::UtcNow.AddSeconds(10)
+    $state = @{ Ready = $false }
+    $timer.add_Tick({
+        $paths = @($list.SelectedItems | ForEach-Object { $_.Entry.FullPath })
+        if ($paths.Count -eq $expected.Count -and @($expected | Where-Object { $_ -notin $paths }).Count -eq 0) {
+            $state.Ready = $true
+            $frame.Continue = $false
+        } elseif ([DateTime]::UtcNow -gt $deadline) { $frame.Continue = $false }
+    }.GetNewClosure())
+    $timer.Start()
+    try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+    if (-not $state.Ready) { throw "Could not select test items: $expected." }
+}
+function Assert-ClipboardText([string] $expected, [string] $description) {
+    $frame = [System.Windows.Threading.DispatcherFrame]::new()
+    $timer = [System.Windows.Threading.DispatcherTimer]::new()
+    $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+    $deadline = [DateTime]::UtcNow.AddSeconds(2)
+    $state = @{ Actual = ''; Ready = $false }
+    $timer.add_Tick({
+        $state.Actual = [System.Windows.Clipboard]::GetText()
+        if ($state.Actual -ceq $expected) { $state.Ready = $true; $frame.Continue = $false }
+        elseif ([DateTime]::UtcNow -gt $deadline) { $frame.Continue = $false }
+    }.GetNewClosure())
+    $timer.Start()
+    try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+    if (-not $state.Ready) { throw "$description expected=[$expected], actual=[$($state.Actual)]." }
+}
 function Assert-Menu($actions, [string[]] $expected, [string[]] $disabled) {
     if ((@($actions | ForEach-Object { $_.Id }) -join ',') -cne ($actionIds -join ',')) { throw 'Incorrect action IDs.' }
     if (@($actions | Where-Object { $_.Label -cne 'Lokalisierte Aktion' }).Count -ne 0) { throw 'Action labels were not localized.' }
@@ -75,6 +108,10 @@ function Assert-ShellMenu($actions, [string[]] $expected, [bool] $background, [I
     } finally { ([IDisposable] $instance).Dispose() }
 }
 try {
+    $testFile = Join-Path $directory 'name with spaces.txt'
+    $testFolder = Join-Path $directory 'test-folder'
+    [IO.File]::WriteAllText($testFile, 'test')
+    [IO.Directory]::CreateDirectory($testFolder) | Out-Null
     $window = [System.Windows.Window]::new()
     $window.ShowInTaskbar = $false
     $window.Left = -20000
@@ -101,18 +138,18 @@ try {
             'Copy' { @('CopyAbort', 'CopyPaste') }
             'Move' { @('MoveAbort', 'MovePaste') }
         }
-        $expected = @('Rename', '|', 'PathGet') + $transfer + @('|', 'Delete', '|', 'Shell command')
+        $expected = @('Rename', '|', 'NameGet', 'PathGet') + $transfer + @('|', 'Delete', '|', 'Shell command')
         $directoryActions = $createDirectory.Invoke($pathview, [object[]] @($entry))
         Assert-Menu $directoryActions $expected $(if ($case -eq 'Idle') { @() } else { @('Delete') })
         Assert-ShellMenu $directoryActions $expected[0..($expected.Count - 3)] $false $owner
         $backgroundTransfer = if ($case -eq 'Idle') { @() } else { $transfer }
-        $backgroundExpected = @('Rename', '|', 'PathGet') + $backgroundTransfer + @('|', 'Delete', '|', 'Shell command')
+        $backgroundExpected = @('Rename', '|', 'NameGet', 'PathGet') + $backgroundTransfer + @('|', 'Delete', '|', 'Shell command')
         $backgroundActions = $createBackground.Invoke($pathview, @())
-        Assert-Menu $backgroundActions $backgroundExpected @('Rename', 'PathGet', 'Delete')
+        Assert-Menu $backgroundActions $backgroundExpected @('Rename', 'NameGet', 'PathGet', 'Delete')
         Assert-ShellMenu $backgroundActions $backgroundExpected[0..($backgroundExpected.Count - 3)] $true $owner
-        foreach ($name in @('Rename', 'PathGet', 'CopyGet', 'CopyAbort', 'CopyPaste', 'MoveGet', 'MoveAbort', 'MovePaste', 'Delete')) {
+        foreach ($name in $actionIds) {
             $enabled = switch ($name) {
-                'Rename' { $true } 'PathGet' { $true } 'Delete' { $case -eq 'Idle' }
+                'Rename' { $true } 'NameGet' { $true } 'PathGet' { $true } 'Delete' { $case -eq 'Idle' }
                 'CopyGet' { $case -eq 'Idle' } 'MoveGet' { $case -eq 'Idle' }
                 'CopyAbort' { $case -eq 'Copy' } 'CopyPaste' { $case -eq 'Copy' }
                 'MoveAbort' { $case -eq 'Move' } 'MovePaste' { $case -eq 'Move' }
@@ -122,6 +159,70 @@ try {
         Assert-Menu ($createContent.Invoke($view, @())) $expected $(if ($case -eq 'Idle') { @() } else { @('Delete') })
         $copy.Abort()
         $move.Abort()
+    }
+    $originalClipboard = [System.Windows.Clipboard]::GetDataObject()
+    try {
+        $window.Content = $pathview
+        $window.Width = 800
+        $window.Height = 500
+        $window.UpdateLayout()
+        $nameButton = $view.FindName('NameGetButton')
+        $pathButton = $view.FindName('PathGetButton')
+        $namePosition = $nameButton.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+        $pathPosition = $pathButton.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+        if ($namePosition.X + $nameButton.ActualWidth -gt $pathPosition.X -or [Math]::Abs($namePosition.Y - $pathPosition.Y) -gt 1) {
+            throw 'Name get was not laid out directly before Path get.'
+        }
+        $reveal = $view.GetType().GetMethod('RevealInsertedItems', $flags)
+        $null = $reveal.Invoke($view, [object[]] @(,[string[]] @($testFile)))
+        Wait-SelectedPaths $view ([string[]] @($testFile))
+        if (-not $view.FindName('NameGetButton').IsEnabled) { throw 'Name get was disabled for a single file.' }
+        $view.FindName('NameGetButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        Assert-ClipboardText 'name with spaces.txt' 'Name get copied an incorrect file name:'
+        Wait-SelectedPaths $view ([string[]] @($testFile))
+        $view.FindName('PathGetButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        Assert-ClipboardText $testFile 'Path get copied an incorrect file path:'
+        Wait-SelectedPaths $view ([string[]] @($testFile))
+        $contentAction = @($createContent.Invoke($view, @()) | Where-Object { $_.Id -eq 'NameGet' })[0]
+        $contentAction.Invoke.Invoke()
+        Assert-ClipboardText 'name with spaces.txt' 'Content menu Name get copied an incorrect file name:'
+        $null = $reveal.Invoke($view, [object[]] @(,[string[]] @($testFolder)))
+        Wait-SelectedPaths $view ([string[]] @($testFolder))
+        $view.FindName('NameGetButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        Assert-ClipboardText 'test-folder' 'Name get copied an incorrect folder name:'
+        $null = $reveal.Invoke($view, [object[]] @(,[string[]] @($testFile, $testFolder)))
+        Wait-SelectedPaths $view ([string[]] @($testFile, $testFolder))
+        if (-not $nameButton.IsEnabled -or -not $pathButton.IsEnabled) { throw 'Name get or Path get was disabled for multiple items.' }
+        foreach ($actionId in @('NameGet', 'PathGet')) {
+            Wait-SelectedPaths $view ([string[]] @($testFile, $testFolder))
+            $selectedPaths = @($view.FindName('FileList').SelectedItems | ForEach-Object { $_.Entry.FullPath })
+            $expectedNames = @($selectedPaths | ForEach-Object { [IO.Path]::GetFileName($_) }) -join [Environment]::NewLine
+            $expectedPaths = $selectedPaths -join [Environment]::NewLine
+            $expectedText = if ($actionId -eq 'NameGet') { $expectedNames } else { $expectedPaths }
+            $view.FindName($actionId + 'Button').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            Assert-ClipboardText $expectedText "$actionId copied incorrect text for multiple items:"
+            if ([System.Windows.Clipboard]::ContainsFileDropList()) { throw "$actionId unexpectedly copied a file-drop list." }
+            Wait-SelectedPaths $view ([string[]] @($testFile, $testFolder))
+            $selectedPaths = @($view.FindName('FileList').SelectedItems | ForEach-Object { $_.Entry.FullPath })
+            $expectedText = if ($actionId -eq 'NameGet') { @($selectedPaths | ForEach-Object { [IO.Path]::GetFileName($_) }) -join [Environment]::NewLine } else { $selectedPaths -join [Environment]::NewLine }
+            $action = @($createContent.Invoke($view, @()) | Where-Object { $_.Id -eq $actionId })[0]
+            if (-not $action.IsEnabled) { throw "$actionId was disabled in the Base Menu for multiple items." }
+            [System.Windows.Clipboard]::SetText('clipboard test sentinel')
+            $action.Invoke.Invoke()
+            Assert-ClipboardText $expectedText "Base Menu $actionId copied incorrect text for multiple items:"
+        }
+        $view.FindName('FileList').SelectedItems.Clear()
+        if ($nameButton.IsEnabled -or $pathButton.IsEnabled) { throw 'Name get or Path get was enabled without a selection.' }
+        $directoryAction = @($createDirectory.Invoke($pathview, [object[]] @($entry)) | Where-Object { $_.Id -eq 'NameGet' })[0]
+        $directoryAction.Invoke.Invoke()
+        Assert-ClipboardText ([IO.Path]::GetFileName($directory)) 'Directory menu Name get copied an incorrect folder name:'
+        $getName = $assembly.GetType('SUTWinExplorer.SutShell', $true).GetMethod('GetFileSystemName', [Reflection.BindingFlags]'Static,NonPublic')
+        foreach ($case in @(@('C:\', 'C:'), @('C:\folder\', 'folder'), @('\\server\share\', 'share'))) {
+            if ($getName.Invoke($null, [object[]] @($case[0])) -cne $case[1]) { throw "Incorrect filesystem name for $($case[0])." }
+        }
+    } finally {
+        if ($null -eq $originalClipboard) { [System.Windows.Clipboard]::Clear() }
+        else { [System.Windows.Clipboard]::SetDataObject($originalClipboard, $true) }
     }
 } finally {
     if ($null -ne $copy) { $copy.Abort() }

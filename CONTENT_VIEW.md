@@ -169,8 +169,10 @@ Each placeholder carries its snapshot path, so ContentView can retain selections
 even before their full records are loaded. On refresh it restores the selected
 paths in the new snapshot, including off-screen rows; paths no longer present or
 excluded by the filters are dropped. Navigating to another location clears the
-selection. Copy get and Move get stage all selected paths, while Path get and
-Rename require exactly one loaded selection. Delete operates on selected files
+selection. Copy get and Move get stage all selected paths. Name get and Path get
+copy all selected filesystem leaf names or paths as text, one per line; file
+names include their extensions. Rename requires exactly one loaded selection.
+Delete operates on selected files
 and folders through the Windows Shell, requests recycling, and refreshes the
 view even if an operation is interrupted. Drive roots cannot be deleted. Delete
 is disabled while Copy or Move is prepared. Recycling availability and prompts
@@ -284,7 +286,7 @@ content **Hide internal** setting is independent of the tree filters. The
 dialog to choose a type and name before creating the item in the current
 filesystem directory. It is disabled for virtual or unavailable locations.
 The background Content Menu opens the same dialog. The **FOR SELECTED** row offers
-Properties, Rename, Path get, Copy get, Move get, and Delete. Properties opens
+Properties, Rename, Name get, Path get, Copy get, Move get, and Delete. Properties opens
 the Windows Shell properties for one loaded selected item. Button availability
 depends on the local selection and on the shared transfer state.
 
@@ -633,8 +635,9 @@ Shell IDList Array as `TYMED_HGLOBAL`, and calls `IShellView.SelectItem` with
 the single relative child PIDL and `SVSI_EDIT` (`0x0003`). The medium remains
 locked during that call; the medium and managed/raw COM references are
 released in `finally`. The Shell owns validation, commit/cancel, and
-name-collision behavior. Path get uses the selected filesystem path; Delete
-and native Shell context-menu operations remain selection-aware.
+name-collision behavior. Name get uses the filesystem leaf name; Path get uses the
+selected filesystem path; Delete and native Shell context-menu operations remain
+selection-aware.
 
 ### Shell View Host
 

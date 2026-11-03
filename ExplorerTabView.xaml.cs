@@ -1003,6 +1003,7 @@ public partial class Pathview : UserControl
         var actions = new (string Name, bool Enabled)[]
         {
             ("Rename", !entry.IsTop && Directory.Exists(entry.Path)),
+            ("NameGet", Directory.Exists(entry.Path)),
             ("PathGet", Directory.Exists(entry.Path)),
             ("CopyGet", canStart), ("CopyAbort", copyPrepared), ("CopyPaste", copyPrepared),
             ("MoveGet", canStart), ("MoveAbort", movePrepared), ("MovePaste", movePrepared),
@@ -1013,7 +1014,7 @@ public partial class Pathview : UserControl
             System.Windows.Automation.AutomationProperties.GetName((Button)DirectoryContent.FindName(action.Name + "Button")),
             action.Enabled, () => ExecuteDirectoryMenuAction(action.Name, entry),
             IsTransfer: action.Name.StartsWith("Copy", StringComparison.Ordinal) || action.Name.StartsWith("Move", StringComparison.Ordinal),
-            SeparatorBefore: action.Name is "PathGet" or "Delete")).ToArray();
+            SeparatorBefore: action.Name is "NameGet" or "Delete")).ToArray();
     }
 
     private IReadOnlyList<ShellMenuAction> CreateBackgroundMenuActions()
@@ -1022,7 +1023,7 @@ public partial class Pathview : UserControl
         var movePrepared = MoveWorkflowState.Shared.IsPrepared;
         var actions = new (string Name, bool Enabled)[]
         {
-            ("Rename", false), ("PathGet", false), ("CopyGet", false),
+            ("Rename", false), ("NameGet", false), ("PathGet", false), ("CopyGet", false),
             ("CopyAbort", copyPrepared), ("CopyPaste", copyPrepared), ("MoveGet", false),
             ("MoveAbort", movePrepared), ("MovePaste", movePrepared), ("Delete", false)
         };
@@ -1031,7 +1032,7 @@ public partial class Pathview : UserControl
             System.Windows.Automation.AutomationProperties.GetName((Button)DirectoryContent.FindName(action.Name + "Button")),
             action.Enabled, () => ExecuteDirectoryMenuAction(action.Name, null),
             IsTransfer: action.Name.StartsWith("Copy", StringComparison.Ordinal) || action.Name.StartsWith("Move", StringComparison.Ordinal),
-            SeparatorBefore: action.Name is "PathGet" or "Delete")).ToArray();
+            SeparatorBefore: action.Name is "NameGet" or "Delete")).ToArray();
     }
 
     private void ExecuteDirectoryMenuAction(string action, TreeEntry? entry)
@@ -1042,6 +1043,7 @@ public partial class Pathview : UserControl
             switch (action)
             {
                 case "Rename": BeginTreeRename(entry!); break;
+                case "NameGet": Clipboard.SetText(SutShell.GetFileSystemName(entry!.Path)); break;
                 case "PathGet": Clipboard.SetText(entry!.Path); break;
                 case "CopyGet":
                     if (MoveWorkflowState.Shared.IsPrepared)

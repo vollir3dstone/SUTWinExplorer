@@ -311,8 +311,8 @@ may show its requested row in light gray without changing the active selection.
 - [x] The WPF application chrome keeps the app's custom tabs, address field,
   directory trees, and item-count status area.
 - [x] Below the two visibility checkboxes, the content pane provides five
-  separated action groups: **Rename**; **Path get**; **Copy get**, **Copy abort**,
-  and **Copy paste**; **Move get**, **Move abort**, and **Move paste**; and
+  separated action groups: **Rename**; **Name get** and **Path get**; **Copy get**,
+  **Copy abort**, and **Copy paste**; **Move get**, **Move abort**, and **Move paste**; and
   **Delete**. Copy and Move each have an app-owned two-state workflow,
   independent of Shell clipboard state. Their **get** buttons stage selected
   filesystem paths; **paste** performs the operation into the active folder;
@@ -340,9 +340,15 @@ may show its requested row in light gray without changing the active selection.
   **Rename** is enabled only for a single loaded item and starts an inline
   rename editor. Enter commits and Escape cancels; invalid names and existing
   target names are reported without overwriting the existing item.
-  **Path get** is enabled only for a single selected item and copies that
-  item's filesystem path to the clipboard. **Delete** remains selection-aware;
-  other selection-dependent actions are disabled when nothing is selected.
+  **Name get** and **Path get** are enabled when at least one item is selected
+  and every selected item is loaded. Name get copies filesystem names, including
+  file extensions, to the clipboard; Path get copies full filesystem paths. Both
+  place plain text, not a file list, on the clipboard. With multiple items, the
+  text contains one name or path per line in selection order, separated by Windows
+  line breaks (CRLF). There is no line break after the last item; a single item
+  is copied without any line break. **Delete** remains
+  selection-aware; other selection-dependent actions are disabled when nothing
+  is selected.
 - [x] After the application-owned **New**, **Copy paste**, or **Move paste**
   inserts items into the current directory, the destination ContentView selects
   all inserted items and scrolls the first into view. It turns off **Hide
@@ -514,8 +520,10 @@ SUTWinExplorer installation before testing a new installation.
   paste/abort become enabled. Use Move paste and verify the sources move into
   the active folder without changing Shell clipboard state. Repeat and use
   Move abort; verify the source items remain in place. Select one item and
-  verify **Path get** copies its filesystem path; verify the button is disabled
-  for no selection or multiple selected items. Also stage a Move, remove
+  verify **Name get** copies its filesystem name and **Path get** its path.
+  Repeat with multiple files and directories and verify one text line per item;
+  verify both buttons are disabled when nothing is selected.
+  Also stage a Move, remove
   or rename one source before Paste, and verify preflight reports an
   error, starts no transfer, and preserves the staged workflow. A change after
   preflight may still cause a late failure; multi-item Paste is not atomic and

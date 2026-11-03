@@ -184,7 +184,7 @@ ambiguous commands and provider-specific differences can prevent a match; the
 presence of a registration alone is not proof of an identical command.
 
 The Base Menu prepends the application's common actions. With no selected
-item, Rename, Path get and Delete are disabled; unavailable Copy/Move actions
+item, Rename, Name get, Path get and Delete are disabled; unavailable Copy/Move actions
 are omitted, while prepared abort and paste actions remain available according
 to workflow state.
 Paste targets the current directory. The background Content Menu starts with a
@@ -215,8 +215,8 @@ Shift background menu is not filtered.
 
 ## Base Menu
 
-The first section is ordered as `Rename`, a separator, `Path get`, the available
-Copy and Move actions, a separator, and `Delete`. Disabled transfer actions are
+The first section is ordered as `Rename`, a separator, `Name get`, `Path get`,
+the available Copy and Move actions, a separator, and `Delete`. Disabled transfer actions are
 omitted rather than grayed out; other unavailable actions remain visible and
 disabled. In the idle state with an eligible selection, Copy get and Move get
 are shown. A prepared Copy shows Copy abort and Copy paste instead; a prepared
@@ -226,8 +226,11 @@ In the sidebar, the same labels are used but the
 actions operate on the clicked directory rather than the ContentView selection;
 Rename uses the sidebar inline editor. Copy paste and Move paste use the current
 Pathview directory as their destination, not necessarily the clicked directory.
-Rename requires one loaded item with an editable Shell name; Path get
-requires one loaded item. Copy get and Move get require loaded selected items
+Rename requires one loaded item with an editable Shell name; Name get and Path
+get require one or more loaded items. Name get copies their filesystem leaf names,
+including any file extensions, while Path get copies their full filesystem paths.
+For multiple items both actions use text with one item per line. Copy get and
+Move get require loaded selected items
 and no prepared Copy or Move. Their respective paste and abort actions require
 that workflow to be prepared. Copy and Move use the application's mutually
 exclusive prepared-operation workflows, not the Windows clipboard: get prepares
@@ -275,8 +278,9 @@ its extensions receive the mixed selection and decide what to offer. The
 application does not establish that every offered command applies to every
 item, or that the resulting menu is a subset of the normal Windows menu.
 The directory-only registry and whitelist classification is not used. Rename
-and Path get are disabled for multiple selections; Copy get and Move get stage
-all selected items, and Delete requires each item to be deletable.
+is disabled for multiple selections; Name get and Path get copy all selected
+names or paths, Copy get and Move get stage all selected items, and Delete
+requires each item to be deletable.
 
 ### Directory Classification: Three Alternative Criteria
 
@@ -458,7 +462,7 @@ includes mixed selections; "directories" means directory-only selections.
 | Copy `copy` | Excluded | Excluded | Copy get prepares the application workflow. |
 | Cut `cut` | Excluded | Excluded | Move get prepares the application workflow. |
 | Paste `paste` | Excluded | Excluded | Copy paste or Move paste completes a prepared workflow. |
-| Copy as path `copyaspath` | Excluded | Excluded | Path get copies the path for one selected file. |
+| Copy as path `copyaspath` | Excluded | Excluded | Path get copies the selected paths as text. |
 | Rename `rename` | Excluded | Excluded | Rename starts the application's inline editor. |
 | Delete `delete` | Excluded | Excluded | Delete uses the application's Shell-backed operation. |
 | Create shortcut `link` | Files: excluded; directories: retained when matched | Files: excluded; directories: retained unless identified as a duplicate | There is no application replacement. |

@@ -147,6 +147,13 @@ internal static class SutShell
 
     internal static string? GetFolderTarget(string path) => ShellFileOperations.GetFolderTarget(path);
 
+    internal static string GetFileSystemName(string path)
+    {
+        var trimmedPath = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var name = Path.GetFileName(trimmedPath);
+        return name.Length > 0 ? name : trimmedPath[(trimmedPath.LastIndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]) + 1)..];
+    }
+
     internal static string? GetEditName(string path)
     {
         var root = Path.GetPathRoot(path);
