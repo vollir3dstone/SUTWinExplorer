@@ -25,6 +25,13 @@ and file counts beneath its badge; `-` indicates that a snapshot is being prepar
 The counts include items hidden by any ContentView filter and do not depend on
 how many rows have loaded. At This PC, drive roots count as directories.
 
+The fixed-width columns retain their widths; Name and Type share the remaining
+table viewport. The divider between them is draggable and changing one width
+adjusts the other. The chosen Type width is retained when the viewport changes,
+subject to the available space. Other column dividers and reordering are disabled.
+When the viewport is narrower than the fixed columns alone, Name and Type shrink
+to zero and the fixed columns are clipped; no horizontal scrollbar is shown.
+
 ### Responsibilities
 
 | Component | Responsibility |

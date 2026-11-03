@@ -33,6 +33,9 @@ public partial class ContentView : UserControl
     private int _nextBackgroundIndex;
     private bool _loadingRange;
     private bool _loadScheduled;
+    private bool _updatingColumnWidths;
+    private double _nameTypeWidth;
+    private double _preferredTypeWidth = 130;
     private readonly SutContextMenuController<DirectoryRow> _contextMenu;
 
     public ContentView()
@@ -250,6 +253,8 @@ public partial class ContentView : UserControl
 
     private void ContentView_Loaded(object sender, RoutedEventArgs e)
     {
+        DependencyPropertyDescriptor.FromProperty(GridViewColumn.WidthProperty, typeof(GridViewColumn))
+            .AddValueChanged(NameColumn, NameColumn_WidthChanged);
         var culture = CultureInfo.CurrentCulture;
         var typeface = new Typeface(FileList.FontFamily, FileList.FontStyle, FileList.FontWeight, FileList.FontStretch);
         var pixelsPerDip = VisualTreeHelper.GetDpi(FileList).PixelsPerDip;
@@ -269,6 +274,8 @@ public partial class ContentView : UserControl
 
     private void ContentView_Unloaded(object sender, RoutedEventArgs e)
     {
+        DependencyPropertyDescriptor.FromProperty(GridViewColumn.WidthProperty, typeof(GridViewColumn))
+            .RemoveValueChanged(NameColumn, NameColumn_WidthChanged);
         _rangeCancellation?.Cancel();
         CopyWorkflowState.Shared.Changed -= WorkflowState_Changed;
         MoveWorkflowState.Shared.Changed -= WorkflowState_Changed;
@@ -309,6 +316,8 @@ public partial class ContentView : UserControl
     {
         if (e.VerticalChange != 0)
             _rangeCancellation?.Cancel();
+        if (e.ViewportWidthChange != 0)
+            UpdateColumnWidths();
         ScheduleRangeLoad();
     }
 
@@ -505,16 +514,51 @@ public partial class ContentView : UserControl
 
     private void FileList_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (FileList.View is not GridView gridView || gridView.Columns.Count < 7)
+        UpdateColumnWidths();
+    }
+
+    private void UpdateColumnWidths()
+    {
+        if (_updatingColumnWidths || FileList.View is not GridView gridView || gridView.Columns.Count != 7)
+            return;
+        var scrollViewer = FindVisualChild<ScrollViewer>(FileList);
+        if (scrollViewer is null || scrollViewer.ViewportWidth <= 0)
             return;
 
-        var fixedColumnWidths = 42 + 34 + 26 + 130 + SizeColumn.Width + DateColumn.Width;
-        const double minimumNameWidth = 80;
-        var scrollViewer = FindVisualChild<ScrollViewer>(FileList);
-        var scrollbarWidth = scrollViewer?.ComputedVerticalScrollBarVisibility == Visibility.Visible
-            ? SystemParameters.VerticalScrollBarWidth : 0;
-        var availableNameWidth = FileList.ActualWidth - fixedColumnWidths - scrollbarWidth - 8;
-        gridView.Columns[3].Width = Math.Max(minimumNameWidth, availableNameWidth);
+        var fixedColumnWidths = gridView.Columns.Where(column => column != NameColumn && column != TypeColumn).Sum(column => column.Width);
+        _nameTypeWidth = Math.Max(0, scrollViewer.ViewportWidth - fixedColumnWidths);
+        var minimum = Math.Min(40, _nameTypeWidth / 2);
+        var typeWidth = Math.Clamp(_preferredTypeWidth, minimum, _nameTypeWidth - minimum);
+        _updatingColumnWidths = true;
+        try
+        {
+            NameColumn.Width = _nameTypeWidth - typeWidth;
+            TypeColumn.Width = typeWidth;
+        }
+        finally { _updatingColumnWidths = false; }
+    }
+
+    private void NameColumn_WidthChanged(object? sender, EventArgs e)
+    {
+        if (_updatingColumnWidths || _nameTypeWidth <= 0 || !double.IsFinite(NameColumn.Width))
+            return;
+        var minimum = Math.Min(40, _nameTypeWidth / 2);
+        var nameWidth = Math.Clamp(NameColumn.Width, minimum, _nameTypeWidth - minimum);
+        _preferredTypeWidth = _nameTypeWidth - nameWidth;
+        _updatingColumnWidths = true;
+        try
+        {
+            NameColumn.Width = nameWidth;
+            TypeColumn.Width = _preferredTypeWidth;
+        }
+        finally { _updatingColumnWidths = false; }
+    }
+
+    private void FileList_HeaderLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is GridViewColumnHeader header &&
+            header.Template.FindName("PART_HeaderGripper", header) is Thumb gripper)
+            gripper.IsEnabled = false;
     }
 
     private void FileList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -578,7 +622,7 @@ public partial class ContentView : UserControl
         var source = e.OriginalSource as DependencyObject;
         if (FindAncestor<Thumb>(source) is not null &&
             FindAncestor<GridViewColumnHeader>(source) is { } header &&
-            (ReferenceEquals(header.Column, SizeColumn) || ReferenceEquals(header.Column, DateColumn)))
+            (!ReferenceEquals(header.Column, NameColumn) || e.ClickCount > 1))
         {
             e.Handled = true;
             return;

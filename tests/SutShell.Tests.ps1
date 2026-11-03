@@ -73,6 +73,9 @@ public sealed class SutShellMenuProbe : System.IDisposable
         mouse_event(4, 0, 0, 0, System.UIntPtr.Zero);
     }
 
+    public static void LeftDown() => mouse_event(2, 0, 0, 0, System.UIntPtr.Zero);
+    public static void LeftUp() => mouse_event(4, 0, 0, 0, System.UIntPtr.Zero);
+
     public static System.IntPtr CreateAmbiguousMenu()
     {
         var menu = CreatePopupMenu();
@@ -1239,6 +1242,85 @@ try {
         $columns = $list.View.Columns
         Assert-True ($columns.Count -eq 7 -and $columns[3].Header.Tag -eq 'Name' -and
             $columns[3].Width -gt 80 -and $columns[4].Width -eq 130) 'Shell column order or name-column sizing is incorrect.'
+        $scroll = Find-VisualType $list ([System.Windows.Controls.ScrollViewer])
+        $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
+        Assert-True (-not $list.View.AllowsColumnReorder -and $scroll.HorizontalScrollBarVisibility -eq 'Disabled' -and
+            [Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and $scroll.ScrollableWidth -lt 1) "The columns do not fill the viewport: columns=$widthSum, viewport=$($scroll.ViewportWidth), scrollable=$($scroll.ScrollableWidth)."
+        for ($index = 0; $index -lt $columns.Count; $index++) {
+            $header = $columns[$index].Header
+            $header.ApplyTemplate() | Out-Null
+            $gripper = $header.Template.FindName('PART_HeaderGripper', $header)
+            Assert-True ($null -ne $gripper -and $gripper.IsEnabled -eq ($index -eq 3)) "Column $index has an incorrect resize handle: exists=$($null -ne $gripper), enabled=$($gripper.IsEnabled), headerLoaded=$($header.IsLoaded), headerColumn=$($null -ne $header.Column)."
+        }
+        $originalNameWidth = $columns[3].Width
+        $originalTypeWidth = $columns[4].Width
+        $columns[3].Width += 35
+        Assert-True ([Math]::Abs($columns[3].Width - $originalNameWidth - 35) -lt 1 -and
+            [Math]::Abs($columns[4].Width - $originalTypeWidth + 35) -lt 1) 'The Name/Type splitter did not preserve their combined width.'
+        $columns[3].Width = 10000
+        Assert-True ($columns[4].Width -ge 40 -and [Math]::Abs($columns[3].Width + $columns[4].Width - $originalNameWidth - $originalTypeWidth) -lt 1) 'The splitter allowed Type to collapse or changed the combined width.'
+        $columns[3].Width = 1
+        Assert-True ($columns[3].Width -ge 40 -and [Math]::Abs($columns[3].Width + $columns[4].Width - $originalNameWidth - $originalTypeWidth) -lt 1) 'The splitter allowed Name to collapse or changed the combined width.'
+        $columns[3].Width = $originalNameWidth
+        $window.Width += 100
+        $window.UpdateLayout()
+        $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
+        Assert-True ([Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and [Math]::Abs($columns[4].Width - $originalTypeWidth) -lt 1) 'Window resizing did not preserve the Type width and fill the viewport.'
+        $window.Width -= 100
+        $window.UpdateLayout()
+        $scroll.VerticalScrollBarVisibility = 'Hidden'
+        $window.UpdateLayout()
+        $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
+        Assert-True ([Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and $scroll.ScrollableWidth -lt 1) 'The columns did not adapt when the vertical scrollbar disappeared.'
+        $scroll.VerticalScrollBarVisibility = 'Auto'
+        $window.UpdateLayout()
+        $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
+        Assert-True ([Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and $scroll.ScrollableWidth -lt 1) 'The columns did not adapt when the vertical scrollbar appeared.'
+        $originalWindowWidth = $window.Width
+        $window.Width = 500
+        $window.UpdateLayout()
+        $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
+        Assert-True ([Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and $columns[3].Width -ge 0 -and $columns[4].Width -ge 0) 'The Name/Type pair did not fit a narrow viewport.'
+        $window.Width = $originalWindowWidth
+        $window.UpdateLayout()
+        $originalCursor = [SutShellRightClickProbe]::CursorPosition()
+        $originalLeft = $window.Left
+        $originalTop = $window.Top
+        try {
+            $window.Left = 20
+            $window.Top = 20
+            $null = $window.Activate()
+            $window.UpdateLayout()
+            $nameHeader = $columns[3].Header
+            $gripper = $nameHeader.Template.FindName('PART_HeaderGripper', $nameHeader)
+            $point = $gripper.PointToScreen([System.Windows.Point]::new($gripper.ActualWidth / 2, $gripper.ActualHeight / 2))
+            $beforeName = $columns[3].Width
+            $beforeType = $columns[4].Width
+            $drag = [pscustomobject] @{ Phase = 0 }
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(100)
+            $timer.add_Tick({
+                switch ($drag.Phase) {
+                    0 { [SutShellRightClickProbe]::MovePointer([int] $point.X, [int] $point.Y); [SutShellMenuProbe]::LeftDown() }
+                    1 { [SutShellRightClickProbe]::MovePointer([int] ($point.X + 10), [int] $point.Y) }
+                    2 { [SutShellRightClickProbe]::MovePointer([int] ($point.X + 20), [int] $point.Y) }
+                    3 { [SutShellRightClickProbe]::MovePointer([int] ($point.X + 30), [int] $point.Y) }
+                    4 { [SutShellMenuProbe]::LeftUp(); $frame.Continue = $false }
+                }
+                $drag.Phase++
+            }.GetNewClosure())
+            $timer.Start()
+            try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+            Assert-True ($columns[3].Width -gt $beforeName + 10 -and $columns[4].Width -lt $beforeType - 10 -and
+                [Math]::Abs(($columns[3].Width + $columns[4].Width) - ($beforeName + $beforeType)) -lt 1) 'Dragging the Name/Type divider did not resize both columns together.'
+        } finally {
+            [SutShellMenuProbe]::LeftUp()
+            [SutShellRightClickProbe]::MovePointer($originalCursor[0], $originalCursor[1])
+            $window.Left = $originalLeft
+            $window.Top = $originalTop
+            $columns[3].Width = $originalNameWidth
+        }
         $iconSetType = $assembly.GetType('SUTWinExplorer.ShellIconSet', $true)
         $iconSet = $iconSetType.GetConstructor([type[]] @([System.Windows.Media.ImageSource], [System.Windows.Media.ImageSource], [double])).Invoke(
             [object[]] @($notes.Icons.BaseIcon, $notes.MediaTypeIcon, [double] 0.55))
