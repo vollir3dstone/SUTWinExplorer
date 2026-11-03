@@ -325,7 +325,7 @@ public sealed class SutShellRightClickProbe : System.IDisposable
     private int startY;
     private long secondClickAt;
     private long noMenuCheckAt;
-    public static uint RenameCommandId;
+    public static uint PropertiesCommandId;
     public static uint NameGetCommandId;
     public bool FirstMenu;
     public bool SecondMenu;
@@ -397,7 +397,7 @@ public sealed class SutShellRightClickProbe : System.IDisposable
                 var menu = SendMessage(window, 0x01E1, System.IntPtr.Zero, System.IntPtr.Zero);
                 var label = new System.Text.StringBuilder(512);
                 GetMenuString(menu, 2, label, label.Capacity, 0x400);
-                var isBase = GetMenuItemID(menu, 0) == RenameCommandId && GetMenuItemID(menu, 2) == NameGetCommandId;
+                var isBase = GetMenuItemID(menu, 0) == PropertiesCommandId && GetMenuItemID(menu, 2) == NameGetCommandId;
                 if (phase == 0 && ObservedFirstLabel == null) ObservedFirstLabel = label.ToString();
                 if (phase == 0 && isBase)
                 {
@@ -621,9 +621,9 @@ function Assert-True([bool] $condition, [string] $message) {
 }
 
 function Test-BaseMenu($probe) {
-    $probe.ItemCount -ge 5 -and $probe.CommandIds[0] -eq (Get-ActionCommandId 'Rename') -and $probe.CommandIds[2] -eq (Get-ActionCommandId 'NameGet')
+    $probe.ItemCount -ge 5 -and $probe.CommandIds[0] -eq (Get-ActionCommandId 'Properties') -and $probe.CommandIds[2] -eq (Get-ActionCommandId 'NameGet')
 }
-$standardActionIds = @('Rename', 'NameGet', 'PathGet', 'CopyGet', 'CopyAbort', 'CopyPaste', 'MoveGet', 'MoveAbort', 'MovePaste', 'Delete')
+$standardActionIds = @('Properties', 'NameGet', 'PathGet', 'CopyGet', 'CopyAbort', 'CopyPaste', 'MoveGet', 'MoveAbort', 'MovePaste', 'Rename', 'Delete')
 function Get-ActionCommandId([string] $id) {
     $index = [Array]::IndexOf($menuActionOrder, $id)
     if ($index -lt 0) { throw "Unknown menu action: $id" }
@@ -1187,7 +1187,7 @@ try {
     $viewFlags = [System.Reflection.BindingFlags]'Instance,NonPublic'
     $null = $view.GetType().GetMethod('Initialize', $viewFlags).Invoke($view, [object[]] @([bool] $true))
     $menuActionOrder = @($view.GetType().GetMethod('CreateContextMenuActions', $viewFlags).Invoke($view, @()) | ForEach-Object { $_.Id })
-    [SutShellRightClickProbe]::RenameCommandId = Get-ActionCommandId 'Rename'
+    [SutShellRightClickProbe]::PropertiesCommandId = Get-ActionCommandId 'Properties'
     [SutShellRightClickProbe]::NameGetCommandId = Get-ActionCommandId 'NameGet'
     $window = [System.Windows.Window]::new()
     $window.ShowInTaskbar = $false
@@ -1625,7 +1625,7 @@ try {
             if (@($backgroundEntries | Where-Object { $_.Position -eq ($parent.Position + '.0') -and $_.Text -ceq $parent.Text }).Count -gt 0) { $parent }
         })
         Assert-True ($newParent.Count -eq 1) 'The Shell New submenu could not be identified.'
-        Assert-True ($view.FindName('NewButton').IsEnabled -and -not $view.FindName('PropertiesButton').IsEnabled) 'Directory New or multi-selection Properties state was incorrect.'
+        Assert-True ($view.FindName('NewButton').IsEnabled -and $view.FindName('PropertiesButton').IsEnabled) 'Directory New or multi-selection Properties state was incorrect.'
         $hideDirectories = $view.FindName('HideDirectoriesCheckBox').GetCheckBox()
         $otherHideDirectories = $otherView.FindName('HideDirectoriesCheckBox').GetCheckBox()
         Assert-True ($hideDirectories.IsChecked -and $otherHideDirectories.IsChecked) 'The directory filter was not set before the New dialog test.'
@@ -1831,7 +1831,7 @@ try {
             try {
                 $null = $showMenu.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject))
                 Assert-True (Test-BaseMenu $menuProbe) 'Multiple files did not show the Base Menu.'
-                Assert-True (($menuProbe.States[0] -band 3) -ne 0 -and ($menuProbe.States[2] -band 3) -eq 0 -and ($menuProbe.States[3] -band 3) -eq 0) 'Multiple file selection actions have incorrect states.'
+                Assert-True (($menuProbe.States[0] -band 3) -eq 0 -and ($menuProbe.States[2] -band 3) -eq 0 -and ($menuProbe.States[3] -band 3) -eq 0 -and ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'Rename')] -band 3) -ne 0) 'Multiple file selection actions have incorrect states.'
                 if ($null -ne $selection) { Assert-True ($menuProbe.SelectIndex -ge 0 -and ($menuProbe.States[$menuProbe.SelectIndex] -band 3) -eq 0) "Multi-file command $selection was disabled." }
             } finally { $menuProbe.Dispose() }
             if ($selection -in @('CopyGet', 'MoveGet')) {
@@ -1860,13 +1860,9 @@ try {
                 Assert-True ($menuProbe.ItemCount -gt 0) "The multi-file $menuKind menu was empty."
                 $isBase = (Test-BaseMenu $menuProbe)
                 Assert-True ($isBase -eq ($menuKind -eq 'base')) "The multi-file menu did not alternate to $menuKind."
-                foreach ($entry in $multiNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -eq 'properties' -and $_.Text }) {
-                    Assert-True (($entry.Text -in $menuProbe.Items) -eq ($menuKind -eq 'base')) "Properties was shown in the wrong multi-file menu: $menuKind."
-                    if ($menuKind -eq 'base') {
-                        $index = [Array]::IndexOf($menuProbe.Items, $entry.Text)
-                        Assert-True (($menuProbe.States[$index] -band 3) -eq 0) 'Properties was disabled in the Base Menu multi-file menu.'
-                    }
-                }
+                $index = Get-MenuActionIndex $menuProbe 'Properties'
+                Assert-True (($index -ge 0) -eq ($menuKind -eq 'base')) "Properties was shown in the wrong multi-file menu: $menuKind."
+                if ($menuKind -eq 'base') { Assert-True ($index -eq 0 -and ($menuProbe.States[$index] -band 3) -eq 0) 'Properties was missing or disabled in the Base Menu multi-file menu.' }
                 if ($menuKind -eq 'content') {
                     $linkDropHereLabel = [SutShellMenuProbe]::LinkDropHereLabel()
                     Assert-True ($null -eq $linkDropHereLabel -or $linkDropHereLabel -notin $menuProbe.Items) 'A drag-and-drop-only Link Shell Extension command appeared in the multi-file menu.'
@@ -1908,7 +1904,7 @@ try {
         $multiProperties = @($multiNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -eq 'properties' -and $_.Text })[0]
         $propertiesProbe = [SutShellPropertiesProbe]::new('')
         $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-        $menuProbe.SelectLabel = $multiProperties.Text
+        $menuProbe.SelectCommandId = Get-ActionCommandId 'Properties'
         try {
             $null = $showMenu.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject))
             $frame = [System.Windows.Threading.DispatcherFrame]::new()
@@ -1918,7 +1914,7 @@ try {
             $timer.add_Tick({ if ($propertiesProbe.Opened -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
             $timer.Start()
             try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-            Assert-True ($menuProbe.SelectIndex -gt (Get-MenuActionIndex $menuProbe 'Delete') -and $propertiesProbe.Opened) 'The Base Menu multi-file properties command did not open a Windows dialog.'
+            Assert-True ($menuProbe.SelectIndex -eq 0 -and $propertiesProbe.Opened) 'The Base Menu multi-file properties command did not open a Windows dialog.'
         } finally {
             $menuProbe.Dispose()
             $propertiesProbe.Dispose()
@@ -2227,12 +2223,11 @@ try {
             $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
             Assert-True ((Test-BaseMenu $menuProbe)) 'The first right-click did not show the Base Menu.'
             $baseLabels = @($menuProbe.Items)
-            foreach ($entry in $propertyEntries) {
-                $index = [Array]::IndexOf($menuProbe.Items, $entry.Text)
-                Assert-True ($index -gt (Get-MenuActionIndex $menuProbe 'Delete') -and ($menuProbe.States[$index] -band 3) -eq 0) 'Properties was missing or disabled in the Base Menu.'
-            }
+            $index = Get-MenuActionIndex $menuProbe 'Properties'
+            Assert-True ($index -eq 0 -and ($menuProbe.States[$index] -band 3) -eq 0) 'Properties was missing or disabled in the Base Menu.'
             foreach ($entry in $shellRenameEntries) {
-                Assert-True ($entry.Text -notin $baseLabels[((Get-MenuActionIndex $menuProbe 'Delete') + 1)..($baseLabels.Count - 1)]) 'The Shell rename command appeared alongside the application Rename action.'
+                $shellLabels = @(for ($index = 0; $index -lt $menuProbe.ItemCount; $index++) { if ($menuProbe.CommandIds[$index] -ge 1 -and $menuProbe.CommandIds[$index] -le 0x7fff) { $menuProbe.Items[$index] } })
+                Assert-True ($entry.Text -notin $shellLabels) 'The Shell rename command appeared alongside the application Rename action.'
             }
         } finally { $menuProbe.Dispose() }
         $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
@@ -2301,7 +2296,7 @@ try {
         $list.SelectedItem = $notesMenuRow
         $propertiesProbe = [SutShellPropertiesProbe]::new('notes.txt')
         $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-        $menuProbe.SelectLabel = $propertyEntries[0].Text
+        $menuProbe.SelectCommandId = Get-ActionCommandId 'Properties'
         try {
             $null = $showMenu.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject))
             $frame = [System.Windows.Threading.DispatcherFrame]::new()
@@ -2311,7 +2306,7 @@ try {
             $timer.add_Tick({ if ($propertiesProbe.Opened -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
             $timer.Start()
             try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-            Assert-True ($menuProbe.SelectIndex -gt (Get-MenuActionIndex $menuProbe 'Delete') -and $propertiesProbe.Opened) "The Base Menu properties command did not open the Windows properties dialog: index=$($menuProbe.SelectIndex), opened=$($propertiesProbe.Opened)."
+            Assert-True ($menuProbe.SelectIndex -eq 0 -and $propertiesProbe.Opened) "The Base Menu properties command did not open the Windows properties dialog: index=$($menuProbe.SelectIndex), opened=$($propertiesProbe.Opened)."
         } finally {
             $menuProbe.Dispose()
             $propertiesProbe.Dispose()
@@ -2347,9 +2342,9 @@ try {
                         Assert-True ($entry.Text -in $menuProbe.Items) 'The unblacklisted SUTTextViewer command disappeared from the Base Menu.'
                     }
                     $deleteIndex = Get-MenuActionIndex $menuProbe 'Delete'
-                    if ($menuProbe.ItemCount -gt $deleteIndex + 1) {
-                        Assert-True (($menuProbe.States[$deleteIndex + 1] -band 0x800) -ne 0) 'The toolbar actions were not separated from Shell extensions.'
-                    }
+                    $renameIndex = Get-MenuActionIndex $menuProbe 'Rename'
+                    Assert-True ($deleteIndex -eq $menuProbe.ItemCount - 1 -and $renameIndex -eq $deleteIndex - 2 -and
+                        ($menuProbe.States[$renameIndex - 1] -band 0x800) -ne 0 -and ($menuProbe.States[$deleteIndex - 1] -band 0x800) -ne 0) 'Rename and Delete were not separated at the end of the Base Menu.'
                     for ($index = 0; $index -lt $standardActionIds.Count; $index++) {
                         $menuIndex = Get-MenuActionIndex $menuProbe $standardActionIds[$index]
                         if ($standardActionIds[$index] -match '^(Copy|Move)' -and -not $buttonStates[$index]) {
@@ -2668,13 +2663,11 @@ try {
                     }
                     $isBase = (Test-BaseMenu $menuProbe)
                     Assert-True ($isBase -eq ($menuKind -eq 'base')) "The directory menu did not alternate to $menuKind`: multiple=$multiple."
-                    foreach ($entry in $folderProperties) {
-                        $index = [Array]::IndexOf($menuProbe.Items, $entry.Text)
-                        Assert-True (($index -ge 0) -eq ($menuKind -eq 'base')) "Directory properties appeared in the wrong menu: multiple=$multiple, menu=$menuKind."
-                        if ($menuKind -eq 'base') { Assert-True (($menuProbe.States[$index] -band 3) -eq 0) 'Directory properties was disabled.' }
-                    }
+                    $index = Get-MenuActionIndex $menuProbe 'Properties'
+                    Assert-True (($index -ge 0) -eq ($menuKind -eq 'base')) "Directory properties appeared in the wrong menu: multiple=$multiple, menu=$menuKind."
+                    if ($menuKind -eq 'base') { Assert-True ($index -eq 0 -and ($menuProbe.States[$index] -band 3) -eq 0) 'Directory properties was disabled.' }
                     if ($multiple -and $menuKind -eq 'base') {
-                        Assert-True (($menuProbe.States[0] -band 3) -ne 0 -and ($menuProbe.States[2] -band 3) -eq 0 -and ($menuProbe.States[3] -band 3) -eq 0) 'Multiple directory selection actions have incorrect states.'
+                        Assert-True (($menuProbe.States[0] -band 3) -eq 0 -and ($menuProbe.States[2] -band 3) -eq 0 -and ($menuProbe.States[3] -band 3) -eq 0 -and ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'Rename')] -band 3) -ne 0) 'Multiple directory selection actions have incorrect states.'
                     }
                     if ($menuKind -eq 'base') {
                         $folderBaseLabels = @($menuProbe.Items)
@@ -2725,7 +2718,7 @@ try {
         $list.SelectedItem = $folderRow
         $propertiesProbe = [SutShellPropertiesProbe]::new('Folder')
         $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-        $menuProbe.SelectLabel = $singleFolderProperty
+        $menuProbe.SelectCommandId = Get-ActionCommandId 'Properties'
         try {
             $null = $showMenu.Invoke($view, [object[]] @($folderRow.PSObject.BaseObject))
             $frame = [System.Windows.Threading.DispatcherFrame]::new()
@@ -2735,7 +2728,7 @@ try {
             $timer.add_Tick({ if ($propertiesProbe.Opened -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
             $timer.Start()
             try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-            Assert-True ($menuProbe.SelectIndex -gt (Get-MenuActionIndex $menuProbe 'Delete') -and $propertiesProbe.Opened) 'Directory properties did not open a Windows dialog from the Base Menu.'
+            Assert-True ($menuProbe.SelectIndex -eq 0 -and $propertiesProbe.Opened) 'Directory properties did not open a Windows dialog from the Base Menu.'
         } finally { $menuProbe.Dispose(); $propertiesProbe.Dispose() }
         $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
         $menuProbe.SelectCommandId = Get-ActionCommandId 'CopyGet'
@@ -2822,12 +2815,10 @@ try {
                     $isBase = (Test-BaseMenu $menuProbe)
                     Assert-True ($isBase -eq ($menuKind -eq 'base')) "The mixed menu did not alternate to $menuKind."
                     if ($isBase) {
-                        Assert-True (($menuProbe.States[0] -band 3) -ne 0 -and ($menuProbe.States[2] -band 3) -eq 0 -and ($menuProbe.States[3] -band 3) -eq 0 -and
+                        Assert-True (($menuProbe.States[0] -band 3) -eq 0 -and ($menuProbe.States[2] -band 3) -eq 0 -and ($menuProbe.States[3] -band 3) -eq 0 -and
                             ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'CopyGet')] -band 3) -eq 0 -and ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'MoveGet')] -band 3) -eq 0 -and
                             ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'Delete')] -band 3) -eq 0) 'Mixed-selection action states were incorrect.'
-                        foreach ($entry in $mixedGeneric | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -eq 'properties' -and $_.Text }) {
-                            Assert-True ($entry.Text -in $menuProbe.Items) 'Mixed-selection Base Menu lost Shell properties.'
-                        }
+                        Assert-True ((Get-MenuActionIndex $menuProbe 'Properties') -eq 0) 'Mixed-selection Base Menu lost Properties.'
                     } else {
                         foreach ($entry in $mixedNative | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -in @('copy', 'cut', 'paste', 'copyaspath', 'link', 'delete', 'rename', 'properties') -and $_.Text }) {
                             Assert-True ($entry.Text -notin $menuProbe.Items) "Excluded Shell command remained in the mixed Content Menu: $($entry.Text)."

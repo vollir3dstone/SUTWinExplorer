@@ -183,8 +183,8 @@ a verb. Matching is conservative: different labels, empty or lazy submenus,
 ambiguous commands and provider-specific differences can prevent a match; the
 presence of a registration alone is not proof of an identical command.
 
-The Base Menu prepends the application's common actions. With no selected
-item, Rename, Name get, Path get and Delete are disabled; unavailable Copy/Move actions
+The Base Menu includes the application's common actions. With no selected
+item, Properties, Rename, Name get, Path get and Delete are disabled; unavailable Copy/Move actions
 are omitted, while prepared abort and paste actions remain available according
 to workflow state.
 Paste targets the current directory. The background Content Menu starts with a
@@ -215,8 +215,9 @@ Shift background menu is not filtered.
 
 ## Base Menu
 
-The first section is ordered as `Rename`, a separator, `Name get`, `Path get`,
-the available Copy and Move actions, a separator, and `Delete`. Disabled transfer actions are
+The Base Menu starts with `Properties`, a separator, `Name get`, `Path get`,
+and the available Copy and Move actions. The Shell section follows, then a separator,
+`Rename`, another separator, and `Delete`. Disabled transfer actions are
 omitted rather than grayed out; other unavailable actions remain visible and
 disabled. In the idle state with an eligible selection, Copy get and Move get
 are shown. A prepared Copy shows Copy abort and Copy paste instead; a prepared
@@ -226,7 +227,8 @@ In the sidebar, the same labels are used but the
 actions operate on the clicked directory rather than the ContentView selection;
 Rename uses the sidebar inline editor. Copy paste and Move paste use the current
 Pathview directory as their destination, not necessarily the clicked directory.
-Rename requires one loaded item with an editable Shell name; Name get and Path
+Properties invokes the Shell properties command for one or more loaded selected
+items. Rename requires one loaded item with an editable Shell name; Name get and Path
 get require one or more loaded items. Name get copies their filesystem leaf names,
 including any file extensions, while Path get copies their full filesystem paths.
 For multiple items both actions use text with one item per line. Copy get and
@@ -247,8 +249,8 @@ controls confirmation and recycling, which depends on the location.
 For files and mixed file/directory selections, the Shell section is produced by
 `SHCreateDefaultContextMenu` using the `*` and `AllFilesystemObjects`
 association keys and the complete selection. For directory-only selections, the Base
-Menu starts from the actual Windows item menu and keeps Properties, uniquely
-matching entries from an `AllFilesystemObjects` menu, and the additional
+Menu starts from the actual Windows item menu and keeps uniquely matching entries
+from an `AllFilesystemObjects` menu and the additional
 registry-matched entries described below. The selected commands are invoked via
 the Windows item menu that produced them, not by using file commands on a
 directory. `CMF_CANRENAME` is supplied for single and multiple selections; on
@@ -286,8 +288,7 @@ requires each item to be deletable.
 
 For a directory-only selection, a Shell entry can qualify for the Base Menu
 through any one of these criteria. They are alternatives, not three tests that
-must all pass. Properties is retained separately when Windows provides it;
-the explicit command exclusions below are applied afterwards.
+must all pass. The explicit command exclusions below are applied afterwards.
 
 1. **`AllFilesystemObjects`:** the entry matches a command obtained by asking
   the Shell for a menu using this association class.
@@ -444,8 +445,7 @@ whitelist is reported to .NET trace output and the additional registry-based
 classification is skipped; identifiable `AllFilesystemObjects` entries remain.
 
 The application then filters the resulting Shell entries, removes redundant
-separators and prepends the toolbar section. Shell Properties remains available
-when supplied by Windows. The menu may include built-in commands and extension
+separators and adds the application actions around the Shell section. The menu may include built-in commands and extension
 commands; neither generic registration nor a command's visible label proves its
 purpose or provider.
 
@@ -466,14 +466,17 @@ includes mixed selections; "directories" means directory-only selections.
 | Rename `rename` | Excluded | Excluded | Rename starts the application's inline editor. |
 | Delete `delete` | Excluded | Excluded | Delete uses the application's Shell-backed operation. |
 | Create shortcut `link` | Files: excluded; directories: retained when matched | Files: excluded; directories: retained unless identified as a duplicate | There is no application replacement. |
-| Properties `properties` | Retained if provided | Excluded | Keep the Shell Properties command in one menu. |
+| Properties `properties` | Top-level entry excluded when application actions are supplied | Excluded | Application Properties invokes the Shell command. |
 | Open `open`, Edit `edit` | Files: top-level entries excluded; directories: retained when matched | Retained unless separately identified as a duplicate | File content-specific operations belong in the Content Menu. |
 | Open With `openas` | Files: top-level entry excluded; directories: retained when matched | Retained unless separately identified as a duplicate | File content-specific operation belongs in the Content Menu. |
 
 The exclusions for `copy`, `cut`, `paste`, `copyaspath`, `rename` and `delete`
 are applied recursively to currently populated submenus in both menus and again
 after a submenu is initialized. The same applies to `link` for files and mixed
-selections. `properties` is filtered the same way in the Content Menu only. For files and mixed selections, the
+selections. `properties` is filtered recursively in the Content Menu and at the
+top level in the Base Menu when application actions are supplied. Paired background
+menus also remove the top-level Shell Properties entry; the original Shift menu
+remains unfiltered. For files and mixed selections, the
 Base Menu-only exclusions for `open`, `edit`, `openas` and the blacklist are
 applied only to top-level commands when the Base Menu is prepared; they are not
 recursive or reapplied to lazy submenus. Consequently a nested or subsequently

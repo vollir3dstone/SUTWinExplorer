@@ -286,8 +286,8 @@ content **Hide internal** setting is independent of the tree filters. The
 dialog to choose a type and name before creating the item in the current
 filesystem directory. It is disabled for virtual or unavailable locations.
 The background Content Menu opens the same dialog. The **FOR SELECTED** row offers
-Properties, Rename, Name get, Path get, Copy get, Move get, and Delete. Properties opens
-the Windows Shell properties for one loaded selected item. Button availability
+Properties, Name get, Path get, Copy get, Move get, Rename, and Delete. Properties opens
+the Windows Shell properties for one or more loaded selected items. Button availability
 depends on the local selection and on the shared transfer state.
 
 The dialog presents types in a fixed-height, scrollable list with Shell type

@@ -310,10 +310,11 @@ may show its requested row in light gray without changing the active selection.
   build time; media type names remain available to accessibility tools.
 - [x] The WPF application chrome keeps the app's custom tabs, address field,
   directory trees, and item-count status area.
-- [x] Below the two visibility checkboxes, the content pane provides five
-  separated action groups: **Rename**; **Name get** and **Path get**; **Copy get**,
-  **Copy abort**, and **Copy paste**; **Move get**, **Move abort**, and **Move paste**; and
-  **Delete**. Copy and Move each have an app-owned two-state workflow,
+- [x] Below the two visibility checkboxes, the content pane provides the
+  separated action groups **Properties**; **Name get** and **Path get**; **Copy get**,
+  **Copy abort**, and **Copy paste**; **Move get**, **Move abort**, and **Move paste**;
+  **Rename**; and **Delete**. Properties opens the Windows Shell properties
+  for one or more loaded selected items. Copy and Move each have an app-owned two-state workflow,
   independent of Shell clipboard state. Their **get** buttons stage selected
   filesystem paths; **paste** performs the operation into the active folder;
   **abort** clears the staged paths. Initially, Get is enabled when there is a
@@ -373,8 +374,10 @@ may show its requested row in light gray without changing the active selection.
 
 ### Context menus and file operations
 
-- [x] The application's actions at the top of the Base Menu have a separator
-  after **Rename** and before **Delete**. Unavailable transfer actions are
+- [x] The Base Menu starts with the application-owned **Properties**, followed
+  by a separator, **Name get**, **Path get**, and the available Copy and Move
+  actions. Shell commands follow, then a separator, **Rename**, another separator,
+  and **Delete**. Unavailable transfer actions are
   omitted; other unavailable actions remain visible and disabled. With an
   eligible selection and no prepared transfer, Copy get and Move get are
   available. A prepared Copy shows Copy abort and Copy paste; a prepared Move

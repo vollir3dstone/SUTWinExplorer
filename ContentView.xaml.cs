@@ -87,8 +87,8 @@ public partial class ContentView : UserControl
     }
 
     private IReadOnlyList<ShellMenuAction> CreateContextMenuActions() =>
-        new[] { RenameButton, NameGetButton, PathGetButton, CopyGetButton, CopyAbortButton, CopyPasteButton,
-            MoveGetButton, MoveAbortButton, MovePasteButton, DeleteButton }.Select(button => new ShellMenuAction(
+        new[] { PropertiesButton, NameGetButton, PathGetButton, CopyGetButton, CopyAbortButton, CopyPasteButton,
+            MoveGetButton, MoveAbortButton, MovePasteButton, RenameButton, DeleteButton }.Select(button => new ShellMenuAction(
                 (string)button.Tag, System.Windows.Automation.AutomationProperties.GetName(button), button.IsEnabled,
                 () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)),
                 IsTransfer: button.Tag is string action && (action.StartsWith("Copy", StringComparison.Ordinal) || action.StartsWith("Move", StringComparison.Ordinal)),
@@ -469,9 +469,9 @@ public partial class ContentView : UserControl
                     ShowNewItemDialog(CurrentPath);
                     break;
                 case "Properties":
-                    if (selectedPaths.Count != 1)
-                        throw new InvalidOperationException("Select exactly one item before using Properties.");
-                    SutShell.ShowProperties(selectedPaths[0], owner);
+                    if (selectedPaths.Count == 0)
+                        throw new InvalidOperationException("Select one or more items before using Properties.");
+                    SutShell.ShowProperties(selectedPaths, owner);
                     break;
                 case "Rename":
                     BeginRename();
@@ -555,7 +555,7 @@ public partial class ContentView : UserControl
         var selectedRows = FileList.SelectedItems.OfType<DirectoryRow>().ToArray();
         var hasSelection = selectedRows.Length > 0 && selectedRows.All(row => row.Entry is not null);
         NewButton.IsEnabled = Directory.Exists(CurrentPath);
-        PropertiesButton.IsEnabled = hasSelection && selectedRows.Length == 1;
+        PropertiesButton.IsEnabled = hasSelection;
         RenameButton.IsEnabled = hasSelection && selectedRows.Length == 1 &&
                      SutShell.GetEditName(selectedRows[0].FullPath) is not null;
         NameGetButton.IsEnabled = PathGetButton.IsEnabled = hasSelection;

@@ -1,5 +1,10 @@
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
+$parseErrors = $null
+$suiteAst = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'SutShell.Tests.ps1'), [ref]$null, [ref]$parseErrors)
+if ($parseErrors.Count) { throw $parseErrors[0] }
+$suiteHelpers = $suiteAst.Find({ param($node) $node -is [System.Management.Automation.Language.StringConstantExpressionAst] -and $node.Value.StartsWith('public sealed class SutShellTestSignal') }, $true)
+Add-Type -TypeDefinition $suiteHelpers.Value
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
@@ -26,7 +31,7 @@ $previousContext = [System.Threading.SynchronizationContext]::Current
 $flags = [Reflection.BindingFlags]'Instance,NonPublic'
 $factory = $assembly.GetType('SUTWinExplorer.SutContextMenuFactory', $true)
 $insert = $factory.GetMethod('InsertActions', [Reflection.BindingFlags]'Static,NonPublic')
-$actionIds = @('Rename', 'NameGet', 'PathGet', 'CopyGet', 'CopyAbort', 'CopyPaste', 'MoveGet', 'MoveAbort', 'MovePaste', 'Delete')
+$actionIds = @('Properties', 'NameGet', 'PathGet', 'CopyGet', 'CopyAbort', 'CopyPaste', 'MoveGet', 'MoveAbort', 'MovePaste', 'Rename', 'Delete')
 $directory = Join-Path ([IO.Path]::GetTempPath()) ('SutBaseMenu-' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($directory) | Out-Null
 function Wait-SelectedPaths($view, [string[]] $expected) {
@@ -62,6 +67,21 @@ function Assert-ClipboardText([string] $expected, [string] $description) {
     try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
     if (-not $state.Ready) { throw "$description expected=[$expected], actual=[$($state.Actual)]." }
 }
+function Assert-PropertiesDialog($action, [string] $titlePart, [string] $description) {
+    if (-not $action.IsEnabled) { throw "Properties was disabled for $description." }
+    $probe = [SutShellPropertiesProbe]::new($titlePart)
+    try {
+        $action.Invoke.Invoke()
+        $frame = [System.Windows.Threading.DispatcherFrame]::new()
+        $timer = [System.Windows.Threading.DispatcherTimer]::new()
+        $timer.Interval = [TimeSpan]::FromMilliseconds(50)
+        $deadline = [DateTime]::UtcNow.AddSeconds(5)
+        $timer.add_Tick({ if ($probe.Opened -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+        $timer.Start()
+        try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+        if (-not $probe.Opened) { throw "Properties did not open a Shell dialog for $description." }
+    } finally { $probe.Dispose() }
+}
 function Assert-Menu($actions, [string[]] $expected, [string[]] $disabled) {
     if ((@($actions | ForEach-Object { $_.Id }) -join ',') -cne ($actionIds -join ',')) { throw 'Incorrect action IDs.' }
     if (@($actions | Where-Object { $_.Label -cne 'Lokalisierte Aktion' }).Count -ne 0) { throw 'Action labels were not localized.' }
@@ -92,18 +112,29 @@ function Assert-ShellMenu($actions, [string[]] $expected, [bool] $background, [I
     $instance = $create.Invoke($null, [object[]] @([string[]] @($directory), $owner, $actions, $background))
     try {
         $menu = $instance.GetType().GetField('_menu', $flags).GetValue($instance)
-        for ($index = 0; $index -lt $expected.Count; $index++) {
+        $count = [BaseMenuProbe]::GetMenuItemCount($menu)
+        for ($index = 0; $index -lt $count; $index++) {
             $state = [BaseMenuProbe]::GetMenuState($menu, $index, 0x400)
             $text = [Text.StringBuilder]::new(256)
             $null = [BaseMenuProbe]::GetMenuString($menu, $index, $text, $text.Capacity, 0x400)
             $command = [BaseMenuProbe]::GetMenuItemID($menu, $index)
+            if ($index -ge $expected.Count -and $index -lt $count - 4) {
+                if ($command -ge 0x8000 -and $command -ne [uint]::MaxValue) { throw 'Application action appeared in the Shell section.' }
+                if ($command -ge 1 -and $command -le 0x7fff) {
+                    $shellMenu = $instance.GetType().GetField('_contextMenu', $flags).GetValue($instance)
+                    $getVerb = $factory.GetMethod('GetCommandVerb', [Reflection.BindingFlags]'Static,NonPublic')
+                    if ($getVerb.Invoke($null, [object[]] @($shellMenu, [uint] ($command - 1))) -eq 'properties') { throw 'Duplicate Shell properties command.' }
+                }
+                continue
+            }
+            $expectedItem = if ($index -lt $expected.Count) { $expected[$index] } else { @('|', 'Rename', '|', 'Delete')[$index - ($count - 4)] }
             $actual = if (($state -band 0x800) -ne 0) { '|' } else {
                 $actionIndex = [int] $command - 0x8000
                 if ($actionIndex -lt 0 -or $actionIndex -ge $actions.Count) { throw "Incorrect Shell menu command ID: $command." }
                 if ($text.ToString() -cne $actions[$actionIndex].Label) { throw 'Incorrect Shell menu display label.' }
                 $actions[$actionIndex].Id
             }
-            if ($actual -cne $expected[$index]) { throw "Incorrect Shell menu item at ${index}: $actual; expected $($expected[$index])." }
+            if ($actual -cne $expectedItem) { throw "Incorrect Shell menu item at ${index}: $actual; expected $expectedItem." }
         }
     } finally { ([IDisposable] $instance).Dispose() }
 }
@@ -138,18 +169,18 @@ try {
             'Copy' { @('CopyAbort', 'CopyPaste') }
             'Move' { @('MoveAbort', 'MovePaste') }
         }
-        $expected = @('Rename', '|', 'NameGet', 'PathGet') + $transfer + @('|', 'Delete', '|', 'Shell command')
+        $expected = @('Properties', '|', 'NameGet', 'PathGet') + $transfer + @('|', 'Shell command', '|', 'Rename', '|', 'Delete')
         $directoryActions = $createDirectory.Invoke($pathview, [object[]] @($entry))
         Assert-Menu $directoryActions $expected $(if ($case -eq 'Idle') { @() } else { @('Delete') })
-        Assert-ShellMenu $directoryActions $expected[0..($expected.Count - 3)] $false $owner
+        Assert-ShellMenu $directoryActions (@('Properties', '|', 'NameGet', 'PathGet') + $transfer) $false $owner
         $backgroundTransfer = if ($case -eq 'Idle') { @() } else { $transfer }
-        $backgroundExpected = @('Rename', '|', 'NameGet', 'PathGet') + $backgroundTransfer + @('|', 'Delete', '|', 'Shell command')
+        $backgroundExpected = @('Properties', '|', 'NameGet', 'PathGet') + $backgroundTransfer + @('|', 'Shell command', '|', 'Rename', '|', 'Delete')
         $backgroundActions = $createBackground.Invoke($pathview, @())
-        Assert-Menu $backgroundActions $backgroundExpected @('Rename', 'NameGet', 'PathGet', 'Delete')
-        Assert-ShellMenu $backgroundActions $backgroundExpected[0..($backgroundExpected.Count - 3)] $true $owner
+        Assert-Menu $backgroundActions $backgroundExpected @('Properties', 'Rename', 'NameGet', 'PathGet', 'Delete')
+        Assert-ShellMenu $backgroundActions (@('Properties', '|', 'NameGet', 'PathGet') + $backgroundTransfer) $true $owner
         foreach ($name in $actionIds) {
             $enabled = switch ($name) {
-                'Rename' { $true } 'NameGet' { $true } 'PathGet' { $true } 'Delete' { $case -eq 'Idle' }
+                'Properties' { $true } 'Rename' { $true } 'NameGet' { $true } 'PathGet' { $true } 'Delete' { $case -eq 'Idle' }
                 'CopyGet' { $case -eq 'Idle' } 'MoveGet' { $case -eq 'Idle' }
                 'CopyAbort' { $case -eq 'Copy' } 'CopyPaste' { $case -eq 'Copy' }
                 'MoveAbort' { $case -eq 'Move' } 'MovePaste' { $case -eq 'Move' }
@@ -173,6 +204,13 @@ try {
         if ($namePosition.X + $nameButton.ActualWidth -gt $pathPosition.X -or [Math]::Abs($namePosition.Y - $pathPosition.Y) -gt 1) {
             throw 'Name get was not laid out directly before Path get.'
         }
+        $renameButton = $view.FindName('RenameButton')
+        $deleteButton = $view.FindName('DeleteButton')
+        $renamePosition = $renameButton.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+        $deletePosition = $deleteButton.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+        if ($renamePosition.X + $renameButton.ActualWidth -gt $deletePosition.X -or [Math]::Abs($renamePosition.Y - $deletePosition.Y) -gt 1) {
+            throw 'Rename was not laid out directly before Delete.'
+        }
         $reveal = $view.GetType().GetMethod('RevealInsertedItems', $flags)
         $null = $reveal.Invoke($view, [object[]] @(,[string[]] @($testFile)))
         Wait-SelectedPaths $view ([string[]] @($testFile))
@@ -186,6 +224,11 @@ try {
         $contentAction = @($createContent.Invoke($view, @()) | Where-Object { $_.Id -eq 'NameGet' })[0]
         $contentAction.Invoke.Invoke()
         Assert-ClipboardText 'name with spaces.txt' 'Content menu Name get copied an incorrect file name:'
+        Wait-SelectedPaths $view ([string[]] @($testFile))
+        $propertiesAction = @($createContent.Invoke($view, @()) | Where-Object { $_.Id -eq 'Properties' })[0]
+        Assert-PropertiesDialog $propertiesAction 'name with spaces.txt' 'a single file'
+        $directoryAction = @($createDirectory.Invoke($pathview, [object[]] @($entry)) | Where-Object { $_.Id -eq 'Properties' })[0]
+        Assert-PropertiesDialog $directoryAction ([IO.Path]::GetFileName($directory)) 'the sidebar directory'
         $null = $reveal.Invoke($view, [object[]] @(,[string[]] @($testFolder)))
         Wait-SelectedPaths $view ([string[]] @($testFolder))
         $view.FindName('NameGetButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
@@ -211,6 +254,10 @@ try {
             $action.Invoke.Invoke()
             Assert-ClipboardText $expectedText "Base Menu $actionId copied incorrect text for multiple items:"
         }
+        Wait-SelectedPaths $view ([string[]] @($testFile, $testFolder))
+        $propertiesAction = @($createContent.Invoke($view, @()) | Where-Object { $_.Id -eq 'Properties' })[0]
+        if (-not $view.FindName('PropertiesButton').IsEnabled) { throw 'Properties was disabled for multiple selected items.' }
+        Assert-PropertiesDialog $propertiesAction '' 'multiple selected items'
         $view.FindName('FileList').SelectedItems.Clear()
         if ($nameButton.IsEnabled -or $pathButton.IsEnabled) { throw 'Name get or Path get was enabled without a selection.' }
         $directoryAction = @($createDirectory.Invoke($pathview, [object[]] @($entry)) | Where-Object { $_.Id -eq 'NameGet' })[0]

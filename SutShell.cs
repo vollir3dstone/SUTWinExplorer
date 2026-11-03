@@ -204,9 +204,9 @@ internal static class SutShell
         menu.ShowSubmenu(SutContextMenuFactory.FindBackgroundNewSubmenu, x, y);
     }
 
-    internal static void ShowProperties(string path, IntPtr owner)
+    internal static void ShowProperties(IReadOnlyList<string> paths, IntPtr owner)
     {
-        using var menu = SutContextMenuFactory.GetItemMenu([path], owner);
+        using var menu = SutContextMenuFactory.GetItemMenu(paths, owner);
         menu.InvokeVerb("properties");
     }
 

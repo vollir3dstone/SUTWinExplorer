@@ -103,11 +103,6 @@
                             Tag="Properties" Width="72" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
                     </StackPanel>
                     <StackPanel Grid.Column="3" Orientation="Horizontal">
-                        <Button x:Name="RenameButton" Content="Rename…" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Rename" ToolTip="Rename"
-                            Tag="Rename" Width="72" Padding="0" IsEnabled="False"
-                                Click="ContentOperationButton_Click" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="5" Orientation="Horizontal">
                         <Button x:Name="NameGetButton" Content="Name🠝" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Name get" ToolTip="Name get"
                             Tag="NameGet" Width="54" Padding="0" IsEnabled="False"
                                 Click="ContentOperationButton_Click" />
@@ -115,15 +110,20 @@
                             Tag="PathGet" Width="48" Padding="0" IsEnabled="False"
                                 Click="ContentOperationButton_Click" />
                     </StackPanel>
-                    <StackPanel Grid.Column="7" Orientation="Horizontal">
+                    <StackPanel Grid.Column="5" Orientation="Horizontal">
                         <Button x:Name="CopyGetButton" Content="Copy🠝" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Copy get" ToolTip="Copy get"
                             Tag="CopyGet" Width="48" Padding="0" IsEnabled="False"
                             Click="ContentOperationButton_Click" />
                     </StackPanel>
-                    <StackPanel Grid.Column="9" Orientation="Horizontal">
+                    <StackPanel Grid.Column="7" Orientation="Horizontal">
                         <Button x:Name="MoveGetButton" Content="Move🠝" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Move get" ToolTip="Move get"
                             Tag="MoveGet" Width="48" Padding="0" IsEnabled="False"
                             Click="ContentOperationButton_Click" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="9" Orientation="Horizontal">
+                        <Button x:Name="RenameButton" Content="Rename…" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Rename" ToolTip="Rename"
+                            Tag="Rename" Width="72" Padding="0" IsEnabled="False"
+                                Click="ContentOperationButton_Click" />
                     </StackPanel>
                     <StackPanel Grid.Column="11" Orientation="Horizontal">
                         <Button x:Name="DeleteButton" Content="Del🗑️" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Delete" ToolTip="Delete"

@@ -1002,11 +1002,12 @@ public partial class Pathview : UserControl
         var canStart = !copyPrepared && !movePrepared;
         var actions = new (string Name, bool Enabled)[]
         {
-            ("Rename", !entry.IsTop && Directory.Exists(entry.Path)),
+            ("Properties", Directory.Exists(entry.Path)),
             ("NameGet", Directory.Exists(entry.Path)),
             ("PathGet", Directory.Exists(entry.Path)),
             ("CopyGet", canStart), ("CopyAbort", copyPrepared), ("CopyPaste", copyPrepared),
             ("MoveGet", canStart), ("MoveAbort", movePrepared), ("MovePaste", movePrepared),
+            ("Rename", !entry.IsTop && Directory.Exists(entry.Path)),
             ("Delete", canStart && ShellFileOperations.CanDelete(entry.Path))
         };
         return actions.Select(action => new ShellMenuAction(
@@ -1023,9 +1024,9 @@ public partial class Pathview : UserControl
         var movePrepared = MoveWorkflowState.Shared.IsPrepared;
         var actions = new (string Name, bool Enabled)[]
         {
-            ("Rename", false), ("NameGet", false), ("PathGet", false), ("CopyGet", false),
+            ("Properties", false), ("NameGet", false), ("PathGet", false), ("CopyGet", false),
             ("CopyAbort", copyPrepared), ("CopyPaste", copyPrepared), ("MoveGet", false),
-            ("MoveAbort", movePrepared), ("MovePaste", movePrepared), ("Delete", false)
+            ("MoveAbort", movePrepared), ("MovePaste", movePrepared), ("Rename", false), ("Delete", false)
         };
         return actions.Select(action => new ShellMenuAction(
             action.Name,
@@ -1042,6 +1043,7 @@ public partial class Pathview : UserControl
             var owner = new WindowInteropHelper(Window.GetWindow(this)!).Handle;
             switch (action)
             {
+                case "Properties": SutShell.ShowProperties([entry!.Path], owner); break;
                 case "Rename": BeginTreeRename(entry!); break;
                 case "NameGet": Clipboard.SetText(SutShell.GetFileSystemName(entry!.Path)); break;
                 case "PathGet": Clipboard.SetText(entry!.Path); break;

@@ -171,7 +171,7 @@ internal static class SutContextMenuFactory
                 if (background)
                 {
                     FilterBackgroundBaseMenu(menu, contextMenu, backgroundBaseCommands!);
-                    InsertActions(menu, actions!);
+                    if (actions!.Count > 0) RemoveShellProperties(menu, contextMenu);
                 }
                 else if (directorySelection)
                 {
@@ -195,12 +195,17 @@ internal static class SutContextMenuFactory
                 }
                 if (!background)
                 {
-                    PrepareBaseMenu(menu, contextMenu, actions!, directorySelection);
+                    PrepareBaseMenu(menu, contextMenu, directorySelection, actions!.Count > 0);
                     RemoveExcludedFileCommands(menu, contextMenu, directorySelection);
                 }
+                if (actions!.Count > 0)
+                    InsertActions(menu, actions);
             }
             else if (excludedCommands is not null)
+            {
                 PrepareContentMenu(menu, contextMenu, excludedCommands, directorySelection, background);
+                if (background) RemoveShellProperties(menu, contextMenu);
+            }
             if (background && excludedCommands is not null && backgroundNewAction is not null)
             {
                 ReplaceBackgroundNew(menu, backgroundNewAction);
@@ -450,10 +455,12 @@ internal static class SutContextMenuFactory
         }
     }
 
-    private static void PrepareBaseMenu(IntPtr menu, IContextMenu contextMenu, IReadOnlyList<ShellMenuAction> actions, bool directorySelection)
+    private static void PrepareBaseMenu(IntPtr menu, IContextMenu contextMenu, bool directorySelection, bool replaceProperties)
     {
         var standardVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             { "copy", "copyaspath", "paste", "rename", "delete", "cut" };
+        if (replaceProperties)
+            standardVerbs.Add("properties");
         if (!directorySelection)
             standardVerbs.UnionWith(["link", "open", "openas", "edit"]);
         var openWithLabel = new StringBuilder(256);
@@ -484,25 +491,48 @@ internal static class SutContextMenuFactory
         }
 
         RemoveRedundantSeparators(menu);
+    }
 
-        InsertActions(menu, actions);
+    private static void RemoveShellProperties(IntPtr menu, IContextMenu contextMenu)
+    {
+        for (var index = GetMenuItemCount(menu) - 1; index >= 0; index--)
+        {
+            var id = GetMenuItemID(menu, index);
+            if (id >= FirstCommandId && id <= LastCommandId &&
+                string.Equals(GetCommandVerb(contextMenu, id - FirstCommandId), "properties", StringComparison.OrdinalIgnoreCase) &&
+                !RemoveMenu(menu, (uint)index, MenuByPosition))
+                throw new InvalidOperationException("Could not remove the Shell properties command.");
+        }
+        RemoveRedundantSeparators(menu);
     }
 
     private static void InsertActions(IntPtr menu, IReadOnlyList<ShellMenuAction> actions)
     {
-        if (GetMenuItemCount(menu) > 0 && !InsertMenu(menu, 0, MenuByPosition | MenuSeparator, UIntPtr.Zero, null))
-            throw new InvalidOperationException("Could not insert the menu separator.");
-
-        for (var index = actions.Count - 1; index >= 0; index--)
+        var position = 0u;
+        for (var index = 0; index < actions.Count; index++)
         {
-            if (actions[index].IsTransfer && !actions[index].IsEnabled)
+            var action = actions[index];
+            if (action.Id is "Rename" or "Delete" || (action.IsTransfer && !action.IsEnabled))
                 continue;
-            var id = BaseMenuCommandFirst + (uint)index;
-            if (!InsertMenu(menu, 0, MenuByPosition | (actions[index].IsEnabled ? 0u : MenuDisabled), (UIntPtr)id, actions[index].Label))
+            if (action.SeparatorBefore && !InsertMenu(menu, position++, MenuByPosition | MenuSeparator, UIntPtr.Zero, null))
+                throw new InvalidOperationException("Could not insert the menu separator.");
+            if (!InsertMenu(menu, position++, MenuByPosition | (action.IsEnabled ? 0u : MenuDisabled),
+                    (UIntPtr)(BaseMenuCommandFirst + (uint)index), action.Label))
                 throw new InvalidOperationException("Could not insert a standard menu command.");
-            if (actions[index].SeparatorBefore && !InsertMenu(menu, 0, MenuByPosition | MenuSeparator, UIntPtr.Zero, null))
+        }
+        if (position < GetMenuItemCount(menu) && !InsertMenu(menu, position, MenuByPosition | MenuSeparator, UIntPtr.Zero, null))
+            throw new InvalidOperationException("Could not insert the menu separator.");
+        for (var index = 0; index < actions.Count; index++)
+        {
+            var action = actions[index];
+            if (action.Id is not ("Rename" or "Delete"))
+                continue;
+            if (!InsertMenu(menu, (uint)GetMenuItemCount(menu), MenuByPosition | MenuSeparator, UIntPtr.Zero, null) ||
+                !InsertMenu(menu, (uint)GetMenuItemCount(menu), MenuByPosition | (action.IsEnabled ? 0u : MenuDisabled),
+                    (UIntPtr)(BaseMenuCommandFirst + (uint)index), action.Label))
                 throw new InvalidOperationException("Could not insert the menu separator.");
         }
+        RemoveRedundantSeparators(menu);
     }
 
     private static string? ComparableCommand(IntPtr menu, IContextMenu contextMenu, int index, bool includeDisabled = false, bool allowVerbless = false)
