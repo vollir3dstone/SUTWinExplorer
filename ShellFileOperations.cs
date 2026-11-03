@@ -12,6 +12,7 @@ internal static class ShellFileOperations
     private const uint ClsctxInprocServer = 1;
     private const uint FileOperationAllowUndo = 0x40;
     private const uint FileOperationRecycleOnDelete = 0x00080000;
+    private const int CopyEngineUserCancelled = unchecked((int)0x80270000);
     private static readonly Guid FileOperationClassId = new("3AD05575-8857-4850-9277-11B85BDB8E09");
     private static readonly Guid ShellLinkClassId = new("00021401-0000-0000-C000-000000000046");
     private static readonly Guid ShellLinkInterfaceId = new("000214F9-0000-0000-C000-000000000046");
@@ -154,7 +155,10 @@ internal static class ShellFileOperations
             }
             foreach (var source in sources)
                 Marshal.ThrowExceptionForHR(operation.DeleteItem(source, IntPtr.Zero));
-            Marshal.ThrowExceptionForHR(operation.PerformOperations());
+            var result = operation.PerformOperations();
+            if (result == CopyEngineUserCancelled)
+                throw new OperationCanceledException("The Shell delete operation was canceled.");
+            Marshal.ThrowExceptionForHR(result);
             Marshal.ThrowExceptionForHR(operation.GetAnyOperationsAborted(out var operationsAborted));
             if (operationsAborted)
                 throw new OperationCanceledException("The Shell delete operation was canceled.");
