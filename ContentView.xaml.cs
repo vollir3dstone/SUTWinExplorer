@@ -87,11 +87,11 @@ public partial class ContentView : UserControl
     }
 
     private IReadOnlyList<ShellMenuAction> CreateContextMenuActions() =>
-        new[] { PropertiesButton, NameGetButton, PathGetButton, CopyGetButton, CopyAbortButton, CopyPasteButton,
+        new[] { PropertiesButton, NameGetButton, PathGetButton, LinkGetButton, LinkAbortButton, LinkPasteButton, CopyGetButton, CopyAbortButton, CopyPasteButton,
             MoveGetButton, MoveAbortButton, MovePasteButton, RenameButton, DeleteButton }.Select(button => new ShellMenuAction(
                 (string)button.Tag, System.Windows.Automation.AutomationProperties.GetName(button), button.IsEnabled,
                 () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)),
-                IsTransfer: button.Tag is string action && (action.StartsWith("Copy", StringComparison.Ordinal) || action.StartsWith("Move", StringComparison.Ordinal)),
+                IsTransfer: button.Tag is string action && (action.StartsWith("Link", StringComparison.Ordinal) || action.StartsWith("Copy", StringComparison.Ordinal) || action.StartsWith("Move", StringComparison.Ordinal)),
                 SeparatorBefore: button == NameGetButton || button == DeleteButton)).ToArray();
 
     internal void ShowNewItemDialog(string path)
@@ -298,6 +298,7 @@ public partial class ContentView : UserControl
         DateColumn.Width = Math.Ceiling(Math.Max(Measure("Date modified") + 10, Measure(sampleDate)) + 16);
         FileList_SizeChanged(FileList, null!);
         ScheduleRangeLoad();
+        LinkWorkflowState.Shared.Changed += WorkflowState_Changed;
         CopyWorkflowState.Shared.Changed += WorkflowState_Changed;
         MoveWorkflowState.Shared.Changed += WorkflowState_Changed;
         UpdateToolbarOperationButtons();
@@ -308,6 +309,7 @@ public partial class ContentView : UserControl
         DependencyPropertyDescriptor.FromProperty(GridViewColumn.WidthProperty, typeof(GridViewColumn))
             .RemoveValueChanged(NameColumn, NameColumn_WidthChanged);
         _rangeCancellation?.Cancel();
+        LinkWorkflowState.Shared.Changed -= WorkflowState_Changed;
         CopyWorkflowState.Shared.Changed -= WorkflowState_Changed;
         MoveWorkflowState.Shared.Changed -= WorkflowState_Changed;
     }
@@ -476,9 +478,26 @@ public partial class ContentView : UserControl
                 case "Rename":
                     BeginRename();
                     break;
+                case "LinkGet":
+                    if (CopyWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared)
+                        throw new InvalidOperationException("Abort or complete the prepared transfer before starting a Link.");
+                    LinkWorkflowState.Shared.Prepare(selectedPaths);
+                    break;
+                case "LinkPaste":
+                    var linked = new List<string>();
+                    try
+                    {
+                        SutShell.Link(LinkWorkflowState.Shared.PreparedPaths, CurrentPath, linked);
+                        LinkWorkflowState.Shared.CompletePaste();
+                    }
+                    finally { RevealInsertedItems(linked); }
+                    break;
+                case "LinkAbort":
+                    LinkWorkflowState.Shared.Abort();
+                    break;
                 case "CopyGet":
-                    if (MoveWorkflowState.Shared.IsPrepared)
-                        throw new InvalidOperationException("Abort or complete the prepared Move before starting a Copy.");
+                    if (LinkWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared)
+                        throw new InvalidOperationException("Abort or complete the prepared transfer before starting a Copy.");
                     CopyWorkflowState.Shared.Prepare(selectedPaths);
                     break;
                 case "CopyPaste":
@@ -494,8 +513,8 @@ public partial class ContentView : UserControl
                     CopyWorkflowState.Shared.Abort();
                     break;
                 case "MoveGet":
-                    if (CopyWorkflowState.Shared.IsPrepared)
-                        throw new InvalidOperationException("Abort or complete the prepared Copy before starting a Move.");
+                    if (LinkWorkflowState.Shared.IsPrepared || CopyWorkflowState.Shared.IsPrepared)
+                        throw new InvalidOperationException("Abort or complete the prepared transfer before starting a Move.");
                     MoveWorkflowState.Shared.Prepare(selectedPaths);
                     break;
                 case "MovePaste":
@@ -559,10 +578,14 @@ public partial class ContentView : UserControl
         RenameButton.IsEnabled = hasSelection && selectedRows.Length == 1 &&
                      SutShell.GetEditName(selectedRows[0].FullPath) is not null;
         NameGetButton.IsEnabled = PathGetButton.IsEnabled = hasSelection;
+        var linkPrepared = LinkWorkflowState.Shared.IsPrepared;
         var copyPrepared = CopyWorkflowState.Shared.IsPrepared;
         var movePrepared = MoveWorkflowState.Shared.IsPrepared;
-        var canStartOperation = !copyPrepared && !movePrepared;
+        var canStartOperation = !linkPrepared && !copyPrepared && !movePrepared;
         DeleteButton.IsEnabled = hasSelection && canStartOperation && selectedRows.All(row => ShellFileOperations.CanDelete(row.FullPath));
+        LinkGetButton.IsEnabled = hasSelection && canStartOperation;
+        LinkPasteButton.IsEnabled = linkPrepared;
+        LinkAbortButton.IsEnabled = linkPrepared;
         CopyGetButton.IsEnabled = hasSelection && canStartOperation;
         CopyPasteButton.IsEnabled = copyPrepared;
         CopyAbortButton.IsEnabled = copyPrepared;

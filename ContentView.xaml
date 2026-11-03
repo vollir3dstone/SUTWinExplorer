@@ -97,6 +97,8 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="1" Orientation="Horizontal">
                         <Button x:Name="PropertiesButton" Content="Properties…" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Properties" ToolTip="Properties"
@@ -111,21 +113,26 @@
                                 Click="ContentOperationButton_Click" />
                     </StackPanel>
                     <StackPanel Grid.Column="5" Orientation="Horizontal">
+                        <Button x:Name="LinkGetButton" Content="Link🠝" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Link get" ToolTip="Link get"
+                            Tag="LinkGet" Width="48" Padding="0" IsEnabled="False"
+                            Click="ContentOperationButton_Click" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="7" Orientation="Horizontal">
                         <Button x:Name="CopyGetButton" Content="Copy🠝" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Copy get" ToolTip="Copy get"
                             Tag="CopyGet" Width="48" Padding="0" IsEnabled="False"
                             Click="ContentOperationButton_Click" />
                     </StackPanel>
-                    <StackPanel Grid.Column="7" Orientation="Horizontal">
+                    <StackPanel Grid.Column="9" Orientation="Horizontal">
                         <Button x:Name="MoveGetButton" Content="Move🠝" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Move get" ToolTip="Move get"
                             Tag="MoveGet" Width="48" Padding="0" IsEnabled="False"
                             Click="ContentOperationButton_Click" />
                     </StackPanel>
-                    <StackPanel Grid.Column="9" Orientation="Horizontal">
+                    <StackPanel Grid.Column="11" Orientation="Horizontal">
                         <Button x:Name="RenameButton" Content="Rename…" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Rename" ToolTip="Rename"
                             Tag="Rename" Width="72" Padding="0" IsEnabled="False"
                                 Click="ContentOperationButton_Click" />
                     </StackPanel>
-                    <StackPanel Grid.Column="11" Orientation="Horizontal">
+                    <StackPanel Grid.Column="13" Orientation="Horizontal">
                         <Button x:Name="DeleteButton" Content="Del🗑️" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Delete" ToolTip="Delete"
                             Tag="Delete" Width="48" Padding="0" IsEnabled="False"
                                 Click="ContentOperationButton_Click" />
@@ -135,6 +142,8 @@
             </Grid>
             <Grid x:Name="DirectoryActions" Grid.Row="1" Grid.Column="0" Margin="4,0,8,0" MinWidth="72">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" MinHeight="4" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" MinHeight="4" />
                     <RowDefinition Height="Auto" />
@@ -167,12 +176,18 @@
                 <Button x:Name="NewButton" Grid.Row="2" Content="New…" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="New" ToolTip="New"
                         Tag="New" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
                 <StackPanel Grid.Row="4">
+                    <Button x:Name="LinkAbortButton" Content="Link✕" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Link abort" ToolTip="Link abort"
+                        Tag="LinkAbort" Width="Auto" HorizontalAlignment="Stretch" Padding="0" Margin="0,0,0,4" IsEnabled="False" Click="ContentOperationButton_Click" />
+                    <Button x:Name="LinkPasteButton" Content="Link🠟" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Link paste" ToolTip="Link paste"
+                        Tag="LinkPaste" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
+                </StackPanel>
+                <StackPanel Grid.Row="6">
                     <Button x:Name="CopyAbortButton" Content="Copy✕" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Copy abort" ToolTip="Copy abort"
                         Tag="CopyAbort" Width="Auto" HorizontalAlignment="Stretch" Padding="0" Margin="0,0,0,4" IsEnabled="False" Click="ContentOperationButton_Click" />
                     <Button x:Name="CopyPasteButton" Content="Copy🠟" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Copy paste" ToolTip="Copy paste"
                         Tag="CopyPaste" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
                 </StackPanel>
-                <StackPanel Grid.Row="6">
+                <StackPanel Grid.Row="8">
                     <Button x:Name="MoveAbortButton" Content="Move✕" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Move abort" ToolTip="Move abort"
                         Tag="MoveAbort" Width="Auto" HorizontalAlignment="Stretch" Padding="0" Margin="0,0,0,4" IsEnabled="False" Click="ContentOperationButton_Click" />
                     <Button x:Name="MovePasteButton" Content="Move🠟" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Move paste" ToolTip="Move paste"

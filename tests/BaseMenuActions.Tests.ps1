@@ -31,7 +31,7 @@ $previousContext = [System.Threading.SynchronizationContext]::Current
 $flags = [Reflection.BindingFlags]'Instance,NonPublic'
 $factory = $assembly.GetType('SUTWinExplorer.SutContextMenuFactory', $true)
 $insert = $factory.GetMethod('InsertActions', [Reflection.BindingFlags]'Static,NonPublic')
-$actionIds = @('Properties', 'NameGet', 'PathGet', 'CopyGet', 'CopyAbort', 'CopyPaste', 'MoveGet', 'MoveAbort', 'MovePaste', 'Rename', 'Delete')
+$actionIds = @('Properties', 'NameGet', 'PathGet', 'LinkGet', 'LinkAbort', 'LinkPaste', 'CopyGet', 'CopyAbort', 'CopyPaste', 'MoveGet', 'MoveAbort', 'MovePaste', 'Rename', 'Delete')
 $directory = Join-Path ([IO.Path]::GetTempPath()) ('SutBaseMenu-' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($directory) | Out-Null
 function Wait-SelectedPaths($view, [string[]] $expected) {
@@ -159,13 +159,16 @@ try {
     $createDirectory = $pathview.GetType().GetMethod('CreateDirectoryMenuActions', $flags)
     $createBackground = $pathview.GetType().GetMethod('CreateBackgroundMenuActions', $flags)
     $entry = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.TreeEntry', $true), [object[]] @([string] 'folder', [string] $directory))
+    $link = $assembly.GetType('SUTWinExplorer.LinkWorkflowState', $true).GetProperty('Shared').GetValue($null)
     $copy = $assembly.GetType('SUTWinExplorer.CopyWorkflowState', $true).GetProperty('Shared').GetValue($null)
     $move = $assembly.GetType('SUTWinExplorer.MoveWorkflowState', $true).GetProperty('Shared').GetValue($null)
-    foreach ($case in @('Idle', 'Copy', 'Move')) {
+    foreach ($case in @('Idle', 'Link', 'Copy', 'Move')) {
+        if ($case -eq 'Link') { $link.Prepare([string[]] @($directory)) }
         if ($case -eq 'Copy') { $copy.Prepare([string[]] @($directory)) }
         if ($case -eq 'Move') { $move.Prepare([string[]] @($directory)) }
         $transfer = switch ($case) {
-            'Idle' { @('CopyGet', 'MoveGet') }
+            'Idle' { @('LinkGet', 'CopyGet', 'MoveGet') }
+            'Link' { @('LinkAbort', 'LinkPaste') }
             'Copy' { @('CopyAbort', 'CopyPaste') }
             'Move' { @('MoveAbort', 'MovePaste') }
         }
@@ -181,13 +184,15 @@ try {
         foreach ($name in $actionIds) {
             $enabled = switch ($name) {
                 'Properties' { $true } 'Rename' { $true } 'NameGet' { $true } 'PathGet' { $true } 'Delete' { $case -eq 'Idle' }
-                'CopyGet' { $case -eq 'Idle' } 'MoveGet' { $case -eq 'Idle' }
+                'LinkGet' { $case -eq 'Idle' } 'CopyGet' { $case -eq 'Idle' } 'MoveGet' { $case -eq 'Idle' }
+                'LinkAbort' { $case -eq 'Link' } 'LinkPaste' { $case -eq 'Link' }
                 'CopyAbort' { $case -eq 'Copy' } 'CopyPaste' { $case -eq 'Copy' }
                 'MoveAbort' { $case -eq 'Move' } 'MovePaste' { $case -eq 'Move' }
             }
             $view.FindName($name + 'Button').IsEnabled = $enabled
         }
         Assert-Menu ($createContent.Invoke($view, @())) $expected $(if ($case -eq 'Idle') { @() } else { @('Delete') })
+        $link.Abort()
         $copy.Abort()
         $move.Abort()
     }
@@ -203,6 +208,14 @@ try {
         $pathPosition = $pathButton.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
         if ($namePosition.X + $nameButton.ActualWidth -gt $pathPosition.X -or [Math]::Abs($namePosition.Y - $pathPosition.Y) -gt 1) {
             throw 'Name get was not laid out directly before Path get.'
+        }
+        $linkButton = $view.FindName('LinkGetButton')
+        $copyButton = $view.FindName('CopyGetButton')
+        $linkPosition = $linkButton.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+        $copyPosition = $copyButton.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+        if ($pathPosition.X + $pathButton.ActualWidth -gt $linkPosition.X -or $linkPosition.X + $linkButton.ActualWidth -gt $copyPosition.X -or
+            [Math]::Abs($pathPosition.Y - $linkPosition.Y) -gt 1 -or [Math]::Abs($linkPosition.Y - $copyPosition.Y) -gt 1) {
+            throw 'Link get was not laid out between Path get and Copy get.'
         }
         $renameButton = $view.FindName('RenameButton')
         $deleteButton = $view.FindName('DeleteButton')
@@ -258,6 +271,38 @@ try {
         $propertiesAction = @($createContent.Invoke($view, @()) | Where-Object { $_.Id -eq 'Properties' })[0]
         if (-not $view.FindName('PropertiesButton').IsEnabled) { throw 'Properties was disabled for multiple selected items.' }
         Assert-PropertiesDialog $propertiesAction '' 'multiple selected items'
+        Wait-SelectedPaths $view ([string[]] @($testFile, $testFolder))
+        $linkGet = @($createContent.Invoke($view, @()) | Where-Object { $_.Id -eq 'LinkGet' })[0]
+        $linkGet.Invoke.Invoke()
+        if (-not $link.IsPrepared -or @($link.PreparedPaths).Count -ne 2 -or
+            -not $view.FindName('LinkAbortButton').IsEnabled -or -not $view.FindName('LinkPasteButton').IsEnabled -or
+            $view.FindName('LinkGetButton').IsEnabled -or $copyButton.IsEnabled -or
+            $view.FindName('MoveGetButton').IsEnabled -or $deleteButton.IsEnabled) { throw 'Prepared Link states were incorrect.' }
+        $linkPaste = @($createBackground.Invoke($pathview, @()) | Where-Object { $_.Id -eq 'LinkPaste' })[0]
+        if (-not $linkPaste.IsEnabled) { throw 'Link paste was disabled in the background menu.' }
+        $linkPaste.Invoke.Invoke()
+        $shortcuts = [string[]] @((Join-Path $directory 'name with spaces.txt - Shortcut.lnk'), (Join-Path $directory 'test-folder - Shortcut.lnk'))
+        if ($link.IsPrepared -or @($shortcuts | Where-Object { -not [IO.File]::Exists($_) }).Count -ne 0 -or
+            -not [IO.File]::Exists($testFile) -or -not [IO.Directory]::Exists($testFolder)) { throw 'Link paste did not create shortcuts and retain the sources.' }
+        Wait-SelectedPaths $view $shortcuts
+        $directoryLink = @($createDirectory.Invoke($pathview, [object[]] @($entry)) | Where-Object { $_.Id -eq 'LinkGet' })[0]
+        $directoryLink.Invoke.Invoke()
+        if (-not $link.IsPrepared -or @($link.PreparedPaths)[0] -cne $directory) { throw 'Sidebar Link get did not prepare its directory.' }
+        $linkAbort = @($createBackground.Invoke($pathview, @()) | Where-Object { $_.Id -eq 'LinkAbort' })[0]
+        $linkAbort.Invoke.Invoke()
+        if ($link.IsPrepared) { throw 'Background Link abort did not clear the workflow.' }
+        $disappearing = Join-Path $directory 'disappearing.txt'
+        [IO.File]::WriteAllText($disappearing, 'temporary')
+        $link.Prepare([string[]] @($disappearing))
+        [IO.File]::Delete($disappearing)
+        $errorProbe = [SutShellPropertiesProbe]::new('Operation failed')
+        try {
+            $view.FindName('LinkPasteButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            if (-not $errorProbe.Opened -or -not $link.IsPrepared -or -not $view.FindName('LinkPasteButton').IsEnabled -or
+                [IO.File]::Exists((Join-Path $directory 'disappearing.txt - Shortcut.lnk'))) {
+                throw 'Failed Link paste did not report the error and retain the prepared workflow.'
+            }
+        } finally { $errorProbe.Dispose(); $link.Abort() }
         $view.FindName('FileList').SelectedItems.Clear()
         if ($nameButton.IsEnabled -or $pathButton.IsEnabled) { throw 'Name get or Path get was enabled without a selection.' }
         $directoryAction = @($createDirectory.Invoke($pathview, [object[]] @($entry)) | Where-Object { $_.Id -eq 'NameGet' })[0]
@@ -272,6 +317,7 @@ try {
         else { [System.Windows.Clipboard]::SetDataObject($originalClipboard, $true) }
     }
 } finally {
+    if ($null -ne $link) { $link.Abort() }
     if ($null -ne $copy) { $copy.Abort() }
     if ($null -ne $move) { $move.Abort() }
     if ($null -ne $window) { $window.Close() }

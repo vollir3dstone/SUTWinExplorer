@@ -177,6 +177,9 @@ internal static class SutShell
 
     internal static void Open(string path) => Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
 
+    internal static void Link(IReadOnlyList<string> paths, string destination, IList<string> insertedPaths) =>
+        ShellFileOperations.Link(paths, destination, insertedPaths);
+
     internal static void Copy(IReadOnlyList<string> paths, string destination, IntPtr owner, IList<string> insertedPaths) =>
         ShellFileOperations.Copy(paths, destination, owner, insertedPaths);
 

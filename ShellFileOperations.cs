@@ -106,6 +106,48 @@ internal static class ShellFileOperations
         Transfer(sourcePaths, destinationPath, ownerWindow, "move", insertedPaths,
             (operation, source, destination, sink) => operation.MoveItem(source, destination, null, sink));
 
+    public static void Link(IReadOnlyList<string> sourcePaths, string destinationPath, IList<string> insertedPaths)
+    {
+        if (sourcePaths.Count == 0)
+            throw new InvalidOperationException("Select one or more items to link.");
+
+        ValidateTransferPaths(sourcePaths, destinationPath, "link");
+        foreach (var sourcePath in sourcePaths)
+        {
+            var name = SutShell.GetFileSystemName(sourcePath);
+            name = string.Concat(name.Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
+            var baseName = $"{name} - Shortcut";
+            var temporaryPath = Path.Combine(destinationPath, $"{Guid.NewGuid():N}.tmp");
+            using (new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { }
+            IShellLinkNative? shellLink = null;
+            try
+            {
+                var classId = ShellLinkClassId;
+                var interfaceId = ShellLinkInterfaceId;
+                Marshal.ThrowExceptionForHR(CoCreateShellLink(ref classId, IntPtr.Zero, ClsctxInprocServer, ref interfaceId, out shellLink));
+                Marshal.ThrowExceptionForHR(shellLink.SetPath(Path.GetFullPath(sourcePath)));
+                Marshal.ThrowExceptionForHR(((IPersistFileNative)shellLink).Save(temporaryPath, true));
+                for (var number = 1; ; number++)
+                {
+                    var linkPath = Path.Combine(destinationPath, number == 1 ? $"{baseName}.lnk" : $"{baseName} ({number}).lnk");
+                    try
+                    {
+                        File.Move(temporaryPath, linkPath);
+                    }
+                    catch (IOException) when (File.Exists(linkPath) || Directory.Exists(linkPath)) { continue; }
+                    insertedPaths.Add(linkPath);
+                    break;
+                }
+            }
+            finally
+            {
+                if (shellLink is not null && Marshal.IsComObject(shellLink))
+                    _ = Marshal.ReleaseComObject(shellLink);
+                File.Delete(temporaryPath);
+            }
+        }
+    }
+
     internal static bool CanDelete(string path)
     {
         try
@@ -310,7 +352,7 @@ internal static class ShellFileOperations
         ref Guid interfaceId,
         [MarshalAs(UnmanagedType.Interface)] out IFileOperationNative operation);
 
-    [DllImport("ole32.dll", PreserveSig = true)]
+    [DllImport("ole32.dll", EntryPoint = "CoCreateInstance", PreserveSig = true)]
     private static extern int CoCreateShellLink(
         ref Guid classId,
         IntPtr outer,

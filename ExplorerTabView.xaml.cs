@@ -997,14 +997,16 @@ public partial class Pathview : UserControl
 
     private IReadOnlyList<ShellMenuAction> CreateDirectoryMenuActions(TreeEntry entry)
     {
+        var linkPrepared = LinkWorkflowState.Shared.IsPrepared;
         var copyPrepared = CopyWorkflowState.Shared.IsPrepared;
         var movePrepared = MoveWorkflowState.Shared.IsPrepared;
-        var canStart = !copyPrepared && !movePrepared;
+        var canStart = !linkPrepared && !copyPrepared && !movePrepared;
         var actions = new (string Name, bool Enabled)[]
         {
             ("Properties", Directory.Exists(entry.Path)),
             ("NameGet", Directory.Exists(entry.Path)),
             ("PathGet", Directory.Exists(entry.Path)),
+            ("LinkGet", canStart), ("LinkAbort", linkPrepared), ("LinkPaste", linkPrepared),
             ("CopyGet", canStart), ("CopyAbort", copyPrepared), ("CopyPaste", copyPrepared),
             ("MoveGet", canStart), ("MoveAbort", movePrepared), ("MovePaste", movePrepared),
             ("Rename", !entry.IsTop && Directory.Exists(entry.Path)),
@@ -1014,17 +1016,19 @@ public partial class Pathview : UserControl
             action.Name,
             System.Windows.Automation.AutomationProperties.GetName((Button)DirectoryContent.FindName(action.Name + "Button")),
             action.Enabled, () => ExecuteDirectoryMenuAction(action.Name, entry),
-            IsTransfer: action.Name.StartsWith("Copy", StringComparison.Ordinal) || action.Name.StartsWith("Move", StringComparison.Ordinal),
+            IsTransfer: action.Name.StartsWith("Link", StringComparison.Ordinal) || action.Name.StartsWith("Copy", StringComparison.Ordinal) || action.Name.StartsWith("Move", StringComparison.Ordinal),
             SeparatorBefore: action.Name is "NameGet" or "Delete")).ToArray();
     }
 
     private IReadOnlyList<ShellMenuAction> CreateBackgroundMenuActions()
     {
+        var linkPrepared = LinkWorkflowState.Shared.IsPrepared;
         var copyPrepared = CopyWorkflowState.Shared.IsPrepared;
         var movePrepared = MoveWorkflowState.Shared.IsPrepared;
         var actions = new (string Name, bool Enabled)[]
         {
-            ("Properties", false), ("NameGet", false), ("PathGet", false), ("CopyGet", false),
+            ("Properties", false), ("NameGet", false), ("PathGet", false), ("LinkGet", false),
+            ("LinkAbort", linkPrepared), ("LinkPaste", linkPrepared), ("CopyGet", false),
             ("CopyAbort", copyPrepared), ("CopyPaste", copyPrepared), ("MoveGet", false),
             ("MoveAbort", movePrepared), ("MovePaste", movePrepared), ("Rename", false), ("Delete", false)
         };
@@ -1032,7 +1036,7 @@ public partial class Pathview : UserControl
             action.Name,
             System.Windows.Automation.AutomationProperties.GetName((Button)DirectoryContent.FindName(action.Name + "Button")),
             action.Enabled, () => ExecuteDirectoryMenuAction(action.Name, null),
-            IsTransfer: action.Name.StartsWith("Copy", StringComparison.Ordinal) || action.Name.StartsWith("Move", StringComparison.Ordinal),
+            IsTransfer: action.Name.StartsWith("Link", StringComparison.Ordinal) || action.Name.StartsWith("Copy", StringComparison.Ordinal) || action.Name.StartsWith("Move", StringComparison.Ordinal),
             SeparatorBefore: action.Name is "NameGet" or "Delete")).ToArray();
     }
 
@@ -1047,9 +1051,29 @@ public partial class Pathview : UserControl
                 case "Rename": BeginTreeRename(entry!); break;
                 case "NameGet": Clipboard.SetText(SutShell.GetFileSystemName(entry!.Path)); break;
                 case "PathGet": Clipboard.SetText(entry!.Path); break;
+                case "LinkGet":
+                    if (CopyWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared)
+                        throw new InvalidOperationException("Abort or complete the prepared transfer before starting a Link.");
+                    LinkWorkflowState.Shared.Prepare([entry!.Path]);
+                    break;
+                case "LinkAbort": LinkWorkflowState.Shared.Abort(); break;
+                case "LinkPaste":
+                    var linked = new List<string>();
+                    try
+                    {
+                        SutShell.Link(LinkWorkflowState.Shared.PreparedPaths, CurrentPath, linked);
+                        LinkWorkflowState.Shared.CompletePaste();
+                    }
+                    finally
+                    {
+                        DirectoryContent.RevealInsertedItems(linked);
+                        RefreshActivePathTree();
+                        RefreshCurrentRouteTree();
+                    }
+                    break;
                 case "CopyGet":
-                    if (MoveWorkflowState.Shared.IsPrepared)
-                        throw new InvalidOperationException("Abort or complete the prepared Move before starting a Copy.");
+                    if (LinkWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared)
+                        throw new InvalidOperationException("Abort or complete the prepared transfer before starting a Copy.");
                     CopyWorkflowState.Shared.Prepare([entry!.Path]);
                     break;
                 case "CopyAbort": CopyWorkflowState.Shared.Abort(); break;
@@ -1068,8 +1092,8 @@ public partial class Pathview : UserControl
                     }
                     break;
                 case "MoveGet":
-                    if (CopyWorkflowState.Shared.IsPrepared)
-                        throw new InvalidOperationException("Abort or complete the prepared Copy before starting a Move.");
+                    if (LinkWorkflowState.Shared.IsPrepared || CopyWorkflowState.Shared.IsPrepared)
+                        throw new InvalidOperationException("Abort or complete the prepared transfer before starting a Move.");
                     MoveWorkflowState.Shared.Prepare([entry!.Path]);
                     break;
                 case "MoveAbort": MoveWorkflowState.Shared.Abort(); break;

@@ -272,6 +272,8 @@ public partial class MainWindow : Window
 
     private void HandleExternalShellCopy(IReadOnlyList<string> copiedPaths)
     {
+        if (LinkWorkflowState.Shared.IsPrepared)
+            LinkWorkflowState.Shared.Abort();
         if (MoveWorkflowState.Shared.IsPrepared)
             MoveWorkflowState.Shared.Abort();
 

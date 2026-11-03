@@ -20,6 +20,7 @@ Shell helpers directly.
 | `GetFolderTarget(path)` | Returns a directory path for a directory or a directory shortcut, otherwise `null`. |
 | `GetEditName(path)` / `Rename(path, name, owner)` | Obtain the filesystem leaf name for editing, or `null` for a drive root; validate and rename an item through the Windows Shell, returning its new filesystem path. Invalid names and existing targets fail; case-only changes are allowed. |
 | `Open(path)` | Opens an item using the OS shell. |
+| `Link(paths, destination, insertedPaths)` | Create Shell shortcuts for the selected paths in the destination, without overwriting existing items. Appends created paths; a later failure can leave earlier shortcuts in place. |
 | `Copy(paths, destination, owner, insertedPaths)` / `Move(...)` | Run the native transfer operation and append actual destination paths reported by the Shell to the caller's mutable list. Only direct children of the destination are collected. Failures propagate and a transfer is not atomic; the list can contain items completed before a failure. |
 | `Delete(paths, owner)` | Delete selected filesystem items using `IFileOperation`, requesting recycling and undo. Rejects drive/share roots; the Shell controls confirmation and may not support recycling for every location. Failures and cancellation propagate, and deletion is not atomic. |
 | `ShowItemMenu(paths, owner, rename)` / `ShowBackgroundMenu(path, owner)` | Show a native Windows context menu for one or more items from the same directory, or for a folder background. The optional single-item rename callback starts the caller's editor. |
@@ -138,7 +139,7 @@ just changed records. In the current ContentView/Pathview integration:
 | Change name pattern, Hide directories, Hide internal or a sort column/direction | Keep cache; create a new filtered/sorted snapshot. |
 | Navigate or invoke ContentView `Refresh` | Invalidate; the next snapshot enumerates again. The current `Refresh(bool)` implementation invalidates regardless of the boolean argument. |
 | Filesystem notification | Pathview coalesces notifications and invokes `Refresh`, invalidating the entire cache. |
-| Successful inline rename, New, or Copy/Move with reported inserted items | Refresh and invalidate; insertion completion also handles items reported before a later transfer failure. |
+| Successful inline rename, New, or Link/Copy/Move with reported inserted items | Refresh and invalidate; insertion completion also handles items reported before a later transfer failure. |
 | Pathview becomes visible or loads | Pathview schedules a filesystem refresh, which can invalidate even without a known change. |
 | Filter or refresh while inline rename is active | Defer rebuilding the view until editing ends; a requested invalidation occurs before deferral. Successful rename also invalidates. |
 

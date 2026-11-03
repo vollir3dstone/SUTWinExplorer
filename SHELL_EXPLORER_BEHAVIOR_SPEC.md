@@ -25,16 +25,16 @@ tab-scoped; sort history is also tab-scoped and remains in effect on navigation.
 A Pathview is either browsable or non-browsable; that role is assigned
 when it is created and cannot be changed by the user.
 
-A **transfer operation** is the application's Copy or Move workflow. Each
+A **transfer operation** is the application's Link, Copy or Move workflow. Each
 consists of three suboperations:
 
 - **Get** prepares the selected files and directories as sources without
-  copying or moving them.
-- **Paste** copies or moves the prepared sources into the current directory.
+  linking, copying or moving them.
+- **Paste** creates shortcuts to, copies or moves the prepared sources into the current directory.
 - **Abort** discards the prepared sources without transferring them.
 
 The prepared transfer is shared across tabs, so its sources can be selected in
-one Pathview and pasted in another. Only one Copy or Move can be prepared at a
+one Pathview and pasted in another. Only one Link, Copy or Move can be prepared at a
 time. A successful Paste or Abort returns the transfer to its idle state; if
 Paste fails, the prepared sources remain available. A failed transfer may
 already have completed some items.
@@ -311,18 +311,20 @@ may show its requested row in light gray without changing the active selection.
 - [x] The WPF application chrome keeps the app's custom tabs, address field,
   directory trees, and item-count status area.
 - [x] Below the two visibility checkboxes, the content pane provides the
-  separated action groups **Properties**; **Name get** and **Path get**; **Copy get**,
+  separated action groups **Properties**; **Name get** and **Path get**; **Link get**,
+  **Link abort**, and **Link paste**; **Copy get**,
   **Copy abort**, and **Copy paste**; **Move get**, **Move abort**, and **Move paste**;
   **Rename**; and **Delete**. Properties opens the Windows Shell properties
-  for one or more loaded selected items. Copy and Move each have an app-owned two-state workflow,
+  for one or more loaded selected items. Link, Copy and Move each have an app-owned two-state workflow,
   independent of Shell clipboard state. Their **get** buttons stage selected
   filesystem paths; **paste** performs the operation into the active folder;
   **abort** clears the staged paths. Initially, Get is enabled when there is a
-  selection, while Paste and Abort are disabled. A prepared Copy disables all
-  Move buttons and enables only Copy paste/abort in its group. A prepared Move
-  disables all Copy buttons and enables only Move paste/abort in its group.
-  Successful Paste or Abort returns that workflow to idle. Copy uses native file copy and
-  Move uses native file move; neither workflow reads or writes Shell clipboard
+  selection, while Paste and Abort are disabled. A prepared transfer disables
+  the other transfer groups and enables only its own paste and abort actions.
+  Successful Paste or Abort returns that workflow to idle. Link creates a Windows
+  Shell shortcut for each source, without modifying it; existing names are not
+  overwritten. Copy uses native file copy and Move uses native file move; none of
+  the workflows reads or writes Shell clipboard
   state. As an optional integration, toolbar **Copy get** also invokes the
   Shell Copy verb, and an external Shell Copy stages its file paths through the
   same Copy get transition. Shell Cut and unrelated clipboard contents do not
@@ -330,14 +332,14 @@ may show its requested row in light gray without changing the active selection.
   file handles, reserve the objects, or lock them against changes by the user,
   another process, or the Shell. Before Paste starts, the app checks that the
   destination is an accessible folder, reads filesystem attributes for every
-  staged source, and resolves all sources before beginning the transfer. If
+  staged source, and resolves all Shell items for Copy and Move before beginning the transfer. If
   these preflight checks fail, no transfer is started, an error is shown, and
   the staged workflow remains available. Passing preflight does not prove
   that all file contents are readable or that permissions allow the complete
   operation. The check cannot protect paths after it completes: an object or
   its permissions may change before or during the operation. Such a late
   failure is reported, but a multi-item operation may already have transferred
-  some items; Copy and Move are not atomic and do not roll back completed work.
+  some items; Link, Copy and Move are not atomic and do not roll back completed work.
   **Rename** is enabled only for a single loaded item and starts an inline
   rename editor. Enter commits and Escape cancels; invalid names and existing
   target names are reported without overwriting the existing item.
@@ -350,7 +352,7 @@ may show its requested row in light gray without changing the active selection.
   is copied without any line break. **Delete** remains
   selection-aware; other selection-dependent actions are disabled when nothing
   is selected.
-- [x] After the application-owned **New**, **Copy paste**, or **Move paste**
+- [x] After the application-owned **New**, **Link paste**, **Copy paste**, or **Move paste**
   inserts items into the current directory, the destination ContentView selects
   all inserted items and scrolls the first into view. It turns off **Hide
   directories** if an inserted item is a directory, turns off **Hide internal**
@@ -361,6 +363,28 @@ may show its requested row in light gray without changing the active selection.
   including names resulting from conflict resolution. The application-owned
   toolbar and paired-menu actions use the same completion; native Windows
   menus and extensions do not use it.
+
+### Link transfer
+
+- [x] **Link get** prepares one or more selected files or directories as
+  shortcut targets. It is available in the selection row and the Base Menu,
+  after **Path get** and before **Copy get**. A directory can also be prepared
+  from its sidebar Base Menu.
+- [x] **Link paste** creates one Windows shortcut (`.lnk`) per prepared path
+  in the current directory, including when that directory is in another tab.
+  The original files and directories remain unchanged. Each shortcut is named
+  after its source with ` - Shortcut.lnk` appended; a number is added when
+  needed to avoid overwriting an existing item. Created shortcuts are selected
+  and brought into view using the normal insertion completion.
+- [x] **Link abort** discards the prepared paths without creating shortcuts.
+  Paste and Abort are available in the directory column and in the applicable
+  Base Menus, including background menus. While Link is prepared, starting
+  another transfer and Delete are disabled. An external Shell Copy cancels
+  the prepared Link and prepares Copy instead.
+- [x] If a source or destination is unavailable at paste time, the operation
+  reports an error and keeps the prepared Link for retry or abort. All sources
+  are checked before creation starts; a later failure can nevertheless leave
+  already-created shortcuts in place, without rolling them back.
 
 ### Selection and opening
 
@@ -375,13 +399,12 @@ may show its requested row in light gray without changing the active selection.
 ### Context menus and file operations
 
 - [x] The Base Menu starts with the application-owned **Properties**, followed
-  by a separator, **Name get**, **Path get**, and the available Copy and Move
+  by a separator, **Name get**, **Path get**, and the available Link, Copy and Move
   actions. Shell commands follow, then a separator, **Rename**, another separator,
   and **Delete**. Unavailable transfer actions are
   omitted; other unavailable actions remain visible and disabled. With an
-  eligible selection and no prepared transfer, Copy get and Move get are
-  available. A prepared Copy shows Copy abort and Copy paste; a prepared Move
-  shows Move abort and Move paste. The same rules apply to the content and
+  eligible selection and no prepared transfer, Link get, Copy get and Move get
+  are available. A prepared transfer shows its abort and paste actions. The same rules apply to the content and
   sidebar menus and their backgrounds.
 - [x] ContentView file and folder selections use the Base and Content Menu pair
   described in [CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md).
@@ -511,7 +534,12 @@ SUTWinExplorer installation before testing a new installation.
   characters, `.` is literal, and a blank pattern removes only the pattern
   constraint. Verify both files and directories are filtered without
   navigation.
-11. Select multiple items and use **Copy get**. Verify Copy paste and Copy
+11. Select multiple files and directories and use **Link get**. Verify Link
+  paste and Link abort become enabled and the other transfer actions are
+  disabled. Paste in another tab and verify that each `.lnk` points to its
+  original source, existing items are not overwritten, and the sources remain
+  unchanged. Repeat with Link abort and with a source removed before paste.
+  Select multiple items and use **Copy get**. Verify Copy paste and Copy
   abort become enabled, Copy get becomes disabled, and all Move buttons remain
   disabled. Use Copy paste and verify the items are copied into the active
   folder without changing Shell clipboard state. Repeat and use Copy abort;
@@ -531,7 +559,7 @@ SUTWinExplorer installation before testing a new installation.
   error, starts no transfer, and preserves the staged workflow. A change after
   preflight may still cause a late failure; multi-item Paste is not atomic and
   may leave already-transferred items in place.
-  For New, Copy paste and Move paste, verify inserted items are selected, the
+  For New, Link paste, Copy paste and Move paste, verify inserted items are selected, the
   first is scrolled into view, and only filters hiding an inserted item are
   reset. Include a directory, an internal item, a nonmatching name, multiple
   items, and a paste from a paired directory menu. Verify unaffected filters

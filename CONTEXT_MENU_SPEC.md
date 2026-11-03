@@ -184,7 +184,7 @@ ambiguous commands and provider-specific differences can prevent a match; the
 presence of a registration alone is not proof of an identical command.
 
 The Base Menu includes the application's common actions. With no selected
-item, Properties, Rename, Name get, Path get and Delete are disabled; unavailable Copy/Move actions
+item, Properties, Rename, Name get, Path get and Delete are disabled; unavailable Link/Copy/Move actions
 are omitted, while prepared abort and paste actions remain available according
 to workflow state.
 Paste targets the current directory. The background Content Menu starts with a
@@ -197,7 +197,7 @@ Windows fallback. Supported direct types and their limits are described in
 [CONTENT_VIEW.md](CONTENT_VIEW.md). Background
 commands such as Windows clipboard Paste are not subjected to the selected-item
 file-verb exclusion list; they are distinct from the application's prepared
-Copy/Move workflows.
+Link/Copy/Move workflows.
 
 Both paired background menus exclude the Shell commands `refresh` and
 `viewcustomwizard` (Refresh and Customize this folder). The original native
@@ -216,34 +216,33 @@ Shift background menu is not filtered.
 ## Base Menu
 
 The Base Menu starts with `Properties`, a separator, `Name get`, `Path get`,
-and the available Copy and Move actions. The Shell section follows, then a separator,
+and the available Link, Copy and Move actions. The Shell section follows, then a separator,
 `Rename`, another separator, and `Delete`. Disabled transfer actions are
 omitted rather than grayed out; other unavailable actions remain visible and
-disabled. In the idle state with an eligible selection, Copy get and Move get
-are shown. A prepared Copy shows Copy abort and Copy paste instead; a prepared
-Move shows Move abort and Move paste instead. Each entry uses the corresponding
+disabled. In the idle state with an eligible selection, Link get, Copy get and Move get
+are shown. A prepared transfer shows its abort and paste actions instead. Each entry uses the corresponding
 toolbar button's current label, enabled state and click handler in ContentView.
 In the sidebar, the same labels are used but the
 actions operate on the clicked directory rather than the ContentView selection;
-Rename uses the sidebar inline editor. Copy paste and Move paste use the current
+Rename uses the sidebar inline editor. Link paste, Copy paste and Move paste use the current
 Pathview directory as their destination, not necessarily the clicked directory.
 Properties invokes the Shell properties command for one or more loaded selected
 items. Rename requires one loaded item with an editable Shell name; Name get and Path
 get require one or more loaded items. Name get copies their filesystem leaf names,
 including any file extensions, while Path get copies their full filesystem paths.
-For multiple items both actions use text with one item per line. Copy get and
-Move get require loaded selected items
-and no prepared Copy or Move. Their respective paste and abort actions require
-that workflow to be prepared. Copy and Move use the application's mutually
+For multiple items both actions use text with one item per line. Link get, Copy get and
+Move get require loaded selected items and no prepared transfer. Their respective paste and abort actions require
+that workflow to be prepared. Link, Copy and Move use the application's mutually
 exclusive prepared-operation workflows, not the Windows clipboard: get prepares
 selected paths, paste operates in the current folder, and abort clears the
-prepared operation. The application-owned New, Copy paste and Move paste
+prepared operation. Link paste creates Shell shortcuts without changing the sources.
+The application-owned New, Link paste, Copy paste and Move paste
 actions use the same ContentView insertion completion as the toolbar: they
 reset filters that hide inserted items, select the inserted items and scroll the
 first into view. This includes items transferred before a later failure. Native
 Windows menu and extension actions do not use that completion. Delete uses the
 Shell file-operation API; it requires loaded,
-deletable targets and is disabled during a prepared Copy or Move. The Shell
+deletable targets and is disabled during a prepared Link, Copy or Move. The Shell
 controls confirmation and recycling, which depends on the location.
 
 For files and mixed file/directory selections, the Shell section is produced by
@@ -281,7 +280,7 @@ application does not establish that every offered command applies to every
 item, or that the resulting menu is a subset of the normal Windows menu.
 The directory-only registry and whitelist classification is not used. Rename
 is disabled for multiple selections; Name get and Path get copy all selected
-names or paths, Copy get and Move get stage all selected items, and Delete
+names or paths, Link get, Copy get and Move get stage all selected items, and Delete
 requires each item to be deletable.
 
 ### Directory Classification: Three Alternative Criteria
