@@ -85,16 +85,28 @@ freshness limitations are described in [Directory Cache](SUTSHELL_API.md#directo
 
 ### Sorting
 
-Each ContentView has its own initially empty SutShell sort history, retained on
-refresh, filtering and navigation while that view exists. Clicking Name, TA2,
-Size, Date modified, MT, TA1 or MO submits one column/criterion
-pair. Clicking the active
-column toggles ascending and descending; choosing another starts ascending. A
-triangle marks only the primary pair. SutShell moves each submitted pair to the
-front, removing any previous pair for that column; remaining pairs break ties in
-priority order. Directories always precede files, and both groups use the same
-criteria. Without criteria, and as a final tie-breaker, display names sort
-ascending. Selection is restored by path after sorting.
+`SortOrderWidget` is independent of ContentView's column enum. It accepts a list
+of display names and exposes ordered `(index, direction)` pairs; indices refer
+to the original input positions, including when names are duplicated. Its
+`Changed` event reports configuration, direction, and order changes. ContentView
+maps the indices and directions to its own SutShell sort pairs, and uses the
+widget's `Select` method to synchronize table-header clicks.
+
+Each ContentView has its own sort sequence, retained on refresh, filtering and
+navigation while that view exists. The **Sort order** editor follows the Name
+pattern control and always displays all seven columns, including hidden ones.
+Its initial order is Name, MT, TA1, TA2, Date, Size, MO, all ascending. Boxes
+run from highest to lowest priority; clicking a box reverses its direction
+without changing its priority. Dragging a box, or using Alt+Left/Right while it
+has keyboard focus, changes its priority without changing its direction.
+
+Clicking the primary table header reverses its direction; clicking another
+header moves that column to the front with its existing direction. The editor
+and the primary header triangle stay synchronized. Directories always precede
+files, and both groups use the same criteria. Display name and path provide
+final ascending tie-breakers. Selection is restored by path after sorting.
+Applying the complete sequence requires all corresponding sort keys to be
+loaded when preparing a snapshot.
 
 ### Range scheduling
 

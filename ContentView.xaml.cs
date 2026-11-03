@@ -40,10 +40,20 @@ public partial class ContentView : UserControl
     private double _preferredTypeWidth = 130;
     private const double MinimumNameColumnWidth = 80;
     private readonly SutContextMenuController<DirectoryRow> _contextMenu;
+    private static readonly DirectorySortColumn[] SortColumns =
+    [
+        DirectorySortColumn.Name, DirectorySortColumn.MediaTypeIcon, DirectorySortColumn.TypeApp1Icon,
+        DirectorySortColumn.TypeApp2Name, DirectorySortColumn.DateModified, DirectorySortColumn.Size,
+        DirectorySortColumn.Overlay
+    ];
 
     public ContentView()
     {
         InitializeComponent();
+        SortOrderEditor.Configure(["Name", "MT", "TA1", "TA2", "Date", "Size", "MO"]);
+        _sorting.Update(GetWidgetSortPairs());
+        SortOrderEditor.Changed += SortOrderChanged;
+        UpdateSortDisplay();
         _contextMenu = new SutContextMenuController<DirectoryRow>(
             row => row.FullPath,
             () => FileList.SelectedItems.OfType<DirectoryRow>().Select(row => row.FullPath).ToArray(),
@@ -298,10 +308,25 @@ public partial class ContentView : UserControl
             !Enum.TryParse<DirectorySortColumn>(tag, out var column))
             return;
 
-        var current = _sorting.Pairs.FirstOrDefault();
-        var criterion = _sorting.Pairs.Count > 0 && current.Column == column && current.Criterion == DirectorySortCriterion.Ascending
-            ? DirectorySortCriterion.Descending : DirectorySortCriterion.Ascending;
-        _sorting.Update([new DirectorySortPair(column, criterion)]);
+        var index = Array.IndexOf(SortColumns, column);
+        if (index >= 0) SortOrderEditor.Select(index);
+    }
+
+    private DirectorySortPair[] GetWidgetSortPairs() => SortOrderEditor.Items.Select(item => new DirectorySortPair(
+        SortColumns[item.Index], item.Direction == SortOrderDirection.Ascending
+            ? DirectorySortCriterion.Ascending : DirectorySortCriterion.Descending)).ToArray();
+
+    private void SortOrderChanged(object? sender, EventArgs e)
+    {
+        _sorting.Update(GetWidgetSortPairs());
+        UpdateSortDisplay();
+        RefreshCore(invalidate: false);
+    }
+
+    private void UpdateSortDisplay()
+    {
+        var pairs = _sorting.Pairs;
+        var primary = pairs[0];
         foreach (var (indicator, indicatorColumn) in new[]
         {
             (NameSortIndicator, DirectorySortColumn.Name), (TypeApp2NameSortIndicator, DirectorySortColumn.TypeApp2Name),
@@ -310,10 +335,10 @@ public partial class ContentView : UserControl
             (OverlaySortIndicator, DirectorySortColumn.Overlay)
         })
         {
-            indicator.Visibility = indicatorColumn == column ? Visibility.Visible : Visibility.Collapsed;
-            indicator.Text = criterion == DirectorySortCriterion.Ascending ? "\u25B2" : "\u25BC";
+            indicator.Visibility = indicatorColumn == primary.Column ? Visibility.Visible : Visibility.Collapsed;
+            indicator.Text = primary.Criterion == DirectorySortCriterion.Ascending ? "\u25B2" : "\u25BC";
         }
-        RefreshCore(invalidate: false);
+
     }
 
     private void FileList_LayoutUpdated(object? sender, EventArgs e) => ScheduleRangeLoad();

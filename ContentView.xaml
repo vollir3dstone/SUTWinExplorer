@@ -64,6 +64,10 @@
                                 </Grid>
                             </Border>
                         </InlineUIContainer>
+                        <Run Text="  Sort order  " />
+                        <InlineUIContainer BaselineAlignment="Baseline">
+                            <local:SortOrderWidget x:Name="SortOrderEditor" />
+                        </InlineUIContainer>
                         <InlineUIContainer BaselineAlignment="Baseline">
                             <local:CheckBoxWrapper x:Name="HideRightColumnsCheckBox"
                                                    Label="Hide right columns" Margin="16,0,0,0" />

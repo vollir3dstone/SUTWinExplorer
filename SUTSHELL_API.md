@@ -49,8 +49,9 @@ MediaTypeIcon, TypeApp1Icon and Overlay;
 `DirectorySortPair` combines them. Each view holds a `DirectorySortState`;
 `Update` prepends the supplied list in its given priority order and removes
 older pairs for those columns. Invalid enum values and duplicate columns in one
-update are rejected. The state starts empty and survives refresh and navigation
-within that view, but is not persisted across sessions. The snapshot operation
+update are rejected. The state itself starts empty; ContentView initializes it
+with all seven columns and retains it across refresh and navigation, but does not
+persist it across sessions. The snapshot operation
 copies the current ordered pairs before starting its background work.
 
 TypeApp2Name uses the localized Shell type name, MediaTypeIcon the declared `MediaType` enum

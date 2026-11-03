@@ -1172,6 +1172,62 @@ try {
     $window.Content = $view
     $window.Show()
     try {
+        $viewSort = $view.GetType().GetField('_sorting', $viewFlags).GetValue($view)
+        $defaultOrder = 'Name,MediaTypeIcon,TypeApp1Icon,TypeApp2Name,DateModified,Size,Overlay'
+        $sortWidget = $view.FindName('SortOrderEditor')
+        $sortBoxes = $sortWidget.Child
+        Assert-True ((@($pairsProperty.GetValue($viewSort)).Column -join ',') -ceq $defaultOrder -and
+            @($pairsProperty.GetValue($viewSort) | Where-Object { $_.Criterion -ne 'Ascending' }).Count -eq 0 -and
+            ($sortBoxes.Children | ForEach-Object { $_.Content.TrimEnd([char] 0x25B2) }) -join ',' -ceq 'Name,MT,TA1,TA2,Date,Size,MO' -and
+            $view.FindName('NameSortIndicator').Visibility -eq 'Visible') 'The initial sort widget or its criteria are incorrect.'
+        $sortBoxes.Children[1].RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        Assert-True (@($pairsProperty.GetValue($viewSort))[1].Criterion -eq 'Descending' -and
+            $sortBoxes.Children[1].Content -match ([string] [char] 0x25BC)) 'Clicking a sort box did not reverse its direction.'
+        $view.FindName('FileList').View.Columns[0].Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        Assert-True (@($pairsProperty.GetValue($viewSort))[0].Column -eq 'MediaTypeIcon' -and
+            @($pairsProperty.GetValue($viewSort))[0].Criterion -eq 'Descending' -and
+            $sortBoxes.Children[0].Tag -eq 1 -and $view.FindName('MediaTypeIconSortIndicator').Text -ceq [string] [char] 0x25BC) 'A header click did not preserve the box direction and promote it.'
+        $moveSortColumn = $sortWidget.GetType().GetMethod('MoveItem', $viewFlags)
+        $null = $moveSortColumn.Invoke($sortWidget, [object[]] @([int] 1, [int] 7))
+        Assert-True (@($pairsProperty.GetValue($viewSort))[6].Column -eq 'MediaTypeIcon' -and
+            @($pairsProperty.GetValue($viewSort))[6].Criterion -eq 'Descending' -and $sortBoxes.Children[6].Tag -eq 1) 'Moving a sort box did not preserve its criterion.'
+        $sortWidget.Configure([string[]] @('Name', 'MT', 'TA1', 'TA2', 'Date', 'Size', 'MO'))
+        $originalCursor = [SutShellRightClickProbe]::CursorPosition()
+        try {
+            $window.Left = 20
+            $window.Top = 20
+            $window.Width = [Math]::Min(1200, [System.Windows.SystemParameters]::WorkArea.Width - 40)
+            $null = $window.Activate()
+            $view.FindName('SortOrderEditor').BringIntoView()
+            $window.UpdateLayout()
+            $start = $sortBoxes.Children[0].PointToScreen([System.Windows.Point]::new($sortBoxes.Children[0].ActualWidth / 2, $sortBoxes.Children[0].ActualHeight / 2))
+            $drag = [pscustomobject] @{ Phase = 0; Target = $null }
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(100)
+            $timer.add_Tick({
+                switch ($drag.Phase) {
+                    0 { [SutShellRightClickProbe]::MovePointer([int] $start.X, [int] $start.Y) }
+                    1 { [SutShellMenuProbe]::LeftDown() }
+                    2 { [SutShellRightClickProbe]::MovePointer([int] ($start.X + 12), [int] $start.Y) }
+                    3 { $drag.Target = $sortBoxes.Children[2].PointToScreen([System.Windows.Point]::new($sortBoxes.Children[2].ActualWidth - 4, $sortBoxes.Children[2].ActualHeight / 2)); [SutShellRightClickProbe]::MovePointer([int] $drag.Target.X, [int] $drag.Target.Y) }
+                    4 { [SutShellMenuProbe]::LeftUp(); $frame.Continue = $false }
+                }
+                $drag.Phase++
+            }.GetNewClosure())
+            $timer.Start()
+            try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+            Assert-True ((@($pairsProperty.GetValue($viewSort)).Column -join ',') -ceq 'MediaTypeIcon,TypeApp1Icon,Name,TypeApp2Name,DateModified,Size,Overlay' -and
+                @($pairsProperty.GetValue($viewSort) | Where-Object { $_.Criterion -ne 'Ascending' }).Count -eq 0) "Dragging a sort box did not preserve directions and reorder the criteria: start=$start, target=$($drag.Target), pairs=$(@($pairsProperty.GetValue($viewSort)) -join '; ')."
+        } finally {
+            [SutShellMenuProbe]::LeftUp()
+            [SutShellRightClickProbe]::MovePointer($originalCursor[0], $originalCursor[1])
+            $window.Left = -20000
+            $window.Top = -20000
+            $window.Width = 800
+            $sortWidget.Configure([string[]] @('Name', 'MT', 'TA1', 'TA2', 'Date', 'Size', 'MO'))
+            $view.FindName('ViewControlsScroll').ScrollToLeftEnd()
+        }
         $null = $view.GetType().GetMethod('SetCurrentPath', $viewFlags).Invoke($view, [object[]] @([string] $directory))
         $null = $view.GetType().GetMethod('Refresh', $viewFlags).Invoke($view, [object[]] @([bool] $true))
         $frame = [System.Windows.Threading.DispatcherFrame]::new()
@@ -1442,7 +1498,7 @@ try {
             $view.FindName('NameSortIndicator').IsVisible -and $view.FindName('NameSortIndicator').ActualWidth -gt 0 -and
             $view.FindName('NameSortIndicator').Text -ceq [string] [char] 0x25B2) 'Primary sort indicator did not move to the new column.'
         $viewSort = $view.GetType().GetField('_sorting', $viewFlags).GetValue($view)
-        Assert-True ((@($pairsProperty.GetValue($viewSort)).Column -join ',') -ceq 'Name,Size') 'Column clicks did not preserve the secondary sort.'
+        Assert-True ((@($pairsProperty.GetValue($viewSort)).Column -join ',') -ceq 'Name,Size,MediaTypeIcon,TypeApp1Icon,TypeApp2Name,DateModified,Overlay') 'Column clicks did not preserve the secondary sort.'
         foreach ($iconColumn in @(@(0, 'MediaTypeIconSortIndicator'), @(1, 'TypeApp1IconSortIndicator'), @(2, 'OverlaySortIndicator'))) {
             $header = $columns[$iconColumn[0]].Header
             foreach ($direction in @([char] 0x25B2, [char] 0x25BC)) {
@@ -1468,7 +1524,8 @@ try {
         $null = $otherView.GetType().GetMethod('SetCurrentPath', $viewFlags).Invoke($otherView, [object[]] @([string] '::{20D04FE0-3AEA-1069-A2D8-08002B30309D}'))
         Assert-True (-not $otherView.FindName('NewButton').IsEnabled) 'New was enabled for the virtual This PC location.'
         $otherSort = $otherView.GetType().GetField('_sorting', $viewFlags).GetValue($otherView)
-        Assert-True (@($pairsProperty.GetValue($otherSort)).Count -eq 0) 'Sort history leaked into another ContentView.'
+        Assert-True ((@($pairsProperty.GetValue($otherSort)).Column -join ',') -ceq $defaultOrder -and
+            @($pairsProperty.GetValue($otherSort) | Where-Object { $_.Criterion -ne 'Ascending' }).Count -eq 0) 'Sort history leaked into another ContentView.'
         $frame = [System.Windows.Threading.DispatcherFrame]::new()
         $probe = [SutShellUiProbe]::new()
         $probe.List = $list
