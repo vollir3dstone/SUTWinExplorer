@@ -134,8 +134,9 @@ is disabled while Copy or Move is prepared. Recycling availability and prompts
 depend on the location and Windows settings. Right-clicking an already-selected
 row preserves the selection; right-clicking an unselected row first selects only
 that row. File-only, directory-only and mixed selections use the [Base and Content Menu pair](CONTEXT_MENU_SPEC.md).
-Repeated right-clicks on the same row alternate between the menus, including
-while either menu is open and the pointer stays at the opening position. A
+Repeated right-clicks on the same row cycle through the Base Menu, Content Menu
+and no menu, then restart with the Base Menu. This includes clicks while either
+menu is open and the pointer stays at the opening position. A
 right-click on another row while the Base Menu is open ends the series,
 selects only that row and starts its applicable menu; changing the selection
 also resets the series. Shift-right-click opens the original Windows menu,

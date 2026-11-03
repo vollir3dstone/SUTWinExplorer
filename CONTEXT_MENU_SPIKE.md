@@ -88,8 +88,8 @@ Notepad++; a registration does not guarantee that its commands appear for every
 file. Packaged/modern extensions are not guaranteed to be included.
 
 A second right-click on the same row opens the special file menu, even while the
-generic popup is open; subsequent right-clicks on that row alternate between
-them. A right-click on another row selects only that row and starts with its
+generic popup is open; the third shows no menu, and the next starts again with
+the generic menu. A right-click on another row selects only that row and starts with its
 generic menu; a selection change also resets the series. The special menu starts with the original Windows
 item menu. An enabled top-level command is removed only when it has a readable
 verb and label matching exactly one enabled command in the displayed generic

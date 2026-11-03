@@ -60,11 +60,11 @@ The view supplies these callbacks when constructing the controller:
 
 The view remains responsible for its own input events, initial selection and
 navigation. It calls `Show(target, owner, alternate)` with the owner window
-handle; `alternate` enables the mouse-driven Base/Content sequence. It calls
+handle; `alternate` enables the mouse-driven Base/Content/no-menu sequence. It calls
 `Reset()` when a selection or navigation change invalidates that sequence.
 `IsDifferentTarget(target)` lets a view distinguish a new target from the
 remembered Base Menu target when applying its selection rules. The controller
-owns the sequence, rechecks selection after a Base Menu closes, and requests
+owns the sequence, rechecks selection after each menu closes, and requests
 hit-testing, selection changes and fallbacks through the supplied callbacks.
 
 ### Factory and Menu Instance
@@ -88,7 +88,7 @@ The caller disposes each instance after showing it; creation and display run on
 the UI STA thread. The view supplies action callbacks but does not manage the
 paired menu's native resources.
 
-`SutContextMenuController<T>` owns the alternating menu sequence and selection
+`SutContextMenuController<T>` owns the three-step menu sequence and selection
 validation separately for each participating widget and Pathview. The Base Menu
 captures comparable commands after the popup closes and before a selected command
 is invoked, including submenus populated during display. The controller retains
@@ -106,15 +106,17 @@ ContentView uses the following selection rules:
 - A file, directory or mixed selection opens the Base Menu first. The clicked
   row's full path identifies the menu series, and the complete selection is
   retained.
-- Repeated right-clicks on the same row alternate between the Base and Content
-  menus for the same selection, including while either popup is still open and
-  the pointer remains at its opening position.
+- Repeated right-clicks on the same row cycle through Base Menu, Content Menu,
+  and no menu for the same selection, then start again with the Base Menu.
+  This also works while a popup is open and the pointer remains at its opening
+  position: the third click closes the Content Menu without opening another.
 - A right-click on another row while the Base Menu is open ends the series and
   makes that row the sole selection, even if it was already part of a multiple
   selection. A file or directory starts a new Base Menu.
-- A selection change invalidates the remembered Base Menu and its command
-  snapshot. While the Base Menu popup is open, a change to the selection also
-  prevents using the stale snapshot to open a Content Menu.
+- A selection or target change invalidates the remembered sequence, including a
+  pending no-menu step, and its command snapshot. While the Base Menu popup is
+  open, a selection change also prevents using a stale snapshot to open a
+  Content Menu.
 - A right-click on the list background clears the selection and opens the
   Windows background menu. List chrome such as headers and scrollbars is not
   treated as an item or background. Clicks outside the owner are not consumed

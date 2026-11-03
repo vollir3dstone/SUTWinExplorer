@@ -14,6 +14,7 @@ internal sealed class SutContextMenuController<T> where T : class
     private readonly Action _showBackground;
     private IReadOnlyDictionary<string, int>? _baseCommands;
     private string? _basePath;
+    private bool _skipNextMenu;
     private int _selectionVersion;
 
     internal SutContextMenuController(Func<T, string> path, Func<IReadOnlyList<string>> selection,
@@ -30,7 +31,7 @@ internal sealed class SutContextMenuController<T> where T : class
         _showBackground = showBackground;
     }
 
-    internal bool IsDifferentTarget(T target) => _baseCommands is not null &&
+    internal bool IsDifferentTarget(T target) => _basePath is not null &&
         !string.Equals(_basePath, _path(target), StringComparison.OrdinalIgnoreCase);
 
     internal void Reset()
@@ -43,6 +44,7 @@ internal sealed class SutContextMenuController<T> where T : class
     {
         _baseCommands = null;
         _basePath = null;
+        _skipNextMenu = false;
     }
 
     internal void Show(T? target, IntPtr owner, bool alternate)
@@ -67,6 +69,12 @@ internal sealed class SutContextMenuController<T> where T : class
             }
 
             var targetPath = _path(target);
+            if (alternate && _skipNextMenu &&
+                string.Equals(_basePath, targetPath, StringComparison.OrdinalIgnoreCase))
+            {
+                ClearSequence();
+                return;
+            }
             if (alternate && _baseCommands is { } baseCommands &&
                 string.Equals(_basePath, targetPath, StringComparison.OrdinalIgnoreCase))
             {
@@ -86,8 +94,19 @@ internal sealed class SutContextMenuController<T> where T : class
                 });
                 if (repeat && selectionVersion == _selectionVersion)
                 {
-                    forceNative = shift;
-                    continue;
+                    if (shift)
+                    {
+                        forceNative = true;
+                        continue;
+                    }
+                    return;
+                }
+                var selectionAfterContent = _selection();
+                if (selectionVersion == _selectionVersion && selectedPaths.Count == selectionAfterContent.Count &&
+                    selectedPaths.All(path => selectionAfterContent.Contains(path, StringComparer.OrdinalIgnoreCase)))
+                {
+                    _basePath = targetPath;
+                    _skipNextMenu = true;
                 }
                 return;
             }
