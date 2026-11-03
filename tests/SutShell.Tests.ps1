@@ -79,6 +79,21 @@ public sealed class SutShellMenuProbe : System.IDisposable
         return menu;
     }
 
+    public static System.IntPtr CreateLazyBackgroundMenu()
+    {
+        var menu = CreatePopupMenu();
+        foreach (var resourceId in new uint[] { 37460, 37462, 30315 })
+        {
+            var label = new System.Text.StringBuilder(256);
+            var submenu = CreatePopupMenu();
+            if (menu == System.IntPtr.Zero || submenu == System.IntPtr.Zero ||
+                LoadString(GetModuleHandle("shell32.dll"), resourceId, label, label.Capacity) <= 0 ||
+                !AppendMenu(menu, 0x10, new System.UIntPtr(unchecked((ulong)submenu.ToInt64())), label.ToString()))
+                throw new System.InvalidOperationException("Could not create the lazy background menu fixture.");
+        }
+        return menu;
+    }
+
     public static string OpenWithLabel()
     {
         var text = new System.Text.StringBuilder(256);
@@ -586,6 +601,35 @@ function Find-TreeContainer($control, $entry) {
     return $null
 }
 
+function Find-ListBackgroundPoint($control) {
+    for ($y = [int] $control.ActualHeight - 8; $y -ge 8; $y -= 8) {
+        $point = [System.Windows.Point]::new(10, $y)
+        $source = $control.InputHitTest($point)
+        if ($null -eq $source) { continue }
+        $blocked = $false
+        while ($null -ne $source -and -not [object]::ReferenceEquals($source, $control)) {
+            if ($source -is [System.Windows.Controls.ListViewItem] -or
+                $source -is [System.Windows.Controls.Primitives.ScrollBar] -or
+                $source -is [System.Windows.Controls.GridViewColumnHeader]) { $blocked = $true; break }
+            $source = [System.Windows.Media.VisualTreeHelper]::GetParent($source)
+        }
+        if (-not $blocked -and $null -ne $source) { return $control.PointToScreen($point) }
+    }
+    throw "Could not find a clickable list background: $($control.Name)."
+}
+
+function Wait-ListCount($control, [int] $expectedCount) {
+    $frame = [System.Windows.Threading.DispatcherFrame]::new()
+    $deadline = [DateTime]::UtcNow.AddSeconds(10)
+    $timer = [System.Windows.Threading.DispatcherTimer]::new()
+    $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+    $timer.add_Tick({ if ($control.Items.Count -eq $expectedCount -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+    $timer.Start()
+    try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+    Assert-True ($control.Items.Count -eq $expectedCount) "The list did not reach $expectedCount items."
+    $control.UpdateLayout()
+}
+
 $assemblyPath = Join-Path $PSScriptRoot '..\bin\Debug\net10.0-windows\SUTWinExplorer.dll'
 $assembly = [System.Reflection.Assembly]::Load([System.IO.File]::ReadAllBytes($assemblyPath))
 [System.Windows.Application].GetField('_resourceAssembly', [System.Reflection.BindingFlags]'Static,NonPublic').SetValue($null, $assembly)
@@ -623,6 +667,12 @@ try {
         -not $wildcardMatch.Invoke($null, [object[]] @('DirectoryOnlyVerb', "item`0Shared", $wildcardVerbs, $directoryOnlyVerbs, $labels)) -and
         -not $wildcardMatch.Invoke($null, [object[]] @($null, "item`0Lazy", $wildcardVerbs, $directoryOnlyVerbs, $labels))) 'Ambiguous wildcard menu matching did not preserve the intended criteria.'
 } finally { [void] [SutShellMenuProbe]::DestroyMenu($ambiguousMenu) }
+$lazyBackgroundMenu = [SutShellMenuProbe]::CreateLazyBackgroundMenu()
+try {
+    $null = $menuType.GetMethod('RemoveBackgroundViewMenus', $flags).Invoke($null, [object[]] @($lazyBackgroundMenu, $null))
+    $remainingLabels = $menuType.GetMethod('CollectMenuLabels', $flags).Invoke($null, @($lazyBackgroundMenu))
+    Assert-True ($remainingLabels.Count -eq 1) 'Lazy Sort and Group submenus were not removed or the New submenu was removed.'
+} finally { [void] [SutShellMenuProbe]::DestroyMenu($lazyBackgroundMenu) }
 $openDirectory = $shell.GetMethod('OpenDirectoryAsync', $flags)
 $openSortedDirectory = $shell.GetMethod('OpenSortedDirectoryAsync', $flags)
 $openCachedDirectory = $shell.GetMethod('OpenCachedDirectoryAsync', $flags)
@@ -1050,6 +1100,118 @@ try {
             $menuProbe.Dispose()
             ([IDisposable] $contentInstance).Dispose()
         }
+        $backgroundEntries = @((& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path $directory -Background | ConvertFrom-Json).Menu)
+        $excludedBackgroundEntries = @($backgroundEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -in @('refresh', 'viewcustomwizard') })
+        Assert-True ($excludedBackgroundEntries.Count -eq 2) 'The Shell did not expose both background commands to exclude.'
+        $viewParents = @($backgroundEntries | Where-Object {
+            $_.Position -match '^\d+\.\d+$' -and $_.Verb -match '^(viewlogical|arrange|sortascending|sortdescending|groupascending|groupdescending)'
+        } | ForEach-Object { ($_.Position -split '\.')[0] } | Select-Object -Unique)
+        Assert-True ($viewParents.Count -ge 3) 'The Shell did not expose identifiable View, Sort and Group submenus.'
+        $newParent = @($backgroundEntries | Where-Object { $_.Position -notmatch '\.' -and $_.HasSubmenu -and $_.OwnerDrawn } | ForEach-Object {
+            $parent = $_
+            if (@($backgroundEntries | Where-Object { $_.Position -eq ($parent.Position + '.0') -and $_.Text -ceq $parent.Text }).Count -gt 0) { $parent }
+        })
+        Assert-True ($newParent.Count -eq 1) 'The Shell New submenu could not be identified.'
+        $emptyCommands = [System.Collections.Generic.Dictionary[string, int]]::new()
+        $backgroundInstance = $menuType.GetMethod('GetBackgroundContentMenu', $flags).Invoke($null, [object[]] @([string] $directory, $ownerHandle, $emptyCommands))
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        try {
+            $null = $showInstance.Invoke($backgroundInstance, [object[]] @($null))
+            Assert-True ($menuProbe.ItemCount -gt 0) 'The filtered background menu was not displayed.'
+            Assert-True ($newParent[0].Text -in $menuProbe.Items) 'The New submenu was removed from the background Content Menu.'
+            foreach ($entry in $excludedBackgroundEntries) {
+                Assert-True ($entry.Text -notin $menuProbe.Items) "An excluded command remained in the background Content Menu: $($entry.Text)."
+            }
+            foreach ($position in $viewParents) {
+                $parent = @($backgroundEntries | Where-Object { $_.Position -eq $position })[0]
+                Assert-True ($parent.Text -notin $menuProbe.Items) "A background view submenu remained: $($parent.Text)."
+            }
+        } finally {
+            $menuProbe.Dispose()
+            ([IDisposable] $backgroundInstance).Dispose()
+        }
+        $backgroundBase = $menuType.GetMethod('GetBackgroundBaseMenu', $flags).Invoke($null, [object[]] @([string] $directory, $ownerHandle, $emptyActions))
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        try {
+            $backgroundSnapshot = $showInstance.Invoke($backgroundBase, [object[]] @($null))
+            Assert-True ($null -ne $backgroundSnapshot -and $newParent[0].Text -notin $menuProbe.Items) 'The background Base Menu included New or did not return a snapshot.'
+            foreach ($entry in $excludedBackgroundEntries) {
+                Assert-True ($entry.Text -notin $menuProbe.Items) "An excluded command remained in the background Base Menu: $($entry.Text)."
+            }
+            foreach ($position in $viewParents) {
+                $parent = @($backgroundEntries | Where-Object { $_.Position -eq $position })[0]
+                Assert-True ($parent.Text -notin $menuProbe.Items) "A background view submenu remained in the Base Menu: $($parent.Text)."
+            }
+        } finally {
+            $menuProbe.Dispose()
+            ([IDisposable] $backgroundBase).Dispose()
+        }
+        $backgroundInstance = $menuType.GetMethod('GetBackgroundContentMenu', $flags).Invoke($null, [object[]] @([string] $directory, $ownerHandle, $backgroundSnapshot))
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        try {
+            $null = $showInstance.Invoke($backgroundInstance, [object[]] @($null))
+            Assert-True ($newParent[0].Text -in $menuProbe.Items) 'New was lost after comparing the background menus.'
+            foreach ($entry in $excludedBackgroundEntries) {
+                Assert-True ($entry.Text -notin $menuProbe.Items) "An excluded command returned after comparing background menus: $($entry.Text)."
+            }
+        } finally {
+            $menuProbe.Dispose()
+            ([IDisposable] $backgroundInstance).Dispose()
+        }
+        $backgroundSuffix = [guid]::NewGuid().ToString('N')
+        $sharedBackgroundVerb = "KISBackgroundShared$backgroundSuffix"
+        $backgroundOnlyVerb = "KISBackgroundOnly$backgroundSuffix"
+        $sharedBackgroundLabel = "KIS shared background $backgroundSuffix"
+        $backgroundOnlyLabel = "KIS background only $backgroundSuffix"
+        $backgroundRegistryPaths = @("Software\Classes\*\shell\$sharedBackgroundVerb",
+            "Software\Classes\Directory\shell\$sharedBackgroundVerb",
+            "Software\Classes\Directory\Background\shell\$sharedBackgroundVerb",
+            "Software\Classes\Directory\Background\shell\$backgroundOnlyVerb")
+        try {
+            foreach ($registryPath in $backgroundRegistryPaths) {
+                $entry = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($registryPath)
+                try {
+                    $entry.SetValue('', $(if ($registryPath.EndsWith($backgroundOnlyVerb)) { $backgroundOnlyLabel } else { $sharedBackgroundLabel }))
+                    $command = $entry.CreateSubKey('command')
+                    try { $command.SetValue('', 'cmd.exe /c exit 0') } finally { $command.Dispose() }
+                } finally { $entry.Dispose() }
+            }
+            $backgroundBase = $menuType.GetMethod('GetBackgroundBaseMenu', $flags).Invoke($null, [object[]] @([string] $directory, $ownerHandle, $emptyActions))
+            $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+            try {
+                $backgroundSnapshot = $showInstance.Invoke($backgroundBase, [object[]] @($null))
+                Assert-True ($sharedBackgroundLabel -in $menuProbe.Items -and $backgroundOnlyLabel -notin $menuProbe.Items) 'Shared and background-only registrations were classified incorrectly in the Base Menu.'
+            } finally { $menuProbe.Dispose(); ([IDisposable] $backgroundBase).Dispose() }
+            $backgroundInstance = $menuType.GetMethod('GetBackgroundContentMenu', $flags).Invoke($null, [object[]] @([string] $directory, $ownerHandle, $backgroundSnapshot))
+            $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+            try {
+                $null = $showInstance.Invoke($backgroundInstance, [object[]] @($null))
+                Assert-True ($sharedBackgroundLabel -notin $menuProbe.Items -and $backgroundOnlyLabel -in $menuProbe.Items) 'Shared and background-only registrations were classified incorrectly in the Content Menu.'
+            } finally { $menuProbe.Dispose(); ([IDisposable] $backgroundInstance).Dispose() }
+        } finally {
+            foreach ($registryPath in $backgroundRegistryPaths) { [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($registryPath, $false) }
+        }
+        $showMenuCore = $view.GetType().GetMethod('ShowMenuCore', $viewFlags)
+        $list.SelectedItems.Clear()
+        foreach ($menuKind in @('base', 'content', 'none', 'base')) {
+            $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+            try {
+                $null = $showMenuCore.Invoke($view, [object[]] @($null, $true))
+                if ($menuKind -eq 'none') {
+                    Assert-True ($menuProbe.ItemCount -eq -1) 'The third background click displayed a menu.'
+                } elseif ($menuKind -eq 'base') {
+                    Assert-True ($menuProbe.ItemCount -ge 9 -and $menuProbe.Items[1] -eq 'Path get' -and
+                        ($menuProbe.States[0] -band 3) -ne 0 -and ($menuProbe.States[1] -band 3) -ne 0 -and
+                        $newParent[0].Text -notin $menuProbe.Items) 'The background Base Menu or its disabled selection actions were incorrect.'
+                } else {
+                    Assert-True ($menuProbe.ItemCount -gt 0 -and $newParent[0].Text -in $menuProbe.Items) 'The background Content Menu did not include New.'
+                }
+                foreach ($position in $viewParents) {
+                    $parent = @($backgroundEntries | Where-Object { $_.Position -eq $position })[0]
+                    Assert-True ($parent.Text -notin $menuProbe.Items) "A view submenu appeared in the background $menuKind step."
+                }
+            } finally { $menuProbe.Dispose() }
+        }
         $multiPaths = @($notesMenuRow.Entry.FullPath, $otherFileRow.Entry.FullPath)
         $list.SelectedItems.Clear()
         $list.SelectedItems.Add($notesMenuRow) | Out-Null
@@ -1177,6 +1339,88 @@ try {
             $window.Left = 20
             $window.Top = 20
             $window.Activate() | Out-Null
+            $list.SelectedItems.Clear()
+            $unfilteredCount = $list.Items.Count
+            $namePattern = $view.FindName('NamePatternTextBox')
+            $namePattern.Text = 'notes*.txt'
+            Wait-ListCount $list 1
+            $backgroundPoint = Find-ListBackgroundPoint $list
+            $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $backgroundPoint.X, [int] $backgroundPoint.Y, [int] $backgroundPoint.X, [int] $backgroundPoint.Y)
+            $rightClickProbe.AdditionalClicks = 2
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $deadline = [DateTime]::UtcNow.AddSeconds(10)
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(50)
+            $timer.add_Tick({ if ($rightClickProbe.AdditionalMenuCount -eq 1 -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+            $timer.Start()
+            try {
+                [System.Windows.Threading.Dispatcher]::PushFrame($frame)
+                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasBase -and
+                    $newParent[0].Text -in $rightClickProbe.SecondItems -and $rightClickProbe.NoMenuObserved -and
+                    $rightClickProbe.AdditionalMenuCount -eq 1 -and $rightClickProbe.AdditionalMenuWasBase[0] -and
+                    $list.SelectedItems.Count -eq 0) 'Actual background clicks did not follow the Base, Content, no-menu sequence.'
+            } finally { $timer.Stop(); $rightClickProbe.Dispose() }
+            $controller = $view.GetType().GetField('_contextMenu', $viewFlags).GetValue($view)
+            $null = $controller.GetType().GetMethod('Reset', $viewFlags).Invoke($controller, @())
+            $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $backgroundPoint.X, [int] $backgroundPoint.Y, [int] $backgroundPoint.X, [int] $backgroundPoint.Y)
+            $rightClickProbe.SecondWithShift = $true
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $deadline = [DateTime]::UtcNow.AddSeconds(10)
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(50)
+            $timer.add_Tick({ if ($rightClickProbe.SecondMenu -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+            $timer.Start()
+            try {
+                [System.Windows.Threading.Dispatcher]::PushFrame($frame)
+                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasBase) 'Shift-right-click did not open the native background menu.'
+                foreach ($entry in $excludedBackgroundEntries) {
+                    Assert-True ($entry.Text -in $rightClickProbe.SecondItems) "Shift-right-click did not preserve the native background command: $($entry.Text)."
+                }
+                foreach ($position in $viewParents) {
+                    $parent = @($backgroundEntries | Where-Object { $_.Position -eq $position })[0]
+                    Assert-True ($parent.Text -in $rightClickProbe.SecondItems) 'Shift-right-click did not preserve the original background view menus.'
+                }
+            } finally { $timer.Stop(); $rightClickProbe.Dispose() }
+            $singleRow = $list.Items[0]
+            $list.ScrollIntoView($singleRow)
+            $list.UpdateLayout()
+            $singleContainer = $list.ItemContainerGenerator.ContainerFromItem($singleRow)
+            Assert-True ($null -ne $singleContainer) 'The filtered row was not realized for the background target-change test.'
+            $singlePoint = $singleContainer.PointToScreen([System.Windows.Point]::new(10, $singleContainer.ActualHeight / 2))
+            foreach ($direction in @('background-to-item', 'item-to-background')) {
+                $list.SelectedItems.Clear()
+                $null = $controller.GetType().GetMethod('Reset', $viewFlags).Invoke($controller, @())
+                $start = if ($direction -eq 'background-to-item') { $backgroundPoint } else { $singlePoint }
+                $destination = if ($direction -eq 'background-to-item') { $singlePoint } else { $backgroundPoint }
+                $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $start.X, [int] $start.Y, [int] $destination.X, [int] $destination.Y)
+                $frame = [System.Windows.Threading.DispatcherFrame]::new()
+                $deadline = [DateTime]::UtcNow.AddSeconds(10)
+                $timer = [System.Windows.Threading.DispatcherTimer]::new()
+                $timer.Interval = [TimeSpan]::FromMilliseconds(50)
+                $timer.add_Tick({ if ($rightClickProbe.SecondMenu -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+                $timer.Start()
+                try {
+                    [System.Windows.Threading.Dispatcher]::PushFrame($frame)
+                    $expectedSelections = if ($direction -eq 'background-to-item') { 1 } else { 0 }
+                    Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and $rightClickProbe.SecondWasBase -and
+                        $list.SelectedItems.Count -eq $expectedSelections) "A $direction click did not start a new Base Menu."
+                } finally { $timer.Stop(); $rightClickProbe.Dispose() }
+            }
+            $namePattern.Clear()
+            Wait-ListCount $list $unfilteredCount
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $probe = [SutShellUiProbe]::new()
+            $probe.List = $list
+            $probe.AwaitAll = $true
+            $probe.Frame = $frame
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+            $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
+            $timer.Start()
+            try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+            Assert-True $probe.Ready 'The unfiltered rows did not reload after the background click test.'
+            $notesMenuRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'notes.txt') })[0]
+            $otherFileRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'exact.bin') })[0]
             $notesIndex = $list.Items.IndexOf($notesMenuRow)
             $otherMenuRow = $list.Items[($notesIndex + 1) % $list.Items.Count]
             $list.ScrollIntoView($otherMenuRow)
@@ -2158,6 +2402,21 @@ try {
                 } finally { $menuProbe.Dispose() }
             }
         }
+        $sidebarController = $pathviewType.GetField('_subfolderContextMenu', $viewFlags).GetValue($fixedPathview)
+        foreach ($operation in @('Copy', 'Move')) {
+            $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
+            $workflow.Prepare([string[]] @($subfolderEntry.Path))
+            $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
+            $sidebarOwner = [System.Windows.Interop.WindowInteropHelper]::new($fixedWindow).Handle
+            $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
+            $menuProbe.SelectIndex = if ($operation -eq 'Copy') { 3 } else { 6 }
+            try {
+                $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $true))
+                Assert-True (($menuProbe.States[0] -band 3) -ne 0 -and ($menuProbe.States[1] -band 3) -ne 0 -and
+                    ($menuProbe.States[2] -band 3) -ne 0 -and ($menuProbe.States[$menuProbe.SelectIndex] -band 3) -eq 0 -and
+                    -not $workflow.IsPrepared) "The sidebar background $operation action did not match the workflow state."
+            } finally { $menuProbe.Dispose(); $workflow.Abort() }
+        }
         foreach ($case in @(@{ View = $fixedPathview; Window = $fixedWindow; Entry = $subfolderEntry; Tree = $false },
                             @{ View = $browsePathview; Window = $fixedWindow; Entry = $treeEntry; Tree = $true })) {
             $sidebarOwner = [System.Windows.Interop.WindowInteropHelper]::new($case.Window).Handle
@@ -2181,6 +2440,22 @@ try {
             $treeEntry = Find-TreeEntry $siblingsTree.Items[0] (Join-Path $directory 'RenamedFolder')
             $subfolderList.ScrollIntoView($subfolderEntry)
             $fixedWindow.UpdateLayout()
+            $backgroundPoint = Find-ListBackgroundPoint $subfolderList
+            $rightClickProbe = [SutShellRightClickProbe]::new([System.Windows.Interop.WindowInteropHelper]::new($fixedWindow).Handle,
+                [int] $backgroundPoint.X, [int] $backgroundPoint.Y, [int] $backgroundPoint.X, [int] $backgroundPoint.Y)
+            $rightClickProbe.AdditionalClicks = 2
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $deadline = [DateTime]::UtcNow.AddSeconds(10)
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(50)
+            $timer.add_Tick({ if ($rightClickProbe.AdditionalMenuCount -eq 1 -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+            $timer.Start()
+            try {
+                [System.Windows.Threading.Dispatcher]::PushFrame($frame)
+                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasBase -and
+                    $newParent[0].Text -in $rightClickProbe.SecondItems -and $rightClickProbe.NoMenuObserved -and
+                    $rightClickProbe.AdditionalMenuCount -eq 1 -and $rightClickProbe.AdditionalMenuWasBase[0]) 'Sidebar background clicks did not follow the three-step sequence.'
+            } finally { $timer.Stop(); $rightClickProbe.Dispose() }
             $subfolderContainer = $subfolderList.ItemContainerGenerator.ContainerFromItem($subfolderEntry)
             $treeContainer = Find-TreeContainer $siblingsTree $treeEntry
             Assert-True ($null -ne $subfolderContainer -and $null -ne $treeContainer) "Sidebar right-click test entries were not realized: list=$($null -ne $subfolderContainer), tree=$($null -ne $treeContainer), treeEntry=$($null -ne $treeEntry)."

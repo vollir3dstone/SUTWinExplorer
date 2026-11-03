@@ -28,6 +28,8 @@ Shell helpers directly.
 The paired menus are created directly by `SutContextMenuFactory`, not by
 `SutShell`: `GetBaseMenu(paths, owner, actions)` creates the Base Menu and
 `GetContentMenu(paths, owner, baseCommands)` creates the filtered Content Menu.
+The factory's background variants use the current directory and Shell view;
+the controller delegates menu composition and filtering to the factory.
 Each returns a disposable `SutContextMenu`; its `Show(secondRightClick)` displays
 the popup and, for the Base Menu, returns a snapshot after the popup closes.
 The optional callback receives subsequent right-click coordinates, owner-window

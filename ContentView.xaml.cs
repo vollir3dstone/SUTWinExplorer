@@ -49,13 +49,11 @@ public partial class ContentView : UserControl
                 FileList.SelectedItems.Clear();
                 if (row is not null) FileList.SelectedItems.Add(row);
             },
-            row => new[] { RenameButton, PathGetButton, CopyGetButton, CopyAbortButton, CopyPasteButton,
-                MoveGetButton, MoveAbortButton, MovePasteButton, DeleteButton }.Select(button => new ShellMenuAction(
-                    System.Windows.Automation.AutomationProperties.GetName(button), button.IsEnabled,
-                    () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)))).ToArray(),
+            row => CreateContextMenuActions(),
             (row, paths) => SutShell.ShowItemMenu(paths, new WindowInteropHelper(Window.GetWindow(this)!).Handle,
                 paths.Count == 1 && row.Entry is not null && SutShell.GetEditName(row.FullPath) is not null ? BeginRename : null),
-            () => SutShell.ShowBackgroundMenu(CurrentPath, new WindowInteropHelper(Window.GetWindow(this)!).Handle));
+            () => SutShell.ShowBackgroundMenu(CurrentPath, new WindowInteropHelper(Window.GetWindow(this)!).Handle),
+            () => CurrentPath, CreateContextMenuActions);
         HideDirectoriesCheckBox.GetCheckBox().Checked += FiltersChanged;
         HideDirectoriesCheckBox.GetCheckBox().Unchecked += FiltersChanged;
         HideInternalContentCheckBox.GetCheckBox().Checked += FiltersChanged;
@@ -65,6 +63,12 @@ public partial class ContentView : UserControl
         Loaded += ContentView_Loaded;
         Unloaded += ContentView_Unloaded;
     }
+
+    private IReadOnlyList<ShellMenuAction> CreateContextMenuActions() =>
+        new[] { RenameButton, PathGetButton, CopyGetButton, CopyAbortButton, CopyPasteButton,
+            MoveGetButton, MoveAbortButton, MovePasteButton, DeleteButton }.Select(button => new ShellMenuAction(
+                System.Windows.Automation.AutomationProperties.GetName(button), button.IsEnabled,
+                () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)))).ToArray();
 
     internal bool FocusContent() => FileList.Focus();
     internal bool? HideInternalItems
@@ -506,8 +510,7 @@ public partial class ContentView : UserControl
             return;
 
         FileList.SelectedItems.Clear();
-        _contextMenu.Reset();
-        ShowMenu(null);
+        ShowMenuCore(null, alternate: true);
         e.Handled = true;
     }
 

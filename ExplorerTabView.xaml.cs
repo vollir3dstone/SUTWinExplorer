@@ -973,7 +973,8 @@ public partial class Pathview : UserControl
             entry => SelectDirectoryMenuTarget(entry, tree),
             CreateDirectoryMenuActions,
             (entry, _) => ShowNativeMenu(this, entry.Path, !entry.IsTop ? () => BeginTreeRename(entry) : null),
-            () => { if (!tree) ShowNativeBackgroundMenu(this, CurrentPath); });
+            () => { if (!tree) ShowNativeBackgroundMenu(this, CurrentPath); },
+            () => CurrentPath, CreateBackgroundMenuActions);
     }
 
     private void SelectDirectoryMenuTarget(TreeEntry? entry, bool tree)
@@ -1011,19 +1012,34 @@ public partial class Pathview : UserControl
             action.Enabled, () => ExecuteDirectoryMenuAction(action.Name, entry))).ToArray();
     }
 
-    private void ExecuteDirectoryMenuAction(string action, TreeEntry entry)
+    private IReadOnlyList<ShellMenuAction> CreateBackgroundMenuActions()
+    {
+        var copyPrepared = CopyWorkflowState.Shared.IsPrepared;
+        var movePrepared = MoveWorkflowState.Shared.IsPrepared;
+        var actions = new (string Name, bool Enabled)[]
+        {
+            ("Rename", false), ("PathGet", false), ("CopyGet", false),
+            ("CopyAbort", copyPrepared), ("CopyPaste", copyPrepared), ("MoveGet", false),
+            ("MoveAbort", movePrepared), ("MovePaste", movePrepared), ("Delete", false)
+        };
+        return actions.Select(action => new ShellMenuAction(
+            System.Windows.Automation.AutomationProperties.GetName((Button)DirectoryContent.FindName(action.Name + "Button")),
+            action.Enabled, () => ExecuteDirectoryMenuAction(action.Name, null))).ToArray();
+    }
+
+    private void ExecuteDirectoryMenuAction(string action, TreeEntry? entry)
     {
         try
         {
             var owner = new WindowInteropHelper(Window.GetWindow(this)!).Handle;
             switch (action)
             {
-                case "Rename": BeginTreeRename(entry); break;
-                case "PathGet": Clipboard.SetText(entry.Path); break;
+                case "Rename": BeginTreeRename(entry!); break;
+                case "PathGet": Clipboard.SetText(entry!.Path); break;
                 case "CopyGet":
                     if (MoveWorkflowState.Shared.IsPrepared)
                         throw new InvalidOperationException("Abort or complete the prepared Move before starting a Copy.");
-                    CopyWorkflowState.Shared.Prepare([entry.Path]);
+                    CopyWorkflowState.Shared.Prepare([entry!.Path]);
                     break;
                 case "CopyAbort": CopyWorkflowState.Shared.Abort(); break;
                 case "CopyPaste":
@@ -1034,7 +1050,7 @@ public partial class Pathview : UserControl
                 case "MoveGet":
                     if (CopyWorkflowState.Shared.IsPrepared)
                         throw new InvalidOperationException("Abort or complete the prepared Copy before starting a Move.");
-                    MoveWorkflowState.Shared.Prepare([entry.Path]);
+                    MoveWorkflowState.Shared.Prepare([entry!.Path]);
                     break;
                 case "MoveAbort": MoveWorkflowState.Shared.Abort(); break;
                 case "MovePaste":
@@ -1043,7 +1059,7 @@ public partial class Pathview : UserControl
                     RefreshCurrentFileSystemState(true);
                     break;
                 case "Delete":
-                    try { SutShell.Delete([entry.Path], owner); }
+                    try { SutShell.Delete([entry!.Path], owner); }
                     finally { RefreshCurrentFileSystemState(true); }
                     break;
             }
@@ -1087,10 +1103,16 @@ public partial class Pathview : UserControl
         if (IsListChrome(source))
             return;
 
-        ActivePathSubfoldersList.SelectedItem = null;
-        _subfolderContextMenu.Reset();
-        _subfolderMenuTarget = null;
-        ShowNativeBackgroundMenu(this, CurrentPath);
+        try
+        {
+            ActivePathSubfoldersList.SelectedItem = null;
+            if (_subfolderMenuTarget is not null) SelectDirectoryMenuTarget(null, tree: false);
+            _subfolderContextMenu.Show(null, new WindowInteropHelper(Window.GetWindow(this)!).Handle, alternate: true);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "Context menu failed", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
         e.Handled = true;
     }
 

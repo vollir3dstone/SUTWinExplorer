@@ -3,9 +3,10 @@
 ## Scope and Intent
 
 ContentView provides a Base Menu (Basismenü) and a Content Menu (Inhaltsmenü)
-for a selection of one or more existing files and/or directories. The same menu
-pair is available for filesystem directories in the **Active path and siblings**
-tree and the **Sub directories** list in **Active path**. The Base Menu puts the
+for a selection of existing files and/or directories and for the current
+directory's background. The same menu pair is available for filesystem
+directories in the **Active path and siblings** tree, and for directories and
+the background of the **Sub directories** list in **Active path**. The Base Menu puts the
 application's common file operations first and includes generally applicable
 Shell commands. The Content Menu provides the remaining item-specific Shell
 commands. Windows constructs and invokes the Shell portions of both menus; KIS
@@ -55,6 +56,8 @@ The view supplies these callbacks when constructing the controller:
   its background, and select a target or clear the selection when requested.
 - Supply the target-specific `ShellMenuAction` entries, each with a label,
   enabled state and application callback. The view owns their behavior.
+- Supply the current background directory and its application actions when no
+  item is targeted.
 - Show the original native item or background menu when the controller requests
   a fallback. The item callback receives the target and current selected paths.
 
@@ -70,9 +73,11 @@ hit-testing, selection changes and fallbacks through the supplied callbacks.
 ### Factory and Menu Instance
 
 `SutContextMenuFactory` creates menus and applies the Shell registration and
-filtering rules. `GetBaseMenu` accepts the selected paths, owner window and
-widget-provided actions; `GetContentMenu` accepts the same paths and owner plus
-the Base Menu snapshot. The factory also creates native item and background
+filtering rules. The controller supplies paths, owner, actions or a Base Menu
+snapshot, and whether the context is the background. The factory chooses and
+creates the appropriate item or background menu; the controller does not
+classify files, directories, mixed selections or Shell commands. The factory
+also creates native item and background
 menus. Paths in a multiple selection must share a parent directory. For the
 paired menus the controller calls the factory and owns the returned instances;
 for native item and background menus, `SutShell` also calls the factory and
@@ -117,15 +122,17 @@ ContentView uses the following selection rules:
   pending no-menu step, and its command snapshot. While the Base Menu popup is
   open, a selection change also prevents using a stale snapshot to open a
   Content Menu.
-- A right-click on the list background clears the selection and opens the
-  Windows background menu. List chrome such as headers and scrollbars is not
-  treated as an item or background. Clicks outside the owner are not consumed
-  as menu-series clicks.
+- A right-click on the list background clears the selection and starts or
+  advances its own Base/Content/no-menu series for the current directory.
+  Switching between an item and the background starts a new series. List chrome
+  such as headers and scrollbars is not treated as an item or background. Clicks
+  outside the owner are not consumed as menu-series clicks.
 - Shift-right-click on an item uses the original Windows item menu, including
   on the same row while either popup is open. It preserves the current selection;
   on another row while the Base Menu is open it selects only that row. The
   modifier is taken from the mouse message, even if Shift is released before the
-  new menu opens.
+  new menu opens. Shift-right-click on the background uses the original Windows
+  background menu, including its view commands.
   The keyboard context-menu key or Shift+F10 opens the applicable menu without
   starting a mouse-driven alternation series.
 
@@ -134,11 +141,13 @@ with independent controller state per widget and Pathview. Each has a single
 target rather than ContentView's multiple selection. Selecting a different
 tree target or navigating resets the corresponding series. The Sub directories
 list clears its visual selection after its menu closes, while preserving the
-series for a subsequent right-click on the same folder. Its background keeps
-the native background menu; the tree in the **Active path** tab retains its
+series for a subsequent right-click on the same folder. Its background has its
+own three-step sequence; the tree in the **Active path** tab retains its
 native item menu. Virtual or unavailable sidebar targets fall back to the
 native item menu. Shift-right-click uses that native menu; in the Sub directories
 list the Apps key opens the applicable item menu and Shift+F10 the native menu.
+With no selected sidebar item these keyboard commands retain the native
+background menu.
 
 Both popups are tracked using a thread-local Windows menu message filter. For a
 right-button-down or right-button-double-click message, its screen coordinates
@@ -151,6 +160,50 @@ time has elapsed, provided the window is the active popup on the same thread.
 This allows another click without moving the pointer when the popup covers the
 original row. Menu commands in either popup can be invoked with the left mouse
 button or the keyboard, but not with the right mouse button.
+
+## Background Menus
+
+The background represents the current directory, not a selected directory item.
+The factory obtains its `IContextMenu` from a Shell view's
+`IShellView::GetItemObject(SVGIO_BACKGROUND)`. Windows decides which background
+registrations and built-in commands participate, including registrations under
+`Directory\Background`; that registry key is not added as a selected item or
+used as an additional type filter. Commands in both menus are invoked through
+the background `IContextMenu` that produced them.
+
+To classify general commands, the factory first creates the classified Base
+Menu for the current directory as an item and captures its comparable Shell
+entries without displaying it. It then builds the actual background menu. A
+background entry is kept in the background Base Menu only if its comparable
+key occurs exactly once in both menus. This uses the existing verb/label and
+submenu-tree comparison, including the unique-label fallback for entries without
+a verb. Matching is conservative: different labels, empty or lazy submenus,
+ambiguous commands and provider-specific differences can prevent a match; the
+presence of a registration alone is not proof of an identical command.
+
+The Base Menu prepends the application's nine common actions. With no selected
+item, Rename, Path get, Copy get, Move get and Delete are disabled; prepared
+Copy/Move abort and paste actions remain available according to workflow state.
+Paste targets the current directory. The background Content Menu starts with a
+fresh native background menu and removes unique matches to the displayed Base
+Menu snapshot. `New` is kept in the Content Menu, not the Base Menu. Background
+commands such as Windows clipboard Paste are not subjected to the selected-item
+file-verb exclusion list; they are distinct from the application's prepared
+Copy/Move workflows.
+
+Both paired background menus exclude the Shell commands `refresh` and
+`viewcustomwizard` (Refresh and Customize this folder). The original native
+background menu, including these commands, remains available with Shift.
+
+View, Sort by and Group by submenus are removed from both paired background
+menus. The factory identifies their populated Shell commands by canonical view,
+arrange, sort and group verbs, and also matches localized `shell32.dll` Sort by
+and Group by labels for empty or lazy submenus. It uses a localized Shell label
+to keep New out of the Base Menu. These resource IDs are not a documented Shell
+API contract. Windows versions or extensions that expose different labels or
+verbs, especially an initially empty View submenu, may not be recognized;
+removing a matching submenu also removes all of its children. The original
+Shift background menu is not filtered.
 
 ## Base Menu
 
@@ -380,7 +433,7 @@ purpose or provider.
 Matching uses Shell command verbs obtained from `IContextMenu::GetCommandString`,
 case-insensitively. A menu command without a usable verb cannot be reliably
 classified this way. These rules apply to the file, directory and mixed menu
-pairs, not the original Shift or background menus. In this table, "files"
+pairs, not the original Shift menus or the background pairs. In this table, "files"
 includes mixed selections; "directories" means directory-only selections.
 
 | Shell action and verb | Base Menu | Content Menu | Reason or application equivalent |
@@ -490,7 +543,9 @@ alternatives and their limitations.
 [SutShell.Tests.ps1](tests/SutShell.Tests.ps1) exercises menu contents, filtering,
 toolbar actions, Shell invocation, selection and menu switching for single,
 multiple and mixed files and directories. It also checks the independent sidebar
-menu series, target-specific actions and unchanged native Active path tree.
+menu series, target-specific actions and unchanged native Active path tree. It
+exercises both background sequences, native Shift fallback, view filtering,
+New, shared/background-only registry fixtures and background action states.
 It includes native popup and mouse-input probes in WPF windows;
 these tests display windows and move the pointer. Manual verification in the
 actual application remains useful for installed extensions, Windows versions and
@@ -498,16 +553,6 @@ interaction timings not represented by the test environment.
 
 ## Follow-up
 
-- [ ] Define the menu contents for the list background. In particular,
-  decide how background commands such as Paste and New relate to application
-  operations; do not apply the file exclusion list automatically.
-- [ ] When implementing the remaining menus, make the target kind and filtering rules
-  explicit while retaining the shared Shell menu creation, invocation and
-  native-resource lifetime handling. Background menus use a Shell view rather
-  than the selected-item association keys.
-- [ ] Extract the menu-series state and transitions into a small reusable unit
-  when the background behavior is specified. Cover target changes,
-  multiple selections, cancellation, Shift and background clicks.
 - [ ] Add deterministic tests for duplicate and submenu comparison, including
   disabled, owner-drawn, ambiguous, lazy and missing-verb entries. Keep native
   integration tests for real Shell message forwarding and invocation; installed

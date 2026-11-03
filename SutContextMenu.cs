@@ -150,6 +150,12 @@ internal sealed class SutContextMenu : IDisposable
         }
     }
 
+    internal IReadOnlyDictionary<string, int> CaptureSnapshot()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return _captureSnapshot?.Invoke() ?? throw new InvalidOperationException("This menu does not provide a snapshot.");
+    }
+
     public void Dispose()
     {
         if (_disposed) return;

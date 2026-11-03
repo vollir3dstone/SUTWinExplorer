@@ -22,6 +22,10 @@ internal static class SutContextMenuFactory
     private const string DirectoryWhitelistResourceName = "SUTWinExplorer.DirectoryMenuWhitelist.json";
     private static readonly Lazy<HashSet<string>> BlacklistedVerbs = new(LoadBlacklistedVerbs);
     private static readonly Lazy<DirectoryMenuWhitelist> DirectoryWhitelist = new(LoadDirectoryWhitelist);
+    private static readonly Lazy<HashSet<string>> BackgroundViewLabels = new(() => LoadShellMenuLabels(37460, 37462));
+    private static readonly Lazy<HashSet<string>> BackgroundNewLabels = new(() => LoadShellMenuLabels(30315));
+    private static readonly HashSet<string> ExcludedBackgroundVerbs = new(StringComparer.OrdinalIgnoreCase)
+        { "refresh", "viewcustomwizard" };
     private static readonly HashSet<string> ExcludedFileVerbs = new(StringComparer.OrdinalIgnoreCase)
         { "copy", "cut", "paste", "copyaspath", "link", "delete", "rename" };
     internal static SutContextMenu GetItemMenu(IReadOnlyList<string> paths, IntPtr owner, Action? rename = null) =>
@@ -30,14 +34,31 @@ internal static class SutContextMenuFactory
     internal static SutContextMenu GetBackgroundMenu(string folderPath, IntPtr owner) =>
         CreateCore([folderPath], owner, background: true, rename: null);
 
+    internal static SutContextMenu GetBackgroundBaseMenu(string folderPath, IntPtr owner, IReadOnlyList<ShellMenuAction> actions)
+    {
+        using var directoryMenu = GetBaseMenu([folderPath], owner, []);
+        return CreateCore([folderPath], owner, background: true, rename: null, actions,
+            backgroundBaseCommands: directoryMenu.CaptureSnapshot());
+    }
+
+    internal static SutContextMenu GetBackgroundContentMenu(string folderPath, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands) =>
+        CreateCore([folderPath], owner, background: true, rename: null, excludedCommands: baseCommands);
+
     internal static SutContextMenu GetBaseMenu(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions) =>
         CreateCore(paths, owner, background: false, rename: null, actions);
 
     internal static SutContextMenu GetContentMenu(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands) =>
         CreateCore(paths, owner, background: false, rename: null, excludedCommands: baseCommands);
 
+    internal static SutContextMenu GetBaseMenuForContext(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions, bool background) =>
+        background ? GetBackgroundBaseMenu(paths[0], owner, actions) : GetBaseMenu(paths, owner, actions);
+
+    internal static SutContextMenu GetContentMenuForContext(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands, bool background) =>
+        background ? GetBackgroundContentMenu(paths[0], owner, baseCommands) : GetContentMenu(paths, owner, baseCommands);
+
     private static SutContextMenu CreateCore(IReadOnlyList<string> paths, IntPtr owner, bool background, Action? rename,
-        IReadOnlyList<ShellMenuAction>? actions = null, IReadOnlyDictionary<string, int>? excludedCommands = null)
+        IReadOnlyList<ShellMenuAction>? actions = null, IReadOnlyDictionary<string, int>? excludedCommands = null,
+        IReadOnlyDictionary<string, int>? backgroundBaseCommands = null)
     {
         var isBaseMenu = actions is not null;
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
@@ -80,8 +101,8 @@ internal static class SutContextMenuFactory
 
         try
         {
-            fileClass = isBaseMenu && !directorySelection ? Microsoft.Win32.Registry.ClassesRoot.OpenSubKey("*") : null;
-            filesystemClass = isBaseMenu ? Microsoft.Win32.Registry.ClassesRoot.OpenSubKey("AllFilesystemObjects") : null;
+            fileClass = isBaseMenu && !background && !directorySelection ? Microsoft.Win32.Registry.ClassesRoot.OpenSubKey("*") : null;
+            filesystemClass = isBaseMenu && !background ? Microsoft.Win32.Registry.ClassesRoot.OpenSubKey("AllFilesystemObjects") : null;
             Marshal.ThrowExceptionForHR(SHGetDesktopFolder(out desktopFolder));
             foreach (var path in paths)
             {
@@ -143,9 +164,16 @@ internal static class SutContextMenuFactory
             Marshal.ThrowExceptionForHR(contextMenu.QueryContextMenu(menu, 0, FirstCommandId, LastCommandId,
                 isBaseMenu || rename is not null || excludedCommands is not null
                     ? MenuFlags | MenuCanRename : MenuFlags));
+            if (background && (isBaseMenu || excludedCommands is not null))
+                RemoveBackgroundViewMenus(menu, contextMenu);
             if (isBaseMenu)
             {
-                if (directorySelection)
+                if (background)
+                {
+                    FilterBackgroundBaseMenu(menu, contextMenu, backgroundBaseCommands!);
+                    InsertActions(menu, actions!);
+                }
+                else if (directorySelection)
                 {
                     var filesystemCommands = CollectComparableCommands(menu, contextMenu, includeDisabled: true);
                     (HashSet<string> Verbs, HashSet<string> WildcardVerbs, HashSet<string> DirectoryOnlyVerbs, Dictionary<string, int> Commands, HashSet<string> WildcardLabels) sharedCommands =
@@ -165,16 +193,21 @@ internal static class SutContextMenuFactory
                     Marshal.ThrowExceptionForHR(contextMenu.QueryContextMenu(menu, 0, FirstCommandId, LastCommandId, MenuFlags | MenuCanRename));
                     FilterDirectoryBaseMenu(menu, contextMenu, filesystemCommands, sharedCommands);
                 }
-                PrepareBaseMenu(menu, contextMenu, actions!, directorySelection);
-                RemoveExcludedFileCommands(menu, contextMenu, directorySelection);
+                if (!background)
+                {
+                    PrepareBaseMenu(menu, contextMenu, actions!, directorySelection);
+                    RemoveExcludedFileCommands(menu, contextMenu, directorySelection);
+                }
             }
             else if (excludedCommands is not null)
-                PrepareContentMenu(menu, contextMenu, excludedCommands, directorySelection);
+                PrepareContentMenu(menu, contextMenu, excludedCommands, directorySelection, background);
             return new SutContextMenu(owner, menu, contextMenu, actions, rename,
                 offset => IsRenameCommand(contextMenu, offset),
-                isBaseMenu ? () => CollectComparableCommands(menu, contextMenu, allowVerbless: directorySelection) : null,
-                isBaseMenu || excludedCommands is not null
-                    ? submenu => RemoveExcludedFileCommands(submenu, contextMenu, directorySelection, excludedCommands is not null) : null,
+                isBaseMenu ? () => CollectComparableCommands(menu, contextMenu, allowVerbless: directorySelection || background) : null,
+                background && (isBaseMenu || excludedCommands is not null)
+                    ? submenu => RemoveBackgroundViewMenus(submenu, contextMenu)
+                    : isBaseMenu || excludedCommands is not null
+                        ? submenu => RemoveExcludedFileCommands(submenu, contextMenu, directorySelection, excludedCommands is not null) : null,
                 Release);
         }
         catch
@@ -447,6 +480,11 @@ internal static class SutContextMenuFactory
 
         RemoveRedundantSeparators(menu);
 
+        InsertActions(menu, actions);
+    }
+
+    private static void InsertActions(IntPtr menu, IReadOnlyList<ShellMenuAction> actions)
+    {
         if (GetMenuItemCount(menu) > 0 && !InsertMenu(menu, 0, MenuByPosition | MenuSeparator, UIntPtr.Zero, null))
             throw new InvalidOperationException("Could not insert the menu separator.");
 
@@ -547,13 +585,14 @@ internal static class SutContextMenuFactory
         return commands;
     }
 
-    private static void PrepareContentMenu(IntPtr menu, IContextMenu contextMenu, IReadOnlyDictionary<string, int> baseCommands, bool directorySelection)
+    private static void PrepareContentMenu(IntPtr menu, IContextMenu contextMenu, IReadOnlyDictionary<string, int> baseCommands, bool directorySelection, bool background)
     {
-        RemoveExcludedFileCommands(menu, contextMenu, directorySelection, isContentMenu: true);
-        var contentCommands = CollectComparableCommands(menu, contextMenu, allowVerbless: directorySelection);
+        if (!background)
+            RemoveExcludedFileCommands(menu, contextMenu, directorySelection, isContentMenu: true);
+        var contentCommands = CollectComparableCommands(menu, contextMenu, allowVerbless: directorySelection || background);
         for (var index = GetMenuItemCount(menu) - 1; index >= 0; index--)
         {
-            var command = ComparableCommand(menu, contextMenu, index, allowVerbless: directorySelection);
+            var command = ComparableCommand(menu, contextMenu, index, allowVerbless: directorySelection || background);
             if (command is not null && baseCommands.TryGetValue(command, out var baseCount) && baseCount == 1 &&
                 contentCommands.TryGetValue(command, out var contentCount) && contentCount == 1)
             {
@@ -565,6 +604,90 @@ internal static class SutContextMenuFactory
             }
         }
         RemoveRedundantSeparators(menu);
+    }
+
+    private static void FilterBackgroundBaseMenu(IntPtr menu, IContextMenu contextMenu, IReadOnlyDictionary<string, int> directoryCommands)
+    {
+        var backgroundCommands = CollectComparableCommands(menu, contextMenu, includeDisabled: true, allowVerbless: true);
+        for (var index = GetMenuItemCount(menu) - 1; index >= 0; index--)
+        {
+            var command = ComparableCommand(menu, contextMenu, index, includeDisabled: true, allowVerbless: true);
+            if (!HasShellMenuLabel(menu, index, BackgroundNewLabels.Value) &&
+                command is not null && directoryCommands.TryGetValue(command, out var directoryCount) && directoryCount == 1 &&
+                backgroundCommands.TryGetValue(command, out var backgroundCount) && backgroundCount == 1)
+                continue;
+            var removed = GetSubMenu(menu, index) != IntPtr.Zero
+                ? DeleteMenu(menu, (uint)index, MenuByPosition)
+                : RemoveMenu(menu, (uint)index, MenuByPosition);
+            if (!removed)
+                throw new InvalidOperationException("Could not filter the Shell background Base Menu.");
+        }
+        RemoveRedundantSeparators(menu);
+    }
+
+    private static void RemoveBackgroundViewMenus(IntPtr menu, IContextMenu contextMenu)
+    {
+        for (var index = GetMenuItemCount(menu) - 1; index >= 0; index--)
+        {
+            var submenu = GetSubMenu(menu, index);
+            if (submenu != IntPtr.Zero && (HasShellMenuLabel(menu, index, BackgroundViewLabels.Value) ||
+                ContainsBackgroundViewCommand(submenu, contextMenu)) &&
+                !DeleteMenu(menu, (uint)index, MenuByPosition))
+                throw new InvalidOperationException("Could not remove a Shell background view menu.");
+            if (submenu == IntPtr.Zero)
+            {
+                var id = GetMenuItemID(menu, index);
+                if (id >= FirstCommandId && id <= LastCommandId &&
+                    GetCommandVerb(contextMenu, id - FirstCommandId) is { } verb && ExcludedBackgroundVerbs.Contains(verb) &&
+                    !RemoveMenu(menu, (uint)index, MenuByPosition))
+                    throw new InvalidOperationException("Could not remove a Shell background command.");
+            }
+        }
+        RemoveRedundantSeparators(menu);
+    }
+
+    private static HashSet<string> LoadShellMenuLabels(params uint[] resourceIds)
+    {
+        var labels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var module = GetModuleHandle("shell32.dll");
+        if (module == IntPtr.Zero)
+            return labels;
+        foreach (var resourceId in resourceIds)
+        {
+            var label = new StringBuilder(512);
+            if (LoadString(module, resourceId, label, label.Capacity) > 0)
+                labels.Add(label.ToString().Replace("&", "", StringComparison.Ordinal));
+        }
+        return labels;
+    }
+
+    private static bool HasShellMenuLabel(IntPtr menu, int index, HashSet<string> labels)
+    {
+        var label = new StringBuilder(512);
+        return GetMenuString(menu, (uint)index, label, label.Capacity, MenuByPosition) > 0 &&
+            labels.Contains(label.ToString().Replace("&", "", StringComparison.Ordinal));
+    }
+
+    private static bool ContainsBackgroundViewCommand(IntPtr menu, IContextMenu contextMenu)
+    {
+        for (var index = 0; index < GetMenuItemCount(menu); index++)
+        {
+            var submenu = GetSubMenu(menu, index);
+            if (submenu != IntPtr.Zero && ContainsBackgroundViewCommand(submenu, contextMenu))
+                return true;
+            var id = GetMenuItemID(menu, index);
+            if (id < FirstCommandId || id > LastCommandId)
+                continue;
+            var verb = GetCommandVerb(contextMenu, id - FirstCommandId);
+            if (verb is not null && (verb.StartsWith("viewlogical", StringComparison.OrdinalIgnoreCase) ||
+                verb.StartsWith("arrange", StringComparison.OrdinalIgnoreCase) ||
+                verb.StartsWith("sortascending", StringComparison.OrdinalIgnoreCase) ||
+                verb.StartsWith("sortdescending", StringComparison.OrdinalIgnoreCase) ||
+                verb.StartsWith("groupascending", StringComparison.OrdinalIgnoreCase) ||
+                verb.StartsWith("groupdescending", StringComparison.OrdinalIgnoreCase)))
+                return true;
+        }
+        return false;
     }
 
     private static void RemoveExcludedFileCommands(IntPtr menu, IContextMenu contextMenu, bool directorySelection, bool isContentMenu = false)
