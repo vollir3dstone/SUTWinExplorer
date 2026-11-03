@@ -1812,21 +1812,73 @@ try {
                     -not $rightClickProbe.AdditionalMenuWasBase[1] -and $list.SelectedItems.Count -eq 1 -and
                     $list.SelectedItem.Entry.FullPath -eq $folderRow.Entry.FullPath) 'Stationary right-clicks did not alternate the directory menus.'
             } finally { $timer.Stop(); $rightClickProbe.Dispose() }
+            $list.SelectedItems.Clear()
+            $list.SelectedItems.Add($folderRow) | Out-Null
+            $list.SelectedItems.Add($renamedFileRow) | Out-Null
+            $rightClickProbe = [SutShellRightClickProbe]::new($ownerHandle, [int] $folderPoint.X, [int] $folderPoint.Y, [int] $folderPoint.X, [int] $folderPoint.Y)
+            $rightClickProbe.AdditionalClicks = 1
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $deadline = [DateTime]::UtcNow.AddSeconds(10)
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(50)
+            $timer.add_Tick({ if ($rightClickProbe.AdditionalMenuCount -eq 1 -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+            $timer.Start()
+            try {
+                [System.Windows.Threading.Dispatcher]::PushFrame($frame)
+                Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasBase -and
+                    $rightClickProbe.AdditionalMenuCount -eq 1 -and $rightClickProbe.AdditionalMenuWasBase[0] -and
+                    $list.SelectedItems.Count -eq 2 -and $list.SelectedItems.Contains($folderRow) -and
+                    $list.SelectedItems.Contains($renamedFileRow)) 'Stationary right-clicks did not alternate the mixed-selection menus.'
+            } finally { $timer.Stop(); $rightClickProbe.Dispose() }
         } finally {
             $window.Left = $originalLeft
             $window.Top = $originalTop
             [SutShellRightClickProbe]::MovePointer($originalCursor[0], $originalCursor[1])
         }
+        foreach ($firstRow in @($renamedFileRow, $folderRow)) {
+            $secondRow = if ($firstRow -eq $folderRow) { $renamedFileRow } else { $folderRow }
+            $list.SelectedItems.Clear()
+            $list.SelectedItems.Add($firstRow) | Out-Null
+            $list.SelectedItems.Add($secondRow) | Out-Null
+            $mixedPaths = @($firstRow.Entry.FullPath, $secondRow.Entry.FullPath)
+            Assert-True ($list.SelectedItems.Count -eq 2) 'The mixed file and folder selection was not established.'
+            $mixedNative = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path $mixedPaths | ConvertFrom-Json).Menu
+            $mixedGeneric = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path $mixedPaths -Generic | ConvertFrom-Json).Menu
+            Assert-True ($mixedNative.Count -gt 0 -and $mixedGeneric.Count -gt 0) 'The Shell did not provide both mixed-selection menus.'
+            foreach ($menuKind in @('base', 'content', 'base')) {
+                $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+                try {
+                    $null = $showMenuCore.Invoke($view, [object[]] @($firstRow.PSObject.BaseObject, $true))
+                    $isBase = $menuProbe.ItemCount -ge 9 -and ($menuProbe.Items[0..8] -join ',') -ceq 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete'
+                    Assert-True ($isBase -eq ($menuKind -eq 'base')) "The mixed menu did not alternate to $menuKind."
+                    if ($isBase) {
+                        Assert-True (($menuProbe.States[0] -band 3) -ne 0 -and ($menuProbe.States[1] -band 3) -ne 0 -and
+                            ($menuProbe.States[2] -band 3) -eq 0 -and ($menuProbe.States[5] -band 3) -eq 0 -and
+                            ($menuProbe.States[8] -band 3) -eq 0) 'Mixed-selection action states were incorrect.'
+                        foreach ($entry in $mixedGeneric | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -eq 'properties' -and $_.Text }) {
+                            Assert-True ($entry.Text -in $menuProbe.Items) 'Mixed-selection Base Menu lost Shell properties.'
+                        }
+                    } else {
+                        foreach ($entry in $mixedNative | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -in @('copy', 'cut', 'paste', 'copyaspath', 'link', 'delete', 'rename', 'properties') -and $_.Text }) {
+                            Assert-True ($entry.Text -notin $menuProbe.Items) "Excluded Shell command remained in the mixed Content Menu: $($entry.Text)."
+                        }
+                    }
+                    Assert-True ($list.SelectedItems.Count -eq 2 -and $list.SelectedItems.Contains($firstRow) -and
+                        $list.SelectedItems.Contains($secondRow)) 'Opening a mixed-selection menu changed the selection.'
+                } finally { $menuProbe.Dispose() }
+            }
+            foreach ($operation in @('Copy', 'Move')) {
+                $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+                $menuProbe.SelectIndex = if ($operation -eq 'Copy') { 2 } else { 5 }
+                try { $null = $showMenu.Invoke($view, [object[]] @($firstRow.PSObject.BaseObject)) } finally { $menuProbe.Dispose() }
+                $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
+                $preparedPaths = @($workflow.PreparedPaths)
+                Assert-True ($workflow.IsPrepared -and $preparedPaths.Count -eq 2 -and
+                    @($mixedPaths | Where-Object { $_ -notin $preparedPaths }).Count -eq 0) "Mixed-selection $operation did not prepare both items."
+                $view.FindName("${operation}AbortButton").RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            }
+        }
         $list.SelectedItems.Clear()
-        $list.SelectedItems.Add($renamedFileRow) | Out-Null
-        $list.SelectedItems.Add($folderRow) | Out-Null
-        Assert-True ($list.SelectedItems.Count -eq 2) 'The mixed file and folder selection was not established.'
-        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-        try {
-            $null = $showMenu.Invoke($view, [object[]] @($renamedFileRow.PSObject.BaseObject))
-            Assert-True ($menuProbe.ItemCount -gt 0 -and
-                ($menuProbe.ItemCount -lt 9 -or ($menuProbe.Items[0..8] -join ',') -cne 'Rename,Path get,Copy get,Copy abort,Copy paste,Move get,Move abort,Move paste,Delete')) 'A mixed file and folder selection did not retain the Windows menu.'
-        } finally { $menuProbe.Dispose() }
         $list.SelectedItem = $folderRow
         $renameProbe = [SutShellRenameProbe]::new()
         $folderEvent = $view.GetType().GetEvent('FolderRenamed', $viewFlags)

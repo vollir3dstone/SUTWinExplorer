@@ -175,7 +175,7 @@ internal static class ShellContextMenu
                 Path.GetDirectoryName(paths[0]), StringComparison.OrdinalIgnoreCase)))
             throw new ArgumentException("Selected items must belong to the same directory.", nameof(paths));
 
-        var directorySelection = !background && Directory.Exists(paths[0]);
+        var directorySelection = !background && paths.All(Directory.Exists);
         var absolutePidls = new List<IntPtr>();
         IntPtr childPidlArray = IntPtr.Zero;
         IntPtr menu = IntPtr.Zero;

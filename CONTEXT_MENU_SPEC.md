@@ -3,8 +3,7 @@
 ## Scope and Intent
 
 ContentView provides a Base Menu (Basismenü) and a Content Menu (Inhaltsmenü)
-for a selection of one or more existing files or one or more existing
-directories. The Base Menu puts the
+for a selection of one or more existing files and/or directories. The Base Menu puts the
 application's common file operations first and includes generally applicable
 Shell commands. The Content Menu provides the remaining item-specific Shell
 commands. Windows constructs and invokes the Shell portions of both menus; KIS
@@ -35,7 +34,7 @@ implementation is in [ContentView.xaml.cs](ContentView.xaml.cs) and
 
 - On an initial right-click, an unselected row becomes the sole selection; a
   selected row preserves an existing multiple selection.
-- A file-only or directory-only selection opens the Base Menu first. The clicked
+- A file, directory or mixed selection opens the Base Menu first. The clicked
   row's full path identifies the menu series, and the complete selection is
   retained.
 - Repeated right-clicks on the same row alternate between the Base and Content
@@ -55,7 +54,7 @@ implementation is in [ContentView.xaml.cs](ContentView.xaml.cs) and
   on the same row while either popup is open. It preserves the current selection;
   on another row while the Base Menu is open it selects only that row. The
   modifier is taken from the mouse message, even if Shift is released before the
-  new menu opens. Mixed file/directory selections also use the original item menu.
+  new menu opens.
   The keyboard context-menu key or Shift+F10 opens the applicable menu without
   starting a mouse-driven alternation series.
 
@@ -86,8 +85,9 @@ prepared operation. Delete uses the Shell file-operation API; it requires loaded
 deletable targets and is disabled during a prepared Copy or Move. The Shell
 controls confirmation and recycling, which depends on the location.
 
-For files, the Shell section is produced by `SHCreateDefaultContextMenu` using
-the `*` and `AllFilesystemObjects` association keys. For directories, the Base
+For files and mixed file/directory selections, the Shell section is produced by
+`SHCreateDefaultContextMenu` using the `*` and `AllFilesystemObjects`
+association keys and the complete selection. For directory-only selections, the Base
 Menu starts from the actual Windows item menu and keeps Properties, uniquely
 matching entries from an `AllFilesystemObjects` menu, and the additional
 registry-matched entries described below. The selected commands are invoked via
@@ -112,6 +112,15 @@ type conditions on them. After the Shell returns the context menu object,
 applies the exclusions described below. File-type-specific association keys are
 not explicitly supplied in this request. The Content Menu instead starts from
 the normal Windows item menu for the complete selection.
+
+For a mixed selection the same request and file-menu filters apply regardless of
+the order of the selected items. The `*` class is normally a file association;
+its extensions receive the mixed selection and decide what to offer. The
+application does not establish that every offered command applies to every
+item, or that the resulting menu is a subset of the normal Windows menu.
+The directory-only registry and whitelist classification is not used. Rename
+and Path get are disabled for multiple selections; Copy get and Move get stage
+all selected items, and Delete requires each item to be deletable.
 
 ### Directory Classification: Three Alternative Criteria
 
@@ -284,8 +293,9 @@ purpose or provider.
 
 Matching uses Shell command verbs obtained from `IContextMenu::GetCommandString`,
 case-insensitively. A menu command without a usable verb cannot be reliably
-classified this way. These rules apply to the file and directory menu pairs,
-not the original Shift, mixed-selection or background menus.
+classified this way. These rules apply to the file, directory and mixed menu
+pairs, not the original Shift or background menus. In this table, "files"
+includes mixed selections; "directories" means directory-only selections.
 
 | Shell action and verb | Base Menu | Content Menu | Reason or application equivalent |
 | --- | --- | --- | --- |
@@ -302,14 +312,14 @@ not the original Shift, mixed-selection or background menus.
 
 The exclusions for `copy`, `cut`, `paste`, `copyaspath`, `rename` and `delete`
 are applied recursively to currently populated submenus in both menus and again
-after a submenu is initialized. The same applies to `link` for files only.
-`properties` is filtered the same way in the Content Menu only. For files, the
+after a submenu is initialized. The same applies to `link` for files and mixed
+selections. `properties` is filtered the same way in the Content Menu only. For files and mixed selections, the
 Base Menu-only exclusions for `open`, `edit`, `openas` and the blacklist are
 applied only to top-level commands when the Base Menu is prepared; they are not
 recursive or reapplied to lazy submenus. Consequently a nested or subsequently
 added entry can remain visible.
 
-The file Base Menu also removes the Shell Open With submenu when it is owner-drawn,
+The file and mixed-selection Base Menu also removes the Shell Open With submenu when it is owner-drawn,
 has a submenu handle, and its label exactly matches the localized `shell32.dll`
 string resource 5376. This is needed because the observed submenu has no usable
 verb. The resource ID is not a documented Shell API contract; if the resource
@@ -319,7 +329,7 @@ exception may not match.
 The embedded [Shell extension blacklist](Assets/shell-extension-blacklist.json)
 contains descriptive names and exact verbs, currently `ANotepad++64` for
 Notepad++. Names are informational; verbs are matched case-insensitively. The
-blacklist affects only top-level entries in the file Base Menu, not the directory
+blacklist affects only top-level entries in file and mixed-selection Base Menus, not the directory-only
 Base Menu. It is embedded at build time, so editing it requires a rebuild. The Content Menu does not apply
 this blacklist, so those commands can appear there when Windows supplies them.
 The separate
@@ -392,16 +402,15 @@ alternatives and their limitations.
 ## Verification
 
 [SutShell.Tests.ps1](tests/SutShell.Tests.ps1) exercises menu contents, filtering,
-toolbar actions, Shell invocation, selection and menu switching for single and
-multiple files and directories. It includes native popup and mouse-input probes in WPF windows;
+toolbar actions, Shell invocation, selection and menu switching for single,
+multiple and mixed files and directories. It includes native popup and mouse-input probes in WPF windows;
 these tests display windows and move the pointer. Manual verification in the
 actual application remains useful for installed extensions, Windows versions and
 interaction timings not represented by the test environment.
 
 ## Follow-up
 
-- [ ] Define the Base and Content Menu contents for mixed file/directory
-  selections and list background separately. In particular,
+- [ ] Define the menu contents for the list background. In particular,
   decide how background commands such as Paste and New relate to application
   operations; do not apply the file exclusion list automatically.
 - [ ] When implementing the remaining menus, make the target kind and filtering rules
@@ -409,7 +418,7 @@ interaction timings not represented by the test environment.
   native-resource lifetime handling. Background menus use a Shell view rather
   than the selected-item association keys.
 - [ ] Extract the menu-series state and transitions into a small reusable unit
-  when the mixed-selection and background behavior is specified. Cover target changes,
+  when the background behavior is specified. Cover target changes,
   multiple selections, cancellation, Shift and background clicks.
 - [ ] Add deterministic tests for duplicate and submenu comparison, including
   disabled, owner-drawn, ambiguous, lazy and missing-verb entries. Keep native

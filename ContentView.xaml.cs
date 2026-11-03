@@ -476,7 +476,7 @@ public partial class ContentView : UserControl
                 }
                 var selectedPaths = FileList.SelectedItems.OfType<DirectoryRow>().Select(item => item.FullPath).ToArray();
                 if (!forceNativeMenu && selectedPaths.Length > 0 &&
-                    (selectedPaths.All(System.IO.File.Exists) || selectedPaths.All(System.IO.Directory.Exists)) &&
+                    selectedPaths.All(path => System.IO.File.Exists(path) || System.IO.Directory.Exists(path)) &&
                     (Keyboard.Modifiers & ModifierKeys.Shift) == 0)
                 {
                     if (alternate && _baseMenuCommands is { } baseCommands &&

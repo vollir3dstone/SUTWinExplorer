@@ -17,8 +17,8 @@ $paths = @($Path | ForEach-Object { (Get-Item -LiteralPath $_ -Force).FullName }
 if ($Background -and ($paths.Count -ne 1 -or -not [IO.Directory]::Exists($paths[0]))) {
     throw 'Background requires exactly one directory.'
 }
-if ($Generic -and ($Background -or $paths.Count -ne 1 -or -not [IO.File]::Exists($paths[0]))) {
-    throw 'Generic requires exactly one file.'
+if ($Generic -and ($Background -or @($paths | Where-Object { [IO.File]::Exists($_) }).Count -eq 0)) {
+    throw 'Generic requires a selection containing at least one file.'
 }
 if ($FilesystemObjects -and ($Background -or $Generic -or $paths.Count -ne 1 -or -not [IO.Directory]::Exists($paths[0]))) {
     throw 'FilesystemObjects requires exactly one directory and cannot be combined with Generic or Background.'
@@ -231,7 +231,7 @@ public static class ContextMenuSpike
             }
             menu = CreatePopupMenu();
             if (menu == IntPtr.Zero) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-            Marshal.ThrowExceptionForHR(context.QueryContextMenu(menu, 0, 1, 0x7fff, !background && paths.Length == 1 && canRename ? 0x10u : 0u));
+            Marshal.ThrowExceptionForHR(context.QueryContextMenu(menu, 0, 1, 0x7fff, !background && canRename ? 0x10u : 0u));
             var entries = new List<MenuEntry>();
             ReadMenu(menu, context, "", entries);
             return entries.ToArray();
