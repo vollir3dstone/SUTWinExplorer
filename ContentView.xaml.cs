@@ -36,6 +36,9 @@ public partial class ContentView : UserControl
     private bool _updatingColumnWidths;
     private bool _rightColumnsHidden;
     private bool _automaticallyHideRightColumns;
+    private bool _manuallyHideRightColumns;
+    private bool _showRightColumnsDespiteNarrowViewport;
+    private double _lastColumnViewportWidth;
     private double _nameTypeWidth;
     private double _preferredTypeWidth = 130;
     private const double MinimumNameColumnWidth = 80;
@@ -77,9 +80,6 @@ public partial class ContentView : UserControl
         HideDirectoriesCheckBox.GetCheckBox().Unchecked += FiltersChanged;
         HideInternalContentCheckBox.GetCheckBox().Checked += FiltersChanged;
         HideInternalContentCheckBox.GetCheckBox().Unchecked += FiltersChanged;
-        HideRightColumnsCheckBox.GetCheckBox().IsChecked = false;
-        HideRightColumnsCheckBox.GetCheckBox().Checked += RightColumnsVisibilityChanged;
-        HideRightColumnsCheckBox.GetCheckBox().Unchecked += RightColumnsVisibilityChanged;
         FileList.LayoutUpdated += FileList_LayoutUpdated;
         FileList.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(FileList_ScrollChanged));
         Loaded += ContentView_Loaded;
@@ -558,6 +558,11 @@ public partial class ContentView : UserControl
         {
             if (scrollViewer is { ViewportWidth: > 0 })
             {
+                if (Math.Abs(scrollViewer.ViewportWidth - _lastColumnViewportWidth) > 0.01)
+                {
+                    _showRightColumnsDespiteNarrowViewport = false;
+                    _lastColumnViewportWidth = scrollViewer.ViewportWidth;
+                }
                 var leftWidth = gridView.Columns.Where(column => column != NameColumn && column != TypeApp2Name &&
                     column != SizeColumn && column != DateColumn).Sum(column => column.Width);
                 var normalPairWidth = Math.Max(0, scrollViewer.ViewportWidth - leftWidth - SizeColumn.Width - DateColumn.Width);
@@ -565,7 +570,8 @@ public partial class ContentView : UserControl
                 var normalTypeWidth = Math.Clamp(_preferredTypeWidth, minimumType, normalPairWidth - minimumType);
                 _automaticallyHideRightColumns = normalPairWidth - normalTypeWidth < MinimumNameColumnWidth;
             }
-            SetRightColumnsHidden(gridView, HideRightColumnsCheckBox.GetCheckBox().IsChecked == true || _automaticallyHideRightColumns);
+            SetRightColumnsHidden(gridView, _manuallyHideRightColumns ||
+                (_automaticallyHideRightColumns && !_showRightColumnsDespiteNarrowViewport));
             if (scrollViewer is null || scrollViewer.ViewportWidth <= 0)
                 return;
 
@@ -605,16 +611,30 @@ public partial class ContentView : UserControl
     {
         if (sender is GridViewColumnHeader header &&
             header.Template.FindName("PART_HeaderGripper", header) is Thumb gripper)
+        {
             gripper.IsEnabled = ReferenceEquals(header.Column, NameColumn) && !_rightColumnsHidden;
+            if (ReferenceEquals(header.Column, NameColumn))
+                gripper.RenderTransform = new TranslateTransform(-8, 0);
+        }
     }
 
-    private void RightColumnsVisibilityChanged(object sender, RoutedEventArgs e) => UpdateColumnWidths();
+    private void RightColumnsToggle_Click(object sender, RoutedEventArgs e)
+    {
+        _manuallyHideRightColumns = !_rightColumnsHidden;
+        _showRightColumnsDespiteNarrowViewport = _rightColumnsHidden && _automaticallyHideRightColumns;
+        UpdateColumnWidths();
+        e.Handled = true;
+    }
 
     private void SetRightColumnsHidden(GridView gridView, bool hidden)
     {
         if (_rightColumnsHidden == hidden)
             return;
         _rightColumnsHidden = hidden;
+        RightColumnsToggleSymbol.Text = hidden ? "\u2026" : "\u25B8";
+        RightColumnsToggleHeader.ToolTip = hidden ? "Show right columns" : "Hide right columns";
+        System.Windows.Automation.AutomationProperties.SetName(RightColumnsToggleHeader,
+            hidden ? "Show right columns" : "Hide right columns");
         if (hidden)
         {
             gridView.Columns.Remove(TypeApp2Name);

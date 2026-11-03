@@ -1296,9 +1296,9 @@ try {
             Assert-True ([Math]::Abs($position.Y - $propertiesPosition.Y) -lt 1 -and $position.X -gt $propertiesPosition.X) "$buttonName was not after Properties in the selection row."
         }
         $columns = $list.View.Columns
-        Assert-True ($columns.Count -eq 7 -and $columns[3].Header.Tag -eq 'Name' -and
-            $columns[3].Width -gt 80 -and $columns[4].Width -eq 130) 'Shell column order or name-column sizing is incorrect.'
-        foreach ($headerCase in @(@(0, 'MT'), @(1, 'TA1'), @(2, 'MO'), @(4, 'TA2'))) {
+        Assert-True ($columns.Count -eq 8 -and $columns[3].Header.Tag -eq 'Name' -and
+            $columns[3].Width -gt 80 -and $columns[5].Width -eq 130) 'Shell column order or name-column sizing is incorrect.'
+        foreach ($headerCase in @(@(0, 'MT'), @(1, 'TA1'), @(2, 'MO'), @(5, 'TA2'))) {
             Assert-True ($columns[$headerCase[0]].Header.Content.Children[0].Text -ceq $headerCase[1]) "Column $($headerCase[0]) has an incorrect header."
         }
         $scroll = Find-VisualType $list ([System.Windows.Controls.ScrollViewer])
@@ -1309,22 +1309,23 @@ try {
             $header = $columns[$index].Header
             $header.ApplyTemplate() | Out-Null
             $gripper = $header.Template.FindName('PART_HeaderGripper', $header)
-            Assert-True ($null -ne $gripper -and $gripper.IsEnabled -eq ($index -eq 3)) "Column $index has an incorrect resize handle: exists=$($null -ne $gripper), enabled=$($gripper.IsEnabled), headerLoaded=$($header.IsLoaded), headerColumn=$($null -ne $header.Column)."
+            Assert-True (($index -eq 4 -and $null -eq $gripper) -or
+                ($index -ne 4 -and $null -ne $gripper -and $gripper.IsEnabled -eq ($index -eq 3))) "Column $index has an incorrect resize handle."
         }
         $originalNameWidth = $columns[3].Width
-        $originalTypeWidth = $columns[4].Width
+        $originalTypeWidth = $columns[5].Width
         $columns[3].Width += 35
         Assert-True ([Math]::Abs($columns[3].Width - $originalNameWidth - 35) -lt 1 -and
-            [Math]::Abs($columns[4].Width - $originalTypeWidth + 35) -lt 1) 'The Name/Type splitter did not preserve their combined width.'
+            [Math]::Abs($columns[5].Width - $originalTypeWidth + 35) -lt 1) 'The Name/Type splitter did not preserve their combined width.'
         $columns[3].Width = 10000
-        Assert-True ($columns[4].Width -ge 40 -and [Math]::Abs($columns[3].Width + $columns[4].Width - $originalNameWidth - $originalTypeWidth) -lt 1) 'The splitter allowed Type to collapse or changed the combined width.'
+        Assert-True ($columns[5].Width -ge 40 -and [Math]::Abs($columns[3].Width + $columns[5].Width - $originalNameWidth - $originalTypeWidth) -lt 1) 'The splitter allowed Type to collapse or changed the combined width.'
         $columns[3].Width = 1
-        Assert-True ($columns[3].Width -ge 80 -and [Math]::Abs($columns[3].Width + $columns[4].Width - $originalNameWidth - $originalTypeWidth) -lt 1) 'The splitter allowed Name below its minimum or changed the combined width.'
+        Assert-True ($columns[3].Width -ge 80 -and [Math]::Abs($columns[3].Width + $columns[5].Width - $originalNameWidth - $originalTypeWidth) -lt 1) 'The splitter allowed Name below its minimum or changed the combined width.'
         $columns[3].Width = $originalNameWidth
         $window.Width += 100
         $window.UpdateLayout()
         $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
-        Assert-True ([Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and [Math]::Abs($columns[4].Width - $originalTypeWidth) -lt 1) 'Window resizing did not preserve the Type width and fill the viewport.'
+        Assert-True ([Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and [Math]::Abs($columns[5].Width - $originalTypeWidth) -lt 1) 'Window resizing did not preserve the Type width and fill the viewport.'
         $window.Width -= 100
         $window.UpdateLayout()
         $scroll.VerticalScrollBarVisibility = 'Hidden'
@@ -1336,36 +1337,35 @@ try {
         $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
         Assert-True ([Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and $scroll.ScrollableWidth -lt 1) 'The columns did not adapt when the vertical scrollbar appeared.'
         $originalWindowWidth = $window.Width
-        $hideRightColumns = $view.FindName('HideRightColumnsCheckBox').GetCheckBox()
+        $rightColumnsToggle = $view.FindName('RightColumnsToggleHeader')
         $list.SelectedItem = $list.Items[0]
         $selectedBeforeResize = $list.SelectedItem
         $itemsBeforeResize = $list.ItemsSource
         $thresholdViewport = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum - $columns[3].Width + 80
         $window.Width = $originalWindowWidth - ($scroll.ViewportWidth - $thresholdViewport) + 2
         $window.UpdateLayout()
-        Assert-True ($columns.Count -eq 7 -and $columns[3].Width -ge 80 -and -not $hideRightColumns.IsChecked) 'Right columns disappeared above the minimum Name width.'
+        Assert-True ($columns.Count -eq 8 -and $columns[3].Width -ge 80) 'Right columns disappeared above the minimum Name width.'
         $window.Width -= 4
         $window.UpdateLayout()
-        Assert-True ($columns.Count -eq 4 -and -not $hideRightColumns.IsChecked) 'Right columns did not disappear below the minimum Name width.'
+        Assert-True ($columns.Count -eq 5) 'Right columns did not disappear below the minimum Name width.'
         $window.Width += 4
         $window.UpdateLayout()
-        Assert-True ($columns.Count -eq 7 -and -not $hideRightColumns.IsChecked -and [Math]::Abs($columns[4].Width - $originalTypeWidth) -lt 1) 'Right columns did not automatically reappear above the minimum Name width.'
+        Assert-True ($columns.Count -eq 8 -and [Math]::Abs($columns[5].Width - $originalTypeWidth) -lt 1) 'Right columns did not automatically reappear above the minimum Name width.'
         $window.Width = 500
         $window.UpdateLayout()
         $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
-        Assert-True ($columns.Count -eq 4 -and -not $hideRightColumns.IsChecked -and
+        Assert-True ($columns.Count -eq 5 -and
             [Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and $scroll.ScrollableWidth -lt 1 -and
             [object]::ReferenceEquals($itemsBeforeResize, $list.ItemsSource) -and [object]::ReferenceEquals($selectedBeforeResize, $list.SelectedItem)) 'The right columns did not hide automatically in a narrow viewport.'
-        $hideRightColumns.IsChecked = $true
-        $hideRightColumns.IsChecked = $false
-        Assert-True ($columns.Count -eq 4 -and -not $hideRightColumns.IsChecked) 'Unchecking the checkbox overrode automatic hiding in a narrow viewport.'
-        $hideRightColumns.IsChecked = $true
+        $rightColumnsToggle.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        Assert-True ($columns.Count -eq 8) 'The toggle did not override automatic hiding in a narrow viewport.'
+        $rightColumnsToggle.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         $window.Width = $originalWindowWidth
         $window.UpdateLayout()
-        Assert-True ($columns.Count -eq 4 -and $hideRightColumns.IsChecked) 'Automatically hidden columns reappeared despite the checkbox.'
-        $hideRightColumns.IsChecked = $false
+        Assert-True ($columns.Count -eq 5) 'Manually hidden columns reappeared after widening.'
+        $rightColumnsToggle.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         $window.UpdateLayout()
-        Assert-True ($columns.Count -eq 7 -and [Math]::Abs($columns[4].Width - $originalTypeWidth) -lt 1) 'Columns or the chosen Type width were not restored after widening.'
+        Assert-True ($columns.Count -eq 8 -and [Math]::Abs($columns[5].Width - $originalTypeWidth) -lt 1) 'Columns or the chosen Type width were not restored after widening.'
         $list.SelectedItems.Clear()
         $originalCursor = [SutShellRightClickProbe]::CursorPosition()
         $originalLeft = $window.Left
@@ -1379,7 +1379,7 @@ try {
             $gripper = $nameHeader.Template.FindName('PART_HeaderGripper', $nameHeader)
             $point = $gripper.PointToScreen([System.Windows.Point]::new($gripper.ActualWidth / 2, $gripper.ActualHeight / 2))
             $beforeName = $columns[3].Width
-            $beforeType = $columns[4].Width
+            $beforeType = $columns[5].Width
             $drag = [pscustomobject] @{ Phase = 0 }
             $frame = [System.Windows.Threading.DispatcherFrame]::new()
             $timer = [System.Windows.Threading.DispatcherTimer]::new()
@@ -1396,8 +1396,8 @@ try {
             }.GetNewClosure())
             $timer.Start()
             try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-            Assert-True ($columns[3].Width -gt $beforeName + 10 -and $columns[4].Width -lt $beforeType - 10 -and
-                [Math]::Abs(($columns[3].Width + $columns[4].Width) - ($beforeName + $beforeType)) -lt 1) 'Dragging the Name/Type divider did not resize both columns together.'
+            Assert-True ($columns[3].Width -gt $beforeName + 10 -and $columns[5].Width -lt $beforeType - 10 -and
+                [Math]::Abs(($columns[3].Width + $columns[5].Width) - ($beforeName + $beforeType)) -lt 1) 'Dragging the Name/Type divider did not resize both columns together.'
         } finally {
             [SutShellMenuProbe]::LeftUp()
             [SutShellRightClickProbe]::MovePointer($originalCursor[0], $originalCursor[1])
@@ -1405,19 +1405,17 @@ try {
             $window.Top = $originalTop
             $columns[3].Width = $originalNameWidth
         }
-        $hideRightColumns = $view.FindName('HideRightColumnsCheckBox').GetCheckBox()
-        $hideRightWrapper = $view.FindName('HideRightColumnsCheckBox')
-        $patternEditor = $view.FindName('NamePatternTextBox')
-        Assert-True (-not $hideRightColumns.IsChecked -and $hideRightWrapper.Label -eq 'Hide right columns' -and
-            $hideRightWrapper.TranslatePoint([System.Windows.Point]::new(0, 0), $view).X -gt $patternEditor.TranslatePoint([System.Windows.Point]::new(0, 0), $view).X) 'The right-column checkbox was not positioned after the name pattern or initially unchecked.'
+        $rightColumnsToggle = $view.FindName('RightColumnsToggleHeader')
+        Assert-True ([object]::ReferenceEquals($columns[4].Header, $rightColumnsToggle) -and
+            $view.FindName('RightColumnsToggleSymbol').Text -ceq [string] [char] 0x25B8) 'The right-column toggle was not positioned after Name or initially visible.'
         $list.SelectedItem = $list.Items[0]
         $selectedBeforeToggle = $list.SelectedItem
         $itemsBeforeToggle = $list.ItemsSource
-        $hideRightColumns.IsChecked = $true
+        $rightColumnsToggle.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         $window.UpdateLayout()
         $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
         $nameGripper = $columns[3].Header.Template.FindName('PART_HeaderGripper', $columns[3].Header)
-        Assert-True ($columns.Count -eq 4 -and $columns[3].Header.Tag -eq 'Name' -and -not $nameGripper.IsEnabled -and
+        Assert-True ($columns.Count -eq 5 -and $columns[3].Header.Tag -eq 'Name' -and -not $nameGripper.IsEnabled -and
             [Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and $scroll.ScrollableWidth -lt 1 -and
             $columns[3].Width -gt $originalNameWidth -and [object]::ReferenceEquals($itemsBeforeToggle, $list.ItemsSource) -and
             [object]::ReferenceEquals($selectedBeforeToggle, $list.SelectedItem)) 'Hiding right columns did not expand Name or preserved rows and selection.'
@@ -1432,17 +1430,15 @@ try {
         Assert-True ($controlsScroll.ScrollableWidth -gt 0 -and $controlsScroll.ComputedHorizontalScrollBarVisibility -eq 'Visible') 'The view controls were not scrollable in a narrow pane.'
         $controlsScroll.ScrollToRightEnd()
         $window.UpdateLayout()
-        $checkboxPosition = $hideRightWrapper.TranslatePoint([System.Windows.Point]::new(0, 0), $controlsScroll)
-        Assert-True ($checkboxPosition.X -ge 0 -and $checkboxPosition.X + $hideRightWrapper.ActualWidth -le $controlsScroll.ViewportWidth + 1) 'The right-column checkbox was not reachable in a narrow pane.'
         $controlsScroll.ScrollToHome()
         $window.Width = $originalWindowWidth
         $window.UpdateLayout()
-        $hideRightColumns.IsChecked = $false
+        $rightColumnsToggle.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         $window.UpdateLayout()
         $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
-        Assert-True ($columns.Count -eq 7 -and $columns[4].Header.Tag -eq 'TypeApp2Name' -and $columns[5].Header.Tag -eq 'Size' -and
-            $columns[6].Header.Tag -eq 'DateModified' -and $nameGripper.IsEnabled -and
-            [Math]::Abs($columns[4].Width - $originalTypeWidth) -lt 1 -and [Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and
+        Assert-True ($columns.Count -eq 8 -and $columns[5].Header.Tag -eq 'TypeApp2Name' -and $columns[6].Header.Tag -eq 'Size' -and
+            $columns[7].Header.Tag -eq 'DateModified' -and $nameGripper.IsEnabled -and
+            [Math]::Abs($columns[5].Width - $originalTypeWidth) -lt 1 -and [Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and
             [object]::ReferenceEquals($selectedBeforeToggle, $list.SelectedItem)) 'Restoring right columns did not preserve their order, splitter and selection.'
         $list.SelectedItems.Clear()
         $iconSetType = $assembly.GetType('SUTWinExplorer.ShellIconSet', $true)
@@ -1486,10 +1482,10 @@ try {
         $selectedPaths = @($list.SelectedItems | ForEach-Object { $_.Entry.FullPath })
         Assert-True ($list.SelectedItems.Count -eq 2 -and $view.FindName('CopyGetButton').IsEnabled -and
             -not $view.FindName('PathGetButton').IsEnabled -and -not $view.FindName('RenameButton').IsEnabled) 'Multiple selection or its toolbar state failed.'
-        $columns[5].Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        $columns[6].Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         Assert-True ($view.FindName('SizeSortIndicator').Visibility -eq 'Visible' -and
             $view.FindName('SizeSortIndicator').Text -ceq [string] [char] 0x25B2) 'Ascending size indicator was not shown.'
-        $columns[5].Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        $columns[6].Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         Assert-True ($view.FindName('SizeSortIndicator').Text -ceq [string] [char] 0x25BC) 'Descending size indicator was not shown.'
         $columns[3].Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         $list.UpdateLayout()
@@ -1518,9 +1514,10 @@ try {
         $view.FindName('NamePatternTextBox').Text = '*'
         $view.FindName('NamePatternTextBox').Text = ''
         $otherView = [Activator]::CreateInstance($view.GetType())
-        $otherView.FindName('HideRightColumnsCheckBox').GetCheckBox().IsChecked = $true
-        Assert-True ($otherView.FindName('FileList').View.Columns.Count -eq 4 -and $columns.Count -eq 7 -and -not $hideRightColumns.IsChecked) 'Right-column visibility leaked between ContentViews.'
-        $otherView.FindName('HideRightColumnsCheckBox').GetCheckBox().IsChecked = $false
+        $otherToggle = $otherView.FindName('RightColumnsToggleHeader')
+        $otherToggle.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        Assert-True ($otherView.FindName('FileList').View.Columns.Count -eq 5 -and $columns.Count -eq 8) 'Right-column visibility leaked between ContentViews.'
+        $otherToggle.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         $null = $otherView.GetType().GetMethod('SetCurrentPath', $viewFlags).Invoke($otherView, [object[]] @([string] '::{20D04FE0-3AEA-1069-A2D8-08002B30309D}'))
         Assert-True (-not $otherView.FindName('NewButton').IsEnabled) 'New was enabled for the virtual This PC location.'
         $otherSort = $otherView.GetType().GetField('_sorting', $viewFlags).GetValue($otherView)

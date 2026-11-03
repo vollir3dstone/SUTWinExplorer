@@ -11,8 +11,8 @@ for directory data, filesystem observation, and operating-system operations;
 it does not embed a Shell view. The Windows-specific implementation is described
 in [SutShell Windows implementation](SUTSHELL_WINDOWS.md).
 
-The table has one row per item and columns for MT, TA1, MO, Name, TA2,
-Size, and Date modified. The names describe the columns as follows:
+The table has one row per item and columns for MT, TA1, MO, Name, an unlabeled
+toggle, TA2, Size, and Date modified. The names describe the columns as follows:
 
 | Header | Name | Content |
 | --- | --- | --- |
@@ -38,17 +38,19 @@ The counts include items hidden by any ContentView filter and do not depend on
 how many rows have loaded. At This PC, drive roots count as directories.
 
 The fixed-width columns retain their widths; Name and TA2 share the remaining
-table viewport. The divider between them is draggable and changing one width
+table viewport. The divider after Name is draggable and changing one width
 adjusts the other. The chosen TA2 width is retained when the viewport changes,
 subject to the available space. Other column dividers and reordering are disabled.
-The **Hide right columns** checkbox removes TA2, Size, and Date modified from
-this ContentView, gives Name the remaining width, and disables its divider.
-Showing the columns again restores their order and the chosen TA2 width without
+The narrow, unlabeled header after Name toggles TA2, Size, and Date modified.
+It shows a right-pointing triangle when they are visible and an ellipsis when
+they are hidden. Hiding them gives Name the remaining width and disables its
+divider. Showing them again restores their order and chosen TA2 width without
 changing the rows, selection, or sort state. The VIEW controls scroll horizontally
 when the available width cannot display them all. The same columns also hide
-automatically when Name would be narrower than 80 DIP. They reappear when enough
-space is available again, unless the checkbox is checked. The automatic behavior
-does not change the checkbox or the chosen TA2 width.
+automatically when Name would be narrower than 80 DIP and reappear when enough
+space is available, unless manually hidden. Clicking the ellipsis can explicitly
+show them in a narrow viewport until the viewport width changes again. Automatic
+hiding does not change the chosen TA2 width.
 
 ### Responsibilities
 

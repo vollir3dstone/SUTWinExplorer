@@ -68,10 +68,6 @@
                         <InlineUIContainer BaselineAlignment="Baseline">
                             <local:SortOrderWidget x:Name="SortOrderEditor" />
                         </InlineUIContainer>
-                        <InlineUIContainer BaselineAlignment="Baseline">
-                            <local:CheckBoxWrapper x:Name="HideRightColumnsCheckBox"
-                                                   Label="Hide right columns" Margin="16,0,0,0" />
-                        </InlineUIContainer>
                     </TextBlock>
                     </ScrollViewer>
                 </Grid>
@@ -279,6 +275,29 @@
                                         </DataTrigger>
                                     </DataTemplate.Triggers>
                                 </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn x:Name="RightColumnsToggleColumn" Width="14">
+                            <GridViewColumn.Header>
+                                <GridViewColumnHeader x:Name="RightColumnsToggleHeader" Padding="0" ToolTip="Hide right columns"
+                                                      AutomationProperties.Name="Hide right columns" Click="RightColumnsToggle_Click">
+                                    <GridViewColumnHeader.Template>
+                                        <ControlTemplate TargetType="GridViewColumnHeader">
+                                            <Border x:Name="ToggleBackground" Background="Transparent">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="ToggleBackground" Property="Background" Value="{StaticResource ItemHoverBrush}" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </GridViewColumnHeader.Template>
+                                    <TextBlock x:Name="RightColumnsToggleSymbol" Text="▸" FontSize="11" />
+                                </GridViewColumnHeader>
+                            </GridViewColumn.Header>
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate><Border /></DataTemplate>
                             </GridViewColumn.CellTemplate>
                         </GridViewColumn>
                         <GridViewColumn x:Name="TypeApp2Name" Width="130">
