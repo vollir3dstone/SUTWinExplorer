@@ -32,6 +32,15 @@ internal sealed class SutContextMenu : IDisposable
     }
 
     internal IReadOnlyDictionary<string, int>? Show(Func<int, int, bool, bool, bool>? secondRightClick = null)
+        => ShowCore(_menu, null, null, secondRightClick);
+
+    internal void ShowSubmenu(Func<IntPtr, IntPtr> findSubmenu, int x, int y)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ShowCore(findSubmenu(_menu), x, y, null);
+    }
+
+    private IReadOnlyDictionary<string, int>? ShowCore(IntPtr popup, int? x, int? y, Func<int, int, bool, bool, bool>? secondRightClick)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         SubclassProc? subclassProc = null;
@@ -71,6 +80,11 @@ internal sealed class SutContextMenu : IDisposable
             subclassInstalled = true;
             if (!GetCursorPos(out var point))
                 throw new InvalidOperationException("Could not read the pointer position.");
+            if (x.HasValue && y.HasValue)
+            {
+                point.X = x.Value;
+                point.Y = y.Value;
+            }
             if (secondRightClick is not null)
             {
                 menuFilter = (code, wParam, lParam) =>
@@ -112,7 +126,7 @@ internal sealed class SutContextMenu : IDisposable
 
             _ = SetForegroundWindow(_owner);
             var flags = _filterSubmenu is not null ? 0x0100u : 0x0102u;
-            var commandId = TrackPopupMenuEx(_menu, flags, point.X, point.Y, _owner, IntPtr.Zero);
+            var commandId = TrackPopupMenuEx(popup, flags, point.X, point.Y, _owner, IntPtr.Zero);
             var snapshot = _captureSnapshot?.Invoke();
             _ = PostMessage(_owner, 0, IntPtr.Zero, IntPtr.Zero);
             if (commandId != 0)
@@ -127,16 +141,7 @@ internal sealed class SutContextMenu : IDisposable
                     _rename();
                 else
                 {
-                    var invokeInfo = new ShellCommandInvokeInfo
-                    {
-                        Size = (uint)Marshal.SizeOf<ShellCommandInvokeInfo>(),
-                        Mask = 0x00004000,
-                        Owner = _owner,
-                        Verb = new IntPtr(commandId - 1),
-                        VerbW = new IntPtr(commandId - 1),
-                        Show = 1
-                    };
-                    Marshal.ThrowExceptionForHR(_contextMenu.InvokeCommand(ref invokeInfo));
+                    InvokeCommand(commandId - 1);
                 }
             }
             return snapshot;
@@ -148,6 +153,37 @@ internal sealed class SutContextMenu : IDisposable
             if (subclassInstalled && subclassProc is not null)
                 _ = RemoveWindowSubclass(_owner, subclassProc, UIntPtr.Zero);
         }
+    }
+
+    internal void InvokeVerb(string verb)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        for (var index = 0; index < GetMenuItemCount(_menu); index++)
+        {
+            var commandId = GetMenuItemID(_menu, index);
+            if (commandId is >= 1 and <= 0x7FFF &&
+                string.Equals(SutContextMenuFactory.GetCommandVerb(_contextMenu, commandId - 1), verb, StringComparison.OrdinalIgnoreCase) &&
+                (GetMenuState(_menu, (uint)index, 0x400) & 3) == 0)
+            {
+                InvokeCommand(commandId - 1);
+                return;
+            }
+        }
+        throw new InvalidOperationException($"The Shell did not provide an enabled '{verb}' command.");
+    }
+
+    private void InvokeCommand(uint offset)
+    {
+        var invokeInfo = new ShellCommandInvokeInfo
+        {
+            Size = (uint)Marshal.SizeOf<ShellCommandInvokeInfo>(),
+            Mask = 0x00004000,
+            Owner = _owner,
+            Verb = new IntPtr(offset),
+            VerbW = new IntPtr(offset),
+            Show = 1
+        };
+        Marshal.ThrowExceptionForHR(_contextMenu.InvokeCommand(ref invokeInfo));
     }
 
     internal IReadOnlyDictionary<string, int> CaptureSnapshot()
@@ -164,6 +200,9 @@ internal sealed class SutContextMenu : IDisposable
     }
 
     [DllImport("user32.dll", SetLastError = true)] private static extern uint TrackPopupMenuEx(IntPtr menu, uint flags, int x, int y, IntPtr owner, IntPtr parameters);
+    [DllImport("user32.dll")] private static extern int GetMenuItemCount(IntPtr menu);
+    [DllImport("user32.dll")] private static extern uint GetMenuItemID(IntPtr menu, int position);
+    [DllImport("user32.dll")] private static extern uint GetMenuState(IntPtr menu, uint item, uint flags);
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out NativePoint point);
     [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(NativePoint point);
     [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);

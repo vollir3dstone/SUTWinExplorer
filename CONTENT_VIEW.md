@@ -235,9 +235,12 @@ repopulated from the retained Shell view.
 The **VIEW** row controls the content's **Hide directories**, **Hide internal**,
 and **Name pattern** filters. These settings are local to the Pathview; the
 content **Hide internal** setting is independent of the tree filters. The
-**FOR SELECTED** row offers Rename, Path get, Copy get/abort/paste, Move
-get/abort/paste, and Delete. Button availability depends on the local selection
-and on the shared transfer state.
+**FOR DIRECTORY** row offers New and Copy/Move abort and paste. New opens the
+Windows Shell New submenu for the current filesystem directory and is disabled
+for virtual or unavailable locations. The **FOR SELECTED** row offers
+Properties, Rename, Path get, Copy get, Move get, and Delete. Properties opens
+the Windows Shell properties for one loaded selected item. Button availability
+depends on the local selection and on the shared transfer state.
 
 ### Copy and Move across ContentViews
 

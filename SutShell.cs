@@ -189,6 +189,18 @@ internal static class SutShell
         menu.Show();
     }
 
+    internal static void ShowNewMenu(string path, IntPtr owner, int x, int y)
+    {
+        using var menu = SutContextMenuFactory.GetBackgroundMenu(path, owner);
+        menu.ShowSubmenu(SutContextMenuFactory.FindBackgroundNewSubmenu, x, y);
+    }
+
+    internal static void ShowProperties(string path, IntPtr owner)
+    {
+        using var menu = SutContextMenuFactory.GetItemMenu([path], owner);
+        menu.InvokeVerb("properties");
+    }
+
     internal static IDisposable ObserveDirectories(IEnumerable<string> paths, Action changed) =>
         new DirectoryObserver(paths, changed);
 

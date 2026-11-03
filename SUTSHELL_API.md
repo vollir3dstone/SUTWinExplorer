@@ -23,6 +23,7 @@ Shell helpers directly.
 | `Copy(paths, destination, owner)` / `Move(...)` | Run the existing native transfer operation; failures propagate and a transfer is not atomic. |
 | `Delete(paths, owner)` | Delete selected filesystem items using `IFileOperation`, requesting recycling and undo. Rejects drive/share roots; the Shell controls confirmation and may not support recycling for every location. Failures and cancellation propagate, and deletion is not atomic. |
 | `ShowItemMenu(paths, owner, rename)` / `ShowBackgroundMenu(path, owner)` | Show a native Windows context menu for one or more items from the same directory, or for a folder background. The optional single-item rename callback starts the caller's editor. |
+| `ShowNewMenu(path, owner, x, y)` / `ShowProperties(path, owner)` | Show the native background New submenu at screen coordinates, or invoke the selected item's Shell properties command. |
 | `ObserveDirectories(paths, changed)` | Observes immediate changes in the supplied directories and returns an `IDisposable` subscription. The callback may run on a background thread; callers must marshal UI work. Observation failures are logged and do not abort other subscriptions. |
 
 The paired menus are created directly by `SutContextMenuFactory`, not by

@@ -967,6 +967,19 @@ try {
         try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
         Assert-True $probe.Ready "ContentView did not load and render requested row packages: $($probe.Error)"
         $list = $view.FindName('FileList')
+        $newButton = $view.FindName('NewButton')
+        $propertiesButton = $view.FindName('PropertiesButton')
+        $newPosition = $newButton.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+        $propertiesPosition = $propertiesButton.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+        Assert-True ($newButton.IsEnabled -and -not $propertiesButton.IsEnabled -and $newPosition.Y -lt $propertiesPosition.Y) 'The directory and selection action rows or their initial states were incorrect.'
+        foreach ($buttonName in @('CopyAbortButton', 'CopyPasteButton', 'MoveAbortButton', 'MovePasteButton')) {
+            $position = $view.FindName($buttonName).TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+            Assert-True ([Math]::Abs($position.Y - $newPosition.Y) -lt 1) "$buttonName was not in the directory row."
+        }
+        foreach ($buttonName in @('RenameButton', 'PathGetButton', 'CopyGetButton', 'MoveGetButton', 'DeleteButton')) {
+            $position = $view.FindName($buttonName).TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+            Assert-True ([Math]::Abs($position.Y - $propertiesPosition.Y) -lt 1 -and $position.X -gt $propertiesPosition.X) "$buttonName was not after Properties in the selection row."
+        }
         $columns = $list.View.Columns
         Assert-True ($columns.Count -eq 7 -and $columns[3].Header.Tag -eq 'Name' -and
             $columns[3].Width -gt 80 -and $columns[4].Width -eq 130) 'Shell column order or name-column sizing is incorrect.'
@@ -1034,6 +1047,8 @@ try {
         $view.FindName('NamePatternTextBox').Text = '*'
         $view.FindName('NamePatternTextBox').Text = ''
         $otherView = [Activator]::CreateInstance($view.GetType())
+        $null = $otherView.GetType().GetMethod('SetCurrentPath', $viewFlags).Invoke($otherView, [object[]] @([string] '::{20D04FE0-3AEA-1069-A2D8-08002B30309D}'))
+        Assert-True (-not $otherView.FindName('NewButton').IsEnabled) 'New was enabled for the virtual This PC location.'
         $otherSort = $otherView.GetType().GetField('_sorting', $viewFlags).GetValue($otherView)
         Assert-True (@($pairsProperty.GetValue($otherSort)).Count -eq 0) 'Sort history leaked into another ContentView.'
         $frame = [System.Windows.Threading.DispatcherFrame]::new()
@@ -1112,6 +1127,44 @@ try {
             if (@($backgroundEntries | Where-Object { $_.Position -eq ($parent.Position + '.0') -and $_.Text -ceq $parent.Text }).Count -gt 0) { $parent }
         })
         Assert-True ($newParent.Count -eq 1) 'The Shell New submenu could not be identified.'
+        Assert-True ($view.FindName('NewButton').IsEnabled -and -not $view.FindName('PropertiesButton').IsEnabled) 'Directory New or multi-selection Properties state was incorrect.'
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        try {
+            $view.FindName('NewButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            Assert-True ($menuProbe.ItemCount -gt 1) "The New button did not open a populated Shell New menu: $($menuProbe.Items -join ',')."
+        } finally { $menuProbe.Dispose() }
+        $existingFolders = [IO.Directory]::GetDirectories($directory)
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        $menuProbe.SelectIndex = 0
+        try {
+            $view.FindName('NewButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            $createdFolders = @([IO.Directory]::GetDirectories($directory) | Where-Object { $_ -notin $existingFolders })
+            Assert-True ($createdFolders.Count -eq 1) "The New menu did not create a folder in the current directory: $($menuProbe.Items -join ',')."
+        } finally {
+            $menuProbe.Dispose()
+            foreach ($createdFolder in @([IO.Directory]::GetDirectories($directory) | Where-Object { $_ -notin $existingFolders })) {
+                [IO.Directory]::Delete($createdFolder)
+            }
+        }
+        $list.SelectedItems.Clear()
+        Assert-True (-not $view.FindName('PropertiesButton').IsEnabled) 'Properties was enabled without a selection.'
+        $list.SelectedItem = $notesMenuRow
+        Assert-True $view.FindName('PropertiesButton').IsEnabled 'Properties was disabled for a loaded selected item.'
+        $propertiesProbe = [SutShellPropertiesProbe]::new('notes.txt')
+        try {
+            $view.FindName('PropertiesButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $deadline = [DateTime]::UtcNow.AddSeconds(5)
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(50)
+            $timer.add_Tick({ if ($propertiesProbe.Opened -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+            $timer.Start()
+            try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+            Assert-True $propertiesProbe.Opened 'The Properties button did not open the Windows properties dialog for the selected item.'
+        } finally { $propertiesProbe.Dispose() }
+        $list.SelectedItems.Clear()
+        $list.SelectedItems.Add($notesMenuRow) | Out-Null
+        $list.SelectedItems.Add($otherFileRow) | Out-Null
         $emptyCommands = [System.Collections.Generic.Dictionary[string, int]]::new()
         $backgroundInstance = $menuType.GetMethod('GetBackgroundContentMenu', $flags).Invoke($null, [object[]] @([string] $directory, $ownerHandle, $emptyCommands))
         $menuProbe = [SutShellMenuProbe]::new($ownerHandle)

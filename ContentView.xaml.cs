@@ -362,6 +362,15 @@ public partial class ContentView : UserControl
             var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
             switch (action)
             {
+                case "New":
+                    var point = NewButton.PointToScreen(new Point(0, NewButton.ActualHeight));
+                    SutShell.ShowNewMenu(CurrentPath, owner, (int)point.X, (int)point.Y);
+                    break;
+                case "Properties":
+                    if (selectedPaths.Count != 1)
+                        throw new InvalidOperationException("Select exactly one item before using Properties.");
+                    SutShell.ShowProperties(selectedPaths[0], owner);
+                    break;
                 case "Rename":
                     BeginRename();
                     break;
@@ -429,6 +438,8 @@ public partial class ContentView : UserControl
     {
         var selectedRows = FileList.SelectedItems.OfType<DirectoryRow>().ToArray();
         var hasSelection = selectedRows.Length > 0 && selectedRows.All(row => row.Entry is not null);
+        NewButton.IsEnabled = Directory.Exists(CurrentPath);
+        PropertiesButton.IsEnabled = hasSelection && selectedRows.Length == 1;
         RenameButton.IsEnabled = hasSelection && selectedRows.Length == 1 &&
                      SutShell.GetEditName(selectedRows[0].FullPath) is not null;
         PathGetButton.IsEnabled = hasSelection && FileList.SelectedItems.Count == 1;

@@ -220,7 +220,7 @@ internal static class SutContextMenuFactory
     private static bool IsRenameCommand(IContextMenu contextMenu, uint commandOffset)
         => string.Equals(GetCommandVerb(contextMenu, commandOffset), "rename", StringComparison.OrdinalIgnoreCase);
 
-    private static string? GetCommandVerb(IContextMenu contextMenu, uint commandOffset)
+    internal static string? GetCommandVerb(IContextMenu contextMenu, uint commandOffset)
     {
         var buffer = Marshal.AllocHGlobal(256 * sizeof(char));
         try
@@ -666,6 +666,21 @@ internal static class SutContextMenuFactory
         var label = new StringBuilder(512);
         return GetMenuString(menu, (uint)index, label, label.Capacity, MenuByPosition) > 0 &&
             labels.Contains(label.ToString().Replace("&", "", StringComparison.Ordinal));
+    }
+
+    internal static IntPtr FindBackgroundNewSubmenu(IntPtr menu)
+    {
+        var result = IntPtr.Zero;
+        for (var index = 0; index < GetMenuItemCount(menu); index++)
+        {
+            var submenu = GetSubMenu(menu, index);
+            if (submenu == IntPtr.Zero || !HasShellMenuLabel(menu, index, BackgroundNewLabels.Value))
+                continue;
+            if (result != IntPtr.Zero)
+                throw new InvalidOperationException("The Shell provided more than one New menu.");
+            result = submenu;
+        }
+        return result != IntPtr.Zero ? result : throw new InvalidOperationException("The Shell did not provide a New menu.");
     }
 
     private static bool ContainsBackgroundViewCommand(IntPtr menu, IContextMenu contextMenu)

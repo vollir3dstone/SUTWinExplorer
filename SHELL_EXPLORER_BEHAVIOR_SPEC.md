@@ -255,11 +255,11 @@ may show its requested row in light gray without changing the active selection.
 ### Content listing
 
 - [x] The content view displays the active directory's files.
-- [x] The content pane separates its filter row, action row, and Shell view
+- [x] The content pane separates its filter row, directory and selection action rows, and Shell view
   with 8-DIP Grid spacer rows.
 - [x] The hosted Shell content view has a very light gray frame matching the
   fixed **Sub directories** list frame. Its left edge aligns with the **VIEW:**
-  and **FOR SELECTED:** badges above it.
+  **FOR DIRECTORY:** and **FOR SELECTED:** badges above it.
 - [x] **Hide directories** controls whether directories appear in the content
   view. It defaults to on; unchecking it displays directories, and changing it
   updates the view without navigating.
