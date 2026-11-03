@@ -1168,11 +1168,29 @@ try {
         $propertiesButton = $view.FindName('PropertiesButton')
         $newPosition = $newButton.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
         $propertiesPosition = $propertiesButton.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
-        Assert-True ($newButton.IsEnabled -and -not $propertiesButton.IsEnabled -and $newPosition.Y -lt $propertiesPosition.Y) 'The directory and selection action rows or their initial states were incorrect.'
-        foreach ($buttonName in @('CopyAbortButton', 'CopyPasteButton', 'MoveAbortButton', 'MovePasteButton')) {
-            $position = $view.FindName($buttonName).TranslatePoint([System.Windows.Point]::new(0, 0), $view)
-            Assert-True ([Math]::Abs($position.Y - $newPosition.Y) -lt 1) "$buttonName was not in the directory row."
+        $listPosition = $list.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+        $badge = $view.FindName('DirectoryBadge')
+        $badgePosition = $badge.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+        Assert-True ($newButton.IsEnabled -and -not $propertiesButton.IsEnabled -and
+            $newPosition.X + $newButton.ActualWidth -le $listPosition.X -and $propertiesPosition.Y -lt $listPosition.Y -and
+            $badge.Child.Text -eq 'DIRECTORY') 'The directory column, selection row or initial button states were incorrect.'
+        foreach ($buttonName in @('NewButton', 'CopyAbortButton', 'CopyPasteButton', 'MoveAbortButton', 'MovePasteButton')) {
+            $button = $view.FindName($buttonName)
+            Assert-True ([Math]::Abs($button.ActualWidth - $badge.ActualWidth) -lt 1) "$buttonName did not match the directory badge width."
         }
+        $previousBottom = $badgePosition.Y + $badge.ActualHeight
+        $gaps = @()
+        foreach ($group in @(@('NewButton'), @('CopyAbortButton', 'CopyPasteButton'), @('MoveAbortButton', 'MovePasteButton'))) {
+            $first = $view.FindName($group[0])
+            $last = $view.FindName($group[-1])
+            $firstPosition = $first.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+            $lastPosition = $last.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+            $gaps += $firstPosition.Y - $previousBottom
+            Assert-True ($firstPosition.X + $first.ActualWidth -le $listPosition.X -and $lastPosition.Y -ge $firstPosition.Y) 'Directory actions were not arranged vertically beside the table.'
+            $previousBottom = $lastPosition.Y + $last.ActualHeight
+        }
+        $gaps += $listPosition.Y + $list.ActualHeight - $previousBottom
+        Assert-True (($gaps | Measure-Object -Maximum).Maximum - ($gaps | Measure-Object -Minimum).Minimum -lt 1) 'Directory action groups were not evenly spaced.'
         foreach ($buttonName in @('RenameButton', 'PathGetButton', 'CopyGetButton', 'MoveGetButton', 'DeleteButton')) {
             $position = $view.FindName($buttonName).TranslatePoint([System.Windows.Point]::new(0, 0), $view)
             Assert-True ([Math]::Abs($position.Y - $propertiesPosition.Y) -lt 1 -and $position.X -gt $propertiesPosition.X) "$buttonName was not after Properties in the selection row."

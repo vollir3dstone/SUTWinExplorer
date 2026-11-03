@@ -235,7 +235,7 @@ repopulated from the retained Shell view.
 The **VIEW** row controls the content's **Hide directories**, **Hide internal**,
 and **Name pattern** filters. These settings are local to the Pathview; the
 content **Hide internal** setting is independent of the tree filters. The
-**FOR DIRECTORY** row offers New and Copy/Move abort and paste. New opens a
+**DIRECTORY** column to the left of the table offers New and Copy/Move abort and paste. New opens a
 dialog to choose a type and name before creating the item in the current
 filesystem directory. It is disabled for virtual or unavailable locations.
 The background Content Menu opens the same dialog. The **FOR SELECTED** row offers
