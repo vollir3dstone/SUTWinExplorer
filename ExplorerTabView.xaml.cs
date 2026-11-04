@@ -199,6 +199,9 @@ public partial class Pathview : UserControl
         bool? hideInternalContentItems = null) =>
         Navigate(path, NavigationHistoryAction.Normal, hideSiblings, hideInternalDirectories, hideInternalContentItems);
 
+    internal void CopyContentViewSettingsFrom(Pathview source) =>
+        DirectoryContent.CopyViewSettingsFrom(source.DirectoryContent);
+
     internal string? BackHistoryPath => _backHistory.TryPeek(out var path) ? path : null;
     internal string? ForwardHistoryPath => _forwardHistory.TryPeek(out var path) ? path : null;
 

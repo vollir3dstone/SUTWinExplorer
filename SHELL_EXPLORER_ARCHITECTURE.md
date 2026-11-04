@@ -278,6 +278,11 @@ leading ellipsis prefix is omitted.
   has different null semantics: `null` is treated as `true`. If true, an exact
   matching open fixed Pathview is selected when available; if false, the path
   is always navigated in the browsable Pathview.
+  Fixed Pathview activations also supply their source Pathview. After successful
+  navigation to BROWSE, its ContentView copies the source's **Hide directories**,
+  **Hide internal**, **Name pattern**, and complete sort widget order and
+  directions, then refreshes. The copy is not performed when an existing fixed
+  tab is selected, or for navigation without a source Pathview.
 
   | Caller | `hideSiblings` | `hideInternalDirectories` | `hideInternalContentItems` | `preferFixedView` |
   | --- | --- | --- | --- | --- |

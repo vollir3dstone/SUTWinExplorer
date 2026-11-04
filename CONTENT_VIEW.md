@@ -318,7 +318,13 @@ repopulated from the retained Shell view.
 The **VIEW** and **FOR SELECTED** rows are above the table; the area above the
 DIRECTORY column is empty. The **VIEW** row controls the content's **Hide directories**, **Hide internal**,
 and **Name pattern** filters. These settings are local to the Pathview; the
-content **Hide internal** setting is independent of the tree filters. The
+content **Hide internal** setting is independent of the tree filters. When a
+fixed Pathview navigates to BROWSE, all three content filters and the complete
+sort order, including priorities and directions, are copied to BROWSE. Later
+changes remain local to each Pathview. **Reset** at the end of the **VIEW** row
+restores both hide filters to on, clears the name pattern, and restores the
+initial sort order and ascending directions. The table refreshes once after all
+settings are applied; tree filters and other Pathviews are unchanged. The
 **DIRECTORY** column to the left of the table offers New, Item clipboard paste and Link/Copy/Move abort and execute. New opens a
 dialog to choose a type and name before creating the item in the current
 filesystem directory. It is disabled for virtual or unavailable locations.

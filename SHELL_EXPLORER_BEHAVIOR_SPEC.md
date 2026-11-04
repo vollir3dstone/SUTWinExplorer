@@ -27,6 +27,8 @@ the directory-tree pane, content pane, status display, active location, and
 temporary view settings scoped to that tab. Each tab retains its own Pathview
 state when the user switches tabs. For example, **Hide directories** is
 tab-scoped; sort history is also tab-scoped and remains in effect on navigation.
+Navigating from a fixed Pathview to BROWSE copies its view settings as described
+below; subsequently changing either tab does not change the other.
 A Pathview is either browsable or non-browsable; that role is assigned
 when it is created and cannot be changed by the user.
 
@@ -236,11 +238,13 @@ can be prepared at a time, but clipboard actions remain independent of it:
   available. These directory activations set the browsable Pathview's **Hide
   siblings** to on, its directory-tree **Hide internal** to the fixed
   Pathview's **Sub directories** **Hide internal** value, and its content-item
-  **Hide internal** to the fixed Pathview's content **Hide internal** value.
+  **Hide internal**, **Hide directories**, **Name pattern**, and complete sort
+  order (all priorities and directions) to the fixed Pathview's content values.
   Activations prefer an already-open fixed Pathview at the destination before
-  navigating the browsable Pathview. The **Browse** button uses the same
-  activation and filter metadata but always navigates the browsable Pathview.
-  Other navigation, including history, does not supply these filter values.
+  navigating the browsable Pathview; selecting an existing fixed tab does not
+  overwrite its settings. The **Browse** button always navigates the browsable
+  Pathview and copies the same settings. Other navigation, including history,
+  leaves these settings unchanged.
 - [x] Navigation in the browsable Pathview updates the address, custom
   directory tree, and its own content view; the tab title remains **BROWSE**.
 
@@ -372,6 +376,11 @@ may show its requested row in light gray without changing the active selection.
   zero or more characters, and `.` is literal. Matching is case-insensitive
   and updates the content view as the pattern is edited. If Shell cannot
   provide a display name, matching falls back to the filesystem leaf name.
+- [x] **Reset** at the end of the **VIEW** row restores the content defaults:
+  **Hide directories** and **Hide internal** on, an empty **Name pattern**,
+  and sort order Name, MT, TA1, TA2, Date, Size, MO, all ascending. It refreshes
+  the content once after applying the settings and does not change tree filters
+  or other Pathviews.
 - [x] Directory junctions and other directory reparse points follow the same
   visibility rule as ordinary directories when the Shell classifies them as
   folders.

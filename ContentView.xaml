@@ -70,6 +70,13 @@
                                                    Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
                                                    Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}" />
                         </InlineUIContainer>
+                        <InlineUIContainer BaselineAlignment="Baseline">
+                            <Button x:Name="ResetViewButton" Style="{StaticResource ContentPaneButtonStyle}"
+                                    Margin="16,0,0,0" ToolTip="Reset content filters and sort order"
+                                    Click="ResetViewButton_Click">
+                                <TextBlock x:Name="ResetViewLabel" Text="Reset" />
+                            </Button>
+                        </InlineUIContainer>
                     </TextBlock>
                     </ScrollViewer>
                 </Grid>

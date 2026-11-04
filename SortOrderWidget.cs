@@ -52,15 +52,28 @@ public sealed class SortOrderWidget : Border
 
     public IReadOnlyList<SortOrderItem> Items => _items.ToArray();
 
+    internal void SetItems(IReadOnlyList<SortOrderItem> items)
+    {
+        var copy = items.ToArray();
+        if (copy.Length != _names.Length ||
+            copy.Any(item => item.Index < 0 || item.Index >= _names.Length || !Enum.IsDefined(item.Direction)) ||
+            copy.Select(item => item.Index).Distinct().Count() != copy.Length)
+            throw new ArgumentException("Sort items must contain each configured index exactly once.", nameof(items));
+        _items.Clear();
+        _items.AddRange(copy);
+        NotifyChanged();
+    }
+
     public void Configure(IReadOnlyList<string> names)
     {
         ArgumentNullException.ThrowIfNull(names);
         var copy = names.Select(name => name ?? throw new ArgumentException("Names cannot contain null.", nameof(names))).ToArray();
         _names = copy;
-        _items.Clear();
-        _items.AddRange(Enumerable.Range(0, copy.Length).Select(index => new SortOrderItem(index, SortOrderDirection.Ascending)));
-        NotifyChanged();
+        Reset();
     }
+
+    internal void Reset() => SetItems(Enumerable.Range(0, _names.Length)
+        .Select(index => new SortOrderItem(index, SortOrderDirection.Ascending)).ToArray());
 
     public void Select(int index)
     {

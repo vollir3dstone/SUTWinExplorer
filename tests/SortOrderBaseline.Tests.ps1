@@ -58,6 +58,18 @@ function Assert-Baselines($view) {
     }
     if ($null -eq $parent) { throw 'The sort editor is not in the VIEW text line.' }
     $lineBaseline = $parent.TranslatePoint([System.Windows.Point]::new(0, $parent.BaselineOffset), $view).Y
+    $resetLabel = $view.FindName('ResetViewLabel')
+    $resetBaseline = $resetLabel.TranslatePoint([System.Windows.Point]::new(0, $resetLabel.BaselineOffset), $view).Y
+    if ([Math]::Abs($resetBaseline - $lineBaseline) -gt 0.5) {
+        throw "Reset text baseline $resetBaseline differs from the surrounding text baseline $lineBaseline."
+    }
+    foreach ($name in @('HideDirectoriesCheckBox', 'HideInternalContentCheckBox')) {
+        $checkbox = $view.FindName($name)
+        $baseline = $checkbox.TranslatePoint([System.Windows.Point]::new(0, $checkbox.BaselineOffset), $view).Y
+        if ([Math]::Abs($baseline - $lineBaseline) -gt 0.5) {
+            throw "$name baseline $baseline differs from the surrounding text baseline $lineBaseline."
+        }
+    }
     $headerContent = $view.FindName('FileList').View.Columns[3].Header.Content
     $headerLabel = $headerContent.Children[0]
     $headerArrow = $headerContent.Children[1]

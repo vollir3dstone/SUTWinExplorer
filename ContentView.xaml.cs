@@ -61,6 +61,7 @@ public partial class ContentView : UserControl
     public ContentView()
     {
         InitializeComponent();
+        ResetViewButton.LayoutUpdated += ResetViewButton_LayoutUpdated;
         SortOrderEditor.Configure(["Name", "MT", "TA1", "TA2", "Date", "Size", "MO"]);
         _sorting.Update(GetWidgetSortPairs());
         SortOrderEditor.Changed += SortOrderChanged;
@@ -181,6 +182,23 @@ public partial class ContentView : UserControl
     {
         get => HideInternalContentCheckBox.GetCheckBox().IsChecked;
         set => HideInternalContentCheckBox.GetCheckBox().IsChecked = value;
+    }
+
+    internal void CopyViewSettingsFrom(ContentView source)
+    {
+        _suppressFilterRefresh = true;
+        try
+        {
+            HideDirectoriesCheckBox.GetCheckBox().IsChecked = source.HideDirectoriesCheckBox.GetCheckBox().IsChecked;
+            HideInternalContentCheckBox.GetCheckBox().IsChecked = source.HideInternalContentCheckBox.GetCheckBox().IsChecked;
+            NamePatternTextBox.Text = source.NamePatternTextBox.Text;
+            SortOrderEditor.SetItems(source.SortOrderEditor.Items);
+        }
+        finally
+        {
+            _suppressFilterRefresh = false;
+        }
+        RefreshCore(invalidate: false);
     }
 
     private string CurrentPath { get; set; } = string.Empty;
@@ -462,6 +480,34 @@ public partial class ContentView : UserControl
         if (!_suppressFilterRefresh) RefreshCore(invalidate: false);
     }
 
+    private void ResetViewButton_LayoutUpdated(object? sender, EventArgs e)
+    {
+        if (!ResetViewButton.IsArrangeValid || !ResetViewLabel.IsArrangeValid)
+            return;
+        var baseline = ResetViewLabel.TransformToAncestor(ResetViewButton)
+            .Transform(new Point(0, ResetViewLabel.BaselineOffset)).Y;
+        var current = TextBlock.GetBaselineOffset(ResetViewButton);
+        if (!double.IsFinite(current) || Math.Abs(current - baseline) > 0.01)
+            TextBlock.SetBaselineOffset(ResetViewButton, baseline);
+    }
+
+    private void ResetViewButton_Click(object sender, RoutedEventArgs e)
+    {
+        _suppressFilterRefresh = true;
+        try
+        {
+            HideDirectoriesCheckBox.GetCheckBox().IsChecked = true;
+            HideInternalContentCheckBox.GetCheckBox().IsChecked = true;
+            NamePatternTextBox.Clear();
+            SortOrderEditor.Reset();
+        }
+        finally
+        {
+            _suppressFilterRefresh = false;
+        }
+        RefreshCore(invalidate: false);
+    }
+
     private void FileList_ColumnHeaderClick(object sender, RoutedEventArgs e)
     {
         if (e.OriginalSource is not GridViewColumnHeader { Tag: string tag } ||
@@ -480,7 +526,7 @@ public partial class ContentView : UserControl
     {
         _sorting.Update(GetWidgetSortPairs());
         UpdateSortDisplay();
-        RefreshCore(invalidate: false);
+        if (!_suppressFilterRefresh) RefreshCore(invalidate: false);
     }
 
     private void UpdateSortDisplay()

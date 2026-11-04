@@ -563,7 +563,8 @@ public partial class MainWindow : Window
             hideSiblings,
             hideInternalDirectories,
             hideInternalContentItems,
-            preferFixedView);
+            preferFixedView,
+            source);
     }
 
     /// <summary>Navigates to a path and records the activation in shared history.</summary>
@@ -577,7 +578,8 @@ public partial class MainWindow : Window
         bool? hideSiblings = null,
         bool? hideInternalDirectories = null,
         bool? hideInternalContentItems = null,
-        bool? preferFixedView = null)
+        bool? preferFixedView = null,
+        Pathview? settingsSource = null)
     {
         if (string.IsNullOrWhiteSpace(path) || _browsablePathview is null || _browsableTab is null)
             return;
@@ -586,11 +588,12 @@ public partial class MainWindow : Window
         {
             var selectedFixedView = DisplayPathHistoryAgnostic(
                 path,
-                view => view.Navigate(
-                    path,
-                    hideSiblings,
-                    hideInternalDirectories,
-                    hideInternalContentItems),
+                view =>
+                {
+                    view.Navigate(path, hideSiblings, hideInternalDirectories, hideInternalContentItems);
+                    if (settingsSource is not null)
+                        view.CopyContentViewSettingsFrom(settingsSource);
+                },
                 preferFixedView);
             if (selectedFixedView is not null)
                 _browsablePathview.RecordVisitedLocation(path);
