@@ -207,7 +207,7 @@ try {
         $fileTarget = [string] (Join-Path $destination 'target-file.txt')
         [IO.File]::WriteAllText($fileTarget, 'target')
         $null = $viewType.GetMethod('RevealInsertedItems', $flags).Invoke($views[1], [object[]] @(,[string[]] @($folderTarget, $fileTarget)))
-        $rowPath = $assembly.GetType('SUTWinExplorer.DirectoryRow', $true).GetProperty('FullPath', $flags)
+        $rowPath = $assembly.GetType('SUTWinExplorer.DirectoryRow', $true).GetProperty('FullPath')
         function Get-TargetPoint([string] $path) {
             Wait-Until { @($targetList.Items | Where-Object { $rowPath.GetValue($_) -eq $path }).Count -eq 1 } "target row $path"
             $row = @($targetList.Items | Where-Object { $rowPath.GetValue($_) -eq $path })[0]

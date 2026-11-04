@@ -36,6 +36,10 @@ complete row data is available. The DIRECTORY column shows unfiltered directory
 and file counts beneath its badge; `-` indicates that a snapshot is being prepared.
 The counts include items hidden by any ContentView filter and do not depend on
 how many rows have loaded. At This PC, drive roots count as directories.
+After a brief hover, a table row shows its full name below the row, aligned with
+the name column. The tooltip can use the remaining visible table width before
+long names wrap without truncation. A filename is available while row details
+are still loading.
 
 The fixed-width columns retain their widths; Name and TA2 share the remaining
 table viewport. The divider after Name is draggable and changing one width

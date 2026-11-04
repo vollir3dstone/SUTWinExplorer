@@ -217,7 +217,15 @@
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="ListViewItem">
-                                    <Grid Background="Transparent">
+                                                                        <Grid Background="Transparent" ToolTipService.InitialShowDelay="500"
+                                                                                    ToolTipService.ShowDuration="30000" ToolTipOpening="RowToolTip_Opening"
+                                                                                    SizeChanged="RowToolTip_SizeChanged">
+                                        <Grid.ToolTip>
+                                                                                        <ToolTip Placement="Bottom">
+                                                                                                <TextBlock Text="{Binding PlacementTarget.DataContext.DisplayName, RelativeSource={RelativeSource AncestorType={x:Type ToolTip}}}"
+                                                           TextWrapping="Wrap" />
+                                            </ToolTip>
+                                        </Grid.ToolTip>
                                         <Border x:Name="RowBackground" IsHitTestVisible="False" />
                                         <GridViewRowPresenter Content="{TemplateBinding Content}"
                                                               Columns="{TemplateBinding GridView.ColumnCollection}"

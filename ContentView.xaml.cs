@@ -656,6 +656,40 @@ public partial class ContentView : UserControl
         UpdateColumnWidths();
     }
 
+    private void RowToolTip_Opening(object sender, ToolTipEventArgs e)
+    {
+        if (sender is not Grid { ToolTip: ToolTip tooltip } row ||
+            FindVisualChild<GridViewRowPresenter>(row) is not { } presenter ||
+            FileList.View is not GridView gridView)
+            return;
+
+        var index = gridView.Columns.IndexOf(NameColumn);
+        if (index < 0 || index >= VisualTreeHelper.GetChildrenCount(presenter) ||
+            FindVisualChild<TextBlock>(VisualTreeHelper.GetChild(presenter, index)) is not { } name)
+            return;
+
+        ToolTipService.SetPlacementTarget(row, name);
+        UpdateRowToolTipPlacement(row, tooltip);
+    }
+
+    private void RowToolTip_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (sender is Grid { ToolTip: ToolTip { IsOpen: true } tooltip } row)
+            UpdateRowToolTipPlacement(row, tooltip);
+    }
+
+    private static void UpdateRowToolTipPlacement(Grid row, ToolTip tooltip)
+    {
+        if (ToolTipService.GetPlacementTarget(row) is not FrameworkElement name ||
+            FindAncestor<ScrollContentPresenter>(row) is not { } viewport)
+            return;
+
+        var nameInViewport = name.TranslatePoint(new Point(), viewport);
+        var nameInRow = name.TranslatePoint(new Point(), row);
+        tooltip.MaxWidth = Math.Max(1, viewport.ActualWidth - nameInViewport.X);
+        tooltip.VerticalOffset = row.ActualHeight - nameInRow.Y - name.ActualHeight;
+    }
+
     private void UpdateColumnWidths()
     {
         if (_updatingColumnWidths || FileList.View is not GridView gridView)
@@ -977,7 +1011,8 @@ internal sealed class DirectoryRow : INotifyPropertyChanged
 {
     public DirectoryRow() : this(string.Empty) { }
     internal DirectoryRow(string fullPath) => FullPath = fullPath;
-    internal string FullPath { get; }
+    public string FullPath { get; }
+    public string DisplayName => Entry?.Name ?? Path.GetFileName(FullPath);
     private FileEntry? _entry;
     private bool _isEditing;
     private string _editName = string.Empty;
@@ -988,6 +1023,7 @@ internal sealed class DirectoryRow : INotifyPropertyChanged
         {
             _entry = value;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Entry)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DisplayName)));
         }
     }
     internal bool Failed { get; set; }
