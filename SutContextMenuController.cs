@@ -21,6 +21,8 @@ internal sealed class SutContextMenuController<T> where T : class
     private bool _baseIsBackground;
     private bool _skipNextMenu;
     private int _selectionVersion;
+    private int _mouseMovementVersion;
+    private MenuSequenceMouseMonitor? _mouseMonitor;
 
     internal SutContextMenuController(Func<T, string> path, Func<IReadOnlyList<string>> selection,
         Func<int, int, (T? Target, bool Background)> hitTest, Action<T?> select,
@@ -50,15 +52,26 @@ internal sealed class SutContextMenuController<T> where T : class
         _selectionVersion++;
     }
 
-    private void ClearSequence()
+    private void ClearSequence(bool stopMonitoring = true)
     {
         _baseCommands = null;
         _basePath = null;
         _baseIsBackground = false;
         _skipNextMenu = false;
+        if (stopMonitoring)
+        {
+            _mouseMonitor?.Dispose();
+            _mouseMonitor = null;
+        }
     }
 
     internal void Show(T? target, IntPtr owner, bool alternate)
+    {
+        try { ShowCore(target, owner, alternate); }
+        catch { Reset(); throw; }
+    }
+
+    private void ShowCore(T? target, IntPtr owner, bool alternate)
     {
         var forceNative = false;
         while (true)
@@ -85,10 +98,13 @@ internal sealed class SutContextMenuController<T> where T : class
             if (alternate && _baseCommands is { } baseCommands && _baseIsBackground == background &&
                 string.Equals(_basePath, targetPath, StringComparison.OrdinalIgnoreCase))
             {
-                ClearSequence();
+                ClearSequence(stopMonitoring: false);
                 var selectionVersion = _selectionVersion;
+                var mouseVersion = _mouseMovementVersion;
                 var repeat = false;
                 var shift = false;
+                T? newTarget = null;
+                var newBackground = false;
                 var newAction = background ? new ShellMenuAction("New", "New…", true, () => _showNew(targetPath)) : null;
                 using var contentMenu = SutContextMenuFactory.GetContentMenuForContext(selectedPaths, owner, baseCommands, background, newAction,
                     background ? null : _openLocation?.Invoke(selectedPaths));
@@ -97,6 +113,14 @@ internal sealed class SutContextMenuController<T> where T : class
                     if (!overOwner)
                         return false;
                     var hit = _hitTest(screenX, screenY);
+                    if (mouseVersion != _mouseMovementVersion && (hit.Target is not null || hit.Background))
+                    {
+                        newTarget = hit.Target;
+                        newBackground = hit.Background;
+                        repeat = true;
+                        shift = shiftPressed;
+                        return true;
+                    }
                     if (background ? hit.Target is not null || !hit.Background : hit.Target is not { } clicked ||
                         !string.Equals(_path(clicked), targetPath, StringComparison.OrdinalIgnoreCase))
                         return false;
@@ -104,6 +128,19 @@ internal sealed class SutContextMenuController<T> where T : class
                     shift = shiftPressed;
                     return true;
                 });
+                if (contentMenu.CommandInvoked)
+                {
+                    Reset();
+                    return;
+                }
+                if (repeat && mouseVersion != _mouseMovementVersion && (newTarget is not null || newBackground))
+                {
+                    if (background != newBackground || (newTarget is not null && !string.Equals(_path(newTarget), targetPath, StringComparison.OrdinalIgnoreCase)))
+                        _select(newTarget);
+                    target = newTarget;
+                    forceNative = shift;
+                    continue;
+                }
                 if (repeat && selectionVersion == _selectionVersion)
                 {
                     if (shift)
@@ -111,6 +148,7 @@ internal sealed class SutContextMenuController<T> where T : class
                         forceNative = true;
                         continue;
                     }
+                    ClearSequence();
                     return;
                 }
                 IReadOnlyList<string> selectionAfterContent = background ? [_backgroundPath()] : _selection();
@@ -121,15 +159,19 @@ internal sealed class SutContextMenuController<T> where T : class
                     _baseIsBackground = background;
                     _skipNextMenu = true;
                 }
+                else ClearSequence();
                 return;
             }
 
             ClearSequence();
             var version = _selectionVersion;
+            var mouseVersionAtBase = _mouseMovementVersion;
             T? clickedTarget = null;
             var clickedBackground = false;
             var clickedElsewhere = false;
             var clickedWithShift = false;
+            if (alternate)
+                _mouseMonitor = MenuSequenceMouseMonitor.Start(() => { _mouseMovementVersion++; Reset(); });
             using var baseMenu = SutContextMenuFactory.GetBaseMenuForContext(selectedPaths, owner,
                 background ? _backgroundActions() : _actions(target!), background);
             var shownCommands = baseMenu.Show(
@@ -154,11 +196,27 @@ internal sealed class SutContextMenuController<T> where T : class
                     clickedElsewhere = true;
                     return false;
                 } : null)!;
+            if (baseMenu.CommandInvoked)
+            {
+                Reset();
+                return;
+            }
+            if (mouseVersionAtBase != _mouseMovementVersion && (clickedTarget is not null || clickedBackground))
+            {
+                if (background != clickedBackground || (clickedTarget is not null && !string.Equals(_path(clickedTarget), targetPath, StringComparison.OrdinalIgnoreCase)))
+                    _select(clickedTarget);
+                target = clickedTarget;
+                forceNative = clickedWithShift;
+                continue;
+            }
             IReadOnlyList<string> currentSelection = background ? [_backgroundPath()] : _selection();
             if (!alternate || clickedElsewhere || version != _selectionVersion ||
                 selectedPaths.Count != currentSelection.Count ||
                 !selectedPaths.All(path => currentSelection.Contains(path, StringComparer.OrdinalIgnoreCase)))
+            {
+                ClearSequence();
                 return;
+            }
 
             _baseCommands = shownCommands;
             _basePath = targetPath;

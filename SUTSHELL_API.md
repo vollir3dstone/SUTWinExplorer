@@ -37,8 +37,12 @@ Each returns a disposable `SutContextMenu`; its `Show(secondRightClick)` display
 the popup and, for the Base Menu, returns a snapshot after the popup closes.
 The optional callback receives subsequent right-click coordinates, owner-window
 hit state and Shift state. The snapshot can outlive its menu and is used to
-create the Content Menu. The [file context menu specification](CONTEXT_MENU_SPEC.md)
-defines the sequence, filtering, comparison rules and Shell integration limitations.
+create the Content Menu. `CommandInvoked` records whether a command was selected
+before it is invoked, allowing the controller to discard the sequence after
+`Show` returns. The controller also monitors pointer movement for mouse-driven
+sequences; leaving the system double-click area invalidates the sequence without
+closing an open popup. The [file context menu specification](CONTEXT_MENU_SPEC.md)
+defines the sequence, hook lifetime, filtering, comparison rules and Shell integration limitations.
 
 The snapshot fixes item identities and ordering, not filesystem contents: items
 can change or disappear before their range is loaded. A refresh creates a new

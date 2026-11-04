@@ -16,6 +16,7 @@ internal sealed class SutContextMenu : IDisposable
     private readonly bool _allowRightButton;
     private readonly Action _release;
     private bool _disposed;
+    internal bool CommandInvoked { get; private set; }
 
     internal SutContextMenu(IntPtr owner, IntPtr menu, IContextMenu contextMenu,
         IReadOnlyList<ShellMenuAction>? actions, Action? rename, Func<uint, bool> isRename,
@@ -132,7 +133,10 @@ internal sealed class SutContextMenu : IDisposable
             var snapshot = _captureSnapshot?.Invoke();
             _ = PostMessage(_owner, 0, IntPtr.Zero, IntPtr.Zero);
             if (commandId != 0)
+            {
+                CommandInvoked = true;
                 ExecuteCommand(commandId);
+            }
             return snapshot;
         }
         finally

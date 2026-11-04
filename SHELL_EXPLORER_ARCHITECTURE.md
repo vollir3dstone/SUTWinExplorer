@@ -585,6 +585,14 @@ clipboard context-menu verbs, and drag/drop. The app still uses
 trees. That helper queries native Shell context menus and forwards required
 `IContextMenu2`/`IContextMenu3` menu messages.
 
+The custom ContentView and participating sidebar widgets use the paired menus
+described in [CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md). Their controller
+temporarily monitors mouse movement during a menu sequence: leaving the system
+double-click area or executing a command resets it, without closing an open
+popup on movement. The next normal right-click starts a new Base Menu; native
+fallback and keyboard-invoked menus do not start this sequence. The monitor is
+released on reset or view unload.
+
 For tree and **Sub directories** items, the helper requests `CMF_CANRENAME` and
 dispatches the Shell's rename command to a WPF inline editor; committing calls
 the parent Shell folder's `SetNameOf`. Open Pathviews remap affected locations

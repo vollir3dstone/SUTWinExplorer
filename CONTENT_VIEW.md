@@ -184,6 +184,11 @@ and no menu, then restart with the Base Menu. This includes clicks while either
 menu is open and the pointer stays at the opening position. A
 right-click on another row while the Base Menu is open ends the series,
 selects only that row and starts its applicable menu; changing the selection
+also resets the series. Moving the pointer outside the Windows double-click
+area around the opening point resets the series, even if the pointer returns.
+An open menu remains visible; the next normal right-click on any item or the
+background starts with the Base Menu. This also applies after a menu closes
+while the Content Menu or no-menu step is pending. Executing a menu command
 also resets the series. Shift-right-click opens the Windows menu, including on
 the same row while either menu is open. For `.lnk` selections its Shell Open file
 location command is replaced by the application action **Open parent**, as in the Content Menu.

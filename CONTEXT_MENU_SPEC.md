@@ -105,6 +105,20 @@ when needed. It never transfers native
 handles or command IDs between menu instances. Native Shell view commands and
 item renaming are handled separately from the factory.
 
+For a mouse-driven series, `MenuSequenceMouseMonitor` installs a temporary
+Windows low-level mouse hook at the Base Menu's opening cursor position. It
+compares movement with half of each system double-click dimension; exceeding
+either bound invalidates the series immediately, without consuming the event or
+closing a popup. The hook remains active across the Content Menu and pending
+no-menu step, and is removed on invalidation, reset, command completion, native
+fallback, or view unload. Only one monitor is active at a time; starting another
+invalidates the previous series. The controller tracks movement separately from
+selection changes so a right-click received by an open popup after movement
+starts a fresh series at the hit-tested item or background. `SutContextMenu`
+records whether a command was selected before invoking it; the controller
+resets the series after the popup returns. Failures also reset the controller.
+Keyboard-invoked and native fallback menus do not start a mouse-driven series.
+
 ## Selection and Menu Sequence
 
 ContentView uses the following selection rules:
@@ -125,6 +139,11 @@ ContentView uses the following selection rules:
   pending no-menu step, and its command snapshot. While the Base Menu popup is
   open, a selection change also prevents using a stale snapshot to open a
   Content Menu.
+- Moving the pointer outside the system double-click rectangle around the
+  opening point resets the sequence, even if it later returns to that area.
+  The current popup stays open; the next right-click on an item or background
+  starts a new Base Menu. This also applies while either popup is open or the
+  no-menu step is pending. Executing a menu command resets the sequence as well.
 - A right-click on the list background clears the selection and starts or
   advances its own Base/Content/no-menu series for the current directory.
   Switching between an item and the background starts a new series. List chrome
@@ -592,6 +611,12 @@ It includes native popup and mouse-input probes in WPF windows;
 these tests display windows and move the pointer. Manual verification in the
 actual application remains useful for installed extensions, Windows versions and
 interaction timings not represented by the test environment.
+
+[ItemClipboardActions.Tests.ps1](tests/ItemClipboardActions.Tests.ps1) also
+checks movement-triggered sequence resets with both popups open and closed,
+menu command execution, a fresh Base Menu after a right-click on the same item,
+another item or the background, and ContentView unload.
+Its native popup tests temporarily display a test window and move the pointer.
 
 ## Follow-up
 

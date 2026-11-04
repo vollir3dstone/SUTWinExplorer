@@ -25,6 +25,92 @@ public static class ItemMenuProbe
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern bool GetMenuItemInfo(IntPtr menu, uint item, bool byPosition, ref MenuItemInfo info);
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] public static extern int GetObject(IntPtr handle, int size, out BitmapInfo info);
 }
+public sealed class SequenceMenuProbe : IDisposable
+{
+    private delegate bool EnumWindowProc(IntPtr window, IntPtr parameter);
+    [StructLayout(LayoutKind.Sequential)] public struct Point { public int X, Y; }
+    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] private static extern bool EnumThreadWindows(uint thread, EnumWindowProc callback, IntPtr parameter);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr window, System.Text.StringBuilder text, int length);
+    [DllImport("user32.dll")] private static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr wparam, IntPtr lparam);
+    [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr window, uint message, IntPtr wparam, IntPtr lparam);
+    [DllImport("user32.dll")] private static extern uint GetMenuItemID(IntPtr menu, int index);
+    [DllImport("user32.dll")] public static extern bool GetCursorPos(out Point point);
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
+    [DllImport("user32.dll")] public static extern void mouse_event(uint flags, int dx, int dy, uint data, UIntPtr extra);
+    [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(Point point);
+    private readonly uint thread = GetCurrentThreadId();
+    private readonly IntPtr owner;
+    private readonly string mode;
+    private readonly Point origin;
+    private readonly System.Threading.Timer timer;
+    private int phase, busy, ticks;
+    public bool Seen, IsBase, SecondSeen, SecondIsBase;
+    public string ClickWindow;
+    public static Func<int, int, (T, bool)> Target<T>(T target) => (x, y) => (target, false);
+    public static Func<int, int, (T, bool)> Background<T>() => (x, y) => (default(T), true);
+    public SequenceMenuProbe(IntPtr owner, string mode)
+    {
+        this.owner = owner; this.mode = mode;
+        GetCursorPos(out origin);
+        timer = new System.Threading.Timer(Check, null, 50, 50);
+    }
+    private void Check(object unused)
+    {
+        if (System.Threading.Interlocked.Exchange(ref busy, 1) != 0) return;
+        try
+        {
+            EnumThreadWindows(thread, (window, parameter) =>
+            {
+                var name = new System.Text.StringBuilder(32);
+                GetClassName(window, name, name.Capacity);
+                if (name.ToString() != "#32768") return true;
+                var menu = SendMessage(window, 0x01E1, IntPtr.Zero, IntPtr.Zero);
+                if (!Seen) { Seen = true; IsBase = GetMenuItemID(menu, 0) == 0x8000; }
+                if (mode == "move-right" && phase == 0)
+                {
+                    phase = 1;
+                    mouse_event(1, GetSystemMetrics(36) * 4, 0, 0, UIntPtr.Zero);
+                }
+                else if (mode == "move-right" && phase == 1)
+                {
+                    phase = 2;
+                    SetCursorPos(origin.X + 2, origin.Y + 2);
+                }
+                else if (mode == "move-right" && phase == 2)
+                {
+                    phase = 3;
+                    GetCursorPos(out var clickPoint);
+                    var clickClass = new System.Text.StringBuilder(32);
+                    GetClassName(WindowFromPoint(clickPoint), clickClass, clickClass.Capacity);
+                    ClickWindow = clickClass.ToString();
+                    mouse_event(8, 0, 0, 0, UIntPtr.Zero);
+                    mouse_event(16, 0, 0, 0, UIntPtr.Zero);
+                }
+                else if (mode == "move-right")
+                {
+                    SecondSeen = true;
+                    SecondIsBase = GetMenuItemID(menu, 0) == 0x8000;
+                    PostMessage(owner, 0x001F, IntPtr.Zero, IntPtr.Zero);
+                }
+                else if (mode == "move" && phase++ == 0)
+                    mouse_event(1, GetSystemMetrics(36) * 4, 0, 0, UIntPtr.Zero);
+                else if (mode == "command" && phase < 3)
+                {
+                    PostMessage(window, 0x0100, (IntPtr)(phase < 2 ? 0x28 : 0x0D), IntPtr.Zero);
+                    phase++;
+                }
+                else if (mode != "command" || phase++ > 5)
+                    PostMessage(owner, 0x001F, IntPtr.Zero, IntPtr.Zero);
+                return false;
+            }, IntPtr.Zero);
+            if (++ticks > 120) PostMessage(owner, 0x001F, IntPtr.Zero, IntPtr.Zero);
+        }
+        finally { System.Threading.Volatile.Write(ref busy, 0); }
+    }
+    public void Dispose() => timer.Dispose();
+}
 '@
 $assembly = [Reflection.Assembly]::LoadFrom((Join-Path $PSScriptRoot '../bin/Debug/net10.0-windows/SUTWinExplorer.dll'))
 [System.Windows.Application].GetField('_resourceAssembly', [Reflection.BindingFlags]'Static,NonPublic').SetValue($null, $assembly)
@@ -66,6 +152,13 @@ function Wait-Until([scriptblock] $condition, [string] $description) {
 function Invoke-Button($button) {
     if (-not $button.IsEnabled) { throw "$($button.Name) is disabled." }
     $button.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+}
+function Show-SequenceMenu($controller, $row, [IntPtr] $owner, [string] $mode, [bool] $expectedBase) {
+    $probe = [SequenceMenuProbe]::new($owner, $mode)
+    try { $null = $controller.GetType().GetMethod('Show', $flags).Invoke($controller, [object[]] @($row, $owner, $true)) }
+    finally { $probe.Dispose() }
+    if (-not $probe.Seen -or $probe.IsBase -ne $expectedBase) { throw "Unexpected menu for $mode`: seen=$($probe.Seen), base=$($probe.IsBase), expected=$expectedBase." }
+    if ($mode -eq 'move-right' -and (-not $probe.SecondSeen -or -not $probe.SecondIsBase)) { throw "The right-click after movement did not open a new Base Menu: second=$($probe.SecondSeen), base=$($probe.SecondIsBase), click window=$($probe.ClickWindow)." }
 }
 function Assert-ItemMenu($actions, [string[]] $paths, [bool] $background, [IntPtr] $owner) {
     $factory = $assembly.GetType('SUTWinExplorer.SutContextMenuFactory', $true)
@@ -199,6 +292,85 @@ try {
     $owner = [System.Windows.Interop.WindowInteropHelper]::new($window).Handle
     $actions = $view.GetType().GetMethod('CreateContextMenuActions', $flags).Invoke($view, @())
     Assert-ItemMenu $actions ([string[]] @($file, $folder)) $false $owner
+    $controller = $view.GetType().GetField('_contextMenu', $flags).GetValue($view)
+    $reset = $controller.GetType().GetMethod('Reset', $flags)
+    $baseCommands = $controller.GetType().GetField('_baseCommands', $flags)
+    $skipNext = $controller.GetType().GetField('_skipNextMenu', $flags)
+    $hitTest = $controller.GetType().GetField('_hitTest', $flags)
+    $originalHitTest = $hitTest.GetValue($controller)
+    $row = $view.FindName('FileList').SelectedItems[0]
+    $otherRow = $view.FindName('FileList').SelectedItems[1]
+    $originalCursor = [SequenceMenuProbe+Point]::new()
+    $null = [SequenceMenuProbe]::GetCursorPos([ref] $originalCursor)
+    $originX = [int] ([SequenceMenuProbe]::GetSystemMetrics(0) / 2)
+    $originY = [int] ([SequenceMenuProbe]::GetSystemMetrics(1) / 2)
+    try {
+        $null = [SequenceMenuProbe]::SetCursorPos($originX, $originY)
+        Show-SequenceMenu $controller $row $owner 'dismiss' $true
+        if ($null -eq $baseCommands.GetValue($controller)) { throw 'Closing the Base Menu did not retain the sequence.' }
+        [SequenceMenuProbe]::mouse_event(1, 1, 0, 0, [UIntPtr]::Zero)
+        Wait-Until { $null -ne $baseCommands.GetValue($controller) } 'movement inside the double-click area'
+        [SequenceMenuProbe]::mouse_event(1, ([SequenceMenuProbe]::GetSystemMetrics(36) * 4), 0, 0, [UIntPtr]::Zero)
+        Wait-Until { $null -eq $baseCommands.GetValue($controller) } 'movement outside the double-click area'
+        $null = [SequenceMenuProbe]::SetCursorPos($originX, $originY)
+        Show-SequenceMenu $controller $row $owner 'move' $true
+        if ($null -ne $baseCommands.GetValue($controller)) { throw 'Movement while the Base Menu was open did not reset the sequence.' }
+        $null = [SequenceMenuProbe]::SetCursorPos($originX, $originY)
+        Show-SequenceMenu $controller $row $owner 'dismiss' $true
+        Show-SequenceMenu $controller $row $owner 'move' $false
+        if ($null -ne $baseCommands.GetValue($controller)) { throw 'Movement while the Content Menu was open did not reset the sequence.' }
+        $null = [SequenceMenuProbe]::SetCursorPos($originX, $originY)
+        [System.Windows.Clipboard]::SetText('sequence action sentinel')
+        Show-SequenceMenu $controller $row $owner 'command' $true
+        if ([System.Windows.Clipboard]::GetText() -ceq 'sequence action sentinel' -or $null -ne $baseCommands.GetValue($controller)) { throw 'The selected menu command did not execute and reset the sequence.' }
+        Show-SequenceMenu $controller $row $owner 'dismiss' $true
+        Show-SequenceMenu $controller $row $owner 'dismiss' $false
+        [SequenceMenuProbe]::mouse_event(1, ([SequenceMenuProbe]::GetSystemMetrics(36) * 4), 0, 0, [UIntPtr]::Zero)
+        Wait-Until { -not $skipNext.GetValue($controller) } 'movement after the Content Menu'
+        $null = [SequenceMenuProbe]::SetCursorPos($originX, $originY)
+        Show-SequenceMenu $controller $row $owner 'dismiss' $true
+        Show-SequenceMenu $controller $row $owner 'dismiss' $false
+        $null = $controller.GetType().GetMethod('Show', $flags).Invoke($controller, [object[]] @($row, $owner, $true))
+        Show-SequenceMenu $controller $row $owner 'dismiss' $true
+        $null = $reset.Invoke($controller, @())
+        $fakeHitTest = [SequenceMenuProbe].GetMethod('Target').MakeGenericMethod($row.GetType()).Invoke($null, @($row))
+        $hitTest.SetValue($controller, $fakeHitTest)
+        $window.Left = 100
+        $window.Top = 100
+        $null = $window.Activate()
+        $originX = 150
+        $originY = 150
+        $null = [SequenceMenuProbe]::SetCursorPos($originX, $originY)
+        Show-SequenceMenu $controller $row $owner 'move-right' $true
+        if ($null -eq $baseCommands.GetValue($controller)) { throw 'The replacement Base Menu did not start a new sequence.' }
+        $null = $reset.Invoke($controller, @())
+        $null = [SequenceMenuProbe]::SetCursorPos($originX, $originY)
+        Show-SequenceMenu $controller $row $owner 'dismiss' $true
+        Show-SequenceMenu $controller $row $owner 'move-right' $false
+        if ($null -eq $baseCommands.GetValue($controller)) { throw 'The replacement Base Menu after the Content Menu did not start a new sequence.' }
+        $null = $reset.Invoke($controller, @())
+        $hitTest.SetValue($controller, [SequenceMenuProbe].GetMethod('Target').MakeGenericMethod($row.GetType()).Invoke($null, @($otherRow)))
+        $null = [SequenceMenuProbe]::SetCursorPos($originX, $originY)
+        Show-SequenceMenu $controller $row $owner 'move-right' $true
+        $path = $controller.GetType().GetField('_path', $flags).GetValue($controller).DynamicInvoke($otherRow)
+        if ($controller.GetType().GetField('_basePath', $flags).GetValue($controller) -ne $path) { throw 'The replacement Base Menu did not target the other item.' }
+        $null = $reset.Invoke($controller, @())
+        $hitTest.SetValue($controller, [SequenceMenuProbe].GetMethod('Background').MakeGenericMethod($row.GetType()).Invoke($null, @()))
+        $null = [SequenceMenuProbe]::SetCursorPos($originX, $originY)
+        Show-SequenceMenu $controller $otherRow $owner 'move-right' $true
+        if (-not $controller.GetType().GetField('_baseIsBackground', $flags).GetValue($controller)) { throw 'The replacement Base Menu did not target the background.' }
+        $window.Content = $null
+        Wait-Until { $null -eq $baseCommands.GetValue($controller) } 'sequence cleanup on ContentView unload'
+        $window.Content = $view
+        $null = $view.GetType().GetMethod('RevealInsertedItems', $flags).Invoke($view, [object[]] @(,[string[]] @($file, $folder)))
+        Wait-Until { @($view.FindName('FileList').SelectedItems).Count -eq 2 -and $view.FindName('CopyMarkItemButton').IsEnabled } 'selection after menu sequence checks'
+    } finally {
+        $hitTest.SetValue($controller, $originalHitTest)
+        $null = $reset.Invoke($controller, @())
+        $window.Left = -20000
+        $window.Top = -20000
+        $null = [SequenceMenuProbe]::SetCursorPos($originalCursor.X, $originalCursor.Y)
+    }
     [System.Windows.Clipboard]::SetText('copy transfer sentinel')
     Invoke-Button ($view.FindName('CopyMarkItemButton'))
     if (-not $copy.IsPrepared -or [System.Windows.Clipboard]::GetText() -cne 'copy transfer sentinel') { throw "Copy mark item state=$($copy.IsPrepared), clipboard=$([System.Windows.Clipboard]::GetText())." }

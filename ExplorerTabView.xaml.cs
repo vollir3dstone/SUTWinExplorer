@@ -470,6 +470,8 @@ public partial class Pathview : UserControl
 
     private void Pathview_Unloaded(object sender, RoutedEventArgs e)
     {
+        _treeContextMenu.Reset();
+        _subfolderContextMenu.Reset();
         _inputWindow?.RemoveHandler(Mouse.PreviewMouseDownEvent, new MouseButtonEventHandler(InputWindow_PreviewMouseDown));
         _inputWindow = null;
         _fileSystemRefreshTimer.Stop();

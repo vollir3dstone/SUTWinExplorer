@@ -333,6 +333,7 @@ public partial class ContentView : UserControl
 
     private void ContentView_Unloaded(object sender, RoutedEventArgs e)
     {
+        _contextMenu.Reset();
         DependencyPropertyDescriptor.FromProperty(GridViewColumn.WidthProperty, typeof(GridViewColumn))
             .RemoveValueChanged(NameColumn, NameColumn_WidthChanged);
         _rangeCancellation?.Cancel();

@@ -454,6 +454,11 @@ may show its requested row in light gray without changing the active selection.
   sidebar menus and their backgrounds.
 - [x] ContentView file and folder selections use the Base and Content Menu pair
   described in [CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md).
+- [x] Leaving the system double-click area around the opening point or executing
+  a menu command resets the context-menu sequence, even if the pointer returns.
+  Pointer movement does not close an open menu; the next normal right-click on
+  an item or background starts again with the Base Menu. Shift-right-click and
+  keyboard-invoked menus retain their separate native or keyboard behavior.
 - [x] For a single `.lnk` selection, **Open parent** in the Content Menu
   opens the parent directory of the shortcut's file or folder target in KIS
   Explorer. For a folder target, it opens the folder's parent, not the target
