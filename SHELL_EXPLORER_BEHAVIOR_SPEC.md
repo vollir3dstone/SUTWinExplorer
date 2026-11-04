@@ -137,7 +137,10 @@ can be prepared at a time, but clipboard actions remain independent of it:
 - [x] **Pin** creates a non-browsable Pathview at the browsable Pathview's
   current location. If that location already has an open non-browsable
   Pathview, **Pin** selects that tab instead of creating a duplicate. **Pin**
-  is disabled at the virtual **This PC** location.
+  copies the browsable tree **Hide internal**, content **Hide internal**, **Hide
+  directories**, **Name pattern**, and complete sort order and directions to
+  the created or existing fixed Pathview. **Pin** is disabled at the virtual
+  **This PC** location.
 - [x] **Browse** on a non-browsable Pathview selects the first tab and navigates
   the browsable Pathview to the fixed Pathview's location.
 - [x] Non-browsable Pathviews can be closed; the browsable Pathview remains

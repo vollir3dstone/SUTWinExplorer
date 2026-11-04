@@ -243,6 +243,9 @@ leading ellipsis prefix is omitted.
 - **Pin** looks up the browsable Pathview's current path in the fixed-path map.
   It selects the mapped tab when present, otherwise it creates a fixed
   Pathview, registers it, adds the tab after the first item, and selects it.
+  In both cases it copies the browsable tree's **Hide internal** setting to
+  the fixed subdirectory filter and copies all content filters and sort order
+  to the fixed ContentView.
   This prevents duplicate fixed Pathviews at the same normalized path. The
   button is disabled for **This PC**, and `MainWindow` also rejects requests
   to create a fixed Pathview for that virtual location.
@@ -281,8 +284,11 @@ leading ellipsis prefix is omitted.
   Fixed Pathview activations also supply their source Pathview. After successful
   navigation to BROWSE, its ContentView copies the source's **Hide directories**,
   **Hide internal**, **Name pattern**, and complete sort widget order and
-  directions, then refreshes. The copy is not performed when an existing fixed
-  tab is selected, or for navigation without a source Pathview.
+  directions, then refreshes. This includes double-clicking a directory in the
+  fixed ContentView: `DirectoryOpenRequested` forwards the destination through
+  `RequestBrowseLocation`, the same path used by the **Browse** button. The
+  copy is not performed when an existing fixed tab is selected, or for
+  navigation without a source Pathview.
 
   | Caller | `hideSiblings` | `hideInternalDirectories` | `hideInternalContentItems` | `preferFixedView` |
   | --- | --- | --- | --- | --- |

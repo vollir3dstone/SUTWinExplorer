@@ -507,6 +507,8 @@ public partial class MainWindow : Window
             return;
 
         AddPaneview(view.CurrentPath, isBrowsable: false);
+        if (TryGetFixedPathview(view.CurrentPath, out var fixedView))
+            fixedView.CopySettingsFromBrowsable(view);
     }
 
     private void Pathview_DirectoryRenamed(string oldPath, string newPath)

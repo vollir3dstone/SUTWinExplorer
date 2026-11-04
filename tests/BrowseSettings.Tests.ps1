@@ -27,8 +27,10 @@ try {
     $fixedPath = Join-Path $root 'fixed'
     $childPath = Join-Path $fixedPath 'child'
     $otherPath = Join-Path $fixedPath 'other'
+    $doubleClickPath = Join-Path $fixedPath 'double-click'
     [void] [IO.Directory]::CreateDirectory($childPath)
     [void] [IO.Directory]::CreateDirectory($otherPath)
+    [void] [IO.Directory]::CreateDirectory($doubleClickPath)
     [IO.File]::WriteAllText((Join-Path $fixedPath 'small.txt'), 'a')
     [IO.File]::WriteAllText((Join-Path $fixedPath '.middle.txt'), 'aa')
     [IO.File]::WriteAllText((Join-Path $fixedPath 'large.txt'), 'aaa')
@@ -100,6 +102,31 @@ try {
     $navigate.Invoke($window, [object[]] @([string] $root, $null, $null, $null, $false, $null))
     if ($browse.CurrentPath -cne $root -or $destination.FindName('NamePatternTextBox').Text -cne '*.keep') { throw 'Ordinary navigation changed BROWSE settings.' }
 
+    $source.FindName('HideInternalContentCheckBox').GetCheckBox().IsChecked = $false
+    $source.FindName('HideDirectoriesCheckBox').GetCheckBox().IsChecked = $false
+    $source.FindName('NamePatternTextBox').Text = '*click*'
+    $sourceSnapshot = $source.GetType().GetField('_snapshot', $flags)
+    Wait-Until { $null -ne $sourceSnapshot.GetValue($source) } 'The fixed content did not finish loading.'
+    $sourceList = $source.FindName('FileList')
+    $row = @($sourceList.Items | Where-Object { $_.FullPath -ceq $doubleClickPath })[0]
+    if ($null -eq $row) { throw 'The double-click test directory is not visible.' }
+    $items = $sourceSnapshot.GetValue($source).GetType().GetProperty('Items', $flags).GetValue($sourceSnapshot.GetValue($source))
+    $item = @($items | Where-Object { $_.GetType().GetProperty('FullPath', $flags).GetValue($_) -ceq $doubleClickPath })[0]
+    $row.Entry = $item.GetType().GetProperty('Entry', $flags).GetValue($item)
+    $sourceList.SelectedItem = $row
+    $destination.FindName('HideDirectoriesCheckBox').GetCheckBox().IsChecked = $true
+    $destination.FindName('HideInternalContentCheckBox').GetCheckBox().IsChecked = $true
+    $browse.FindName('HideInternalCheckBox').IsChecked = $true
+    $source.GetType().GetMethod('FileList_MouseDoubleClick', $flags).Invoke($source, [object[]] @($sourceList, $null))
+    $doubleClickSort = @($destinationSort.Items | ForEach-Object { "$($_.Index):$($_.Direction)" }) -join ','
+    if ($tabs.SelectedItem.Content -ne $browse -or $browse.CurrentPath -cne $doubleClickPath -or
+        $browse.FindName('HideInternalCheckBox').IsChecked -ne $false -or
+        $destination.FindName('HideDirectoriesCheckBox').GetCheckBox().IsChecked -ne $false -or
+        $destination.FindName('HideInternalContentCheckBox').GetCheckBox().IsChecked -ne $false -or
+        $destination.FindName('NamePatternTextBox').Text -cne '*click*' -or $doubleClickSort -cne $expectedSort) {
+        throw 'Double-clicking a directory did not transfer all view settings.'
+    }
+
     $navigate.Invoke($window, [object[]] @([string] $fixedPath, $null, $null, $null, $false, $null))
     $hideDirectories = $destination.FindName('HideDirectoriesCheckBox').GetCheckBox()
     $hideInternal = $destination.FindName('HideInternalContentCheckBox').GetCheckBox()
@@ -132,6 +159,43 @@ try {
     Wait-Until { $null -ne $snapshot.GetValue($destination) } 'The reset view did not finish loading.'
     $actualNames = @($destination.FindName('FileList').Items | ForEach-Object { [IO.Path]::GetFileName($_.FullPath) }) -join ','
     if ($actualNames -cne 'ignored.png,large.txt,small.txt') { throw "Reset produced unexpected rows: $actualNames" }
+
+    $browse.FindName('HideInternalCheckBox').IsChecked = $true
+    $hideDirectories.IsChecked = $true
+    $hideInternal.IsChecked = $true
+    $pattern.Text = '*.png'
+    $destinationSort.Select(4)
+    $destinationSort.Select(4)
+    $pinSort = @($destinationSort.Items | ForEach-Object { "$($_.Index):$($_.Direction)" }) -join ','
+    $initialCount = $tabs.Items.Count
+    $browse.GetType().GetMethod('PathviewActionButton_Click', $flags).Invoke($browse, [object[]] @($null, $null))
+    $fixedSort = @($sourceSort.Items | ForEach-Object { "$($_.Index):$($_.Direction)" }) -join ','
+    if ($tabs.Items.Count -ne $initialCount -or $tabs.SelectedItem.Content -ne $fixed -or
+        $fixed.FindName('HideInternalSubdirectoriesCheckBox').GetCheckBox().IsChecked -ne $true -or
+        $source.FindName('HideDirectoriesCheckBox').GetCheckBox().IsChecked -ne $true -or
+        $source.FindName('HideInternalContentCheckBox').GetCheckBox().IsChecked -ne $true -or
+        $source.FindName('NamePatternTextBox').Text -cne '*.png' -or $fixedSort -cne $pinSort) {
+        throw 'Pin did not copy settings to the existing fixed view.'
+    }
+
+    $navigate.Invoke($window, [object[]] @([string] $otherPath, $null, $null, $null, $false, $null))
+    $browse.FindName('HideInternalCheckBox').IsChecked = $false
+    $hideDirectories.IsChecked = $false
+    $hideInternal.IsChecked = $false
+    $pattern.Text = '*.new'
+    $browse.GetType().GetMethod('PathviewActionButton_Click', $flags).Invoke($browse, [object[]] @($null, $null))
+    $newFixed = $tabs.SelectedItem.Content
+    $newContent = $newFixed.FindName('DirectoryContent')
+    $newSort = @($newContent.FindName('SortOrderEditor').Items | ForEach-Object { "$($_.Index):$($_.Direction)" }) -join ','
+    if ($tabs.Items.Count -ne $initialCount + 1 -or $newFixed.CurrentPath -cne $otherPath -or
+        $newFixed.FindName('HideInternalSubdirectoriesCheckBox').GetCheckBox().IsChecked -ne $false -or
+        $newContent.FindName('HideDirectoriesCheckBox').GetCheckBox().IsChecked -ne $false -or
+        $newContent.FindName('HideInternalContentCheckBox').GetCheckBox().IsChecked -ne $false -or
+        $newContent.FindName('NamePatternTextBox').Text -cne '*.new' -or $newSort -cne $pinSort) {
+        throw 'Pin did not copy settings to the new fixed view.'
+    }
+    $newContent.FindName('NamePatternTextBox').Text = '*.independent'
+    if ($pattern.Text -cne '*.new') { throw 'The pinned view shares mutable settings with BROWSE.' }
     'Browse settings tests passed.'
 }
 finally {

@@ -319,9 +319,13 @@ The **VIEW** and **FOR SELECTED** rows are above the table; the area above the
 DIRECTORY column is empty. The **VIEW** row controls the content's **Hide directories**, **Hide internal**,
 and **Name pattern** filters. These settings are local to the Pathview; the
 content **Hide internal** setting is independent of the tree filters. When a
-fixed Pathview navigates to BROWSE, all three content filters and the complete
-sort order, including priorities and directions, are copied to BROWSE. Later
-changes remain local to each Pathview. **Reset** at the end of the **VIEW** row
+fixed Pathview navigates to BROWSE, including by double-clicking a directory
+in its content table, all three content filters and the complete sort order,
+including priorities and directions, are copied to BROWSE. If an existing
+fixed tab matches the destination, that tab is selected without overwriting
+its settings. **Pin** copies the same content settings from BROWSE to the new
+or existing fixed tab.
+Later changes remain local to each Pathview. **Reset** at the end of the **VIEW** row
 restores both hide filters to on, clears the name pattern, and restores the
 initial sort order and ascending directions. The table refreshes once after all
 settings are applied; tree filters and other Pathviews are unchanged. The

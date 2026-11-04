@@ -202,6 +202,12 @@ public partial class Pathview : UserControl
     internal void CopyContentViewSettingsFrom(Pathview source) =>
         DirectoryContent.CopyViewSettingsFrom(source.DirectoryContent);
 
+    internal void CopySettingsFromBrowsable(Pathview source)
+    {
+        HideInternalSubdirectoriesCheckBox.GetCheckBox().IsChecked = source.HideInternalCheckBox.IsChecked;
+        CopyContentViewSettingsFrom(source);
+    }
+
     internal string? BackHistoryPath => _backHistory.TryPeek(out var path) ? path : null;
     internal string? ForwardHistoryPath => _forwardHistory.TryPeek(out var path) ? path : null;
 
