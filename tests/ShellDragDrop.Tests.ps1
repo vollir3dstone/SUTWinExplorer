@@ -19,14 +19,16 @@ public sealed class DragMouseProbe : IDisposable
     public static int[] WindowCenter(IntPtr window) { GetWindowRect(window, out var rect); return new[] { (rect.Left + rect.Right) / 2, (rect.Top + rect.Bottom) / 2 }; }
     private readonly int sourceX, sourceY, targetX, targetY;
     private readonly byte modifier;
-    private readonly bool right;
+    private readonly bool right, clickOnly;
     private readonly Timer timer;
     private int phase, busy;
     public bool Done;
     public string StartWindow;
     public DragMouseProbe(int sourceX, int sourceY, int targetX, int targetY, byte modifier, bool right)
+        : this(sourceX, sourceY, targetX, targetY, modifier, right, false) { }
+    public DragMouseProbe(int sourceX, int sourceY, int targetX, int targetY, byte modifier, bool right, bool clickOnly)
     {
-        this.sourceX = sourceX; this.sourceY = sourceY; this.targetX = targetX; this.targetY = targetY; this.modifier = modifier; this.right = right;
+        this.sourceX = sourceX; this.sourceY = sourceY; this.targetX = targetX; this.targetY = targetY; this.modifier = modifier; this.right = right; this.clickOnly = clickOnly;
         timer = new Timer(Tick, null, 100, 150);
     }
     private void SetModifiers(bool release)
@@ -51,8 +53,8 @@ public sealed class DragMouseProbe : IDisposable
                     SetModifiers(false);
                     mouse_event(right ? 8u : 2u, 0, 0, 0, UIntPtr.Zero);
                     break;
-                case 1: SetCursorPos(sourceX + 30, sourceY); mouse_event(1, 1, 0, 0, UIntPtr.Zero); break;
-                case 2: SetCursorPos(targetX, targetY); mouse_event(1, 1, 0, 0, UIntPtr.Zero); break;
+                case 1: if (clickOnly) mouse_event(right ? 16u : 4u, 0, 0, 0, UIntPtr.Zero); else { SetCursorPos(sourceX + 30, sourceY); mouse_event(1, 1, 0, 0, UIntPtr.Zero); } break;
+                case 2: if (!clickOnly) { SetCursorPos(targetX, targetY); mouse_event(1, 1, 0, 0, UIntPtr.Zero); } break;
                 case 3:
                     mouse_event(right ? 16u : 4u, 0, 0, 0, UIntPtr.Zero);
                     break;
@@ -299,6 +301,84 @@ try {
             Wait-Until { $menuProbe.Done } 'right-click menu'
             if (-not $menuProbe.SeenBeforeRelease) { throw 'The context menu did not open on right-button down.' }
         } finally { $menuProbe.Dispose() }
+
+        $sidebarSource = [string] (Join-Path $destination 'sidebar-source')
+        [IO.Directory]::CreateDirectory($sidebarSource) | Out-Null
+        [IO.File]::WriteAllText((Join-Path $sidebarSource 'nested.txt'), 'sidebar')
+        $pathview = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.Pathview', $true),
+            [object[]] @([string] $destination, [bool] $false, $null, $null, $null, $null))
+        $navigation = @{ Paths = [Collections.Generic.List[string]]::new() }
+        $pathview.add_BrowseLocationRequested({ param($view, $path, $fixed, $siblings, $internalDirectories, $internalContent) $navigation.Paths.Add($path) }.GetNewClosure())
+        $grid.Children.Remove($views[1])
+        [System.Windows.Controls.Grid]::SetColumn($pathview, 1)
+        $null = $grid.Children.Add($pathview)
+        $sidebar = $pathview.FindName('ActivePathSubfoldersList')
+        Wait-Until { $sidebar.IsVisible -and @($sidebar.Items | Where-Object { $_.Path -eq $sidebarSource }).Count -eq 1 } 'sidebar drag test view'
+        if (-not $sidebar.AllowDrop -or $pathview.FindName('ActivePathTree').AllowDrop -or $pathview.FindName('ActivePathAndSiblingsTree').AllowDrop) { throw 'Drag-and-drop was enabled on the wrong sidebar controls.' }
+        function Get-SidebarPoint([string] $path) {
+            Wait-Until { @($sidebar.Items | Where-Object { $_.Path -eq $path }).Count -eq 1 } "sidebar row $path"
+            $item = @($sidebar.Items | Where-Object { $_.Path -eq $path })[0]
+            $sidebar.ScrollIntoView($item)
+            Wait-Until { $null -ne $sidebar.ItemContainerGenerator.ContainerFromItem($item) } "sidebar row container $path"
+            $sidebar.ItemContainerGenerator.ContainerFromItem($item).PointToScreen([System.Windows.Point]::new(60, 10))
+        }
+        $sidebarFile = [string] (Join-Path $source 'sidebar-row.txt')
+        [IO.File]::WriteAllText($sidebarFile, 'sidebar row')
+        Invoke-MouseDrag @($sidebarFile) (Get-SidebarPoint $folderTarget) 0x11 $false
+        Wait-Until { [IO.File]::Exists((Join-Path $folderTarget 'sidebar-row.txt')) } 'copy onto sidebar folder row'
+        if ($navigation.Paths.Count -ne 0) { throw 'Dropping on sidebar row triggered navigation.' }
+        $backgroundFile = [string] (Join-Path $source 'sidebar-background.txt')
+        [IO.File]::WriteAllText($backgroundFile, 'sidebar background')
+        $backgroundPoint = $sidebar.PointToScreen([System.Windows.Point]::new(60, $sidebar.ActualHeight - 20))
+        Invoke-MouseDrag @($backgroundFile) $backgroundPoint 0x11 $false
+        Wait-Until { [IO.File]::Exists((Join-Path $destination 'sidebar-background.txt')) } 'copy onto sidebar background'
+        $sidebarMove = [string] (Join-Path $source 'sidebar-move.txt')
+        [IO.File]::WriteAllText($sidebarMove, 'sidebar move')
+        Invoke-MouseDrag @($sidebarMove) (Get-SidebarPoint $folderTarget) 0x10 $false
+        Wait-Until { [IO.File]::Exists((Join-Path $folderTarget 'sidebar-move.txt')) -and -not [IO.File]::Exists($sidebarMove) } 'move onto sidebar folder row'
+        $sidebarLink = [string] (Join-Path $source 'sidebar-link.txt')
+        [IO.File]::WriteAllText($sidebarLink, 'sidebar link')
+        Invoke-MouseDrag @($sidebarLink) (Get-SidebarPoint $folderTarget) 0xFF $false
+        Wait-Until { @([IO.Directory]::GetFiles($folderTarget, '*sidebar-link*.lnk')).Count -eq 1 } 'link onto sidebar folder row'
+        if (-not [IO.File]::Exists($sidebarLink)) { throw 'Sidebar link removed its source.' }
+        $start = Get-SidebarPoint $sidebarSource
+        $end = $sourceList.PointToScreen([System.Windows.Point]::new(100, $sourceList.ActualHeight - 20))
+        $sidebar.SelectedItem = @($sidebar.Items | Where-Object { $_.Path -eq $folderTarget })[0]
+        $probe = [DragMouseProbe]::new([int] $start.X, [int] $start.Y, [int] $end.X, [int] $end.Y, 0x11, $false)
+        try { Wait-Until { $probe.Done -and [IO.File]::Exists((Join-Path $source 'sidebar-source/nested.txt')) } 'drag clicked sidebar folder to table' }
+        finally { $probe.Dispose() }
+        if ([IO.Directory]::Exists((Join-Path $source 'target-folder')) -or $navigation.Paths.Count -ne 0) { throw "Sidebar drag used selection=$([IO.Directory]::Exists((Join-Path $source 'target-folder'))) or triggered navigation=$($navigation.Paths -join ',')." }
+        $sidebarExternalDestination = [string] (Join-Path $root 'sidebar-external-destination')
+        [IO.Directory]::CreateDirectory($sidebarExternalDestination) | Out-Null
+        $result = Join-Path $root 'sidebar-target-result.txt'
+        $external = Start-ExternalProbe 'target' $sidebarExternalDestination $result
+        $process = $external[0]; $position = $external[1]
+        try {
+            $start = Get-SidebarPoint $sidebarSource
+            $probe = [DragMouseProbe]::new([int] $start.X, [int] $start.Y, $position[0], $position[1], 0, $false)
+            try { Wait-Until { $probe.Done -and [IO.File]::Exists($result) -and [IO.File]::Exists((Join-Path $sidebarExternalDestination 'sidebar-source/nested.txt')) } 'drag sidebar folder to external target' }
+            finally { $probe.Dispose() }
+            if (-not [IO.Directory]::Exists($sidebarSource) -or $navigation.Paths.Count -ne 0) { throw 'External sidebar copy removed its source or triggered navigation.' }
+        } finally { if (-not $process.HasExited) { $process.Kill() }; $process.Dispose() }
+        foreach ($mode in @('source', 'text', 'right-source')) {
+            $result = Join-Path $root ("sidebar-$mode-result.txt")
+            $external = Start-ExternalProbe $mode $externalFile $result
+            $process = $external[0]; $position = $external[1]
+            try {
+                $end = Get-SidebarPoint $sidebarSource
+                $probe = [DragMouseProbe]::new($position[0], $position[1], [int] $end.X, [int] $end.Y, 0, ($mode -eq 'right-source'))
+                try { Wait-Until { $probe.Done -and ([IO.File]::Exists($result) -or $process.HasExited) } "external $mode drag to sidebar" }
+                finally { $probe.Dispose() }
+                $expected = if ($mode -eq 'source') { 'Copy' } else { 'None' }
+                if (-not [IO.File]::Exists($result) -or [IO.File]::ReadAllText($result) -ne $expected) { throw "Unexpected external $mode sidebar drag effect." }
+                if ($mode -eq 'source') { Wait-Until { [IO.File]::Exists((Join-Path $sidebarSource 'external-source.txt')) } 'external file copy to sidebar' }
+            } finally { if (-not $process.HasExited) { $process.Kill() }; $process.Dispose() }
+        }
+        $start = Get-SidebarPoint $sidebarSource
+        $probe = [DragMouseProbe]::new([int] $start.X, [int] $start.Y, [int] $start.X, [int] $start.Y, 0, $false, $true)
+        try { Wait-Until { $probe.Done -and $navigation.Paths.Count -eq 1 } 'sidebar click navigation' }
+        finally { $probe.Dispose() }
+        if ($navigation.Paths[0] -ne $sidebarSource) { throw 'Sidebar click navigated to the wrong folder.' }
     } finally {
         $window.Close()
         [System.Threading.SynchronizationContext]::SetSynchronizationContext($previousContext)

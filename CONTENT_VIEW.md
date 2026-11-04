@@ -202,8 +202,13 @@ the original Windows background menu.
 
 Drag selected filesystem items with the left mouse button to another table,
 Windows Explorer, or another compatible application. Dropping filesystem items
-from an external application or another table is also supported. Dropping on a
-directory row targets that directory; dropping on a file row or empty table
+from an external application or another table is also supported. The **Sub
+directories** list supports the same operations, dragging only the clicked folder
+independently of table selection. It has no persistent, user-managed selection or
+multiple selection like the table; any selection used for its menu or keyboard
+interaction is temporary. Its folder rows target the corresponding folder and
+its background targets the current directory. Tree views do not participate.
+Dropping on a directory row targets that directory; dropping on a file row or empty table
 space targets the current directory. A file row is never invoked as a drop
 target. Non-filesystem data and right-button drags into the table are rejected.
 

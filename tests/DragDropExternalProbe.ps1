@@ -34,7 +34,7 @@ if ($Mode -in @('source', 'right-source', 'text')) {
     })
     $window.add_PreviewDrop({
         $paths = [string[]] $_.Data.GetData([System.Windows.DataFormats]::FileDrop)
-        foreach ($source in $paths) { [IO.File]::Copy($source, (Join-Path $Path ([IO.Path]::GetFileName($source)))) }
+        foreach ($source in $paths) { Copy-Item -LiteralPath $source -Destination $Path -Recurse }
         $_.Effects = [System.Windows.DragDropEffects]::Copy
         $_.Handled = $true
         [IO.File]::WriteAllText($ResultPath, 'Copy')

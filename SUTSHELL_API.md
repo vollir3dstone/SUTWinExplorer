@@ -231,6 +231,8 @@ A newer refresh cancels previous requests and cannot be overwritten by their
 results. A slow OS call can still delay completion of its batch. ContentView
 supports multiple selection, its own inline rename editor, Shell-backed Delete,
 clipboard Copy and copy-only Paste, and left-button filesystem drag-and-drop.
-`ShellDragDrop` creates Shell data objects for selected items and forwards WPF
-drag events to the target directory's native `IDropTarget`. Watchers are best-effort and
+The Sub directories list also supports drag-and-drop, using the clicked folder
+as its source rather than a persistent selection. Its menu or keyboard selection
+is temporary; tree views do not support drag-and-drop. `ShellDragDrop` creates Shell data objects and
+forwards WPF drag events to the target directory's native `IDropTarget`. Watchers are best-effort and
 are not a complete replacement for all Shell namespace notifications.

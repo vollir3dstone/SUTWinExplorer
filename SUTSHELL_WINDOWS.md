@@ -84,7 +84,8 @@ fully recoverable guarantees. Observation failures are written to debug output.
 ## Follow-up work
 
 The table does not yet reproduce all behavior in the Shell-oriented behavior
-specification. Filesystem drag/drop is supported in the table; clipboard shortcuts
+specification. Filesystem drag/drop is supported in the table and Sub directories
+list, but not tree views; clipboard shortcuts
 are not implemented. Navigation
 access checks and tree loading still run
 synchronously and can block the UI. The access check precedes committing

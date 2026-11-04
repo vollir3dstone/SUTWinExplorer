@@ -29,12 +29,9 @@ public partial class ContentView : UserControl
     private bool _suppressFilterRefresh;
     private string? _revealedPath;
     private DirectoryRow? _editingRow;
-    private DirectoryRow? _dragRow;
-    private Point _dragStart;
+    private readonly ListViewDragSource<DirectoryRow> _dragSource;
     private bool _preserveDragSelection;
     private bool _toggleDragSelection;
-    private ShellDropTarget? _dropTarget;
-    private string? _dropTargetPath;
     private bool _endingRename;
     private bool _deferredRefresh;
     private int _nextBackgroundIndex;
@@ -90,6 +87,16 @@ public partial class ContentView : UserControl
         HideInternalContentCheckBox.GetCheckBox().Unchecked += FiltersChanged;
         FileList.LayoutUpdated += FileList_LayoutUpdated;
         FileList.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(FileList_ScrollChanged));
+        _ = new ListViewDropTarget(FileList, item => (item as DirectoryRow)?.FullPath, () => CurrentPath, () => _editingRow is null);
+        _dragSource = new ListViewDragSource<DirectoryRow>(FileList, row =>
+        {
+            if (!FileList.SelectedItems.Contains(row))
+            {
+                FileList.SelectedItems.Clear();
+                FileList.SelectedItems.Add(row);
+            }
+            return FileList.SelectedItems.OfType<DirectoryRow>().Select(item => item.FullPath).ToArray();
+        }, () => _editingRow is null, () => { ClearDragStart(); _contextMenu.Reset(); });
         Loaded += ContentView_Loaded;
         Unloaded += ContentView_Unloaded;
     }
@@ -340,7 +347,6 @@ public partial class ContentView : UserControl
     private void ContentView_Unloaded(object sender, RoutedEventArgs e)
     {
         _contextMenu.Reset();
-        ClearDropTarget();
         ClearDragStart();
         DependencyPropertyDescriptor.FromProperty(GridViewColumn.WidthProperty, typeof(GridViewColumn))
             .RemoveValueChanged(NameColumn, NameColumn_WidthChanged);
@@ -823,7 +829,9 @@ public partial class ContentView : UserControl
 
         if (FindAncestor<ListViewItem>(source) is { DataContext: DirectoryRow row } && _editingRow is null)
         {
-            BeginDragCandidate(row, e.GetPosition(FileList));
+            _dragSource.Begin(row, e.GetPosition(FileList));
+            _preserveDragSelection = false;
+            _toggleDragSelection = false;
             if (FileList.SelectedItems.Count > 1 && FileList.SelectedItems.Contains(row) &&
                 (Keyboard.Modifiers & ModifierKeys.Shift) == 0)
             {
@@ -836,58 +844,20 @@ public partial class ContentView : UserControl
             FileList.SelectedItems.Clear();
     }
 
-    private void BeginDragCandidate(DirectoryRow row, Point position)
-    {
-        _dragRow = row;
-        _dragStart = position;
-        _preserveDragSelection = false;
-        _toggleDragSelection = false;
-    }
-
     private void ClearDragStart()
     {
-        _dragRow = null;
+        _dragSource.Cancel();
         _preserveDragSelection = false;
         _toggleDragSelection = false;
-    }
-
-    private void FileList_PreviewMouseMove(object sender, MouseEventArgs e)
-    {
-        if (_dragRow is not { } row || _editingRow is not null || e.LeftButton != MouseButtonState.Pressed)
-            return;
-        var position = e.GetPosition(FileList);
-        if (Math.Abs(position.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
-            Math.Abs(position.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
-            return;
-
-        if (!FileList.SelectedItems.Contains(row))
-        {
-            FileList.SelectedItems.Clear();
-            FileList.SelectedItems.Add(row);
-        }
-        var paths = FileList.SelectedItems.OfType<DirectoryRow>().Select(item => item.FullPath).ToArray();
-        ClearDragStart();
-        _contextMenu.Reset();
-        try
-        {
-            var owner = new WindowInteropHelper(Window.GetWindow(this)!).Handle;
-            ShellDragDrop.Start(paths, owner);
-        }
-        catch (Exception exception)
-        {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Drag failed", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-        e.Handled = true;
     }
 
     private void FileList_PreviewMouseButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (_dragRow is null) return;
-        var row = _dragRow;
+        if (_dragSource.Item is not { } row) return;
         var preserveSelection = _preserveDragSelection;
         var toggleSelection = _toggleDragSelection;
         ClearDragStart();
-        if (preserveSelection && row is not null)
+        if (preserveSelection)
         {
             if (toggleSelection) FileList.SelectedItems.Remove(row);
             else
@@ -897,87 +867,6 @@ public partial class ContentView : UserControl
             }
             e.Handled = true;
         }
-    }
-
-    private void FileList_PreviewDragOver(object sender, DragEventArgs e)
-    {
-        e.Handled = true;
-        try
-        {
-            if (_editingRow is not null || e.KeyStates.HasFlag(DragDropKeyStates.RightMouseButton) ||
-                e.Data is not System.Runtime.InteropServices.ComTypes.IDataObject data ||
-                e.Data.GetData(DataFormats.FileDrop, false) is not string[] paths || paths.Length == 0 ||
-                paths.Any(path => !Path.IsPathFullyQualified(path) || (!File.Exists(path) && !Directory.Exists(path))))
-            {
-                ClearDropTarget();
-                e.Effects = DragDropEffects.None;
-                return;
-            }
-            var source = FileList.InputHitTest(e.GetPosition(FileList)) as DependencyObject;
-            if (IsListChrome(source))
-            {
-                ClearDropTarget();
-                e.Effects = DragDropEffects.None;
-                return;
-            }
-            var row = FindAncestor<ListViewItem>(source)?.DataContext as DirectoryRow;
-            var destination = row is not null && Directory.Exists(row.FullPath) ? row.FullPath : CurrentPath;
-            if (!Directory.Exists(destination))
-            {
-                ClearDropTarget();
-                e.Effects = DragDropEffects.None;
-                return;
-            }
-            var point = FileList.PointToScreen(e.GetPosition(FileList));
-            var allowed = (uint)(e.AllowedEffects & (DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link));
-            uint effect;
-            if (_dropTarget is null || !string.Equals(_dropTargetPath, destination, StringComparison.OrdinalIgnoreCase))
-            {
-                ClearDropTarget();
-                _dropTarget = ShellDragDrop.CreateTarget(destination, new WindowInteropHelper(Window.GetWindow(this)!).Handle);
-                _dropTargetPath = destination;
-                effect = _dropTarget.Enter(data, (uint)e.KeyStates, (int)point.X, (int)point.Y, allowed);
-            }
-            else effect = _dropTarget.Over((uint)e.KeyStates, (int)point.X, (int)point.Y, allowed);
-            e.Effects = (DragDropEffects)effect;
-        }
-        catch (Exception exception)
-        {
-            Trace.TraceError("Drag-over failed: {0}", exception);
-            ClearDropTarget();
-            e.Effects = DragDropEffects.None;
-        }
-    }
-
-    private void FileList_PreviewDragLeave(object sender, DragEventArgs e) => ClearDropTarget();
-
-    private void FileList_PreviewDrop(object sender, DragEventArgs e)
-    {
-        e.Handled = true;
-        try
-        {
-            if (_dropTarget is null || e.Data is not System.Runtime.InteropServices.ComTypes.IDataObject data)
-            {
-                e.Effects = DragDropEffects.None;
-                return;
-            }
-            var point = FileList.PointToScreen(e.GetPosition(FileList));
-            var allowed = (uint)(e.AllowedEffects & (DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link));
-            e.Effects = (DragDropEffects)_dropTarget.Drop(data, (uint)e.KeyStates, (int)point.X, (int)point.Y, allowed);
-        }
-        catch (Exception exception)
-        {
-            e.Effects = DragDropEffects.None;
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Drop failed", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-        finally { ClearDropTarget(); }
-    }
-
-    private void ClearDropTarget()
-    {
-        _dropTarget?.Dispose();
-        _dropTarget = null;
-        _dropTargetPath = null;
     }
 
     private void FileList_PreviewKeyDown(object sender, KeyEventArgs e)

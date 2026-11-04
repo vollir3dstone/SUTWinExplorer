@@ -371,7 +371,13 @@ leading ellipsis prefix is omitted.
 - A fixed Pathview's **Active path** pane has its own default-checked
   **Hide internal** checkbox above the subfolder list. It applies the same
   internal-item predicate to that list's immediate children only; it does not
-  change the content-pane filter or the browsable tree filter.
+  change the content-pane filter or the browsable tree filter. The list does not
+  expose a persistent, user-managed or multiple selection like the content
+  table. Pointer actions identify the clicked or dragged folder; WPF selection
+  may be used temporarily for menus or keyboard interaction. Entering a row and
+  closing its item menu clear that selection. An open menu keeps its target;
+  prepared transfers retain their own source paths and use the current directory
+  as their destination.
 - The content pane has a separate, default-checked **Hide internal** checkbox
   beside the default-checked **Hide directories** checkbox. It uses the same
   item predicate for files and directories: it hides dot- and dollar-prefixed
@@ -593,13 +599,16 @@ popup on movement. The next normal right-click starts a new Base Menu; native
 fallback and keyboard-invoked menus do not start this sequence. The monitor is
 released on reset or view unload.
 
-The custom table uses `ShellDragDrop` to obtain a Shell data object for selected
-filesystem items and delegates incoming left-button drags to the native folder
+The custom table and Sub directories list share `ListViewDragSource` and
+`ListViewDropTarget` for left-button filesystem drag-and-drop. The table supplies
+its selection, while the list supplies only the clicked folder. `ShellDragDrop`
+obtains a Shell data object and delegates incoming drags to the native folder
 drop target. Directory rows select their own destination; file rows and the
-background select the current directory. The table rejects non-filesystem and
-right-button drags. Its ordinary right-click menu handler is independent of
-drag-and-drop. Integration tests in [ShellDragDrop.Tests.ps1](tests/ShellDragDrop.Tests.ps1)
-exercise real gestures, modifier effects, cross-process data and right-click behavior.
+background select the current directory. Non-filesystem and right-button drags
+are rejected, and tree views do not participate. Ordinary right-click menu
+handlers remain independent of drag-and-drop. Integration tests in
+[ShellDragDrop.Tests.ps1](tests/ShellDragDrop.Tests.ps1) exercise real gestures,
+modifier effects, cross-process data and right-click behavior.
 
 For tree and **Sub directories** items, the helper requests `CMF_CANRENAME` and
 dispatches the Shell's rename command to a WPF inline editor; committing calls

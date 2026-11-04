@@ -59,6 +59,7 @@ public partial class Pathview : UserControl
     private Window? _inputWindow;
     private readonly SutContextMenuController<TreeEntry> _treeContextMenu;
     private readonly SutContextMenuController<TreeEntry> _subfolderContextMenu;
+    private readonly ListViewDragSource<TreeEntry> _subfolderDragSource;
     private TreeEntry? _treeMenuTarget;
     private TreeEntry? _subfolderMenuTarget;
 
@@ -68,6 +69,11 @@ public partial class Pathview : UserControl
         InitializeComponent();
         _treeContextMenu = CreateDirectoryMenuController(ActivePathAndSiblingsTree, true);
         _subfolderContextMenu = CreateDirectoryMenuController(ActivePathSubfoldersList, false);
+        _ = new ListViewDropTarget(ActivePathSubfoldersList,
+            item => item is TreeEntry { IsPlaceholder: false } entry ? entry.Path : null,
+            () => CurrentPath, () => _editingTreeEntry is null);
+        _subfolderDragSource = new ListViewDragSource<TreeEntry>(ActivePathSubfoldersList, entry => [entry.Path],
+            () => _editingTreeEntry is null, () => { _subfolderContextMenu.Reset(); _subfolderMenuTarget = null; });
         ActivePathAndSiblingsTree.SelectedItemChanged += (_, args) =>
         {
             if (args.NewValue is not TreeEntry entry || _treeMenuTarget is null ||
@@ -1203,13 +1209,25 @@ public partial class Pathview : UserControl
         }
     }
 
+    private void ActivePathSubfoldersList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _subfolderDragSource.Cancel();
+        var source = e.OriginalSource as DependencyObject;
+        if (FindAncestor<TextBox>(source) is null && _editingTreeEntry is null &&
+            FindAncestor<ListViewItem>(source) is { DataContext: TreeEntry { IsPlaceholder: false } entry } &&
+            Directory.Exists(entry.Path))
+            _subfolderDragSource.Begin(entry, e.GetPosition(ActivePathSubfoldersList));
+    }
+
     private void ActivePathSubfoldersList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        var clickedEntry = _subfolderDragSource.Item;
+        _subfolderDragSource.Cancel();
         if (FindAncestor<TextBox>(e.OriginalSource as DependencyObject) is not null)
             return;
 
         if (FindAncestor<ListViewItem>(e.OriginalSource as DependencyObject) is
-            { DataContext: TreeEntry { IsPlaceholder: false } entry })
+            { DataContext: TreeEntry { IsPlaceholder: false } entry } && ReferenceEquals(clickedEntry, entry))
         {
             _subfolderContextMenu.Reset();
             _subfolderMenuTarget = null;

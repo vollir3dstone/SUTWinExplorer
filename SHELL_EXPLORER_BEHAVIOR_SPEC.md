@@ -240,6 +240,15 @@ may show its requested row in light gray without changing the active selection.
   shows only the folder's Shell icon (including overlays) and name.
   The sections have a visible gap, and each subfolder row matches the tree's
   row height.
+- [x] The **Sub directories** list does not provide a persistent, user-managed
+  selection or multiple selection like the content table. Hover highlights the
+  row under the pointer; pointer actions use the folder clicked or dragged, not
+  a previously selected folder. The list may use a temporary selection for an
+  operation or keyboard interaction. Entering a row clears the selection, and
+  the selection used for an item context menu is cleared when that menu closes.
+  An open menu retains its chosen target; prepared transfers retain their own
+  source paths and execute into the current directory. With no temporarily
+  selected item, keyboard context-menu commands use the background menu.
 - [x] The **Active path** tab page insets its two-section layout 8 DIP from
   the tab-page edges. The sidebar tabs leave a 4-DIP gap before the horizontal
   GridSplitter; the surrounding two-pane layout retains its 4-DIP margin.
@@ -455,11 +464,13 @@ may show its requested row in light gray without changing the active selection.
   sidebar menus and their backgrounds.
 - [x] ContentView file and folder selections use the Base and Content Menu pair
   described in [CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md).
-- [x] ContentView supports left-button filesystem drag-and-drop between tables
-  and compatible external applications. Directory rows target that directory;
-  file rows and empty space target the current directory. Copy, Move and Link
-  use Shell effects and modifier keys; right-button drags into the table and
-  non-filesystem data are rejected. Clipboard and prepared transfers are independent.
+- [x] ContentView and the Sub directories list support left-button filesystem
+  drag-and-drop between each other and compatible external applications. The
+  table drags its selection; the list drags only the clicked folder. Directory
+  rows target that directory; file rows and empty space target the current
+  directory. Copy, Move and Link use Shell effects and modifier keys; right-button
+  drags and non-filesystem data are rejected. Tree views do not participate.
+  Clipboard and prepared transfers are independent.
 - [x] Leaving the system double-click area around the opening point or executing
   a menu command resets the context-menu sequence, even if the pointer returns.
   Pointer movement does not close an open menu; the next normal right-click on

@@ -164,8 +164,14 @@ The two sidebar widgets use the same menu series for the clicked directory,
 with independent controller state per widget and Pathview. Each has a single
 target rather than ContentView's multiple selection. Selecting a different
 tree target or navigating resets the corresponding series. The Sub directories
-list clears its visual selection after its menu closes, while preserving the
-series for a subsequent right-click on the same folder. Its background has its
+list has no persistent, user-managed selection like ContentView: hover highlights
+the row under the pointer, and a right-click targets the clicked folder. A
+temporary selection may be used for the menu or keyboard interaction; entering a
+row clears it, and the item menu's selection is cleared after the menu closes.
+An open menu retains its target even if the pointer moves. Prepared transfers
+retain their own source paths and execute into the current directory, rather
+than using the hovered folder as their source or destination. The list preserves
+the menu series for a subsequent right-click on the same folder. Its background has its
 own three-step sequence; the tree in the **Active path** tab retains its
 native item menu. Virtual or unavailable sidebar targets fall back to the
 native item menu. Shift-right-click uses that native menu; in the Sub directories
