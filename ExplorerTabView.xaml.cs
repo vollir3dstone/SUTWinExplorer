@@ -1199,16 +1199,10 @@ public partial class Pathview : UserControl
 
     private void Tree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not TreeView || FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { DataContext: TreeEntry entry } || entry.IsPlaceholder)
+        if (!ReferenceEquals(sender, ActivePathAndSiblingsTree) || FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { DataContext: TreeEntry entry } || entry.IsPlaceholder)
             return;
 
-        if (ReferenceEquals(sender, ActivePathAndSiblingsTree))
-            ShowDirectoryMenu(entry, tree: true, alternate: true);
-        else
-        {
-            entry.IsSelected = true;
-            ShowNativeMenu(this, entry.Path, !entry.IsTop ? () => BeginTreeRename(entry) : null);
-        }
+        ShowDirectoryMenu(entry, tree: true, alternate: true);
         e.Handled = true;
     }
 

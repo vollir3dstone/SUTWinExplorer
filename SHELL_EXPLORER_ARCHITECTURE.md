@@ -591,7 +591,8 @@ Shell content sizing and filter internals are documented in
 The hosted Shell content view supplies its own item and background menus,
 clipboard context-menu verbs, and drag/drop. The app still uses
 `ShellContextMenu` for context menus requested from the custom WPF directory
-trees. That helper queries native Shell context menus and forwards required
+tree and Sub directories list. The **Path** tree in the **Active path** tab has
+no context menu. The helper queries native Shell context menus and forwards required
 `IContextMenu2`/`IContextMenu3` menu messages.
 
 The custom ContentView and participating sidebar widgets use the paired menus
@@ -613,7 +614,7 @@ handlers remain independent of drag-and-drop. Integration tests in
 [ShellDragDrop.Tests.ps1](tests/ShellDragDrop.Tests.ps1) exercise real gestures,
 modifier effects, cross-process data and right-click behavior.
 
-For tree and **Sub directories** items, the helper requests `CMF_CANRENAME` and
+For **Active path and siblings** tree and **Sub directories** items, the helper requests `CMF_CANRENAME` and
 dispatches the Shell's rename command to a WPF inline editor; committing calls
 the parent Shell folder's `SetNameOf`. Open Pathviews remap affected locations
 and history to the returned filesystem path. The virtual **This PC** tree root

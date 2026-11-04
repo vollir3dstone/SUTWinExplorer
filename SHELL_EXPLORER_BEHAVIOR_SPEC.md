@@ -485,7 +485,7 @@ may show its requested row in light gray without changing the active selection.
 - [x] Right-clicking empty content space cycles through the active folder's
   background Base Menu, Content Menu and no menu; Shift opens the native menu.
 - [x] The **Active path and siblings** tree uses the directory Base and Content
-  Menu pair. The **Active path** tree retains its native Shell menu. Where
+  Menu pair. The **Path** tree in the **Active path** tab has no context menu. Where
   renaming is available, **Rename** starts an inline editor in the tree; Enter
   commits and Escape cancels. Renamed active paths and open tabs are updated.
 - [x] In a fixed Pathview's **Sub directories** list, right-clicking a folder

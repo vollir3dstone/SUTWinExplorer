@@ -172,8 +172,8 @@ An open menu retains its target even if the pointer moves. Prepared transfers
 retain their own source paths and execute into the current directory, rather
 than using the hovered folder as their source or destination. The list preserves
 the menu series for a subsequent right-click on the same folder. Its background has its
-own three-step sequence; the tree in the **Active path** tab retains its
-native item menu. Virtual or unavailable sidebar targets fall back to the
+own three-step sequence; the **Path** tree in the **Active path** tab has no
+context menu. Virtual or unavailable sidebar targets fall back to the
 native item menu. Shift-right-click uses that native menu; in the Sub directories
 list the Apps key opens the applicable item menu and Shift+F10 the native menu.
 With no selected sidebar item these keyboard commands retain the native
@@ -612,7 +612,7 @@ alternatives and their limitations.
 [SutShell.Tests.ps1](tests/SutShell.Tests.ps1) exercises menu contents, filtering,
 toolbar actions, Shell invocation, selection and menu switching for single,
 multiple and mixed files and directories. It also checks the independent sidebar
-menu series, target-specific actions and unchanged native Active path tree. It
+menu series, target-specific actions and the absence of an Active path tree menu. It
 exercises both background sequences, native Shift fallback, view filtering,
 the shared New dialog, shared/background-only registry fixtures and background action states.
 It includes native popup and mouse-input probes in WPF windows;

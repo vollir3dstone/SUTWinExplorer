@@ -81,17 +81,20 @@ public sealed class RightMenuProbe : IDisposable
     [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr window, uint message, IntPtr wparam, IntPtr lparam);
     private readonly int x, y;
     private readonly IntPtr owner;
+    private readonly bool checkAfterRelease;
     private readonly Timer timer;
     private int phase, busy;
-    public bool SeenBeforeRelease, Done;
-    public RightMenuProbe(int x, int y, IntPtr owner) { this.x = x; this.y = y; this.owner = owner; timer = new Timer(Tick, null, 100, 150); }
+    public bool MenuSeen, Done;
+    public RightMenuProbe(int x, int y, IntPtr owner) : this(x, y, owner, false) { }
+    public RightMenuProbe(int x, int y, IntPtr owner, bool checkAfterRelease) { this.x = x; this.y = y; this.owner = owner; this.checkAfterRelease = checkAfterRelease; timer = new Timer(Tick, null, 100, 150); }
     private void Tick(object state)
     {
         if (Interlocked.Exchange(ref busy, 1) != 0) return;
         try
         {
             if (phase++ == 0) { SetCursorPos(x, y); mouse_event(8, 0, 0, 0, UIntPtr.Zero); }
-            else if (!SeenBeforeRelease && phase < 20)
+            else if (checkAfterRelease && phase == 2) { mouse_event(16, 0, 0, 0, UIntPtr.Zero); }
+            else if (!MenuSeen && phase < 20)
             {
                 EnumWindows((window, ignored) =>
                 {
@@ -99,7 +102,7 @@ public sealed class RightMenuProbe : IDisposable
                     var name = new System.Text.StringBuilder(32);
                     GetClassName(window, name, name.Capacity);
                     if (process != GetCurrentProcessId() || name.ToString() != "#32768") return true;
-                    SeenBeforeRelease = true;
+                    MenuSeen = true;
                     PostMessage(owner, 0x001F, IntPtr.Zero, IntPtr.Zero);
                     return false;
                 }, IntPtr.Zero);
@@ -299,7 +302,7 @@ try {
         $menuProbe = [RightMenuProbe]::new([int] $point.X, [int] $point.Y, $owner)
         try {
             Wait-Until { $menuProbe.Done } 'right-click menu'
-            if (-not $menuProbe.SeenBeforeRelease) { throw 'The context menu did not open on right-button down.' }
+            if (-not $menuProbe.MenuSeen) { throw 'The context menu did not open on right-button down.' }
         } finally { $menuProbe.Dispose() }
 
         $sidebarSource = [string] (Join-Path $destination 'sidebar-source')
@@ -315,6 +318,14 @@ try {
         $sidebar = $pathview.FindName('ActivePathSubfoldersList')
         Wait-Until { $sidebar.IsVisible -and @($sidebar.Items | Where-Object { $_.Path -eq $sidebarSource }).Count -eq 1 } 'sidebar drag test view'
         if (-not $sidebar.AllowDrop -or $pathview.FindName('ActivePathTree').AllowDrop -or $pathview.FindName('ActivePathAndSiblingsTree').AllowDrop) { throw 'Drag-and-drop was enabled on the wrong sidebar controls.' }
+        $activeTree = $pathview.FindName('ActivePathTree')
+        Wait-Until { $null -ne $activeTree.ItemContainerGenerator.ContainerFromIndex(0) } 'active path tree row'
+        $point = $activeTree.ItemContainerGenerator.ContainerFromIndex(0).PointToScreen([System.Windows.Point]::new(60, 10))
+        $menuProbe = [RightMenuProbe]::new([int] $point.X, [int] $point.Y, $owner, $true)
+        try {
+            Wait-Until { $menuProbe.Done } 'active path tree right-click'
+            if ($menuProbe.MenuSeen) { throw 'The active path tree unexpectedly opened a context menu.' }
+        } finally { $menuProbe.Dispose() }
         function Get-SidebarPoint([string] $path) {
             Wait-Until { @($sidebar.Items | Where-Object { $_.Path -eq $path }).Count -eq 1 } "sidebar row $path"
             $item = @($sidebar.Items | Where-Object { $_.Path -eq $path })[0]

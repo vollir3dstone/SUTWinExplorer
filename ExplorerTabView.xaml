@@ -294,7 +294,6 @@
                                       BorderThickness="0" Padding="0"
                                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                       ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                                      PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown"
                                       PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp" />
                         </Border>
                     </GroupBox>

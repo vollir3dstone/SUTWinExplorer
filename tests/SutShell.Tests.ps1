@@ -3139,7 +3139,7 @@ try {
             $event = [System.Windows.Input.MouseButtonEventArgs]::new([System.Windows.Input.Mouse]::PrimaryDevice, 0, [System.Windows.Input.MouseButton]::Right)
             $event.RoutedEvent = [System.Windows.Input.Mouse]::PreviewMouseDownEvent
             $treeItem.RaiseEvent($event)
-            Assert-True ($menuProbe.ItemCount -gt 0 -and -not (Test-BaseMenu $menuProbe)) "The fixed Active path tree did not show a native menu: count=$($menuProbe.ItemCount), items=$($menuProbe.Items -join '|')."
+            Assert-True ($menuProbe.ItemCount -eq 0) 'The fixed Active path tree unexpectedly opened a menu.'
         } finally { $menuProbe.Dispose() }
     } finally {
         $fixedWindow.Close()
