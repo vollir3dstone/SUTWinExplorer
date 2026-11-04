@@ -254,9 +254,11 @@ be updated. External renames are not tracked as identity-preserving renames.
   Individual unavailable metadata or icons can instead produce an entry with
   empty fields without failing the whole range.
 - SutShell's directory observer is best-effort. ContentView marshals its change
-  callback to the dispatcher; Pathview coalesces notifications and initiates a
-  refresh, which invalidates the whole current-directory cache. Explicit refresh,
-  successful rename, copy or move, and navigation also invalidate it. Filter and
+  callback to the dispatcher; structural changes mark the view enumeration-dirty,
+  while metadata changes update the cached item and mark it display-dirty.
+  The next tab activation re-enumerates only for enumeration-dirty state; a
+  display-only refresh reuses the cached directory records.
+  Explicit refresh, successful rename, copy or move, and navigation also invalidate it. Filter and
   sort changes do not. Notifications and snapshots do not guarantee an atomic
   filesystem view; Shell icon or overlay changes may not generate notifications.
 
@@ -403,7 +405,7 @@ location/tree updates.
 | `HideInternalItems` | Gets or sets this view's nullable content **Hide internal** checkbox state. The other content filters are currently controlled by the view's own UI. |
 | `Refresh(refreshView)` / `RefreshStatus()` | Refresh content or its status as requested. In Shell mode, status refresh also schedules private-table repopulation. |
 | `SetObservedDirectories(paths)` / `ClearObservedDirectories()` | Pass or clear the directory-notification routes calculated by Pathview. |
-| `FileSystemChanged` | Reports a Shell filesystem notification; Pathview coordinates its own deferred content/tree refresh. |
+| `FileSystemChanged` | Reports the observed directory and the filesystem event, including old and new paths for a direct rename; a watcher error has no filesystem event. Immediate changes inside a child directory are reported as a metadata change to that child. |
 
 `PrivateTableTopGapOffset` is a WPF binding property for the spike's visual
 alignment, not a navigation or Shell API. The action buttons do not expose

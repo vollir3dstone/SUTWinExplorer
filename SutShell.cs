@@ -122,6 +122,10 @@ internal static class SutShell
         }, cancellationToken);
     }
 
+    internal static Task<bool> RefreshCachedItemMetadataAsync(
+        DirectoryDataCache cache, string directoryPath, string itemPath) =>
+        RunOnShellThread(_ => cache.RefreshItemMetadata(directoryPath, itemPath), CancellationToken.None);
+
     private static Task<T> RunOnShellThread<T>(Func<CancellationToken, T> operation, CancellationToken cancellationToken)
     {
         var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -259,37 +263,77 @@ internal static class SutShell
     }
 
     internal static IDisposable ObserveDirectories(IEnumerable<string> paths, Action changed) =>
-        new DirectoryObserver(paths, changed);
+        new DirectoryObserver(paths, _ => changed(), null);
+
+    internal static IDisposable ObservePathviewDirectories(IEnumerable<string> paths, string currentPath, Action<DirectoryNotification> changed) =>
+        new DirectoryObserver(paths, changed, currentPath);
 
     private sealed class DirectoryObserver : IDisposable
     {
         private readonly List<FileSystemWatcher> _watchers = [];
 
-        internal DirectoryObserver(IEnumerable<string> paths, Action changed)
+        internal DirectoryObserver(IEnumerable<string> paths, Action<DirectoryNotification> changed, string? currentPath)
         {
             foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 FileSystemWatcher? watcher = null;
                 try
                 {
+                    var isCurrentPath = currentPath is null ||
+                        string.Equals(Path.TrimEndingDirectorySeparator(path), Path.TrimEndingDirectorySeparator(currentPath), StringComparison.OrdinalIgnoreCase);
                     watcher = new FileSystemWatcher(path)
                     {
-                        NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName |
-                                       NotifyFilters.Attributes | NotifyFilters.LastWrite | NotifyFilters.Size
+                        NotifyFilter = isCurrentPath
+                            ? NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.Attributes | NotifyFilters.LastWrite | NotifyFilters.Size
+                            : NotifyFilters.DirectoryName | NotifyFilters.Attributes
                     };
-                    watcher.Changed += (_, _) => changed();
-                    watcher.Created += (_, _) => changed();
-                    watcher.Deleted += (_, _) => changed();
-                    watcher.Renamed += (_, _) => changed();
-                    watcher.Error += (_, _) => changed();
+                    watcher.Changed += (_, args) => { if (isCurrentPath || Directory.Exists(args.FullPath)) changed(new(path, args)); };
+                    watcher.Created += (_, args) => changed(new(path, args));
+                    watcher.Deleted += (_, args) => changed(new(path, args));
+                    watcher.Renamed += (_, args) => changed(new(path, args));
+                    watcher.Error += (_, _) => changed(new(path, null));
                     watcher.EnableRaisingEvents = true;
                     _watchers.Add(watcher);
+                    if (currentPath is not null && isCurrentPath)
+                        ObserveChildDirectoryChanges(path, changed);
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
                 {
                     watcher?.Dispose();
                     Debug.WriteLine($"Could not observe '{path}': {exception.Message}");
                 }
+            }
+        }
+
+        private void ObserveChildDirectoryChanges(string path, Action<DirectoryNotification> changed)
+        {
+            FileSystemWatcher? watcher = null;
+            try
+            {
+                watcher = new FileSystemWatcher(path)
+                {
+                    IncludeSubdirectories = true,
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName
+                };
+                void NotifyChild(string itemPath)
+                {
+                    var childPath = Path.GetDirectoryName(itemPath);
+                    if (childPath is null || !string.Equals(Path.GetDirectoryName(childPath),
+                            Path.TrimEndingDirectorySeparator(path), StringComparison.OrdinalIgnoreCase))
+                        return;
+                    changed(new(path, new FileSystemEventArgs(WatcherChangeTypes.Changed, path, Path.GetFileName(childPath))));
+                }
+                watcher.Created += (_, args) => NotifyChild(args.FullPath);
+                watcher.Deleted += (_, args) => NotifyChild(args.FullPath);
+                watcher.Renamed += (_, args) => { NotifyChild(args.OldFullPath); NotifyChild(args.FullPath); };
+                watcher.Error += (_, _) => changed(new(path, null));
+                watcher.EnableRaisingEvents = true;
+                _watchers.Add(watcher);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                watcher?.Dispose();
+                Debug.WriteLine($"Could not observe child directory changes in '{path}': {exception.Message}");
             }
         }
 
@@ -318,6 +362,8 @@ internal static class SutShell
     private static extern IntPtr SHGetFileInfo(string path, uint fileAttributes, ref ShellFileInfo fileInfo, uint fileInfoSize, uint flags);
 }
 
+internal sealed record DirectoryNotification(string DirectoryPath, FileSystemEventArgs? Change);
+
 internal sealed class DirectoryDataCache
 {
     private readonly object _sync = new();
@@ -334,6 +380,22 @@ internal sealed class DirectoryDataCache
             _path = null;
             _items = null;
         }
+    }
+
+    internal bool RefreshItemMetadata(string directoryPath, string itemPath)
+    {
+        DirectoryItem? item;
+        lock (_sync)
+        {
+            if (!string.Equals(_path, directoryPath, StringComparison.OrdinalIgnoreCase))
+                return false;
+            item = _items?.FirstOrDefault(candidate =>
+                string.Equals(candidate.FullPath, itemPath, StringComparison.OrdinalIgnoreCase));
+        }
+        if (item is null)
+            return false;
+        item.RefreshMetadata();
+        return true;
     }
 
     internal DirectoryItem[] GetDirectory(string path, CancellationToken token)
@@ -402,6 +464,25 @@ internal sealed class DirectoryItem(string name, string fullPath, bool isDirecto
     internal bool IsDirectory { get; } = isDirectory;
     internal bool IsDrive { get; } = isDrive;
     internal MediaType MediaType { get; } = MediaTypeMap.GetMediaType(fullPath, isDirectory);
+
+    internal void RefreshMetadata()
+    {
+        lock (_sync)
+        {
+            _internal = null;
+            _sizeLoaded = false;
+            _modifiedLoaded = false;
+            _typeLoaded = false;
+            _iconsLoaded = false;
+            _size = null;
+            _modified = null;
+            _type = null;
+            _icons = null;
+            _entry = null;
+            _ = IsInternal;
+            _ = Entry;
+        }
+    }
 
     internal bool IsInternal
     {

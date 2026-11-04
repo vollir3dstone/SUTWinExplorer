@@ -20,11 +20,14 @@ public partial class ContentView : UserControl
     private ClipboardChangeMonitor? _clipboardMonitor;
     private CancellationTokenSource? _refreshCancellation;
     private CancellationTokenSource? _rangeCancellation;
+    private Task _snapshotReady = Task.CompletedTask;
+    private readonly HashSet<Task> _metadataUpdates = [];
     private DirectorySnapshot? _snapshot;
     private DirectoryRow[]? _rows;
     private readonly DirectorySortState _sorting = new();
     private readonly DirectoryDataCache _directoryCache = new();
     private readonly HashSet<string> _selectedPaths = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _observedDirectories = new(StringComparer.OrdinalIgnoreCase);
     private bool _restoringSelection;
     private bool _suppressFilterRefresh;
     private string? _revealedPath;
@@ -182,7 +185,7 @@ public partial class ContentView : UserControl
     private string CurrentPath { get; set; } = string.Empty;
     internal event EventHandler<string>? FolderOpenRequested;
     internal event Action<string, string>? FolderRenamed;
-    internal event EventHandler? FileSystemChanged;
+    internal event EventHandler<DirectoryNotification>? FileSystemChanged;
 
     internal void Initialize(bool isBrowsable)
     {
@@ -212,7 +215,11 @@ public partial class ContentView : UserControl
 
     internal void EnsureLocationAccessible(string path) => SutShell.EnsureDirectoryAccessible(path);
 
-    internal void Refresh(bool refreshView) => RefreshCore(invalidate: true);
+    internal void Refresh(bool refreshView)
+    {
+        if (refreshView)
+            RefreshCore(invalidate: true);
+    }
 
     private async void RefreshCore(bool invalidate)
     {
@@ -233,6 +240,8 @@ public partial class ContentView : UserControl
         ClearRows();
         var cancellation = new CancellationTokenSource();
         _refreshCancellation = cancellation;
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _snapshotReady = completion.Task;
         var path = CurrentPath;
         var showDirectories = HideDirectoriesCheckBox.GetCheckBox().IsChecked != true;
         var hideInternal = HideInternalContentCheckBox.GetCheckBox().IsChecked == true;
@@ -285,11 +294,57 @@ public partial class ContentView : UserControl
         }
         finally
         {
+            completion.TrySetResult();
             if (ReferenceEquals(_refreshCancellation, cancellation))
                 _refreshCancellation = null;
             cancellation.Dispose();
         }
     }
+
+    internal void UpdateCachedItemMetadata(string itemPath)
+    {
+        var update = UpdateCachedItemMetadataAsync(CurrentPath, itemPath);
+        _metadataUpdates.Add(update);
+        _ = RemoveCompletedMetadataUpdateAsync(update);
+    }
+
+    private async Task UpdateCachedItemMetadataAsync(string directoryPath, string itemPath)
+    {
+        Task ready;
+        do
+        {
+            ready = _snapshotReady;
+            await ready;
+        }
+        while (!ReferenceEquals(ready, _snapshotReady));
+
+        if (string.Equals(CurrentPath, directoryPath, StringComparison.OrdinalIgnoreCase))
+            await SutShell.RefreshCachedItemMetadataAsync(_directoryCache, directoryPath, itemPath);
+    }
+
+    private async Task RemoveCompletedMetadataUpdateAsync(Task update)
+    {
+        try { await update; }
+        catch (Exception exception) { Debug.WriteLine($"Could not update cached metadata: {exception}"); }
+        finally { _metadataUpdates.Remove(update); }
+    }
+
+    internal async Task WaitForMetadataUpdatesAsync()
+    {
+        while (_metadataUpdates.Count > 0)
+        {
+            var updates = _metadataUpdates.ToArray();
+            try { await Task.WhenAll(updates); }
+            catch (Exception exception) { Debug.WriteLine($"Could not update cached metadata: {exception}"); }
+            finally
+            {
+                foreach (var update in updates)
+                    _metadataUpdates.Remove(update);
+            }
+        }
+    }
+
+    internal void RefreshDisplay() => RefreshCore(invalidate: false);
 
     private void ClearRows()
     {
@@ -307,11 +362,15 @@ public partial class ContentView : UserControl
 
     internal void SetObservedDirectories(IEnumerable<string> directories)
     {
+        var paths = directories.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (_observedDirectories.SetEquals(paths))
+            return;
         ClearObservedDirectories();
-        _directoryObserver = SutShell.ObserveDirectories(directories, () =>
+        _observedDirectories.UnionWith(paths);
+        _directoryObserver = SutShell.ObservePathviewDirectories(paths, CurrentPath, notification =>
         {
             if (!Dispatcher.HasShutdownStarted)
-                _ = Dispatcher.BeginInvoke(() => FileSystemChanged?.Invoke(this, EventArgs.Empty));
+            _ = Dispatcher.BeginInvoke(() => FileSystemChanged?.Invoke(this, notification));
         });
     }
 
@@ -319,6 +378,7 @@ public partial class ContentView : UserControl
     {
         _directoryObserver?.Dispose();
         _directoryObserver = null;
+        _observedDirectories.Clear();
     }
 
     private void ContentView_Loaded(object sender, RoutedEventArgs e)
@@ -528,7 +588,8 @@ public partial class ContentView : UserControl
                     SutShell.CopyToClipboard(selectedPaths, owner);
                     break;
                 case "ItemClipboardPaste":
-                    SutShell.PasteFromClipboard(CurrentPath, owner);
+                    try { SutShell.PasteFromClipboard(CurrentPath, owner); }
+                    finally { Refresh(true); }
                     break;
                 case "LinkMarkItem":
                     if (CopyWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared)

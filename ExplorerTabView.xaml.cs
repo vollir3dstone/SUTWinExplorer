@@ -50,8 +50,12 @@ public partial class Pathview : UserControl
     private bool _suppressTreeBringIntoView;
     private TreeEntry? _pendingTreeNavigationEntry;
     private TreeEntry? _editingTreeEntry;
-    private bool _fileSystemStateDirty = true;
-    private bool _contentViewNeedsRefresh = true;
+    private bool _fileSystemStateDirty;
+    private bool _enumerationDirty;
+    private bool _displayDirty;
+    private bool _refreshWholeTree;
+    private readonly HashSet<string> _dirtyDirectories = new(StringComparer.OrdinalIgnoreCase);
+    private TreeEntry? _activePathEntry;
     private readonly List<TreeEntry> _driveRoots = [];
     private readonly Action<string?>? _customNameChanged;
     private readonly Action<Color>? _tabColorChanged;
@@ -194,6 +198,7 @@ public partial class Pathview : UserControl
         foreach (var drive in _driveRoots)
             drive.RefreshDisplayName();
         _fileSystemStateDirty = true;
+        _refreshWholeTree = true;
         ScheduleFileSystemRefreshIfVisible();
         RemapHistory(_backHistory, oldPath, newPath);
         RemapHistory(_forwardHistory, oldPath, newPath);
@@ -322,6 +327,12 @@ public partial class Pathview : UserControl
 
         CurrentPath = path;
         DirectoryContent.SetCurrentPath(path);
+        _fileSystemStateDirty = false;
+        _enumerationDirty = false;
+        _displayDirty = false;
+        _refreshWholeTree = false;
+        _dirtyDirectories.Clear();
+        SynchronizeContentChangeNotifications();
         PinPathviewButton.IsEnabled = !IsTopPath(path);
         BrowsePathviewButton.IsEnabled = true;
         OpenInExplorerButton.IsEnabled = true;
@@ -329,7 +340,6 @@ public partial class Pathview : UserControl
         LocationLabel.Text = ShellDisplayNameProvider.GetDisplayPath(path);
         RefreshActivePathAndSiblingsTree();
         RefreshActivePathTree();
-        SynchronizeContentChangeNotifications();
         LocationChanged?.Invoke(this, CurrentPath);
     }
 
@@ -432,9 +442,6 @@ public partial class Pathview : UserControl
 
     private void Pathview_Loaded(object sender, RoutedEventArgs e)
     {
-        _fileSystemStateDirty = true;
-        _contentViewNeedsRefresh = true;
-        SynchronizeContentChangeNotifications();
         ScheduleFileSystemRefreshIfVisible();
     }
 
@@ -443,18 +450,12 @@ public partial class Pathview : UserControl
         _treeContextMenu.Reset();
         _subfolderContextMenu.Reset();
         _fileSystemRefreshTimer.Stop();
-        _fileSystemStateDirty = true;
-        _contentViewNeedsRefresh = true;
-        DirectoryContent.ClearObservedDirectories();
     }
 
     private void Pathview_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (IsVisible)
         {
-            _fileSystemStateDirty = true;
-            _contentViewNeedsRefresh = true;
-            SynchronizeContentChangeNotifications();
             ScheduleFileSystemRefreshIfVisible();
             if (!IsBrowsable)
                 Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
@@ -555,9 +556,6 @@ public partial class Pathview : UserControl
 
     private void SynchronizeContentChangeNotifications()
     {
-        if (!IsLoaded)
-            return;
-
         var desiredPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         AddCurrentPathNotificationPaths(desiredPaths);
 
@@ -594,16 +592,33 @@ public partial class Pathview : UserControl
         }
     }
 
-    private void ContentView_FileSystemChanged(object? sender, EventArgs e)
+    private void ContentView_FileSystemChanged(object? sender, DirectoryNotification notification)
     {
+        var path = notification.DirectoryPath;
+        if (notification.Change is { ChangeType: WatcherChangeTypes.Changed } change)
+        {
+            if (string.Equals(Path.TrimEndingDirectorySeparator(path), Path.TrimEndingDirectorySeparator(CurrentPath), StringComparison.OrdinalIgnoreCase))
+            {
+                DirectoryContent.UpdateCachedItemMetadata(change.FullPath);
+                _displayDirty = true;
+            }
+            return;
+        }
         _fileSystemStateDirty = true;
-        _contentViewNeedsRefresh = false;
-        ScheduleFileSystemRefreshIfVisible();
+        _dirtyDirectories.Add(path);
+        if (string.Equals(Path.TrimEndingDirectorySeparator(path), Path.TrimEndingDirectorySeparator(CurrentPath), StringComparison.OrdinalIgnoreCase))
+            _enumerationDirty = true;
+    }
+
+    internal void Close()
+    {
+        _fileSystemRefreshTimer.Stop();
+        DirectoryContent.ClearObservedDirectories();
     }
 
     private void ScheduleFileSystemRefreshIfVisible()
     {
-        if (!_fileSystemStateDirty || !IsLoaded || !IsVisible ||
+        if ((!_fileSystemStateDirty && !_displayDirty) || !IsLoaded || !IsVisible ||
             Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
             return;
 
@@ -614,14 +629,81 @@ public partial class Pathview : UserControl
     private void FileSystemRefreshTimer_Tick(object? sender, EventArgs e)
     {
         _fileSystemRefreshTimer.Stop();
-        if (!IsLoaded || !IsVisible || _editingTreeEntry is not null)
+        if ((!_fileSystemStateDirty && !_displayDirty) || !IsLoaded || !IsVisible || _editingTreeEntry is not null)
             return;
 
-        var refreshContentView = _contentViewNeedsRefresh;
+        var refreshContentView = _enumerationDirty;
+        var refreshDisplay = _displayDirty;
+        var refreshWholeTree = _refreshWholeTree;
+        var dirtyDirectories = _dirtyDirectories.ToHashSet(StringComparer.OrdinalIgnoreCase);
         _fileSystemStateDirty = false;
-        _contentViewNeedsRefresh = false;
-        RefreshCurrentFileSystemState(refreshContentView);
-        SynchronizeContentChangeNotifications();
+        _enumerationDirty = false;
+        _displayDirty = false;
+        _refreshWholeTree = false;
+        _dirtyDirectories.Clear();
+        if (refreshWholeTree)
+            RefreshCurrentFileSystemState(refreshContentView);
+        else
+        {
+            DirectoryContent.Refresh(refreshContentView);
+            RefreshDirtyDirectories(dirtyDirectories);
+        }
+        if (refreshDisplay && !refreshContentView)
+            _ = RefreshDisplayWhenReadyAsync(CurrentPath);
+    }
+
+    private async Task RefreshDisplayWhenReadyAsync(string path)
+    {
+        await DirectoryContent.WaitForMetadataUpdatesAsync();
+        if (!string.Equals(CurrentPath, path, StringComparison.OrdinalIgnoreCase))
+            return;
+        if (!IsLoaded || !IsVisible)
+        {
+            _displayDirty = true;
+            return;
+        }
+        DirectoryContent.RefreshDisplay();
+    }
+
+    private void RefreshDirtyDirectories(HashSet<string> dirtyDirectories)
+    {
+        string[]? currentDirectories = null;
+        if (_activePathEntry is { } activePath && dirtyDirectories.Contains(activePath.Path))
+        {
+            try
+            {
+                currentDirectories = Directory.EnumerateDirectories(activePath.Path).ToArray();
+                RefreshTreeChildren(activePath, useSubfolderFilter: true, directoryPaths: currentDirectories);
+                activePath.HasSubdirectories = false;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+
+        if (IsTopPath(CurrentPath) || ActivePathAndSiblingsTree.ItemsSource is not ObservableCollection<TreeEntry> roots)
+            return;
+
+        var rootPath = Path.GetPathRoot(CurrentPath);
+        var active = roots.FirstOrDefault(root => root.IsTop)?.Children.FirstOrDefault(root =>
+            string.Equals(root.Path, rootPath, StringComparison.OrdinalIgnoreCase));
+        if (active is null || string.IsNullOrEmpty(rootPath))
+            return;
+
+        if (dirtyDirectories.Contains(active.Path) &&
+            (!string.Equals(active.Path, CurrentPath, StringComparison.OrdinalIgnoreCase) || currentDirectories is not null))
+            RefreshTreeChildren(active, directoryPaths: string.Equals(active.Path, CurrentPath, StringComparison.OrdinalIgnoreCase) ? currentDirectories : null);
+        foreach (var segment in GetPathSegments(rootPath, CurrentPath))
+        {
+            var childPath = Path.Combine(active.Path, segment);
+            active = active.Children.FirstOrDefault(child => !child.IsPlaceholder &&
+                string.Equals(child.Path, childPath, StringComparison.OrdinalIgnoreCase));
+            if (active is null)
+                return;
+            if (dirtyDirectories.Contains(active.Path) &&
+                (!string.Equals(active.Path, CurrentPath, StringComparison.OrdinalIgnoreCase) || currentDirectories is not null))
+                RefreshTreeChildren(active, directoryPaths: string.Equals(active.Path, CurrentPath, StringComparison.OrdinalIgnoreCase) ? currentDirectories : null);
+        }
     }
 
     private void InitializeActivePathAndSiblingsTree()
@@ -662,6 +744,7 @@ public partial class Pathview : UserControl
         }
 
         RefreshTreeChildren(parent, useSubfolderFilter: true);
+        _activePathEntry = parent;
         parent.HasSubdirectories = false;
         parent.IsSelected = true;
         ActivePathTree.Height = (segments.Length + 1) * DirectoryTreeRowHeight;
@@ -813,14 +896,14 @@ public partial class Pathview : UserControl
         RefreshTreeChildren(entry);
     }
 
-    private void RefreshTreeChildren(TreeEntry entry, bool useSubfolderFilter = false)
+    private void RefreshTreeChildren(TreeEntry entry, bool useSubfolderFilter = false, string[]? directoryPaths = null)
     {
         if (entry.IsPlaceholder || entry.IsTop)
             return;
 
         try
         {
-            var directories = Directory.EnumerateDirectories(entry.Path).ToArray();
+            var directories = directoryPaths ?? Directory.EnumerateDirectories(entry.Path).ToArray();
             entry.HasSubdirectories = directories.Length > 0;
             directories = directories
                 .Where(directory =>
@@ -1026,7 +1109,10 @@ public partial class Pathview : UserControl
                 case "NameClipboardCopy": Clipboard.SetText(SutShell.GetFileSystemName(entry!.Path)); break;
                 case "PathClipboardCopy": Clipboard.SetText(entry!.Path); break;
                 case "ItemClipboardCopy": SutShell.CopyToClipboard([entry!.Path], owner); break;
-                case "ItemClipboardPaste": SutShell.PasteFromClipboard(CurrentPath, owner); break;
+                case "ItemClipboardPaste":
+                    try { SutShell.PasteFromClipboard(CurrentPath, owner); }
+                    finally { RefreshCurrentFileSystemState(true); }
+                    break;
                 case "LinkMarkItem":
                     if (CopyWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared)
                         throw new InvalidOperationException("Abort or complete the prepared transfer before starting a Link.");
@@ -1437,6 +1523,7 @@ public partial class Pathview : UserControl
         finally
         {
             _fileSystemStateDirty = true;
+            _refreshWholeTree = true;
             ScheduleFileSystemRefreshIfVisible();
         }
     }

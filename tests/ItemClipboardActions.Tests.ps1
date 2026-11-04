@@ -385,6 +385,7 @@ try {
     Wait-Until { $itemClipboardPaste.IsEnabled } 'Item clipboard paste destination'
     Invoke-Button $itemClipboardPaste
     Wait-Until { [IO.File]::Exists((Join-Path $destination 'test.txt')) -and [IO.File]::Exists((Join-Path $destination 'test-folder/nested.txt')) } 'Item clipboard paste completion'
+    Wait-Until { @($view.FindName('FileList').Items | Where-Object { $_.FullPath -eq (Join-Path $destination 'test.txt') }).Count -eq 1 } 'Item clipboard paste content refresh'
     if (-not $copy.IsPrepared -or @($copy.PreparedPaths).Count -ne 2) { throw 'Item clipboard paste changed the prepared Copy.' }
     [System.Windows.Clipboard]::SetText('not files')
     Wait-Until { -not $itemClipboardPaste.IsEnabled } 'Item clipboard paste disabled for text clipboard'
@@ -407,6 +408,7 @@ try {
     if (-not $backgroundItemClipboardPaste.IsEnabled) { throw 'Background Item clipboard paste is disabled.' }
     $backgroundItemClipboardPaste.Invoke.Invoke()
     Wait-Until { [IO.File]::Exists((Join-Path $secondDestination 'test-folder/nested.txt')) } 'background Item clipboard paste'
+    Wait-Until { @($pathview.FindName('ActivePathSubfoldersList').Items | Where-Object { $_.Path -eq (Join-Path $secondDestination 'test-folder') }).Count -eq 1 } 'background Item clipboard paste tree refresh'
     if (-not $copy.IsPrepared -or @($copy.PreparedPaths).Count -ne 2) { throw 'Sidebar clipboard actions changed the prepared Copy.' }
     $copy.Abort()
     [System.Windows.Clipboard]::SetText('sidebar copy sentinel')

@@ -75,10 +75,15 @@ passes them to ContentView's shared insertion completion. Native menu and
 extension operations do not pass through this completion.
 
 `FileSystemWatcher` subscriptions cover the directory paths supplied by
-Pathview, without recursive monitoring. The caller marshals callbacks to the
-WPF dispatcher; Pathview coalesces updates with its existing refresh timer.
-An observer is disposed when its paths change or the view unloads. A watcher
-error requests a refresh, but notification loss and inaccessible paths are not
+Pathview non-recursively. A separate recursive name-only watcher on the current
+directory notices changes immediately inside its child directories; deeper
+events are discarded. It observes the subtree without enumerating it, but can
+still receive events from deeper levels. The caller marshals callbacks to the
+WPF dispatcher; structural events mark enumeration-dirty, while metadata events
+update the cached item and mark display-dirty. The display is refreshed on the
+next tab activation. Observers remain active when a tab is unloaded and are
+disposed when its paths change or the tab closes. A watcher error currently
+marks the tab dirty, but notification loss and inaccessible paths are not
 fully recoverable guarantees. Observation failures are written to debug output.
 
 ## Follow-up work

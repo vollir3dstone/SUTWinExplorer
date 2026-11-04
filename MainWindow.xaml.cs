@@ -45,6 +45,11 @@ public partial class MainWindow : Window
         UseCasesPane.UseCaseDeleteRequested += UseCasesPane_UseCaseDeleteRequested;
         UseCasesPane.UseCasesRefreshRequested += UseCasesPane_UseCasesRefreshRequested;
         ContentRendered += MainWindow_ContentRendered;
+        Closed += (_, _) =>
+        {
+            foreach (var view in _tabsByPathview.Keys)
+                view.Close();
+        };
     }
 
     private void MainWindow_ContentRendered(object? sender, EventArgs e)
@@ -149,6 +154,7 @@ public partial class MainWindow : Window
             _tabsByPathview.Remove(view);
             _useCaseEntriesByPathview.Remove(view);
             RemoveFixedPathview(view);
+            view.Close();
             ExplorerTabs.Items.Remove(tab);
         }
 
@@ -659,6 +665,7 @@ public partial class MainWindow : Window
         var tab = ExplorerTabs.Items.Cast<TabItem>().FirstOrDefault(item => ReferenceEquals(item.Content, view));
         if (tab is not null)
         {
+            view.Close();
             ExplorerTabs.Items.Remove(tab);
             _tabsByPathview.Remove(view);
             RemoveFixedPathview(view);

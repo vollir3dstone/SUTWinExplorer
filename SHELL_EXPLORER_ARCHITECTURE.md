@@ -552,36 +552,24 @@ documented with the component.
 
 ## Shell Change Notifications
 
-Filesystem synchronization uses the Shell's `SHChangeNotifyRegister`, not
-per-property `FileSystemWatcher`s. Each tab registers only the directory route
-from the drive root through `CurrentPath`, one non-recursive registration per
-route directory. A route directory's registration reports changes to its
-immediate children, which is sufficient to update the current listing and the
-route nodes' sibling lists. Sibling directories' own contents are not shown in
-the tree, so their subtrees are deliberately not registered. Registration
-count therefore scales with route depth, not the number of loaded or sibling
-directories.
+The agreed performance and refresh requirements are specified in
+[Required refresh contract](./SUTSHELL_API.md#required-refresh-contract).
+The following describes the current implementation, which does not yet satisfy
+every rule in that contract.
 
-Registrations use `SHCNE_DISKEVENTS` with interrupt, Shell-level, and
-new-delivery sources; the latter payload is read with
-`SHChangeNotification_Lock` and released with `SHChangeNotification_Unlock`.
-The host deregisters all notification IDs when the tab unloads or its native
-window is destroyed, and updates route registrations after navigation.
-
-Notifications are coalesced by a 200ms tab-level dispatcher timer. The Shell
-owns and refreshes its content view from its own change notifications. When a
-notification reaches a visible tab, the app refreshes the item count and
-reconciles only the active route's loaded tree nodes, preserving existing
-nodes and their expansion/selection state. A hidden tab is marked dirty and
-does not update its custom trees immediately; on becoming visible it performs
-one rescan and explicitly refreshes the content view in case notifications
-were missed while unloaded.
-
-Runtime-verified with external create, rename, and delete in a disposable test
-directory: the Shell list and **Active path and siblings** tree updated without
-restarting the app. Creating a sibling under an ancestor on the current route
-updated the tree without registering that sibling's subtree. A directory
-created while its tab was hidden appeared in the tree after switching back.
+Each Pathview uses non-recursive `FileSystemWatcher` registrations for the
+directory route from the drive root through `CurrentPath`, plus a recursive
+name-only watcher to detect immediate child-directory content changes. They remain active
+while the tab is hidden or unloaded, and are replaced on navigation and disposed
+when the tab closes. Ancestor watchers track directory changes, not unrelated
+files. Structural notifications mark affected content and/or route trees
+enumeration-dirty. Metadata notifications update the cached item and mark the
+view display-dirty; they do not enumerate. When a dirty tab next becomes
+visible, only enumeration-dirty route nodes are enumerated, while display-dirty
+content is rebuilt from cached records. Both trees share the current directory's
+subdirectory enumeration. A clean tab retains its existing snapshot and trees. Explicit user operations and
+navigation can still refresh their affected views. Watchers are best-effort and
+cannot guarantee delivery of all filesystem or Shell metadata changes.
 
 ## ContentView sizing and filtering
 

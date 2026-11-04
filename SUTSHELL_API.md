@@ -76,6 +76,54 @@ ready, including Shell icons for an icon sort.
 
 ## Directory Cache
 
+### Required refresh contract
+
+This section specifies the agreed target behavior for Pathviews, content, and
+directory trees. It is a performance contract, not a claim that every rule is
+already implemented. The implementation description below records the current
+behavior where it differs from this contract.
+
+1. **Enumeration dirty:** A directory is marked enumeration-dirty when its
+	immediate items are added, removed, or renamed. A metadata change is handled
+	separately under rule 4 and must not set enumeration-dirty. Dirty state
+	belongs to the affected directory; it is not a request to enumerate unrelated
+	directories. A filesystem notification only records the dirty state: it does
+	not itself enumerate, including when the tab is visible. When a tab is next
+	opened or activated, its enumeration-dirty directories are enumerated again;
+	the complete results are then filtered and displayed. Opening a clean tab
+	does not enumerate or rebuild its unchanged directory contents or trees.
+	Initial loading of a directory still requires its first enumeration.
+2. **Filters:** Changing filter conditions never causes a new enumeration, even
+	when a directory is dirty. Filtering uses the existing complete, unfiltered
+	enumeration. A dirty directory is re-enumerated on the next tab activation,
+	not as a side effect of filtering.
+3. **External path or name changes:** An externally renamed or moved directory
+	represented by a Pathview, including a change to an ancestor in its path,
+	updates that Pathview's path, its tab label, and its Use Case entry without
+	enumerating that directory. A custom tab name remains unchanged. Cached paths
+	and observer registrations must follow the updated path without requiring an
+	enumeration of its contents. If the renamed or moved directory is itself an
+	immediate item in another displayed directory, that other directory's item
+	list is affected under rule 1; this does not make the moved directory's own
+	contents enumeration-dirty.
+4. **Display dirty:** An immediate item's metadata change updates that item's
+	cached metadata and marks the view display-dirty, not enumeration-dirty. The
+	cache update does not enumerate the directory. On the next activation, the
+	display and any affected filtering or sorting are updated from the existing
+	complete enumeration. A change solely inside a subdirectory never causes
+	enumeration of its parent: a child directory's timestamp change follows the
+	same display-dirty rule regardless of its cause. Structural changes still
+	follow rule 1.
+
+Filesystem observers remain active for the lifetime of an open tab, including
+while it is hidden or unloaded. They may be updated when the observed path
+changes and are released when the tab closes. Notifications are best-effort:
+lost notifications, watcher errors, and moves that cannot be identified
+unambiguously are not proof that a directory's items changed, and require
+separate recovery handling. Directory timestamp changes use the same targeted
+metadata refresh whether the timestamp was changed directly or as a consequence
+of a change inside the directory.
+
 ### Scope and ownership
 
 Each ContentView owns one `DirectoryDataCache` instance and passes it to
@@ -143,11 +191,20 @@ just changed records. In the current ContentView/Pathview integration:
 | Event | Cache behavior |
 | --- | --- |
 | Change name pattern, Hide directories, Hide internal or a sort column/direction | Keep cache; create a new filtered/sorted snapshot. |
-| Navigate or invoke ContentView `Refresh` | Invalidate; the next snapshot enumerates again. The current `Refresh(bool)` implementation invalidates regardless of the boolean argument. |
-| Filesystem notification | Pathview coalesces notifications and invokes `Refresh`, invalidating the entire cache. |
+| Navigate or invoke ContentView `Refresh(true)` | Invalidate; the next snapshot enumerates again. `Refresh(false)` leaves content unchanged. |
+| Immediate item metadata notification | Update that item's cached metadata and mark the view display-dirty; do not invalidate or enumerate the directory. |
+| Immediate item addition, removal or rename | Mark the affected directory enumeration-dirty without refreshing, even while visible. |
 | Successful inline rename, New, or Link/Copy/Move with reported inserted items | Refresh and invalidate; insertion completion also handles items reported before a later transfer failure. |
-| Pathview becomes visible or loads | Pathview schedules a filesystem refresh, which can invalidate even without a known change. |
+| Pathview becomes visible or loads | Enumerate enumeration-dirty directories; otherwise redraw a display-dirty view from the cached records. A clean tab retains its snapshot and trees. |
 | Filter or refresh while inline rename is active | Defer rebuilding the view until editing ends; a requested invalidation occurs before deferral. Successful rename also invalidates. |
+
+Pathview receives filesystem events, including both paths for a direct rename,
+or an error indication without event details. Name changes immediately inside a
+child directory are also reported as a metadata change for that child, so its
+cached timestamp can be updated without enumerating the parent. External
+Pathview path updates are not yet implemented. Watcher errors currently mark
+the affected route enumeration-dirty and are not yet handled separately as
+required by the contract above.
 
 `FileSystemWatcher` is best-effort, and the cache is not an atomic filesystem
 snapshot. Items can change between enumeration and lazy loading, or after a
