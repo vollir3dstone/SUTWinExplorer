@@ -294,16 +294,18 @@ leading ellipsis prefix is omitted.
   resolved target path in the same way.
 - Each Pathview's location header spans the full width above its body. The
   visible **Browse** or **Pin** button is first; a non-browsable Pathview places
-  its **FIXED** badge and custom-name editor next, followed by the current
-  directory's Shell icon and path expression. The Pathview constructor receives
-  the initial nullable name and a name-change callback; `MainWindow` owns the
-  profile entry and saves changes. The name editor is 28 DIP high and uses the
-  path display's font and foreground. Its placeholder uses the same font with a
-  lighter gray foreground. Opening a Fixed tab or confirming its name with
-  Enter requests focus on the native Shell content when available; the host
+  its **FIXED** badge next, followed by the current directory's Shell icon and
+  path expression. A pencil button before the color picker opens a custom-name
+  dialog. The Pathview constructor receives the initial nullable name and a
+  name-change callback; `MainWindow` owns the profile entry and saves accepted
+  changes. The dialog editor is 28 DIP high and uses the path display's font
+  and foreground. Its undefined-name placeholder uses the same font with a
+  lighter gray foreground. Apply saves the name, including `null` for an empty
+  value; Cancel or Escape discards changes. Opening a Fixed tab or applying its
+  name requests focus on the native Shell content when available; the host
   retries after delayed navigation only while it still has focus. BROWSE has
-  no name editor. At the far right, every Pathview has a 28-by-28-DIP button
-  for opening the current location in Windows Explorer. The main area below is
+  no name-edit button. At the far right, every Pathview has a 28-by-28-DIP
+  button for opening the current location in Windows Explorer. The main area below is
   split horizontally, with the role-specific directory-tree pane on the left
   and the content pane on the right. **Hide directories** and content **Hide
   internal** appear below the location header in the content pane. The
@@ -312,7 +314,8 @@ leading ellipsis prefix is omitted.
   margins so the color-picker visibility does not change row height. The
   second row containing the sidebar, splitter, and content pane has a 4-DIP
   white inset; the outer `ExplorerTabs` has `Padding="0"`. Fixed Pathviews show a
-  right-aligned color-palette button next to the Explorer button. Their location
+  right-aligned name-edit pencil, color-palette button, and Explorer button, in
+  that order. Their location
   header starts white; choosing one of twelve light spectrum colors changes
   that header and the matching application tab. The browsable Pathview has no
   palette button.

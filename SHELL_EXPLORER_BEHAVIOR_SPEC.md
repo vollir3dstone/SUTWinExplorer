@@ -144,23 +144,22 @@ can be prepared at a time, but clipboard actions remain independent of it:
   tab. Each non-browsable Pathview shows only the **Active path** tree tab.
 - [x] Each Pathview shows its location row across the full width above the
   side-by-side panes. The visible **Browse** or **Pin** button comes first; a
-  non-browsable Pathview then shows its bold **FIXED** badge and custom-name
-  editor. An undefined name displays `(Undefined custom name)`; entering an
-  empty name stores `null`. Enter, focus loss, or a click outside the editor
-  saves changes, and Escape restores the last committed name. Opening a Fixed
-  tab and confirming its name with Enter place keyboard focus in its Shell
-  content when available, not the editor. An outside click preserves the
-  target's action and focus; if the target does not take focus, the Shell
-  content receives it when available. Names are stored
-  in the active profile. The editor uses the path display's font and color;
-  only the undefined-name placeholder uses a lighter gray.
+  non-browsable Pathview then shows its bold **FIXED** badge. A pencil button
+  before the color picker opens the custom-name dialog. An undefined name
+  displays `(Undefined custom name)`; applying an empty name stores `null`.
+  Apply saves changes and Cancel or Escape discards them. Opening a Fixed tab
+  and applying its name place keyboard focus in its Shell content when
+  available. Names are stored in the active profile. The dialog editor uses
+  the path display's font and color; only the undefined-name placeholder uses
+  a lighter gray.
   The Fixed tab label shows the complete custom name when set; otherwise it
   uses the shortened path. An unavailable path retains its `!` marker.
   The current directory's Shell icon precedes its path expression. At the far
   right, every Pathview has an **Open in Windows Explorer** button beside the
-  fixed-view color picker; it opens a new Explorer window at that Pathview's
-  current path. The browsable Pathview has no FIXED badge, name editor, or
-  color picker. Below this row, the
+  fixed-view color picker; fixed Pathviews also have the name-edit pencil
+  immediately before the picker. The Explorer button opens a new window at
+  that Pathview's current path. The browsable Pathview has no FIXED badge,
+  name-edit button, or color picker. Below this row, the
   tree pane is on the left and the content pane is on the right; **Hide
   directories** and **Hide internal** appear below the location row in the
   content pane.

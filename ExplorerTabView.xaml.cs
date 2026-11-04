@@ -56,7 +56,6 @@ public partial class Pathview : UserControl
     private readonly Action<string?>? _customNameChanged;
     private readonly Action<Color>? _tabColorChanged;
     private string? _customName;
-    private Window? _inputWindow;
     private readonly SutContextMenuController<TreeEntry> _treeContextMenu;
     private readonly SutContextMenuController<TreeEntry> _subfolderContextMenu;
     private readonly ListViewDragSource<TreeEntry> _subfolderDragSource;
@@ -89,7 +88,6 @@ public partial class Pathview : UserControl
         TabColor = tabColor;
         if (tabColor is Color color)
             PaneBackground = new SolidColorBrush(color);
-        CustomNameEditor.Text = customName ?? string.Empty;
         var explorerPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
         OpenInExplorerIcon.Source = ShellIconProvider.GetIconAtSize(explorerPath, 16, 16) ??
                                     ShellIconProvider.GetSmallIcons(explorerPath)?.BaseIcon;
@@ -100,7 +98,7 @@ public partial class Pathview : UserControl
         ActivePathAndSiblingsTab.Visibility = IsBrowsable ? Visibility.Visible : Visibility.Collapsed;
         SidebarTabs.SelectedItem = IsBrowsable ? ActivePathAndSiblingsTab : ActivePathTab;
         FixedPathBadge.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
-        CustomNameContainer.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
+        EditCustomNameButton.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
         BrowsePathviewButton.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
         PinPathviewButton.Visibility = IsBrowsable ? Visibility.Visible : Visibility.Collapsed;
         PaneColorButton.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
@@ -143,44 +141,21 @@ public partial class Pathview : UserControl
     public event Action<Pathview, string, bool?, bool?, bool?, bool?>? BrowseLocationRequested;
     public event Action<string, string>? DirectoryRenamed;
 
-    private void CustomNameEditor_PreviewKeyDown(object sender, KeyEventArgs e)
+    private void EditCustomNameButton_Click(object sender, RoutedEventArgs e)
     {
-        if (e.Key == Key.Enter)
-        {
-            CommitCustomName();
-            DirectoryContent.FocusContent();
-            e.Handled = true;
-        }
-        else if (e.Key == Key.Escape)
-        {
-            CustomNameEditor.Text = _customName ?? string.Empty;
-            e.Handled = true;
-        }
-    }
-
-    private void CustomNameEditor_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) =>
-        CommitCustomName();
-
-    private void InputWindow_PreviewMouseDown(object sender, MouseButtonEventArgs e)
-    {
-        if (!CustomNameEditor.IsKeyboardFocusWithin || CustomNameEditor.IsMouseOver)
+        var dialog = new CustomNameDialog(_customName, LocationLabel);
+        if (Window.GetWindow(this) is { } owner)
+            dialog.Owner = owner;
+        if (dialog.ShowDialog() != true)
             return;
 
-        CommitCustomName();
-        Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
-        {
-            if (!CustomNameEditor.IsKeyboardFocusWithin)
-                return;
-            if (IsVisible)
-                DirectoryContent.FocusContent();
-            if (CustomNameEditor.IsKeyboardFocusWithin)
-                Keyboard.ClearFocus();
-        });
+        CommitCustomName(dialog.CustomName);
+        if (IsVisible)
+            DirectoryContent.FocusContent();
     }
 
-    private void CommitCustomName()
+    private void CommitCustomName(string? name)
     {
-        var name = CustomNameEditor.Text.Length == 0 ? null : CustomNameEditor.Text;
         if (string.Equals(name, _customName, StringComparison.Ordinal))
             return;
         _customName = name;
@@ -435,22 +410,13 @@ public partial class Pathview : UserControl
 
     private void LocationHeaderPanel_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        var fixedBadgeWidth = FixedPathBadge.Visibility == Visibility.Visible
-            ? FixedPathBadge.ActualWidth + FixedPathBadge.Margin.Left + FixedPathBadge.Margin.Right
-            : 0;
-        var customNameWidth = CustomNameContainer.Visibility == Visibility.Visible
-            ? CustomNameContainer.Width + CustomNameContainer.Margin.Left + CustomNameContainer.Margin.Right
-            : 0;
+        var prefixWidth = LocationHeaderPrefix.ActualWidth;
         var locationIconWidth = LocationIconSlot.Visibility == Visibility.Visible
             ? LocationIconSlot.Width + LocationIconSlot.Margin.Left + LocationIconSlot.Margin.Right
             : 0;
-        var actionButton = IsBrowsable ? PinPathviewButton : BrowsePathviewButton;
-        var actionButtonWidth = actionButton.Visibility == Visibility.Visible
-            ? actionButton.ActualWidth + actionButton.Margin.Left + actionButton.Margin.Right
-            : 0;
         var titlePadding = LocationLabel.Padding.Left + LocationLabel.Padding.Right;
         LocationLabel.MaxWidth = Math.Max(0,
-            LocationHeaderPanel.ActualWidth - fixedBadgeWidth - customNameWidth - locationIconWidth - actionButtonWidth - titlePadding);
+            LocationHeaderPanel.ActualWidth - prefixWidth - locationIconWidth - titlePadding);
     }
 
     private void UpdateLocationIcon(string path)
@@ -466,8 +432,6 @@ public partial class Pathview : UserControl
 
     private void Pathview_Loaded(object sender, RoutedEventArgs e)
     {
-        _inputWindow = Window.GetWindow(this);
-        _inputWindow?.AddHandler(Mouse.PreviewMouseDownEvent, new MouseButtonEventHandler(InputWindow_PreviewMouseDown), true);
         _fileSystemStateDirty = true;
         _contentViewNeedsRefresh = true;
         SynchronizeContentChangeNotifications();
@@ -478,8 +442,6 @@ public partial class Pathview : UserControl
     {
         _treeContextMenu.Reset();
         _subfolderContextMenu.Reset();
-        _inputWindow?.RemoveHandler(Mouse.PreviewMouseDownEvent, new MouseButtonEventHandler(InputWindow_PreviewMouseDown));
-        _inputWindow = null;
         _fileSystemRefreshTimer.Stop();
         _fileSystemStateDirty = true;
         _contentViewNeedsRefresh = true;
