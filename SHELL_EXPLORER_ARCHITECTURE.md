@@ -569,7 +569,87 @@ visible, only enumeration-dirty route nodes are enumerated, while display-dirty
 content is rebuilt from cached records. Both trees share the current directory's
 subdirectory enumeration. A clean tab retains its existing snapshot and trees. Explicit user operations and
 navigation can still refresh their affected views. Watchers are best-effort and
-cannot guarantee delivery of all filesystem or Shell metadata changes.
+cannot guarantee delivery of all filesystem or Shell metadata changes. When a
+rename notification identifies both paths, affected Pathviews update their
+paths, cached records, and Use Case entries without invalidating their contents.
+Internal Shell moves report their actual source and destination; separate
+external delete/create notifications cannot reliably be paired. A watcher on
+a descendant can also prevent Windows from renaming or moving its ancestor.
+
+### Suspending Pathview Observers for Internal Directory Operations
+
+There is no global set of individual watchers. `MainWindow` owns the
+`_tabsByPathview` dictionary, which maps each open Pathview to its tab, including
+hidden Pathviews. Each Pathview owns a ContentView; the ContentView owns one
+`_directoryObserver`, whose `DirectoryObserver` holds the individual
+`FileSystemWatcher` instances in its `_watchers` list. The set of observed
+directory paths in ContentView is local to that view, not a window-wide
+registry.
+
+`MainWindow.AddPaneview` supplies its `RunDirectoryOperation` method to the
+Pathview, which supplies a forwarding method to its ContentView. The current
+folder's **Rename...** and **Relocate...**, directory renames in the tree and
+content view, and the application's prepared **Move execute** operations in
+the tree and content view use this coordinator. A standalone Pathview without
+the window callback suspends and resumes only its own observers. Native Shell
+drag/drop, clipboard operations and Shell extension commands do not use this
+coordination.
+
+For an outermost coordinated operation the sequence is:
+
+1. `MainWindow.RunDirectoryOperation` iterates a snapshot of
+  `_tabsByPathview.Keys` and calls `SuspendObservers` on every view, not just
+  the initiating or visible view. The snapshot permits the tab collection to
+  change while a Shell operation runs a modal message loop.
+2. Each Pathview computes its observed route from the drive root to its current
+  path and records `Directory.GetLastWriteTimeUtc` for existing route
+  directories in `_suspendedDirectoryTimes`. It sets `_observersSuspended` and
+  calls `ContentView.ClearObservedDirectories`. That disposes the view's
+  `DirectoryObserver`; its `Dispose` disposes every watcher in `_watchers`,
+  releasing their handles, and the ContentView clears its observed-path set.
+  This is disposal, not merely disabling event delivery.
+3. The coordinator executes the Shell operation. Rename returns its actual new
+  path; prepared moves and Relocate collect actual source/destination pairs
+  from the Shell transfer progress sink. Move paths already reported as
+  completed are propagated in a `finally` block even when the operation later
+  fails or is canceled.
+4. While observers are still suspended, `DirectoryRenamed` reaches
+  `MainWindow.Pathview_DirectoryRenamed`, which iterates all registered
+  Pathviews and calls `ApplyDirectoryRename`. This remaps saved timestamps and
+  history, and, for affected current paths, cached item paths, trees, location
+  and associated tab and Use Case state. Custom tab names remain unchanged.
+  `SynchronizeContentChangeNotifications` returns without creating watchers
+  while `_observersSuspended` is set, so remapping cannot prematurely reopen
+  handles on the old or new route.
+5. In `finally`, the coordinator iterates the then-current Pathview dictionary
+  and calls `ResumeObservers`, including when the operation throws or is
+  canceled. Each suspended view clears the guard, forcibly recreates its
+  observers for its current route, and compares the recorded route timestamps
+  with the filesystem. Missing or changed directories are marked dirty; a
+  changed current directory also sets `_enumerationDirty`. Visible dirty views
+  schedule a refresh; hidden views retain their dirty state until visible.
+  Existing dirty state is not cleared merely because an operation occurred.
+
+`_directoryOperationDepth` prevents nested coordinated operations from
+independently suspending or resuming observers: only the outermost call does
+so. A Pathview added while the depth is nonzero is suspended when registered
+and participates in the final resume. A closed Pathview disposes its observers
+and cannot reopen them. The final resume loop is not independently protected
+against an unexpected exception from one view; such an exception could prevent
+later views in that loop from resuming. Normal watcher-registration failures
+such as inaccessible paths are caught inside `DirectoryObserver` and logged.
+
+The timestamp comparison is best-effort reconciliation, not a complete record
+of the observation gap. In particular, file metadata changes or changes in
+child directories need not change a watched route directory's timestamp; other
+changes can likewise be missed. Re-registering the watchers cannot replay
+missed notifications. Conversely, moving or renaming a Pathview's directory
+alone does not mark its unchanged content enumeration-dirty; its timestamp keys
+are remapped before comparison. The integration checks in
+[PathviewRename.Tests.ps1](tests/PathviewRename.Tests.ps1) cover real ancestor
+rename and relocation with multiple Pathviews, cached contents, Use Case paths,
+observer restoration after failure or cancellation, and a directory change
+during suspension.
 
 ## ContentView sizing and filtering
 

@@ -22,6 +22,7 @@ public partial class ContentView : UserControl
     private CancellationTokenSource? _rangeCancellation;
     private Task _snapshotReady = Task.CompletedTask;
     private readonly HashSet<Task> _metadataUpdates = [];
+    private readonly List<(string OldPath, string NewPath)> _pathRemaps = [];
     private DirectorySnapshot? _snapshot;
     private DirectoryRow[]? _rows;
     private readonly DirectorySortState _sorting = new();
@@ -186,6 +187,15 @@ public partial class ContentView : UserControl
     internal event EventHandler<string>? FolderOpenRequested;
     internal event Action<string, string>? FolderRenamed;
     internal event EventHandler<DirectoryNotification>? FileSystemChanged;
+    internal Action<Action>? DirectoryOperation { get; set; }
+
+    private void RunDirectoryOperation(Action operation)
+    {
+        if (DirectoryOperation is { } coordinator)
+            coordinator(operation);
+        else
+            operation();
+    }
 
     internal void Initialize(bool isBrowsable)
     {
@@ -205,6 +215,7 @@ public partial class ContentView : UserControl
         _rows = null;
         _selectedPaths.Clear();
         _revealedPath = null;
+        _pathRemaps.Clear();
         CurrentPath = path;
         ClearRows();
         DirectoryCountLabel.Text = "-";
@@ -214,6 +225,29 @@ public partial class ContentView : UserControl
     }
 
     internal void EnsureLocationAccessible(string path) => SutShell.EnsureDirectoryAccessible(path);
+
+    internal void RemapPaths(string oldPath, string newPath)
+    {
+        _pathRemaps.Add((oldPath, newPath));
+        var refreshPending = _snapshot is null && _refreshCancellation is not null;
+        if (refreshPending)
+            _refreshCancellation?.Cancel();
+        _rangeCancellation?.Cancel();
+        _directoryCache.RemapPaths(oldPath, newPath);
+        CurrentPath = ShellLocations.RemapPath(CurrentPath, oldPath, newPath);
+        var selectedPaths = _selectedPaths.Select(path => ShellLocations.RemapPath(path, oldPath, newPath)).ToArray();
+        _selectedPaths.Clear();
+        _selectedPaths.UnionWith(selectedPaths);
+        if (_revealedPath is not null)
+            _revealedPath = ShellLocations.RemapPath(_revealedPath, oldPath, newPath);
+        if (_rows is not null)
+            foreach (var row in _rows)
+                row.RemapPath(oldPath, newPath);
+        if (refreshPending)
+            RefreshCore(invalidate: false);
+        else
+            ScheduleRangeLoad();
+    }
 
     internal void Refresh(bool refreshView)
     {
@@ -318,6 +352,11 @@ public partial class ContentView : UserControl
         }
         while (!ReferenceEquals(ready, _snapshotReady));
 
+        foreach (var (oldPath, newPath) in _pathRemaps)
+        {
+            directoryPath = ShellLocations.RemapPath(directoryPath, oldPath, newPath);
+            itemPath = ShellLocations.RemapPath(itemPath, oldPath, newPath);
+        }
         if (string.Equals(CurrentPath, directoryPath, StringComparison.OrdinalIgnoreCase))
             await SutShell.RefreshCachedItemMetadataAsync(_directoryCache, directoryPath, itemPath);
     }
@@ -360,10 +399,10 @@ public partial class ContentView : UserControl
         UpdateToolbarOperationButtons();
     }
 
-    internal void SetObservedDirectories(IEnumerable<string> directories)
+    internal void SetObservedDirectories(IEnumerable<string> directories, bool force = false)
     {
         var paths = directories.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (_observedDirectories.SetEquals(paths))
+        if (!force && _observedDirectories.SetEquals(paths))
             return;
         ClearObservedDirectories();
         _observedDirectories.UnionWith(paths);
@@ -632,12 +671,27 @@ public partial class ContentView : UserControl
                     break;
                 case "MoveExecute":
                     var moved = new List<string>();
+                    var movedDirectories = new List<(string OldPath, string NewPath)>();
                     try
                     {
-                        SutShell.Move(MoveWorkflowState.Shared.PreparedPaths, CurrentPath, owner, moved);
-                        MoveWorkflowState.Shared.CompleteExecute();
+                        RunDirectoryOperation(() =>
+                        {
+                            try
+                            {
+                                SutShell.MoveWithDirectoryChanges(MoveWorkflowState.Shared.PreparedPaths, CurrentPath, owner, moved, movedDirectories);
+                                MoveWorkflowState.Shared.CompleteExecute();
+                            }
+                            finally
+                            {
+                                foreach (var (oldPath, newPath) in movedDirectories)
+                                    FolderRenamed?.Invoke(oldPath, newPath);
+                            }
+                        });
                     }
-                    finally { RevealInsertedItems(moved); }
+                    finally
+                    {
+                        RevealInsertedItems(moved);
+                    }
                     break;
                 case "MoveAbort":
                     MoveWorkflowState.Shared.Abort();
@@ -1034,12 +1088,20 @@ public partial class ContentView : UserControl
             if (commit && !string.Equals(row.EditName, SutShell.GetEditName(row.FullPath), StringComparison.Ordinal))
             {
                 var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
-                var newPath = SutShell.Rename(row.FullPath, row.EditName, owner);
-                _selectedPaths.Remove(row.FullPath);
-                _selectedPaths.Add(newPath);
-                renamed = true;
+                void RenameItem()
+                {
+                    var oldPath = row.FullPath;
+                    var newPath = SutShell.Rename(oldPath, row.EditName, owner);
+                    _selectedPaths.Remove(oldPath);
+                    _selectedPaths.Add(newPath);
+                    renamed = true;
+                    if (entry.IsDirectory)
+                        FolderRenamed?.Invoke(oldPath, newPath);
+                }
                 if (entry.IsDirectory)
-                    FolderRenamed?.Invoke(row.FullPath, newPath);
+                    RunDirectoryOperation(RenameItem);
+                else
+                    RenameItem();
             }
             _editingRow = null;
             row.IsEditing = false;
@@ -1072,7 +1134,7 @@ internal sealed class DirectoryRow : INotifyPropertyChanged
 {
     public DirectoryRow() : this(string.Empty) { }
     internal DirectoryRow(string fullPath) => FullPath = fullPath;
-    public string FullPath { get; }
+    public string FullPath { get; private set; }
     public string DisplayName => Entry?.Name ?? Path.GetFileName(FullPath);
     private FileEntry? _entry;
     private bool _isEditing;
@@ -1107,4 +1169,13 @@ internal sealed class DirectoryRow : INotifyPropertyChanged
         }
     }
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    internal void RemapPath(string oldPath, string newPath)
+    {
+        FullPath = ShellLocations.RemapPath(FullPath, oldPath, newPath);
+        if (Entry is not null)
+            Entry = Entry with { FullPath = FullPath };
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(FullPath)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DisplayName)));
+    }
 }

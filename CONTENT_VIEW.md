@@ -231,8 +231,10 @@ reports the error and leaves the editor active. Drive roots are not renameable
 through this editor. A refresh requested during editing is deferred until the
 edit ends; navigation cancels the edit. After a successful rename, the new path
 is selected in the refreshed snapshot if it still passes the active filters.
-Directory renames are also reported to Pathview so open paths and histories can
-be updated. External renames are not tracked as identity-preserving renames.
+Directory renames and Shell moves are also reported to Pathview so affected open
+paths and histories can be updated. External rename notifications are handled
+when they identify both paths; separate external delete/create events cannot be
+reliably paired.
 
 ### Scroll, cancellation, and errors
 

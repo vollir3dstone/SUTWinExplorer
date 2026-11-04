@@ -54,6 +54,9 @@ public partial class Pathview : UserControl
     private bool _enumerationDirty;
     private bool _displayDirty;
     private bool _refreshWholeTree;
+    private bool _observersSuspended;
+    private bool _closed;
+    private Dictionary<string, DateTime>? _suspendedDirectoryTimes;
     private readonly HashSet<string> _dirtyDirectories = new(StringComparer.OrdinalIgnoreCase);
     private TreeEntry? _activePathEntry;
     private readonly List<TreeEntry> _driveRoots = [];
@@ -114,7 +117,8 @@ public partial class Pathview : UserControl
         };
         _fileSystemRefreshTimer.Tick += FileSystemRefreshTimer_Tick;
         DirectoryContent.FolderOpenRequested += ContentView_FolderOpenRequested;
-        DirectoryContent.FolderRenamed += (oldPath, newPath) => DirectoryRenamed?.Invoke(oldPath, newPath);
+        DirectoryContent.FolderRenamed += NotifyDirectoryRenamed;
+        DirectoryContent.DirectoryOperation = RunDirectoryOperation;
         DirectoryContent.FileSystemChanged += ContentView_FileSystemChanged;
         DirectoryContent.Initialize(IsBrowsable);
         InitializeActivePathAndSiblingsTree();
@@ -144,6 +148,19 @@ public partial class Pathview : UserControl
     public event EventHandler? PinRequested;
     public event Action<Pathview, string, bool?, bool?, bool?, bool?>? BrowseLocationRequested;
     public event Action<string, string>? DirectoryRenamed;
+    internal Action<Action>? DirectoryOperation { get; set; }
+
+    private void RunDirectoryOperation(Action operation)
+    {
+        if (DirectoryOperation is { } coordinator)
+            coordinator(operation);
+        else
+        {
+            SuspendObservers();
+            try { operation(); }
+            finally { ResumeObservers(); }
+        }
+    }
 
     private void EditCustomNameButton_Click(object sender, RoutedEventArgs e)
     {
@@ -195,11 +212,13 @@ public partial class Pathview : UserControl
 
     internal void ApplyDirectoryRename(string oldPath, string newPath)
     {
-        foreach (var drive in _driveRoots)
-            drive.RefreshDisplayName();
-        _fileSystemStateDirty = true;
-        _refreshWholeTree = true;
-        ScheduleFileSystemRefreshIfVisible();
+        if (_suspendedDirectoryTimes is not null)
+        {
+            var remappedTimes = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (path, timestamp) in _suspendedDirectoryTimes)
+                remappedTimes[RemapPath(path, oldPath, newPath)] = timestamp;
+            _suspendedDirectoryTimes = remappedTimes;
+        }
         RemapHistory(_backHistory, oldPath, newPath);
         RemapHistory(_forwardHistory, oldPath, newPath);
         _historyCurrentPath = RemapPath(_historyCurrentPath, oldPath, newPath);
@@ -207,10 +226,103 @@ public partial class Pathview : UserControl
         if (string.Equals(updatedPath, CurrentPath, StringComparison.Ordinal))
             return;
 
-        if (string.Equals(updatedPath, CurrentPath, StringComparison.OrdinalIgnoreCase))
-            CommitNavigation(updatedPath, NavigationHistoryAction.None);
-        else
-            Navigate(updatedPath, NavigationHistoryAction.None);
+        _treeContextMenu.Reset();
+        _subfolderContextMenu.Reset();
+        var dirtyDirectories = _dirtyDirectories.Select(path => RemapPath(path, oldPath, newPath)).ToArray();
+        _dirtyDirectories.Clear();
+        _dirtyDirectories.UnionWith(dirtyDirectories);
+        DirectoryContent.RemapPaths(oldPath, newPath);
+        CurrentPath = updatedPath;
+        foreach (var entry in _driveRoots)
+            entry.RemapPaths(oldPath, newPath);
+        if (ActivePathTree.ItemsSource is IEnumerable<TreeEntry> activeRoots)
+            foreach (var entry in activeRoots)
+                entry.RemapPaths(oldPath, newPath);
+        if (ActivePathAndSiblingsTree.ItemsSource is IEnumerable<TreeEntry> siblingRoots)
+            foreach (var entry in siblingRoots)
+                entry.RemapPaths(oldPath, newPath);
+        if (!string.Equals(Path.GetDirectoryName(oldPath), Path.GetDirectoryName(newPath), StringComparison.OrdinalIgnoreCase))
+            ReparentMovedTreeEntries(newPath);
+        UpdateLocationIcon(updatedPath);
+        LocationLabel.Text = ShellDisplayNameProvider.GetDisplayPath(updatedPath);
+        SynchronizeContentChangeNotifications(force: true);
+        LocationChanged?.Invoke(this, updatedPath);
+    }
+
+    private void ReparentMovedTreeEntries(string movedPath)
+    {
+        if (ActivePathTree.ItemsSource is IEnumerable<TreeEntry> activeRoots && activeRoots.FirstOrDefault() is { } activeRoot)
+        {
+            var rootPath = Path.GetPathRoot(CurrentPath);
+            if (!string.IsNullOrEmpty(rootPath) && FindTreeParent(activeRoot, movedPath) is { } oldParent &&
+                oldParent.Children.FirstOrDefault(child => string.Equals(child.Path, movedPath, StringComparison.OrdinalIgnoreCase)) is { } movedEntry)
+            {
+                oldParent.Children.Remove(movedEntry);
+                var newRoot = string.Equals(activeRoot.Path, rootPath, StringComparison.OrdinalIgnoreCase)
+                    ? activeRoot : new TreeEntry(rootPath, rootPath) { IsLoaded = true };
+                newRoot.Children.Clear();
+                var parent = newRoot;
+                foreach (var segment in GetPathSegments(rootPath, Path.GetDirectoryName(movedPath)!))
+                {
+                    var childPath = Path.Combine(parent.Path, segment);
+                    var child = parent.Children.FirstOrDefault(candidate => string.Equals(candidate.Path, childPath, StringComparison.OrdinalIgnoreCase));
+                    if (child is null)
+                    {
+                        child = new TreeEntry(segment, childPath) { IsLoaded = true };
+                        parent.Children.Add(child);
+                    }
+                    parent.IsExpanded = true;
+                    parent = child;
+                }
+                parent.Children.Add(movedEntry);
+                parent.IsExpanded = true;
+                ActivePathTree.ItemsSource = new[] { newRoot };
+                ActivePathTree.Height = (GetPathSegments(rootPath, CurrentPath).Length + 1) * DirectoryTreeRowHeight;
+            }
+        }
+
+        if (ActivePathAndSiblingsTree.ItemsSource is not IEnumerable<TreeEntry> siblingRoots || siblingRoots.FirstOrDefault() is not { } top ||
+            FindTreeParent(top, movedPath) is not { } previousParent ||
+            previousParent.Children.FirstOrDefault(child => string.Equals(child.Path, movedPath, StringComparison.OrdinalIgnoreCase)) is not { } movedNode)
+            return;
+        previousParent.Children.Remove(movedNode);
+        var newRootPath = Path.GetPathRoot(movedPath);
+        var destinationRoot = _driveRoots.FirstOrDefault(root => string.Equals(root.Path, newRootPath, StringComparison.OrdinalIgnoreCase));
+        if (destinationRoot is null || newRootPath is null)
+            return;
+        if (!top.Children.Contains(destinationRoot))
+            top.Children.Add(destinationRoot);
+        var destination = destinationRoot;
+        var route = new List<TreeEntry> { top, destinationRoot };
+        foreach (var segment in GetPathSegments(newRootPath, Path.GetDirectoryName(movedPath)!))
+        {
+            var childPath = Path.Combine(destination.Path, segment);
+            var child = destination.Children.FirstOrDefault(candidate => string.Equals(candidate.Path, childPath, StringComparison.OrdinalIgnoreCase));
+            if (child is null)
+            {
+                child = new TreeEntry(segment, childPath);
+                AddPlaceholder(child);
+                destination.Children.Add(child);
+            }
+            destination = child;
+            route.Add(child);
+        }
+        foreach (var placeholder in destination.Children.Where(child => child.IsPlaceholder).ToArray())
+            destination.Children.Remove(placeholder);
+        destination.Children.Add(movedNode);
+        destination.HasSubdirectories = true;
+        foreach (var entry in route)
+            entry.IsExpanded = true;
+    }
+
+    private static TreeEntry? FindTreeParent(TreeEntry entry, string path)
+    {
+        if (entry.Children.Any(child => !child.IsPlaceholder && string.Equals(child.Path, path, StringComparison.OrdinalIgnoreCase)))
+            return entry;
+        foreach (var child in entry.Children.Where(child => !child.IsPlaceholder))
+            if (FindTreeParent(child, path) is { } parent)
+                return parent;
+        return null;
     }
 
     private static void RemapHistory(Stack<string> history, string oldPath, string newPath)
@@ -219,20 +331,6 @@ public partial class Pathview : UserControl
         history.Clear();
         for (var index = paths.Length - 1; index >= 0; index--)
             history.Push(RemapPath(paths[index], oldPath, newPath));
-    }
-
-    private static string RemapPath(string path, string oldPath, string newPath)
-    {
-        if (string.IsNullOrEmpty(path) || IsTopPath(path))
-            return path;
-
-        var relative = Path.GetRelativePath(oldPath, path);
-        if (relative == ".")
-            return newPath;
-        if (Path.IsPathRooted(relative) || relative == ".." ||
-            relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-            return path;
-        return Path.Combine(newPath, relative);
     }
 
     public void GoBack()
@@ -336,6 +434,9 @@ public partial class Pathview : UserControl
         PinPathviewButton.IsEnabled = !IsTopPath(path);
         BrowsePathviewButton.IsEnabled = true;
         OpenInExplorerButton.IsEnabled = true;
+        var canChangeDirectory = !IsTopPath(path) && Directory.Exists(path) && SutShell.GetEditName(path) is not null;
+        RenameCurrentDirectoryButton.IsEnabled = canChangeDirectory;
+        RelocateCurrentDirectoryButton.IsEnabled = canChangeDirectory;
         UpdateLocationIcon(path);
         LocationLabel.Text = ShellDisplayNameProvider.GetDisplayPath(path);
         RefreshActivePathAndSiblingsTree();
@@ -386,6 +487,91 @@ public partial class Pathview : UserControl
 
     private void PaneColorButton_Click(object sender, RoutedEventArgs e) =>
         PaneColorPopup.IsOpen = true;
+
+    private void RenameCurrentDirectoryButton_Click(object sender, RoutedEventArgs e)
+    {
+        var name = SutShell.GetEditName(CurrentPath);
+        if (name is null)
+            return;
+        var dialog = new DirectoryLocationDialog(false, name, Window.GetWindow(this));
+        if (dialog.ShowDialog() != true || string.Equals(name, dialog.Value, StringComparison.Ordinal))
+            return;
+        try { RenameCurrentDirectory(dialog.Value); }
+        catch (Exception exception)
+        {
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot rename folder", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void RelocateCurrentDirectoryButton_Click(object sender, RoutedEventArgs e)
+    {
+        var parent = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(CurrentPath));
+        if (parent is null)
+            return;
+        var dialog = new DirectoryLocationDialog(true, parent, Window.GetWindow(this));
+        if (dialog.ShowDialog() != true)
+            return;
+        try { RelocateCurrentDirectory(dialog.Value); }
+        catch (OperationCanceledException) { }
+        catch (Exception exception)
+        {
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot relocate folder", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    internal void RenameCurrentDirectory(string name)
+    {
+        var oldPath = CurrentPath;
+        var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
+        RunDirectoryOperation(() =>
+        {
+            var newPath = SutShell.Rename(oldPath, name, owner);
+            NotifyDirectoryRenamed(oldPath, newPath);
+        });
+    }
+
+    internal void RelocateCurrentDirectory(string destination)
+    {
+        if (!Path.IsPathFullyQualified(destination))
+            throw new ArgumentException("Enter an absolute destination folder path.");
+        var oldPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(CurrentPath));
+        var target = Path.TrimEndingDirectorySeparator(Path.GetFullPath(destination));
+        var parent = Path.GetDirectoryName(oldPath);
+        if (parent is null)
+            throw new InvalidOperationException("A drive cannot be relocated.");
+        if (!Directory.Exists(target))
+            throw new DirectoryNotFoundException("The destination folder does not exist.");
+        if (string.Equals(parent, target, StringComparison.OrdinalIgnoreCase))
+            return;
+        var relative = Path.GetRelativePath(oldPath, target);
+        if (relative == "." || (!Path.IsPathRooted(relative) && relative != ".." && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)))
+            throw new InvalidOperationException("A folder cannot be relocated into itself or one of its subfolders.");
+        var targetPath = Path.Combine(target, Path.GetFileName(oldPath));
+        if (Directory.Exists(targetPath) || File.Exists(targetPath))
+            throw new IOException("An item with that name already exists in the destination folder.");
+        var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
+        var relocatedPaths = new List<string>();
+        var relocatedDirectories = new List<(string OldPath, string NewPath)>();
+        RunDirectoryOperation(() =>
+        {
+            try { SutShell.MoveWithDirectoryChanges([oldPath], target, owner, relocatedPaths, relocatedDirectories); }
+            finally
+            {
+                foreach (var (source, result) in relocatedDirectories)
+                    NotifyDirectoryRenamed(source, result);
+            }
+        });
+        if (relocatedDirectories.Count == 0)
+            throw new IOException("The Shell did not report a completed folder relocation.");
+    }
+
+    private void NotifyDirectoryRenamed(string oldPath, string newPath)
+    {
+        if (DirectoryRenamed is { } renamed)
+            renamed(oldPath, newPath);
+        else
+            ApplyDirectoryRename(oldPath, newPath);
+    }
 
     private void OpenInExplorerButton_Click(object sender, RoutedEventArgs e)
     {
@@ -554,12 +740,49 @@ public partial class Pathview : UserControl
             RefreshLoadedTree(child);
     }
 
-    private void SynchronizeContentChangeNotifications()
+    private void SynchronizeContentChangeNotifications(bool force = false)
     {
+        if (_observersSuspended || _closed)
+            return;
+
         var desiredPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         AddCurrentPathNotificationPaths(desiredPaths);
 
-        DirectoryContent.SetObservedDirectories(desiredPaths);
+        DirectoryContent.SetObservedDirectories(desiredPaths, force);
+    }
+
+    internal void SuspendObservers()
+    {
+        if (_observersSuspended || _closed)
+            return;
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddCurrentPathNotificationPaths(paths);
+        _suspendedDirectoryTimes = paths.Where(Directory.Exists)
+            .ToDictionary(path => path, Directory.GetLastWriteTimeUtc, StringComparer.OrdinalIgnoreCase);
+        _observersSuspended = true;
+        DirectoryContent.ClearObservedDirectories();
+    }
+
+    internal void ResumeObservers()
+    {
+        if (!_observersSuspended)
+            return;
+        _observersSuspended = false;
+        SynchronizeContentChangeNotifications(force: true);
+        var timestamps = _suspendedDirectoryTimes;
+        _suspendedDirectoryTimes = null;
+        if (timestamps is null)
+            return;
+        foreach (var (path, timestamp) in timestamps)
+        {
+            if (Directory.Exists(path) && Directory.GetLastWriteTimeUtc(path) == timestamp)
+                continue;
+            _fileSystemStateDirty = true;
+            _dirtyDirectories.Add(path);
+            if (string.Equals(Path.TrimEndingDirectorySeparator(path), Path.TrimEndingDirectorySeparator(CurrentPath), StringComparison.OrdinalIgnoreCase))
+                _enumerationDirty = true;
+        }
+        ScheduleFileSystemRefreshIfVisible();
     }
 
     private void AddCurrentPathNotificationPaths(HashSet<string> paths)
@@ -595,6 +818,12 @@ public partial class Pathview : UserControl
     private void ContentView_FileSystemChanged(object? sender, DirectoryNotification notification)
     {
         var path = notification.DirectoryPath;
+        if (notification.Change is RenamedEventArgs renamed && Directory.Exists(renamed.FullPath) &&
+            !string.Equals(RemapPath(CurrentPath, renamed.OldFullPath, renamed.FullPath), CurrentPath, StringComparison.Ordinal))
+        {
+            ApplyDirectoryRename(renamed.OldFullPath, renamed.FullPath);
+            DirectoryRenamed?.Invoke(renamed.OldFullPath, renamed.FullPath);
+        }
         if (notification.Change is { ChangeType: WatcherChangeTypes.Changed } change)
         {
             if (string.Equals(Path.TrimEndingDirectorySeparator(path), Path.TrimEndingDirectorySeparator(CurrentPath), StringComparison.OrdinalIgnoreCase))
@@ -612,6 +841,9 @@ public partial class Pathview : UserControl
 
     internal void Close()
     {
+        _closed = true;
+        _suspendedDirectoryTimes = null;
+        _observersSuspended = false;
         _fileSystemRefreshTimer.Stop();
         DirectoryContent.ClearObservedDirectories();
     }
@@ -1161,10 +1393,22 @@ public partial class Pathview : UserControl
                 case "MoveAbort": MoveWorkflowState.Shared.Abort(); break;
                 case "MoveExecute":
                     var moved = new List<string>();
+                    var movedDirectories = new List<(string OldPath, string NewPath)>();
                     try
                     {
-                        SutShell.Move(MoveWorkflowState.Shared.PreparedPaths, CurrentPath, owner, moved);
-                        MoveWorkflowState.Shared.CompleteExecute();
+                        RunDirectoryOperation(() =>
+                        {
+                            try
+                            {
+                                SutShell.MoveWithDirectoryChanges(MoveWorkflowState.Shared.PreparedPaths, CurrentPath, owner, moved, movedDirectories);
+                                MoveWorkflowState.Shared.CompleteExecute();
+                            }
+                            finally
+                            {
+                                foreach (var (oldPath, newPath) in movedDirectories)
+                                    NotifyDirectoryRenamed(oldPath, newPath);
+                            }
+                        });
                     }
                     finally
                     {
@@ -1512,19 +1756,25 @@ public partial class Pathview : UserControl
                     throw new ArgumentException("Enter a valid folder name.");
 
                 var owner = new WindowInteropHelper(Window.GetWindow(this)!).Handle;
-                var newPath = ShellItemOperations.Rename(entry.Path, entry.EditName, owner);
-                DirectoryRenamed?.Invoke(entry.Path, newPath);
+                var oldPath = entry.Path;
+                RunDirectoryOperation(() =>
+                {
+                    var newPath = SutShell.Rename(oldPath, entry.EditName, owner);
+                    NotifyDirectoryRenamed(oldPath, newPath);
+                });
+                if (Path.GetDirectoryName(oldPath) is { } parentPath)
+                {
+                    _fileSystemStateDirty = true;
+                    _dirtyDirectories.Add(parentPath);
+                    if (string.Equals(parentPath, CurrentPath, StringComparison.OrdinalIgnoreCase))
+                        _enumerationDirty = true;
+                    ScheduleFileSystemRefreshIfVisible();
+                }
             }
         }
         catch (Exception exception)
         {
             MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot rename folder", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-        finally
-        {
-            _fileSystemStateDirty = true;
-            _refreshWholeTree = true;
-            ScheduleFileSystemRefreshIfVisible();
         }
     }
 
@@ -1553,7 +1803,7 @@ public sealed class TreeEntry : INotifyPropertyChanged
     public TreeEntry(string name, string path) : this(name, path, false) { }
 
     public string Name { get; private set; }
-    public string Path { get; }
+    public string Path { get; private set; }
     public bool IsPlaceholder { get; }
     public bool IsTop { get; }
     public bool IsLoaded { get; set; }
@@ -1599,6 +1849,23 @@ public sealed class TreeEntry : INotifyPropertyChanged
 
     public static TreeEntry Placeholder() => new("Loading", string.Empty, true);
     public static TreeEntry Top() => new(string.Empty, ShellLocations.TopPath, false, true);
+
+    internal void RemapPaths(string oldPath, string newPath)
+    {
+        if (!IsPlaceholder && !IsTop)
+        {
+            var updatedPath = ShellLocations.RemapPath(Path, oldPath, newPath);
+            if (!string.Equals(Path, updatedPath, StringComparison.Ordinal))
+            {
+                Path = updatedPath;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Path)));
+                RefreshDisplayName();
+                RefreshIcons();
+            }
+        }
+        foreach (var child in Children)
+            child.RemapPaths(oldPath, newPath);
+    }
 
     private static bool ContainsSubdirectories(string path)
     {

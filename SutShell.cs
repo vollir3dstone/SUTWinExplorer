@@ -229,6 +229,10 @@ internal static class SutShell
     internal static void Move(IReadOnlyList<string> paths, string destination, IntPtr owner, IList<string> insertedPaths) =>
         ShellFileOperations.Move(paths, destination, owner, insertedPaths);
 
+    internal static void MoveWithDirectoryChanges(IReadOnlyList<string> paths, string destination, IntPtr owner, IList<string> insertedPaths,
+        IList<(string OldPath, string NewPath)> movedDirectories) =>
+        ShellFileOperations.Move(paths, destination, owner, insertedPaths, movedDirectories);
+
     internal static void Delete(IReadOnlyList<string> paths, IntPtr owner) =>
         ShellFileOperations.Delete(paths, owner);
 
@@ -371,6 +375,7 @@ internal sealed class DirectoryDataCache
     private string? _path;
     private DirectoryItem[]? _items;
     private int _generation;
+    private readonly List<(string OldPath, string NewPath)> _pathRemaps = [];
 
     internal void Invalidate()
     {
@@ -379,6 +384,20 @@ internal sealed class DirectoryDataCache
             _generation++;
             _path = null;
             _items = null;
+            _pathRemaps.Clear();
+        }
+    }
+
+    internal void RemapPaths(string oldPath, string newPath)
+    {
+        lock (_sync)
+        {
+            _pathRemaps.Add((oldPath, newPath));
+            if (_path is not null)
+                _path = ShellLocations.RemapPath(_path, oldPath, newPath);
+            if (_items is not null)
+                foreach (var item in _items)
+                    item.RemapPath(oldPath, newPath);
         }
     }
 
@@ -387,6 +406,11 @@ internal sealed class DirectoryDataCache
         DirectoryItem? item;
         lock (_sync)
         {
+            foreach (var (oldPath, newPath) in _pathRemaps)
+            {
+                directoryPath = ShellLocations.RemapPath(directoryPath, oldPath, newPath);
+                itemPath = ShellLocations.RemapPath(itemPath, oldPath, newPath);
+            }
             if (!string.Equals(_path, directoryPath, StringComparison.OrdinalIgnoreCase))
                 return false;
             item = _items?.FirstOrDefault(candidate =>
@@ -460,10 +484,20 @@ internal sealed class DirectoryItem(string name, string fullPath, bool isDirecto
     private ShellIconSet? _icons;
     private FileEntry? _entry;
     internal string Name { get; } = name;
-    internal string FullPath { get; } = fullPath;
+    internal string FullPath { get; private set; } = fullPath;
     internal bool IsDirectory { get; } = isDirectory;
     internal bool IsDrive { get; } = isDrive;
     internal MediaType MediaType { get; } = MediaTypeMap.GetMediaType(fullPath, isDirectory);
+
+    internal void RemapPath(string oldPath, string newPath)
+    {
+        lock (_sync)
+        {
+            FullPath = ShellLocations.RemapPath(FullPath, oldPath, newPath);
+            if (_entry is not null)
+                _entry = _entry with { FullPath = FullPath };
+        }
+    }
 
     internal void RefreshMetadata()
     {

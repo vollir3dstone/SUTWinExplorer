@@ -95,9 +95,10 @@ the previous active use case can be saved.
   its path. A name entered before the initial navigation completes is included
   when the entry is created. If the name is undefined, the tab title falls
   back to the shortened path.
-- Internal folder renames update associated use case paths after successful
-  location updates, including affected descendants. As with existing history
-  behavior, external renames are not tracked as internal renames.
+- Identified folder renames and internal Shell moves update associated use case
+  paths after successful location updates, including affected descendants.
+  External moves reported only as separate deletion and creation events cannot
+  be identified reliably.
 - The virtual Shell location **This PC** cannot be pinned as a Fixed tab.
   BROWSE is never stored. Filter settings, sort settings, selected tab,
   and navigation history are not use case fields.

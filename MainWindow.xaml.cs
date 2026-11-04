@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     private UseCaseConfiguration _activeUseCase;
     private UseCaseStore _useCaseStore;
     private bool _activeUseCaseDirty;
+    private int _directoryOperationDepth;
 
     public MainWindow()
     {
@@ -388,6 +389,9 @@ public partial class MainWindow : Window
         view.PinRequested += Pathview_PinRequested;
         view.BrowseLocationRequested += Pathview_BrowseLocationRequested;
         view.DirectoryRenamed += Pathview_DirectoryRenamed;
+        view.DirectoryOperation = RunDirectoryOperation;
+        if (_directoryOperationDepth > 0)
+            view.SuspendObservers();
 
         if (view.IsBrowsable)
         {
@@ -517,6 +521,29 @@ public partial class MainWindow : Window
             {
                 MessageBox.Show(this, exception.Message, "Cannot update renamed location", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
+        }
+    }
+
+    private void RunDirectoryOperation(Action operation)
+    {
+        if (_directoryOperationDepth++ > 0)
+        {
+            try { operation(); }
+            finally { _directoryOperationDepth--; }
+            return;
+        }
+
+        try
+        {
+            foreach (var view in _tabsByPathview.Keys.ToArray())
+                view.SuspendObservers();
+            operation();
+        }
+        finally
+        {
+            _directoryOperationDepth--;
+            foreach (var view in _tabsByPathview.Keys.ToArray())
+                view.ResumeObservers();
         }
     }
 

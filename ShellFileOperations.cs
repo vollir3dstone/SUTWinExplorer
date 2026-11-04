@@ -109,9 +109,10 @@ internal static class ShellFileOperations
         Transfer(sourcePaths, destinationPath, ownerWindow, "copy", insertedPaths,
             (operation, source, destination, sink) => operation.CopyItem(source, destination, null, sink));
 
-    public static void Move(IReadOnlyList<string> sourcePaths, string destinationPath, IntPtr ownerWindow, IList<string> insertedPaths) =>
+    public static void Move(IReadOnlyList<string> sourcePaths, string destinationPath, IntPtr ownerWindow, IList<string> insertedPaths,
+        IList<(string OldPath, string NewPath)>? movedDirectories = null) =>
         Transfer(sourcePaths, destinationPath, ownerWindow, "move", insertedPaths,
-            (operation, source, destination, sink) => operation.MoveItem(source, destination, null, sink));
+            (operation, source, destination, sink) => operation.MoveItem(source, destination, null, sink), movedDirectories);
 
     public static void Link(IReadOnlyList<string> sourcePaths, string destinationPath, IList<string> insertedPaths)
     {
@@ -228,7 +229,8 @@ internal static class ShellFileOperations
         IntPtr ownerWindow,
         string operationName,
         IList<string> insertedPaths,
-        Func<IFileOperationNative, IShellItemNative, IShellItemNative, IntPtr, int> queueOperation)
+        Func<IFileOperationNative, IShellItemNative, IShellItemNative, IntPtr, int> queueOperation,
+        IList<(string OldPath, string NewPath)>? movedDirectories = null)
     {
         if (sourcePaths.Count == 0)
             throw new InvalidOperationException($"Select one or more items to {operationName}.");
@@ -238,7 +240,7 @@ internal static class ShellFileOperations
         IFileOperationNative? operation = null;
         IShellItemNative? destination = null;
         var sources = new List<IShellItemNative>(sourcePaths.Count);
-        var sink = new TransferProgressSink(destinationPath, insertedPaths);
+        var sink = new TransferProgressSink(destinationPath, insertedPaths, movedDirectories);
         var sinkPointer = IntPtr.Zero;
         try
         {
@@ -392,14 +394,26 @@ internal static class ShellFileOperations
 
     [ComVisible(true)]
     [ClassInterface(ClassInterfaceType.None)]
-    private sealed class TransferProgressSink(string destinationPath, IList<string> insertedPaths) : IFileOperationProgressSink
+    private sealed class TransferProgressSink(string destinationPath, IList<string> insertedPaths,
+        IList<(string OldPath, string NewPath)>? movedDirectories) : IFileOperationProgressSink
     {
+        private readonly Dictionary<IntPtr, string> _movingDirectories = [];
         public int StartOperations() => 0;
         public int FinishOperations(int result) => 0;
         public int PreRenameItem(uint flags, IntPtr item, IntPtr newName) => 0;
         public int PostRenameItem(uint flags, IntPtr item, IntPtr newName, int result, IntPtr newItem) => 0;
-        public int PreMoveItem(uint flags, IntPtr item, IntPtr destination, IntPtr newName) => 0;
-        public int PostMoveItem(uint flags, IntPtr item, IntPtr destination, IntPtr newName, int result, IntPtr newItem) => Record(result, newItem);
+        public int PreMoveItem(uint flags, IntPtr item, IntPtr destination, IntPtr newName)
+        {
+            if (movedDirectories is not null && GetPath(item) is { } path && Directory.Exists(path))
+                _movingDirectories[item] = path;
+            return 0;
+        }
+        public int PostMoveItem(uint flags, IntPtr item, IntPtr destination, IntPtr newName, int result, IntPtr newItem)
+        {
+            if (result >= 0 && _movingDirectories.Remove(item, out var oldPath) && GetPath(newItem) is { } newPath)
+                movedDirectories?.Add((oldPath, newPath));
+            return Record(result, newItem);
+        }
         public int PreCopyItem(uint flags, IntPtr item, IntPtr destination, IntPtr newName) => 0;
         public int PostCopyItem(uint flags, IntPtr item, IntPtr destination, IntPtr newName, int result, IntPtr newItem) => Record(result, newItem);
         public int PreDeleteItem(uint flags, IntPtr item) => 0;
@@ -410,6 +424,14 @@ internal static class ShellFileOperations
         public int ResetTimer() => 0;
         public int PauseTimer() => 0;
         public int ResumeTimer() => 0;
+
+        private static string? GetPath(IntPtr item)
+        {
+            if (item == IntPtr.Zero || ((IShellViewItemNative)Marshal.GetObjectForIUnknown(item)).GetDisplayName(0x80058000, out var name) < 0)
+                return null;
+            try { return Marshal.PtrToStringUni(name); }
+            finally { Marshal.FreeCoTaskMem(name); }
+        }
 
         private int Record(int result, IntPtr newItem)
         {

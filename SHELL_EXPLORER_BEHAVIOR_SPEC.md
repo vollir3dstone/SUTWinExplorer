@@ -183,6 +183,16 @@ can be prepared at a time, but clipboard actions remain independent of it:
 - [x] Each Pathview retains its own location, **Hide directories**, and
   content **Hide internal** settings and sort history when the user switches
   tabs.
+- [x] The location row has **Rename...** and **Relocate...** before the Explorer
+  button for filesystem folders other than drive roots. Rename accepts a folder
+  name in the same parent; Relocate accepts an existing destination parent folder.
+  A successful operation updates affected Pathviews, descendant paths, tree,
+  tab labels and saved use case paths while retaining custom names. The path
+  change alone does not require re-enumerating the moved folder's contents.
+  Application-owned folder rename and prepared move operations temporarily
+  release all Pathview observers. Directory timestamp comparisons detect some,
+  but not all, changes made while observation is interrupted; native Shell
+  drag/drop, clipboard and extension commands are not coordinated this way.
 - [x] The address field displays the selected tab's path and offers paths from
   open non-browsable tabs in its dropdown; the browsable tab's current path is
   never a dropdown entry. Selecting a dropdown entry selects its associated tab.
@@ -201,9 +211,10 @@ can be prepared at a time, but clipboard actions remain independent of it:
   browsable Pathview.
 - [x] Renaming a folder through the tree or **Sub directories** inline editor
   updates affected Back and Forward history paths, including descendants.
-  External renames do not update the history.
-- [ ] Renaming a folder in the Shell content view also updates affected history
-  paths without treating external renames as internal operations.
+  Identified external renames also update affected history paths.
+- [x] Renaming a folder in the content view updates affected history paths.
+  External moves reported only as separate deletion and creation events cannot
+  be identified reliably.
 - [x] A non-browsable Pathview does not change its own location through its
   tree, **Sub directories** list, or Shell content pane. Single-clicking a
   directory in the **Path** tree or **Sub directories** list, or double-clicking

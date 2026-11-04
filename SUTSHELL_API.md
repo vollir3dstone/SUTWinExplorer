@@ -97,7 +97,7 @@ behavior where it differs from this contract.
 	when a directory is dirty. Filtering uses the existing complete, unfiltered
 	enumeration. A dirty directory is re-enumerated on the next tab activation,
 	not as a side effect of filtering.
-3. **External path or name changes:** An externally renamed or moved directory
+3. **Path or name changes:** An internally or externally renamed or moved directory
 	represented by a Pathview, including a change to an ancestor in its path,
 	updates that Pathview's path, its tab label, and its Use Case entry without
 	enumerating that directory. A custom tab name remains unchanged. Cached paths
@@ -201,8 +201,12 @@ just changed records. In the current ContentView/Pathview integration:
 Pathview receives filesystem events, including both paths for a direct rename,
 or an error indication without event details. Name changes immediately inside a
 child directory are also reported as a metadata change for that child, so its
-cached timestamp can be updated without enumerating the parent. External
-Pathview path updates are not yet implemented. Watcher errors currently mark
+cached timestamp can be updated without enumerating the parent. Identified
+renames and internally reported Shell moves rebase affected Pathviews and their
+caches without invalidating their contents. External moves reported only as
+separate deletion and creation events cannot be paired reliably. On Windows,
+watchers on descendants can prevent a directory's ancestor from being renamed
+or moved while those watchers are open. Watcher errors currently mark
 the affected route enumeration-dirty and are not yet handled separately as
 required by the contract above.
 
