@@ -455,6 +455,11 @@ may show its requested row in light gray without changing the active selection.
   sidebar menus and their backgrounds.
 - [x] ContentView file and folder selections use the Base and Content Menu pair
   described in [CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md).
+- [x] ContentView supports left-button filesystem drag-and-drop between tables
+  and compatible external applications. Directory rows target that directory;
+  file rows and empty space target the current directory. Copy, Move and Link
+  use Shell effects and modifier keys; right-button drags into the table and
+  non-filesystem data are rejected. Clipboard and prepared transfers are independent.
 - [x] Leaving the system double-click area around the opening point or executing
   a menu command resets the context-menu sequence, even if the pointer returns.
   Pointer movement does not close an open menu; the next normal right-click on

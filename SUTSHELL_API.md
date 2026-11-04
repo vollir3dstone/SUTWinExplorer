@@ -229,7 +229,8 @@ and prioritizes the new visible region. Loading pauses when the view is unloaded
 and resumes when it is visible again.
 A newer refresh cancels previous requests and cannot be overwritten by their
 results. A slow OS call can still delay completion of its batch. ContentView
-supports multiple selection, its own inline rename editor, and Shell-backed Delete.
-Shell clipboard/drag-and-drop integration has not been implemented
-for the table. Watchers are best-effort and
+supports multiple selection, its own inline rename editor, Shell-backed Delete,
+clipboard Copy and copy-only Paste, and left-button filesystem drag-and-drop.
+`ShellDragDrop` creates Shell data objects for selected items and forwards WPF
+drag events to the target directory's native `IDropTarget`. Watchers are best-effort and
 are not a complete replacement for all Shell namespace notifications.

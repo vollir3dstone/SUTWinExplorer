@@ -198,6 +198,21 @@ Explorer; it is disabled for multiple selections. Right-clicking the empty
 background starts its own Base/Content/no-menu sequence; Shift-right-click keeps
 the original Windows background menu.
 
+### Drag and drop
+
+Drag selected filesystem items with the left mouse button to another table,
+Windows Explorer, or another compatible application. Dropping filesystem items
+from an external application or another table is also supported. Dropping on a
+directory row targets that directory; dropping on a file row or empty table
+space targets the current directory. A file row is never invoked as a drop
+target. Non-filesystem data and right-button drags into the table are rejected.
+
+The Windows Shell chooses Copy, Move or Link and provides the usual modifier-key
+behavior. Drag-and-drop does not use or change the Windows clipboard or the
+application's prepared Link, Copy and Move workflows. Starting a left drag
+invalidates any pending context-menu sequence; ordinary right-click handling is
+unchanged. Shell collision prompts, permissions and cancellation apply as usual.
+
 Rename starts from the toolbar, `F2`, or the single-item context menu. The
 inline editor uses the actual filesystem name including its extension; the
 filename portion is initially selected for files. Enter or loss of keyboard

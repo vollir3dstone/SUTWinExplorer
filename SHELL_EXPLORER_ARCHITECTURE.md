@@ -593,6 +593,14 @@ popup on movement. The next normal right-click starts a new Base Menu; native
 fallback and keyboard-invoked menus do not start this sequence. The monitor is
 released on reset or view unload.
 
+The custom table uses `ShellDragDrop` to obtain a Shell data object for selected
+filesystem items and delegates incoming left-button drags to the native folder
+drop target. Directory rows select their own destination; file rows and the
+background select the current directory. The table rejects non-filesystem and
+right-button drags. Its ordinary right-click menu handler is independent of
+drag-and-drop. Integration tests in [ShellDragDrop.Tests.ps1](tests/ShellDragDrop.Tests.ps1)
+exercise real gestures, modifier effects, cross-process data and right-click behavior.
+
 For tree and **Sub directories** items, the helper requests `CMF_CANRENAME` and
 dispatches the Shell's rename command to a WPF inline editor; committing calls
 the parent Shell folder's `SetNameOf`. Open Pathviews remap affected locations

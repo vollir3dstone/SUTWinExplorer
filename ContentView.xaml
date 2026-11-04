@@ -225,10 +225,14 @@
                 </StackPanel>
             </Grid>
             <ListView x:Name="FileList" Grid.Row="1" Grid.Column="1" SelectionMode="Extended"
+                      AllowDrop="True" PreviewDragEnter="FileList_PreviewDragOver" PreviewDragOver="FileList_PreviewDragOver"
+                      PreviewDragLeave="FileList_PreviewDragLeave" PreviewDrop="FileList_PreviewDrop"
                       VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                       ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                       SelectionChanged="FileList_SelectionChanged" SizeChanged="FileList_SizeChanged"
                       PreviewMouseLeftButtonDown="FileList_PreviewMouseLeftButtonDown"
+                      PreviewMouseLeftButtonUp="FileList_PreviewMouseButtonUp"
+                      PreviewMouseMove="FileList_PreviewMouseMove"
                       MouseDoubleClick="FileList_MouseDoubleClick"
                       PreviewMouseRightButtonDown="FileList_PreviewMouseRightButtonDown"
                       GridViewColumnHeader.Click="FileList_ColumnHeaderClick"
