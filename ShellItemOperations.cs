@@ -23,14 +23,14 @@ internal static class ShellItemOperations
             namePointer = Marshal.StringToCoTaskMemUni(name);
             Marshal.ThrowExceptionForHR(parent.SetNameOf(owner, childPidl, namePointer, 1, out renamedPidl));
             if (renamedPidl == IntPtr.Zero)
-                throw new InvalidOperationException("The Shell did not return the renamed folder.");
+                throw new InvalidOperationException("The Shell did not return the renamed item.");
             if (!ILRemoveLastID(absolutePidl))
-                throw new InvalidOperationException("Could not resolve the renamed folder's parent.");
+                throw new InvalidOperationException("Could not resolve the renamed item's parent.");
             renamedAbsolutePidl = ILCombine(absolutePidl, renamedPidl);
             if (renamedAbsolutePidl == IntPtr.Zero)
-                throw new InvalidOperationException("Could not resolve the renamed folder.");
+                throw new InvalidOperationException("Could not resolve the renamed item.");
             Marshal.ThrowExceptionForHR(SHGetNameFromIDList(renamedAbsolutePidl, 0x80058000, out resultPointer));
-            return Marshal.PtrToStringUni(resultPointer) ?? throw new InvalidOperationException("The renamed folder has no filesystem path.");
+            return Marshal.PtrToStringUni(resultPointer) ?? throw new InvalidOperationException("The renamed item has no filesystem path.");
         }
         finally
         {

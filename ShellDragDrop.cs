@@ -13,7 +13,7 @@ internal static class ShellDragDrop
         var parentPath = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(paths[0]));
         if (paths.Any(path => !string.Equals(
             Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(path)), parentPath, StringComparison.OrdinalIgnoreCase)))
-            throw new InvalidOperationException("Dragged items must belong to the same folder.");
+            throw new InvalidOperationException("Dragged items must belong to the same directory.");
 
         IShellFolder? desktop = null;
         IShellFolder? parent = null;

@@ -126,8 +126,8 @@ public partial class ContentView : UserControl
                 var target = SutShell.GetLinkTarget(shortcutPath) ??
                     throw new InvalidOperationException("The shortcut target is unavailable or is not a filesystem item.");
                 var directory = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(target)) ??
-                    throw new InvalidOperationException("The shortcut target does not have a containing folder.");
-                FolderOpenRequested?.Invoke(this, directory);
+                    throw new InvalidOperationException("The shortcut target does not have a containing directory.");
+                DirectoryOpenRequested?.Invoke(this, directory);
             }
             catch (Exception exception)
             {
@@ -184,8 +184,8 @@ public partial class ContentView : UserControl
     }
 
     private string CurrentPath { get; set; } = string.Empty;
-    internal event EventHandler<string>? FolderOpenRequested;
-    internal event Action<string, string>? FolderRenamed;
+    internal event EventHandler<string>? DirectoryOpenRequested;
+    internal event Action<string, string>? DirectoryRenamed;
     internal event EventHandler<DirectoryNotification>? FileSystemChanged;
     internal Action<Action>? DirectoryOperation { get; set; }
 
@@ -684,7 +684,7 @@ public partial class ContentView : UserControl
                             finally
                             {
                                 foreach (var (oldPath, newPath) in movedDirectories)
-                                    FolderRenamed?.Invoke(oldPath, newPath);
+                                    DirectoryRenamed?.Invoke(oldPath, newPath);
                             }
                         });
                     }
@@ -916,9 +916,9 @@ public partial class ContentView : UserControl
 
         try
         {
-            var folderTarget = SutShell.GetFolderTarget(entry.FullPath);
-            if (folderTarget is not null)
-                FolderOpenRequested?.Invoke(this, folderTarget);
+            var directoryTarget = SutShell.GetDirectoryTarget(entry.FullPath);
+            if (directoryTarget is not null)
+                DirectoryOpenRequested?.Invoke(this, directoryTarget);
             else
                 SutShell.Open(entry.FullPath);
         }
@@ -1096,7 +1096,7 @@ public partial class ContentView : UserControl
                     _selectedPaths.Add(newPath);
                     renamed = true;
                     if (entry.IsDirectory)
-                        FolderRenamed?.Invoke(oldPath, newPath);
+                        DirectoryRenamed?.Invoke(oldPath, newPath);
                 }
                 if (entry.IsDirectory)
                     RunDirectoryOperation(RenameItem);

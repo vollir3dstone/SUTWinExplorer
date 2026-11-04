@@ -75,7 +75,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
     public event EventHandler<string>? NavigationStarting;
     public event EventHandler<string>? NavigationCompleted;
     public event EventHandler<string>? NavigationFailed;
-    public event EventHandler<string>? FolderOpenRequested;
+    public event EventHandler<string>? DirectoryOpenRequested;
     public event EventHandler? FileSystemChanged;
     public event EventHandler? DisplayedItemsChanged;
     public static event EventHandler? ToolbarOperationStateChanged;
@@ -198,7 +198,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             var viewId = typeof(IFolderView2Native).GUID;
             Marshal.ThrowExceptionForHR(_browser.GetCurrentView(ref viewId, out viewPointer));
             if (viewPointer == IntPtr.Zero)
-                throw new InvalidOperationException("The Shell folder view is unavailable.");
+                throw new InvalidOperationException("The Shell view is unavailable.");
 
             view = (IFolderView2Native)Marshal.GetObjectForIUnknown(viewPointer);
             Marshal.ThrowExceptionForHR(view.ItemCount(ShellViewAllItems, out var count));
@@ -279,7 +279,7 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
             var interfaceId = typeof(IFolderView2Native).GUID;
             Marshal.ThrowExceptionForHR(_browser.GetCurrentView(ref interfaceId, out viewPointer));
             if (viewPointer == IntPtr.Zero)
-                throw new InvalidOperationException("The Shell folder view is unavailable.");
+                throw new InvalidOperationException("The Shell view is unavailable.");
             view = (IFolderView2Native)Marshal.GetObjectForIUnknown(viewPointer);
             Marshal.ThrowExceptionForHR(view.ItemCount(ShellViewAllItems, out var count));
             TraceColumnSizing($"Change notification item count={count}, previous={_lastDisplayedItemCount}");
@@ -1077,10 +1077,10 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         if (!_isBrowsable &&
             (path is null || !string.Equals(_programmaticNavigationPath, path, StringComparison.OrdinalIgnoreCase)))
         {
-            if (path is not null && ShellFileOperations.GetFolderTarget(path) is { } folderPath)
+            if (path is not null && ShellFileOperations.GetDirectoryTarget(path) is { } directoryPath)
             {
                 _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
-                    FolderOpenRequested?.Invoke(this, folderPath)));
+                    DirectoryOpenRequested?.Invoke(this, directoryPath)));
             }
 
             return HResultAbort;
@@ -1104,13 +1104,13 @@ internal sealed class ShellExplorerBrowserHost : HwndHost
         {
             var selectedPaths = ShellFileOperations.GetSelectedFileSystemPaths(shellView);
             if (selectedPaths.Count != 1 ||
-                ShellFileOperations.GetFolderTarget(selectedPaths[0]) is not { } folderPath)
+                ShellFileOperations.GetDirectoryTarget(selectedPaths[0]) is not { } directoryPath)
             {
                 return false;
             }
 
             _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
-                FolderOpenRequested?.Invoke(this, folderPath)));
+                DirectoryOpenRequested?.Invoke(this, directoryPath)));
             return true;
         }
         catch

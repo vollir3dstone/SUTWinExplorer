@@ -4,6 +4,8 @@ $assembly = [Reflection.Assembly]::LoadFrom((Join-Path $PSScriptRoot '../bin/Deb
 $shell = $assembly.GetType('SUTWinExplorer.SutShell', $true)
 $flags = [Reflection.BindingFlags]'Static,NonPublic'
 $viewFlags = [Reflection.BindingFlags]'Instance,NonPublic'
+$newItemTypes = $assembly.GetType('SUTWinExplorer.NewItemOperations', $true).GetMethod('GetTypes', $flags).Invoke($null, @())
+if ($newItemTypes[0].Kind.ToString() -cne 'Directory' -or $newItemTypes[0].Name -cne 'Directory') { throw 'The New dialog directory type has an incorrect label.' }
 function Wait-Selection($view, [string[]] $expected) {
     $list = $view.FindName('FileList')
     $frame = [System.Windows.Threading.DispatcherFrame]::new()

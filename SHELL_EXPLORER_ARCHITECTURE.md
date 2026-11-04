@@ -6,6 +6,15 @@
 
 > **Document scope:** This file records architecture, implementation details, API ownership, technical findings, decisions, and unresolved engineering work. It is not the user-facing behavior specification; see [SHELL_EXPLORER_BEHAVIOR_SPEC.md](SHELL_EXPLORER_BEHAVIOR_SPEC.md) for observable requirements and acceptance criteria.
 
+## Directory Terminology
+
+Use `directory`, not `folder`, for filesystem directories in application-owned
+code identifiers and user-facing text. This applies to names of types, members,
+variables, controls and other identifiers as well as labels and messages.
+Externally defined names, including Windows Shell and framework APIs, must remain
+as defined by their owners. This rule does not itself rename existing identifiers
+or change stored formats or external contracts.
+
 ## Decision Record
 
 ### 2026-11-01: Separate product name from internal identity
@@ -505,7 +514,7 @@ replaces only the usual outer frame: its template places each header between
 two horizontal rules that remain 1 DIP high, with 8-DIP gaps beside the title,
 and presents the GroupBox content below it using the control's `Padding`. The lower star-sized
 row is headed **Sub directories** and contains the default-checked
-`HideInternalSubfoldersCheckBox` and a `ListView` inside its own frame, with
+`HideInternalSubdirectoriesCheckBox` and a `ListView` inside its own frame, with
 16-DIP horizontal margins. The header rules use the shared `ViewFrameBrush`;
 the inner list frame uses the same brush at 0.7 DIP. The `ListView` fills the
 remaining area and scrolls vertically; its item-container height uses the same
@@ -529,7 +538,7 @@ for fractional-DIP borders.
 
 `RefreshActivePathTree` loads the active route endpoint's immediate child
 directories into its `TreeEntry.Children` and binds those entries to
-`ActivePathSubfoldersList`. The list reuses `ShellIconTemplate`, so base icons
+`ActivePathSubdirectoriesList`. The list reuses `ShellIconTemplate`, so base icons
 and overlays match the trees. Tree siblings and subfolders are ordered by the
 Shell-localized `TreeEntry.Name`. The subfolder checkbox passes its own filter
 choice through `RefreshTreeChildren`; `InternalItemFilter.IsInternal` is shared

@@ -315,7 +315,7 @@ try {
         $grid.Children.Remove($views[1])
         [System.Windows.Controls.Grid]::SetColumn($pathview, 1)
         $null = $grid.Children.Add($pathview)
-        $sidebar = $pathview.FindName('ActivePathSubfoldersList')
+        $sidebar = $pathview.FindName('ActivePathSubdirectoriesList')
         Wait-Until { $sidebar.IsVisible -and @($sidebar.Items | Where-Object { $_.Path -eq $sidebarSource }).Count -eq 1 } 'sidebar drag test view'
         if (-not $sidebar.AllowDrop -or $pathview.FindName('ActivePathTree').AllowDrop -or $pathview.FindName('ActivePathAndSiblingsTree').AllowDrop) { throw 'Drag-and-drop was enabled on the wrong sidebar controls.' }
         $activeTree = $pathview.FindName('ActivePathTree')

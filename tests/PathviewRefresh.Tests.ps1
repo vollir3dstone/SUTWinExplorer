@@ -135,7 +135,7 @@ try {
     $tabs.SelectedItem = $fixed
     Wait-Until { $generation.GetValue($cache) -gt $hiddenGeneration -and $null -ne $snapshot.GetValue($content) } 'The dirty hidden tab did not refresh on activation.'
     if (-not @($content.FindName('FileList').Items | Where-Object { $_.FullPath -eq (Join-Path $directory 'hidden-folder') }).Count) { throw 'The refreshed content omitted the new directory.' }
-    if (-not @($view.FindName('ActivePathSubfoldersList').Items | Where-Object { $_.Path -eq (Join-Path $directory 'hidden-folder') }).Count) { throw 'The refreshed tree omitted the new directory.' }
+    if (-not @($view.FindName('ActivePathSubdirectoriesList').Items | Where-Object { $_.Path -eq (Join-Path $directory 'hidden-folder') }).Count) { throw 'The refreshed tree omitted the new directory.' }
 
     Pump 500
     $folderPath = Join-Path $directory 'hidden-folder'

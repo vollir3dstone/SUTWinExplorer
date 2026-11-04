@@ -10,7 +10,7 @@ internal sealed class DirectoryLocationDialog : Window
 
     internal DirectoryLocationDialog(bool relocate, string value, Window? owner)
     {
-        Title = relocate ? "Relocate folder" : "Rename folder";
+        Title = relocate ? "Relocate directory" : "Rename directory";
         Owner = owner;
         Width = relocate ? Math.Max(480, (owner?.ActualWidth ?? 800) - 40) : 420;
         MaxWidth = SystemParameters.WorkArea.Width;
@@ -24,10 +24,10 @@ internal sealed class DirectoryLocationDialog : Window
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        root.Children.Add(new TextBlock { Text = relocate ? "Destination folder" : "Folder name", Margin = new Thickness(0, 0, 0, 4) });
+        root.Children.Add(new TextBlock { Text = relocate ? "Destination directory" : "Directory name", Margin = new Thickness(0, 0, 0, 4) });
 
         _editor = new TextBox { Name = "DirectoryLocationEditor", Text = value, Height = 28, Padding = new Thickness(4, 1, 4, 1), Margin = new Thickness(0, 0, 0, 14) };
-        AutomationProperties.SetName(_editor, relocate ? "Destination folder" : "Folder name");
+        AutomationProperties.SetName(_editor, relocate ? "Destination directory" : "Directory name");
         Grid.SetRow(_editor, 1);
         root.Children.Add(_editor);
 

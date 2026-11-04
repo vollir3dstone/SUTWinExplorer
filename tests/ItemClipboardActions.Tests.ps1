@@ -408,7 +408,7 @@ try {
     if (-not $backgroundItemClipboardPaste.IsEnabled) { throw 'Background Item clipboard paste is disabled.' }
     $backgroundItemClipboardPaste.Invoke.Invoke()
     Wait-Until { [IO.File]::Exists((Join-Path $secondDestination 'test-folder/nested.txt')) } 'background Item clipboard paste'
-    Wait-Until { @($pathview.FindName('ActivePathSubfoldersList').Items | Where-Object { $_.Path -eq (Join-Path $secondDestination 'test-folder') }).Count -eq 1 } 'background Item clipboard paste tree refresh'
+    Wait-Until { @($pathview.FindName('ActivePathSubdirectoriesList').Items | Where-Object { $_.Path -eq (Join-Path $secondDestination 'test-folder') }).Count -eq 1 } 'background Item clipboard paste tree refresh'
     if (-not $copy.IsPrepared -or @($copy.PreparedPaths).Count -ne 2) { throw 'Sidebar clipboard actions changed the prepared Copy.' }
     $copy.Abort()
     [System.Windows.Clipboard]::SetText('sidebar copy sentinel')

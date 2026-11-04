@@ -34,18 +34,18 @@ internal static class SutContextMenuFactory
     internal static SutContextMenu GetItemMenuWithOpenLocation(IReadOnlyList<string> paths, IntPtr owner, Action? rename, ShellMenuAction? openLocation) =>
         CreateCore(paths, owner, background: false, rename, openLocationAction: openLocation);
 
-    internal static SutContextMenu GetBackgroundMenu(string folderPath, IntPtr owner) =>
-        CreateCore([folderPath], owner, background: true, rename: null);
+    internal static SutContextMenu GetBackgroundMenu(string directoryPath, IntPtr owner) =>
+        CreateCore([directoryPath], owner, background: true, rename: null);
 
-    internal static SutContextMenu GetBackgroundBaseMenu(string folderPath, IntPtr owner, IReadOnlyList<ShellMenuAction> actions)
+    internal static SutContextMenu GetBackgroundBaseMenu(string directoryPath, IntPtr owner, IReadOnlyList<ShellMenuAction> actions)
     {
-        using var directoryMenu = GetBaseMenu([folderPath], owner, []);
-        return CreateCore([folderPath], owner, background: true, rename: null, actions,
+        using var directoryMenu = GetBaseMenu([directoryPath], owner, []);
+        return CreateCore([directoryPath], owner, background: true, rename: null, actions,
             backgroundBaseCommands: directoryMenu.CaptureSnapshot());
     }
 
-    internal static SutContextMenu GetBackgroundContentMenu(string folderPath, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands, ShellMenuAction? newAction) =>
-        CreateCore([folderPath], owner, background: true, rename: null, excludedCommands: baseCommands, backgroundNewAction: newAction);
+    internal static SutContextMenu GetBackgroundContentMenu(string directoryPath, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands, ShellMenuAction? newAction) =>
+        CreateCore([directoryPath], owner, background: true, rename: null, excludedCommands: baseCommands, backgroundNewAction: newAction);
 
     internal static SutContextMenu GetBaseMenu(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyList<ShellMenuAction> actions) =>
         CreateCore(paths, owner, background: false, rename: null, actions);

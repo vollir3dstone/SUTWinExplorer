@@ -149,7 +149,7 @@ internal static class SutShell
         return completion.Task;
     }
 
-    internal static string? GetFolderTarget(string path) => ShellFileOperations.GetFolderTarget(path);
+    internal static string? GetDirectoryTarget(string path) => ShellFileOperations.GetDirectoryTarget(path);
 
     internal static string? GetLinkTarget(string path) => ShellFileOperations.GetLinkTarget(path);
 
@@ -173,7 +173,7 @@ internal static class SutShell
     {
         if (GetEditName(path) is null || string.IsNullOrWhiteSpace(name) || name is "." or ".." ||
             name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-            throw new ArgumentException("Enter a valid file or folder name.", nameof(name));
+            throw new ArgumentException("Enter a valid file or directory name.", nameof(name));
         var target = Path.Combine(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(path))!, name);
         if (!string.Equals(path, target, StringComparison.OrdinalIgnoreCase) &&
             (File.Exists(target) || Directory.Exists(target)))
@@ -356,7 +356,7 @@ internal static class SutShell
         return SHGetFileInfo(path, 0, ref fileInfo, (uint)Marshal.SizeOf<ShellFileInfo>(), shellFileInfoTypeName) != IntPtr.Zero &&
                !string.IsNullOrEmpty(fileInfo.TypeName)
             ? fileInfo.TypeName
-            : isDirectory ? "Folder" : Path.GetExtension(path);
+            : isDirectory ? "Directory" : Path.GetExtension(path);
     }
 
     internal static string FormatSize(long bytes) =>

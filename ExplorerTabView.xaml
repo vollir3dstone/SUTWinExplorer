@@ -326,7 +326,7 @@
                                 </Border>
                                 <TextBlock Grid.Column="1" TextWrapping="NoWrap">
                                     <InlineUIContainer BaselineAlignment="Baseline">
-                                        <local:CheckBoxWrapper x:Name="HideInternalSubfoldersCheckBox"
+                                        <local:CheckBoxWrapper x:Name="HideInternalSubdirectoriesCheckBox"
                                                                Label="Hide internal" Margin="0,0,16,0" />
                                     </InlineUIContainer>
                                 </TextBlock>
@@ -334,14 +334,14 @@
                                 <Border Grid.Row="2" BorderBrush="{StaticResource ViewFrameBrush}"
                                     BorderThickness="{StaticResource ViewFrameThickness}"
                                     Margin="0">
-                                <ListView x:Name="ActivePathSubfoldersList"
+                                <ListView x:Name="ActivePathSubdirectoriesList"
                                           BorderThickness="0" Padding="0" Margin="16,0"
                                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                           ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                          PreviewMouseRightButtonDown="ActivePathSubfoldersList_PreviewMouseRightButtonDown"
-                                          PreviewKeyDown="ActivePathSubfoldersList_PreviewKeyDown"
-                                          PreviewMouseLeftButtonDown="ActivePathSubfoldersList_PreviewMouseLeftButtonDown"
-                                          PreviewMouseLeftButtonUp="ActivePathSubfoldersList_PreviewMouseLeftButtonUp">
+                                          PreviewMouseRightButtonDown="ActivePathSubdirectoriesList_PreviewMouseRightButtonDown"
+                                          PreviewKeyDown="ActivePathSubdirectoriesList_PreviewKeyDown"
+                                          PreviewMouseLeftButtonDown="ActivePathSubdirectoriesList_PreviewMouseLeftButtonDown"
+                                          PreviewMouseLeftButtonUp="ActivePathSubdirectoriesList_PreviewMouseLeftButtonUp">
                                     <ListView.ItemContainerStyle>
                                         <Style TargetType="{x:Type ListViewItem}">
                                             <Setter Property="Height"
@@ -351,7 +351,7 @@
                                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                             <Setter Property="VerticalContentAlignment" Value="Center" />
                                             <EventSetter Event="MouseEnter"
-                                                         Handler="ActivePathSubfoldersListItem_MouseEnter" />
+                                                         Handler="ActivePathSubdirectoriesListItem_MouseEnter" />
                                             <Setter Property="Template">
                                                 <Setter.Value>
                                                     <ControlTemplate TargetType="ListViewItem">
@@ -388,10 +388,10 @@
                                                                   Content="{Binding}"
                                                                   ContentTemplate="{StaticResource ShellIconTemplate}"
                                                                   VerticalAlignment="Center" />
-                                                <TextBlock x:Name="SubfolderName" Grid.Column="1" Text="{Binding Name}" Margin="4,0,2,0"
+                                                <TextBlock x:Name="SubdirectoryName" Grid.Column="1" Text="{Binding Name}" Margin="4,0,2,0"
                                                            VerticalAlignment="Center" TextWrapping="NoWrap"
                                                            TextTrimming="CharacterEllipsis" />
-                                                <TextBox x:Name="SubfolderNameEditor" Grid.Column="1" Margin="4,0,2,0"
+                                                <TextBox x:Name="SubdirectoryNameEditor" Grid.Column="1" Margin="4,0,2,0"
                                                          Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}"
                                                          Visibility="Collapsed" Padding="1,0"
                                                          IsVisibleChanged="TreeNameEditor_IsVisibleChanged"
@@ -400,8 +400,8 @@
                                             </Grid>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding IsEditing}" Value="True">
-                                                    <Setter TargetName="SubfolderName" Property="Visibility" Value="Collapsed" />
-                                                    <Setter TargetName="SubfolderNameEditor" Property="Visibility" Value="Visible" />
+                                                    <Setter TargetName="SubdirectoryName" Property="Visibility" Value="Collapsed" />
+                                                    <Setter TargetName="SubdirectoryNameEditor" Property="Visibility" Value="Visible" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>

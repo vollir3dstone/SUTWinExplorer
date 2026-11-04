@@ -64,22 +64,22 @@ public partial class Pathview : UserControl
     private readonly Action<Color>? _tabColorChanged;
     private string? _customName;
     private readonly SutContextMenuController<TreeEntry> _treeContextMenu;
-    private readonly SutContextMenuController<TreeEntry> _subfolderContextMenu;
-    private readonly ListViewDragSource<TreeEntry> _subfolderDragSource;
+    private readonly SutContextMenuController<TreeEntry> _subdirectoryContextMenu;
+    private readonly ListViewDragSource<TreeEntry> _subdirectoryDragSource;
     private TreeEntry? _treeMenuTarget;
-    private TreeEntry? _subfolderMenuTarget;
+    private TreeEntry? _subdirectoryMenuTarget;
 
     public Pathview(string initialPath, bool isBrowsable, string? customName, Action<string?>? customNameChanged,
         Color? tabColor, Action<Color>? tabColorChanged)
     {
         InitializeComponent();
         _treeContextMenu = CreateDirectoryMenuController(ActivePathAndSiblingsTree, true);
-        _subfolderContextMenu = CreateDirectoryMenuController(ActivePathSubfoldersList, false);
-        _ = new ListViewDropTarget(ActivePathSubfoldersList,
+        _subdirectoryContextMenu = CreateDirectoryMenuController(ActivePathSubdirectoriesList, false);
+        _ = new ListViewDropTarget(ActivePathSubdirectoriesList,
             item => item is TreeEntry { IsPlaceholder: false } entry ? entry.Path : null,
             () => CurrentPath, () => _editingTreeEntry is null);
-        _subfolderDragSource = new ListViewDragSource<TreeEntry>(ActivePathSubfoldersList, entry => [entry.Path],
-            () => _editingTreeEntry is null, () => { _subfolderContextMenu.Reset(); _subfolderMenuTarget = null; });
+        _subdirectoryDragSource = new ListViewDragSource<TreeEntry>(ActivePathSubdirectoriesList, entry => [entry.Path],
+            () => _editingTreeEntry is null, () => { _subdirectoryContextMenu.Reset(); _subdirectoryMenuTarget = null; });
         ActivePathAndSiblingsTree.SelectedItemChanged += (_, args) =>
         {
             if (args.NewValue is not TreeEntry entry || _treeMenuTarget is null ||
@@ -98,8 +98,8 @@ public partial class Pathview : UserControl
         var explorerPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
         OpenInExplorerIcon.Source = ShellIconProvider.GetIconAtSize(explorerPath, 16, 16) ??
                                     ShellIconProvider.GetSmallIcons(explorerPath)?.BaseIcon;
-        HideInternalSubfoldersCheckBox.GetCheckBox().Checked += HideInternalSubfoldersCheckBox_StateChanged;
-        HideInternalSubfoldersCheckBox.GetCheckBox().Unchecked += HideInternalSubfoldersCheckBox_StateChanged;
+        HideInternalSubdirectoriesCheckBox.GetCheckBox().Checked += HideInternalSubdirectoriesCheckBox_StateChanged;
+        HideInternalSubdirectoriesCheckBox.GetCheckBox().Unchecked += HideInternalSubdirectoriesCheckBox_StateChanged;
         IsBrowsable = isBrowsable;
         ActivePathTab.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
         ActivePathAndSiblingsTab.Visibility = IsBrowsable ? Visibility.Visible : Visibility.Collapsed;
@@ -116,8 +116,8 @@ public partial class Pathview : UserControl
             Interval = TimeSpan.FromMilliseconds(200)
         };
         _fileSystemRefreshTimer.Tick += FileSystemRefreshTimer_Tick;
-        DirectoryContent.FolderOpenRequested += ContentView_FolderOpenRequested;
-        DirectoryContent.FolderRenamed += NotifyDirectoryRenamed;
+        DirectoryContent.DirectoryOpenRequested += ContentView_DirectoryOpenRequested;
+        DirectoryContent.DirectoryRenamed += NotifyDirectoryRenamed;
         DirectoryContent.DirectoryOperation = RunDirectoryOperation;
         DirectoryContent.FileSystemChanged += ContentView_FileSystemChanged;
         DirectoryContent.Initialize(IsBrowsable);
@@ -227,7 +227,7 @@ public partial class Pathview : UserControl
             return;
 
         _treeContextMenu.Reset();
-        _subfolderContextMenu.Reset();
+        _subdirectoryContextMenu.Reset();
         var dirtyDirectories = _dirtyDirectories.Select(path => RemapPath(path, oldPath, newPath)).ToArray();
         _dirtyDirectories.Clear();
         _dirtyDirectories.UnionWith(dirtyDirectories);
@@ -412,9 +412,9 @@ public partial class Pathview : UserControl
     private void CommitNavigation(string path, NavigationHistoryAction historyAction)
     {
         _treeContextMenu.Reset();
-        _subfolderContextMenu.Reset();
+        _subdirectoryContextMenu.Reset();
         _treeMenuTarget = null;
-        _subfolderMenuTarget = null;
+        _subdirectoryMenuTarget = null;
         if (_pendingTreeNavigationEntry is { } pendingEntry &&
             string.Equals(pendingEntry.Path, path, StringComparison.OrdinalIgnoreCase))
         {
@@ -499,7 +499,7 @@ public partial class Pathview : UserControl
         try { RenameCurrentDirectory(dialog.Value); }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot rename folder", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot rename directory", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -515,7 +515,7 @@ public partial class Pathview : UserControl
         catch (OperationCanceledException) { }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot relocate folder", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot relocate directory", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -533,22 +533,22 @@ public partial class Pathview : UserControl
     internal void RelocateCurrentDirectory(string destination)
     {
         if (!Path.IsPathFullyQualified(destination))
-            throw new ArgumentException("Enter an absolute destination folder path.");
+            throw new ArgumentException("Enter an absolute destination directory path.");
         var oldPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(CurrentPath));
         var target = Path.TrimEndingDirectorySeparator(Path.GetFullPath(destination));
         var parent = Path.GetDirectoryName(oldPath);
         if (parent is null)
             throw new InvalidOperationException("A drive cannot be relocated.");
         if (!Directory.Exists(target))
-            throw new DirectoryNotFoundException("The destination folder does not exist.");
+            throw new DirectoryNotFoundException("The destination directory does not exist.");
         if (string.Equals(parent, target, StringComparison.OrdinalIgnoreCase))
             return;
         var relative = Path.GetRelativePath(oldPath, target);
         if (relative == "." || (!Path.IsPathRooted(relative) && relative != ".." && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)))
-            throw new InvalidOperationException("A folder cannot be relocated into itself or one of its subfolders.");
+            throw new InvalidOperationException("A directory cannot be relocated into itself or one of its subdirectories.");
         var targetPath = Path.Combine(target, Path.GetFileName(oldPath));
         if (Directory.Exists(targetPath) || File.Exists(targetPath))
-            throw new IOException("An item with that name already exists in the destination folder.");
+            throw new IOException("An item with that name already exists in the destination directory.");
         var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
         var relocatedPaths = new List<string>();
         var relocatedDirectories = new List<(string OldPath, string NewPath)>();
@@ -562,7 +562,7 @@ public partial class Pathview : UserControl
             }
         });
         if (relocatedDirectories.Count == 0)
-            throw new IOException("The Shell did not report a completed folder relocation.");
+            throw new IOException("The Shell did not report a completed directory relocation.");
     }
 
     private void NotifyDirectoryRenamed(string oldPath, string newPath)
@@ -634,7 +634,7 @@ public partial class Pathview : UserControl
     private void Pathview_Unloaded(object sender, RoutedEventArgs e)
     {
         _treeContextMenu.Reset();
-        _subfolderContextMenu.Reset();
+        _subdirectoryContextMenu.Reset();
         _fileSystemRefreshTimer.Stop();
     }
 
@@ -722,7 +722,7 @@ public partial class Pathview : UserControl
         RefreshActivePathAndSiblingsTree();
     }
 
-    private void HideInternalSubfoldersCheckBox_StateChanged(object sender, RoutedEventArgs e)
+    private void HideInternalSubdirectoriesCheckBox_StateChanged(object sender, RoutedEventArgs e)
     {
         if (!IsBrowsable)
             RefreshActivePathTree();
@@ -905,7 +905,7 @@ public partial class Pathview : UserControl
             try
             {
                 currentDirectories = Directory.EnumerateDirectories(activePath.Path).ToArray();
-                RefreshTreeChildren(activePath, useSubfolderFilter: true, directoryPaths: currentDirectories);
+                RefreshTreeChildren(activePath, useSubdirectoryFilter: true, directoryPaths: currentDirectories);
                 activePath.HasSubdirectories = false;
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -975,13 +975,13 @@ public partial class Pathview : UserControl
             parent = child;
         }
 
-        RefreshTreeChildren(parent, useSubfolderFilter: true);
+        RefreshTreeChildren(parent, useSubdirectoryFilter: true);
         _activePathEntry = parent;
         parent.HasSubdirectories = false;
         parent.IsSelected = true;
         ActivePathTree.Height = (segments.Length + 1) * DirectoryTreeRowHeight;
         ActivePathTree.ItemsSource = new[] { root };
-        ActivePathSubfoldersList.ItemsSource = parent.Children;
+        ActivePathSubdirectoriesList.ItemsSource = parent.Children;
     }
 
     private void RefreshActivePathAndSiblingsTree()
@@ -1128,7 +1128,7 @@ public partial class Pathview : UserControl
         RefreshTreeChildren(entry);
     }
 
-    private void RefreshTreeChildren(TreeEntry entry, bool useSubfolderFilter = false, string[]? directoryPaths = null)
+    private void RefreshTreeChildren(TreeEntry entry, bool useSubdirectoryFilter = false, string[]? directoryPaths = null)
     {
         if (entry.IsPlaceholder || entry.IsTop)
             return;
@@ -1139,10 +1139,10 @@ public partial class Pathview : UserControl
             entry.HasSubdirectories = directories.Length > 0;
             directories = directories
                 .Where(directory =>
-                    !(useSubfolderFilter
-                        ? ShouldHideSubfolderDirectory(directory)
+                    !(useSubdirectoryFilter
+                        ? ShouldHideSubdirectoryDirectory(directory)
                         : ShouldHideTreeDirectory(directory)) &&
-                    (useSubfolderFilter || !ShouldHideSiblingDirectory(entry, directory)))
+                    (useSubdirectoryFilter || !ShouldHideSiblingDirectory(entry, directory)))
                 .ToArray();
             var existingChildren = entry.Children
                 .Where(child => !child.IsPlaceholder)
@@ -1220,9 +1220,9 @@ public partial class Pathview : UserControl
         }
     }
 
-    private bool ShouldHideSubfolderDirectory(string directoryPath)
+    private bool ShouldHideSubdirectoryDirectory(string directoryPath)
     {
-        return HideInternalSubfoldersCheckBox.GetCheckBox().IsChecked == true &&
+        return HideInternalSubdirectoriesCheckBox.GetCheckBox().IsChecked == true &&
                InternalItemFilter.IsInternal(directoryPath, true);
     }
 
@@ -1246,7 +1246,7 @@ public partial class Pathview : UserControl
     private SutContextMenuController<TreeEntry> CreateDirectoryMenuController(ItemsControl control, bool tree)
     {
         return new SutContextMenuController<TreeEntry>(entry => entry.Path,
-            () => (tree ? _treeMenuTarget : _subfolderMenuTarget) is { } target ? [target.Path] : [],
+            () => (tree ? _treeMenuTarget : _subdirectoryMenuTarget) is { } target ? [target.Path] : [],
             (screenX, screenY) =>
             {
                 var source = control.InputHitTest(control.PointFromScreen(new Point(screenX, screenY))) as DependencyObject;
@@ -1265,9 +1265,9 @@ public partial class Pathview : UserControl
 
     private void SelectDirectoryMenuTarget(TreeEntry? entry, bool tree)
     {
-        var previous = tree ? _treeMenuTarget : _subfolderMenuTarget;
+        var previous = tree ? _treeMenuTarget : _subdirectoryMenuTarget;
         if (previous is null || entry is null || !string.Equals(previous.Path, entry.Path, StringComparison.OrdinalIgnoreCase))
-            (tree ? _treeContextMenu : _subfolderContextMenu).Reset();
+            (tree ? _treeContextMenu : _subdirectoryContextMenu).Reset();
         if (tree)
         {
             _treeMenuTarget = entry;
@@ -1275,8 +1275,8 @@ public partial class Pathview : UserControl
         }
         else
         {
-            _subfolderMenuTarget = entry;
-            ActivePathSubfoldersList.SelectedItem = entry;
+            _subdirectoryMenuTarget = entry;
+            ActivePathSubdirectoriesList.SelectedItem = entry;
         }
     }
 
@@ -1435,7 +1435,7 @@ public partial class Pathview : UserControl
         try
         {
             SelectDirectoryMenuTarget(entry, tree);
-            (tree ? _treeContextMenu : _subfolderContextMenu).Show(entry,
+            (tree ? _treeContextMenu : _subdirectoryContextMenu).Show(entry,
                 new WindowInteropHelper(Window.GetWindow(this)!).Handle, alternate);
         }
         catch (Exception exception)
@@ -1444,17 +1444,17 @@ public partial class Pathview : UserControl
         }
     }
 
-    private void ActivePathSubfoldersListItem_MouseEnter(object sender, MouseEventArgs e)
+    private void ActivePathSubdirectoriesListItem_MouseEnter(object sender, MouseEventArgs e)
     {
-        ActivePathSubfoldersList.SelectedItem = null;
+        ActivePathSubdirectoriesList.SelectedItem = null;
     }
 
-    private void ActivePathSubfoldersList_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    private void ActivePathSubdirectoriesList_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
         var source = e.OriginalSource as DependencyObject;
         if (FindAncestor<ListViewItem>(source) is { DataContext: TreeEntry entry } && !entry.IsPlaceholder)
         {
-            ShowSubfolderMenu(entry, alternate: true);
+            ShowSubdirectoryMenu(entry, alternate: true);
             e.Handled = true;
             return;
         }
@@ -1464,9 +1464,9 @@ public partial class Pathview : UserControl
 
         try
         {
-            ActivePathSubfoldersList.SelectedItem = null;
-            if (_subfolderMenuTarget is not null) SelectDirectoryMenuTarget(null, tree: false);
-            _subfolderContextMenu.Show(null, new WindowInteropHelper(Window.GetWindow(this)!).Handle, alternate: true);
+            ActivePathSubdirectoriesList.SelectedItem = null;
+            if (_subdirectoryMenuTarget is not null) SelectDirectoryMenuTarget(null, tree: false);
+            _subdirectoryContextMenu.Show(null, new WindowInteropHelper(Window.GetWindow(this)!).Handle, alternate: true);
         }
         catch (Exception exception)
         {
@@ -1475,21 +1475,21 @@ public partial class Pathview : UserControl
         e.Handled = true;
     }
 
-    private void ActivePathSubfoldersList_PreviewKeyDown(object sender, KeyEventArgs e)
+    private void ActivePathSubdirectoriesList_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (key != Key.Apps && !(key == Key.F10 && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)))
             return;
 
-        if (ActivePathSubfoldersList.SelectedItem is TreeEntry entry && !entry.IsPlaceholder)
-            ShowSubfolderMenu(entry, alternate: false);
+        if (ActivePathSubdirectoriesList.SelectedItem is TreeEntry entry && !entry.IsPlaceholder)
+            ShowSubdirectoryMenu(entry, alternate: false);
         else
             ShowNativeBackgroundMenu(this, CurrentPath);
 
         e.Handled = true;
     }
 
-    private void ShowSubfolderMenu(TreeEntry entry, bool alternate)
+    private void ShowSubdirectoryMenu(TreeEntry entry, bool alternate)
     {
         try
         {
@@ -1497,32 +1497,32 @@ public partial class Pathview : UserControl
         }
         finally
         {
-            ActivePathSubfoldersList.SelectedItem = null;
+            ActivePathSubdirectoriesList.SelectedItem = null;
         }
     }
 
-    private void ActivePathSubfoldersList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void ActivePathSubdirectoriesList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        _subfolderDragSource.Cancel();
+        _subdirectoryDragSource.Cancel();
         var source = e.OriginalSource as DependencyObject;
         if (FindAncestor<TextBox>(source) is null && _editingTreeEntry is null &&
             FindAncestor<ListViewItem>(source) is { DataContext: TreeEntry { IsPlaceholder: false } entry } &&
             Directory.Exists(entry.Path))
-            _subfolderDragSource.Begin(entry, e.GetPosition(ActivePathSubfoldersList));
+            _subdirectoryDragSource.Begin(entry, e.GetPosition(ActivePathSubdirectoriesList));
     }
 
-    private void ActivePathSubfoldersList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    private void ActivePathSubdirectoriesList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        var clickedEntry = _subfolderDragSource.Item;
-        _subfolderDragSource.Cancel();
+        var clickedEntry = _subdirectoryDragSource.Item;
+        _subdirectoryDragSource.Cancel();
         if (FindAncestor<TextBox>(e.OriginalSource as DependencyObject) is not null)
             return;
 
         if (FindAncestor<ListViewItem>(e.OriginalSource as DependencyObject) is
             { DataContext: TreeEntry { IsPlaceholder: false } entry } && ReferenceEquals(clickedEntry, entry))
         {
-            _subfolderContextMenu.Reset();
-            _subfolderMenuTarget = null;
+            _subdirectoryContextMenu.Reset();
+            _subdirectoryMenuTarget = null;
             RequestBrowseLocation(entry.Path);
         }
     }
@@ -1622,7 +1622,7 @@ public partial class Pathview : UserControl
         }
     }
 
-    private void ContentView_FolderOpenRequested(object? sender, string path)
+    private void ContentView_DirectoryOpenRequested(object? sender, string path)
     {
         if (IsBrowsable)
             Navigate(path);
@@ -1635,7 +1635,7 @@ public partial class Pathview : UserControl
             this,
             path,
             true,
-            HideInternalSubfoldersCheckBox.GetCheckBox().IsChecked,
+            HideInternalSubdirectoriesCheckBox.GetCheckBox().IsChecked,
             DirectoryContent.HideInternalItems,
             preferFixedView);
 
@@ -1649,7 +1649,7 @@ public partial class Pathview : UserControl
         {
             if (ReferenceEquals(_pendingTreeNavigationEntry, entry))
                 ClearPendingTreeNavigation();
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot open folder", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot open directory", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -1753,7 +1753,7 @@ public partial class Pathview : UserControl
             {
                 if (string.IsNullOrWhiteSpace(entry.EditName) || entry.EditName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
                     entry.EditName is "." or "..")
-                    throw new ArgumentException("Enter a valid folder name.");
+                    throw new ArgumentException("Enter a valid directory name.");
 
                 var owner = new WindowInteropHelper(Window.GetWindow(this)!).Handle;
                 var oldPath = entry.Path;
@@ -1774,7 +1774,7 @@ public partial class Pathview : UserControl
         }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot rename folder", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot rename directory", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -2066,7 +2066,7 @@ internal static class ShellIconProvider
     {
         var info = new ShellFileInfo();
         var attributes = directory ? 0x10u : 0x80u;
-        var path = directory ? "folder" : "file" + extension;
+        var path = directory ? "directory" : "file" + extension;
         if (SHGetFileInfo(path, attributes, ref info, (uint)Marshal.SizeOf<ShellFileInfo>(), Icon | SmallIcon | UseFileAttributes) == IntPtr.Zero ||
             info.IconHandle == IntPtr.Zero)
             return null;

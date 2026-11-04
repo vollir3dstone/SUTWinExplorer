@@ -17,7 +17,7 @@ internal static class ShellFileOperations
     private static readonly Guid ShellLinkClassId = new("00021401-0000-0000-C000-000000000046");
     private static readonly Guid ShellLinkInterfaceId = new("000214F9-0000-0000-C000-000000000046");
 
-    public static string? GetFolderTarget(string path)
+    public static string? GetDirectoryTarget(string path)
     {
         if (Directory.Exists(path))
             return Path.GetFullPath(path);
@@ -305,12 +305,12 @@ internal static class ShellFileOperations
         try
         {
             if ((File.GetAttributes(destinationPath) & FileAttributes.Directory) == 0)
-                throw new InvalidOperationException($"The destination is not a folder: {destinationPath}");
+                throw new InvalidOperationException($"The destination is not a directory: {destinationPath}");
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
         {
             throw new InvalidOperationException(
-                $"The destination folder no longer exists or cannot be accessed: {destinationPath}", exception);
+                $"The destination directory no longer exists or cannot be accessed: {destinationPath}", exception);
         }
 
         foreach (var sourcePath in sourcePaths)

@@ -27,7 +27,7 @@ internal static class MediaTypeIconMap
         [MediaType.Video] = LoadAsset("type_video 16.png"),
         [MediaType.Box] = LoadAsset("type_box 16.png"),
         [MediaType.CommandData] = LoadAsset("type_command_data 16.png"),
-        [MediaType.Directory] = LoadFolderIcon(),
+        [MediaType.Directory] = LoadDirectoryIcon(),
         [MediaType.ShellLink] = LoadAsset("type_shell_link 16.png"),
         [MediaType.Url] = LoadAsset("type_url 16.png"),
         [MediaType.Ambiguous] = CreateWarningIcon()
@@ -48,7 +48,7 @@ internal static class MediaTypeIconMap
         return image;
     }
 
-    private static BitmapSource LoadFolderIcon()
+    private static BitmapSource LoadDirectoryIcon()
     {
         const uint stockFolder = 3;
         const uint stockIcon = 0x100;
@@ -56,7 +56,7 @@ internal static class MediaTypeIconMap
         var info = new StockIconInfo { Size = (uint)Marshal.SizeOf<StockIconInfo>(), Path = string.Empty };
         Marshal.ThrowExceptionForHR(SHGetStockIconInfo(stockFolder, stockIcon | stockSmallIcon, ref info));
         if (info.Icon == IntPtr.Zero)
-            throw new InvalidOperationException("The Windows folder icon is unavailable.");
+            throw new InvalidOperationException("The Windows directory icon is unavailable.");
 
         try
         {

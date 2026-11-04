@@ -24,7 +24,7 @@ public sealed class SutShellRenameProbe
 {
     public string OldPath;
     public string NewPath;
-    public void OnFolderRenamed(string oldPath, string newPath) { OldPath = oldPath; NewPath = newPath; }
+    public void OnDirectoryRenamed(string oldPath, string newPath) { OldPath = oldPath; NewPath = newPath; }
 }
 
 public sealed class SutShellMenuProbe : System.IDisposable
@@ -734,7 +734,7 @@ function Start-NewDialogProbe([string] $mode) {
                 $picker.UpdateLayout()
                 $result.ListDetails = "first=$($baseItems[0].Name), second=$($baseItems[1].Name), selected=$initialSelection, divider=$dividerCorrect, height=$($picker.ActualHeight), firstIcon=$($null -ne $firstIcon.Source), secondIcon=$($null -ne $secondIcon.Source), offset=$($scroll.VerticalOffset), count=$($picker.Items.Count)"
                 $result.ListCorrect = $picker -is [System.Windows.Controls.ListBox] -and $baseItems[0].Kind.ToString() -eq 'Directory' -and
-                    $baseItems[0].Name -eq 'Folder' -and $baseItems[1].Name -eq 'Textfile' -and $baseItems[1].Extension -eq '.txt' -and
+                    $baseItems[0].Name -eq 'Directory' -and $baseItems[1].Name -eq 'Textfile' -and $baseItems[1].Extension -eq '.txt' -and
                     $initialSelection -eq 1 -and $dividerCorrect -and
                     $picker.ActualHeight -le 262 -and $null -ne $firstIcon.Source -and $null -ne $secondIcon.Source -and
                     $null -ne $scroll -and $scroll.VerticalOffset -gt 0
@@ -2842,8 +2842,8 @@ try {
         $list.SelectedItems.Clear()
         $list.SelectedItem = $folderRow
         $renameProbe = [SutShellRenameProbe]::new()
-        $folderEvent = $view.GetType().GetEvent('FolderRenamed', $viewFlags)
-        $folderCallback = [Delegate]::CreateDelegate([Action[string,string]], $renameProbe, 'OnFolderRenamed')
+        $folderEvent = $view.GetType().GetEvent('DirectoryRenamed', $viewFlags)
+        $folderCallback = [Delegate]::CreateDelegate([Action[string,string]], $renameProbe, 'OnDirectoryRenamed')
         $folderEvent.GetAddMethod($true).Invoke($view, [object[]] @($folderCallback))
         try {
             $null = $view.GetType().GetMethod('BeginRename', $viewFlags).Invoke($view, @())
@@ -3012,14 +3012,14 @@ try {
             $iconStart = $icon.TranslatePoint([System.Windows.Point]::new(0, 0), $panel).X
             Assert-True ([Math]::Abs($iconStart - $prefixEnd - 8) -lt 0.1) 'The path icon must have an 8-DIP gap after the header prefix.'
         }
-        $subfolderList = $fixedPathview.FindName('ActivePathSubfoldersList')
-        $subfolderEntry = @($subfolderList.Items | Where-Object { $_.Path -eq (Join-Path $directory 'OtherFolder') })[0]
+        $subdirectoryList = $fixedPathview.FindName('ActivePathSubdirectoriesList')
+        $subdirectoryEntry = @($subdirectoryList.Items | Where-Object { $_.Path -eq (Join-Path $directory 'OtherFolder') })[0]
         $siblingsTree = $browsePathview.FindName('ActivePathAndSiblingsTree')
         $treeEntry = Find-TreeEntry $siblingsTree.Items[0] (Join-Path $directory 'RenamedFolder')
-        Assert-True ($null -ne $subfolderEntry -and $null -ne $treeEntry) 'Directory sidebar menu test entries were not found.'
+        Assert-True ($null -ne $subdirectoryEntry -and $null -ne $treeEntry) 'Directory sidebar menu test entries were not found.'
         $showDirectoryMenu = $pathviewType.GetMethod('ShowDirectoryMenu', $viewFlags)
         foreach ($menuKind in @('base', 'content', 'none', 'base')) {
-            foreach ($case in @(@{ View = $fixedPathview; Window = $fixedWindow; Entry = $subfolderEntry; Tree = $false },
+            foreach ($case in @(@{ View = $fixedPathview; Window = $fixedWindow; Entry = $subdirectoryEntry; Tree = $false },
                                 @{ View = $browsePathview; Window = $fixedWindow; Entry = $treeEntry; Tree = $true })) {
                 $sidebarOwner = [System.Windows.Interop.WindowInteropHelper]::new($case.Window).Handle
                 $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
@@ -3038,7 +3038,7 @@ try {
                 } finally { $menuProbe.Dispose() }
             }
         }
-        $sidebarController = $pathviewType.GetField('_subfolderContextMenu', $viewFlags).GetValue($fixedPathview)
+        $sidebarController = $pathviewType.GetField('_subdirectoryContextMenu', $viewFlags).GetValue($fixedPathview)
         $sidebarOwner = [System.Windows.Interop.WindowInteropHelper]::new($fixedWindow).Handle
         $sidebarContent = $fixedPathview.FindName('DirectoryContent')
         $sidebarHideDirectories = $sidebarContent.FindName('HideDirectoriesCheckBox').GetCheckBox()
@@ -3081,7 +3081,7 @@ try {
         $sidebarHideDirectories.IsChecked = $true
         foreach ($operation in @('Copy', 'Move')) {
             $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
-            $workflow.Prepare([string[]] @($subfolderEntry.Path))
+            $workflow.Prepare([string[]] @($subdirectoryEntry.Path))
             $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
             $sidebarOwner = [System.Windows.Interop.WindowInteropHelper]::new($fixedWindow).Handle
             $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
@@ -3093,7 +3093,7 @@ try {
                     -not $workflow.IsPrepared) "The sidebar background $operation action did not match the workflow state."
             } finally { $menuProbe.Dispose(); $workflow.Abort() }
         }
-        foreach ($case in @(@{ View = $fixedPathview; Window = $fixedWindow; Entry = $subfolderEntry; Tree = $false },
+        foreach ($case in @(@{ View = $fixedPathview; Window = $fixedWindow; Entry = $subdirectoryEntry; Tree = $false },
                             @{ View = $browsePathview; Window = $fixedWindow; Entry = $treeEntry; Tree = $true })) {
             $sidebarOwner = [System.Windows.Interop.WindowInteropHelper]::new($case.Window).Handle
             foreach ($operation in @('Copy', 'Move')) {
@@ -3112,11 +3112,11 @@ try {
             $fixedWindow.Left = 20
             $fixedWindow.Top = 20
             $fixedWindow.Activate() | Out-Null
-            $subfolderEntry = @($subfolderList.Items | Where-Object { $_.Path -eq (Join-Path $directory 'OtherFolder') })[0]
+            $subdirectoryEntry = @($subdirectoryList.Items | Where-Object { $_.Path -eq (Join-Path $directory 'OtherFolder') })[0]
             $treeEntry = Find-TreeEntry $siblingsTree.Items[0] (Join-Path $directory 'RenamedFolder')
-            $subfolderList.ScrollIntoView($subfolderEntry)
+            $subdirectoryList.ScrollIntoView($subdirectoryEntry)
             $fixedWindow.UpdateLayout()
-            $backgroundPoint = Find-ListBackgroundPoint $subfolderList
+            $backgroundPoint = Find-ListBackgroundPoint $subdirectoryList
             $rightClickProbe = [SutShellRightClickProbe]::new([System.Windows.Interop.WindowInteropHelper]::new($fixedWindow).Handle,
                 [int] $backgroundPoint.X, [int] $backgroundPoint.Y, [int] $backgroundPoint.X, [int] $backgroundPoint.Y)
             $rightClickProbe.AdditionalClicks = 2
@@ -3132,10 +3132,10 @@ try {
                     $newParent[0].Text -in $rightClickProbe.SecondItems -and $rightClickProbe.NoMenuObserved -and
                     $rightClickProbe.AdditionalMenuCount -eq 1 -and $rightClickProbe.AdditionalMenuWasBase[0]) 'Sidebar background clicks did not follow the three-step sequence.'
             } finally { $timer.Stop(); $rightClickProbe.Dispose() }
-            $subfolderContainer = $subfolderList.ItemContainerGenerator.ContainerFromItem($subfolderEntry)
+            $subdirectoryContainer = $subdirectoryList.ItemContainerGenerator.ContainerFromItem($subdirectoryEntry)
             $treeContainer = Find-TreeContainer $siblingsTree $treeEntry
-            Assert-True ($null -ne $subfolderContainer -and $null -ne $treeContainer) "Sidebar right-click test entries were not realized: list=$($null -ne $subfolderContainer), tree=$($null -ne $treeContainer), treeEntry=$($null -ne $treeEntry)."
-            foreach ($container in @($subfolderContainer, $treeContainer)) {
+            Assert-True ($null -ne $subdirectoryContainer -and $null -ne $treeContainer) "Sidebar right-click test entries were not realized: list=$($null -ne $subdirectoryContainer), tree=$($null -ne $treeContainer), treeEntry=$($null -ne $treeEntry)."
+            foreach ($container in @($subdirectoryContainer, $treeContainer)) {
                 $container.BringIntoView()
                 $fixedWindow.UpdateLayout()
                 $point = $container.PointToScreen([System.Windows.Point]::new(10, $container.ActualHeight / 2))

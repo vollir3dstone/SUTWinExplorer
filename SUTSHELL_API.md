@@ -17,7 +17,7 @@ Shell helpers directly.
 | `OpenSortedDirectoryAsync(path, showDirectories, hideInternal, namePattern, sorting, cancellationToken)` | Prepares a filtered snapshot using the ordered pairs in a `DirectorySortState`. Directories always precede files; criteria apply within both groups. This PC contains drive roots. Enumeration errors propagate; inaccessible individual items may be skipped. |
 | `OpenDirectoryAsync(path, showDirectories, hideInternal, namePattern, cancellationToken)` | Opens a snapshot with no explicit sort pairs, using the default name order. |
 | `GetDirectoryRangeAsync(snapshot, start, count, cancellationToken)` | Returns complete entries for the requested zero-based range in snapshot order on a background STA thread. Invalid ranges throw. Unavailable details or icons can be empty; images returned across threads are frozen. |
-| `GetFolderTarget(path)` | Returns a directory path for a directory or a directory shortcut, otherwise `null`. |
+| `GetDirectoryTarget(path)` | Returns a directory path for a directory or a directory shortcut, otherwise `null`. |
 | `GetLinkTarget(path)` | Resolves a `.lnk` to an existing filesystem file or directory; returns `null` for unavailable or non-filesystem targets. |
 | `GetEditName(path)` / `Rename(path, name, owner)` | Obtain the filesystem leaf name for editing, or `null` for a drive root; validate and rename an item through the Windows Shell, returning its new filesystem path. Invalid names and existing targets fail; case-only changes are allowed. |
 | `Open(path)` | Opens an item using the OS shell. |
@@ -271,7 +271,7 @@ name. In the Windows implementation, the entry contains at most one classical
 Shell overlay: it is the overlay selected by Windows, not a list of all applicable
 overlay handlers. Explorer status-column icons are not necessarily overlays.
 The asynchronous APIs check cancellation between items; an in-progress OS
-call cannot be interrupted. Type names come from the Windows Shell, falling back to `Folder` or the
+call cannot be interrupted. Type names come from the Windows Shell, falling back to `Directory` or the
 file extension if unavailable. File sizes are shown in KB (1024 bytes), rounded
 up to whole KB; directories have no displayed size. Modification times use local
 time in the culture-independent format `yyyy-MM-dd HH:mm`. Entry icons use WPF

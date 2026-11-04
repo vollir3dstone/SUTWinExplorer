@@ -154,7 +154,11 @@ try {
         $dialogType = $assembly.GetType('SUTWinExplorer.DirectoryLocationDialog', $true)
         $dialog = $dialogType.GetConstructors($flags)[0].Invoke([object[]] @($true, [string] $root, $null))
         try {
-            if ($dialog.Title -cne 'Relocate folder' -or $dialog.Content.Children[2].Children[1].Content -cne 'Relocate') { throw 'The relocation dialog has incorrect labels.' }
+            if ($dialog.Title -cne 'Relocate directory' -or $dialog.Content.Children[0].Text -cne 'Destination directory' -or $dialog.Content.Children[2].Children[1].Content -cne 'Relocate') { throw 'The relocation dialog has incorrect labels.' }
+        } finally { $dialog.Close() }
+        $dialog = $dialogType.GetConstructors($flags)[0].Invoke([object[]] @($false, [string] 'example', $null))
+        try {
+            if ($dialog.Title -cne 'Rename directory' -or $dialog.Content.Children[0].Text -cne 'Directory name' -or $dialog.Content.Children[2].Children[1].Content -cne 'Rename') { throw 'The rename dialog has incorrect labels.' }
         } finally { $dialog.Close() }
 
         $parentView.GetType().GetMethod('RenameCurrentDirectory', $flags).Invoke($parentView, [object[]] @([string] 'renamed-parent'))

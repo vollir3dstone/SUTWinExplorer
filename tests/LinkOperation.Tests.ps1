@@ -33,8 +33,8 @@ try {
             } finally { [void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($shortcut) }
         }
     } finally { [void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell) }
-    $getFolderTarget = $operations.GetMethod('GetFolderTarget', [Reflection.BindingFlags]'Static,Public')
-    if ($getFolderTarget.Invoke($null, [object[]] @($inserted[1])) -cne $folder) { throw 'The folder shortcut did not resolve to its folder.' }
+    $getDirectoryTarget = $operations.GetMethod('GetDirectoryTarget', [Reflection.BindingFlags]'Static,Public')
+    if ($getDirectoryTarget.Invoke($null, [object[]] @($inserted[1])) -cne $folder) { throw 'The directory shortcut did not resolve to its directory.' }
     $getLinkTarget = $operations.GetMethod('GetLinkTarget', [Reflection.BindingFlags]'Static,Public')
     if ($getLinkTarget.Invoke($null, [object[]] @($inserted[0])) -cne $file -or
         $getLinkTarget.Invoke($null, [object[]] @($inserted[1])) -cne $folder -or

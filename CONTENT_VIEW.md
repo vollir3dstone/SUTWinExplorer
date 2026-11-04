@@ -328,7 +328,7 @@ the Windows Shell properties for one or more loaded selected items. Button avail
 depends on the local selection and on the shared transfer state.
 
 The dialog presents types in a fixed-height, scrollable list with Shell type
-icons. Folder and Textfile appear first, separated from the other available
+icons. Directory and Textfile appear first, separated from the other available
 types by a line; Textfile is initially selected. Clicking a type returns keyboard focus to the name editor.
 After creation, the item is selected and brought into view in the current
 ContentView. Filters that would hide it are cleared; cancelling the dialog
@@ -402,7 +402,7 @@ location/tree updates.
 | `FocusContent()` | Requests keyboard focus in the native Shell content, or in the file list in legacy mode. Returns whether the request could be made. |
 | `NavigateTo(path)` | Clears the private column and requests Shell-backed navigation; it does not commit the Pathview location. It throws if asynchronous content navigation is unavailable. |
 | `NavigationCompleted(path)` / `NavigationFailed(path)` | Report Shell navigation outcomes. Pathview handles pending requests and commits its location/history only on success; a failure path may be empty. |
-| `FolderOpenRequested(path)` | Reports a folder activation for Pathview to route according to its browsable/fixed role. |
+| `DirectoryOpenRequested(path)` | Reports a directory activation for Pathview to route according to its browsable/fixed role. |
 | `SetCurrentPath(path)` | Supplies the location committed by Pathview. It neither navigates nor refreshes the content by itself. |
 | `HideInternalItems` | Gets or sets this view's nullable content **Hide internal** checkbox state. The other content filters are currently controlled by the view's own UI. |
 | `Refresh(refreshView)` / `RefreshStatus()` | Refresh content or its status as requested. In Shell mode, status refresh also schedules private-table repopulation. |

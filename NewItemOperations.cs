@@ -16,7 +16,7 @@ internal static class NewItemOperations
 {
     internal static IReadOnlyList<NewItemType> GetTypes()
     {
-        var types = new List<NewItemType> { new("Folder", "", NewItemKind.Directory) };
+        var types = new List<NewItemType> { new("Directory", "", NewItemKind.Directory) };
         foreach (var extension in Registry.ClassesRoot.GetSubKeyNames().Where(name => name.StartsWith('.') && name.Length > 1))
         {
             try
@@ -86,7 +86,7 @@ internal static class NewItemOperations
         if (!Directory.Exists(directory)) throw new DirectoryNotFoundException("The destination directory is unavailable.");
         if (string.IsNullOrWhiteSpace(name) || name is "." or ".." || name != name.TrimEnd(' ', '.') ||
             name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-            throw new ArgumentException("Enter a valid file or folder name.");
+            throw new ArgumentException("Enter a valid file or directory name.");
         var deviceName = name.Split('.')[0];
         if (deviceName.Equals("CON", StringComparison.OrdinalIgnoreCase) || deviceName.Equals("PRN", StringComparison.OrdinalIgnoreCase) ||
             deviceName.Equals("AUX", StringComparison.OrdinalIgnoreCase) || deviceName.Equals("NUL", StringComparison.OrdinalIgnoreCase) ||

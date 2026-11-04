@@ -17,6 +17,11 @@ Checkboxes record implementation status, not changes to the expected behavior.
 
 ## Terminology
 
+The application consistently calls filesystem directories **directories**, never
+**folders**, in its own user-facing text, including labels, dialogs, tooltips,
+and messages. Windows Shell text and names supplied by external components are
+outside the application's control.
+
 A **Pathview** is the browsing unit attached to an application tab. It comprises
 the directory-tree pane, content pane, status display, active location, and
 temporary view settings scoped to that tab. Each tab retains its own Pathview
@@ -184,12 +189,12 @@ can be prepared at a time, but clipboard actions remain independent of it:
   content **Hide internal** settings and sort history when the user switches
   tabs.
 - [x] The location row has **Rename...** and **Relocate...** before the Explorer
-  button for filesystem folders other than drive roots. Rename accepts a folder
-  name in the same parent; Relocate accepts an existing destination parent folder.
+  button for filesystem directories other than drive roots. Rename accepts a directory
+  name in the same parent; Relocate accepts an existing destination parent directory.
   A successful operation updates affected Pathviews, descendant paths, tree,
   tab labels and saved use case paths while retaining custom names. The path
-  change alone does not require re-enumerating the moved folder's contents.
-  Application-owned folder rename and prepared move operations temporarily
+  change alone does not require re-enumerating the moved directory's contents.
+  Application-owned directory rename and prepared move operations temporarily
   release all Pathview observers. Directory timestamp comparisons detect some,
   but not all, changes made while observation is interrupted; native Shell
   drag/drop, clipboard and extension commands are not coordinated this way.
