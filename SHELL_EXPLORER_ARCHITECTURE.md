@@ -294,8 +294,10 @@ leading ellipsis prefix is omitted.
   resolved target path in the same way.
 - Each Pathview's location header spans the full width above its body. The
   visible **Browse** or **Pin** button is first; a non-browsable Pathview places
-  its **FIXED** badge next, followed by the current directory's Shell icon and
-  path expression. A pencil button before the color picker opens a custom-name
+  its **FIXED** badge next. Their four-column prefix, including its spacing,
+  has a white background independent of the location-row color. An 8-DIP grid
+  column separates it from the path icon. The current
+  directory's Shell icon and path expression follow. A pencil button before the color picker opens a custom-name
   dialog. The Pathview constructor receives the initial nullable name and a
   name-change callback; `MainWindow` owns the profile entry and saves accepted
   changes. The dialog editor is 28 DIP high and uses the path display's font

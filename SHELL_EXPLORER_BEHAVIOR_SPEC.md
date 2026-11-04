@@ -144,7 +144,11 @@ can be prepared at a time, but clipboard actions remain independent of it:
   tab. Each non-browsable Pathview shows only the **Active path** tree tab.
 - [x] Each Pathview shows its location row across the full width above the
   side-by-side panes. The visible **Browse** or **Pin** button comes first; a
-  non-browsable Pathview then shows its bold **FIXED** badge. A pencil button
+  non-browsable Pathview then shows its bold **FIXED** badge. This four-column
+  prefix, including its spacing, has a white background in both Pathview types,
+  independently of the location-row color. An 8-DIP gap separates it from the
+  path icon. Text badges, including **FIXED**, use the same fixed 24-DIP height
+  as the standard text buttons. A pencil button
   before the color picker opens the custom-name dialog. An undefined name
   displays `(Undefined custom name)`; applying an empty name stores `null`.
   Apply saves changes and Cancel or Escape discards them. Opening a Fixed tab
@@ -171,7 +175,7 @@ can be prepared at a time, but clipboard actions remain independent of it:
 - [x] Each fixed Pathview's location row starts with a white background unless
   a profile color is saved. Its right-aligned palette offers twelve light colors
   distributed across the spectrum; choosing one changes only that Pathview's
-  location row and tab header and saves the color in the active profile. The
+  location row outside the white prefix and its tab header and saves the color in the active profile. The
   saved color is restored on profile activation and application restart. Until
   a color is chosen, tab headers retain their normal selected or unselected
   appearance. The browsable Pathview has no color-selection button.

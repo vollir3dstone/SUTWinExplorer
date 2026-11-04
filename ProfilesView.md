@@ -17,7 +17,8 @@ which profile is selected automatically at the next application startup.
 
 - The top row contains **Profiles**, **New**, the **FOR SELECTED:** badge,
   **Edit**, and **Delete**, in that order. The badge uses the same background,
-  padding, and text formatting as the badge in the content pane.
+   padding, text formatting, and fixed 24-DIP height as the badge in the content
+   pane; its height matches the standard text buttons.
 - Below it, the left pane contains a list of profile names. The right pane
    starts with the 24-DIP profile icon and an editor displaying the selected
    profile's name. The editor occupies roughly half the available width and

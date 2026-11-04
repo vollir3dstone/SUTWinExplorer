@@ -182,9 +182,11 @@
                       SizeChanged="LocationHeaderPanel_SizeChanged">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition x:Name="LocationHeaderGap" Width="8" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <Grid x:Name="LocationHeaderPrefix" Grid.Column="0">
+                      <Grid x:Name="LocationHeaderPrefix" Grid.Column="0"
+                          SizeChanged="LocationHeaderPanel_SizeChanged">
                         <TextBlock Text="000000000000000000000000000000"
                                    Visibility="Hidden" IsHitTestVisible="False" TextWrapping="NoWrap"
                                    FontFamily="{Binding FontFamily, ElementName=LocationLabel}"
@@ -192,7 +194,7 @@
                                    FontWeight="{Binding FontWeight, ElementName=LocationLabel}"
                                    FontStyle="{Binding FontStyle, ElementName=LocationLabel}"
                                    FontStretch="{Binding FontStretch, ElementName=LocationLabel}" />
-                            <Grid>
+                            <Grid Background="White" VerticalAlignment="Center">
                                 <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
@@ -207,13 +209,13 @@
                                     Style="{StaticResource ContentPaneButtonStyle}" Padding="10,1"
                                     VerticalAlignment="Center" Visibility="Collapsed"
                                     IsEnabled="False" Click="PathviewActionButton_Click" />
-                                <Border x:Name="FixedPathBadge" Grid.Column="2" Background="#E1E4E7" Padding="6,3"
+                                <Border x:Name="FixedPathBadge" Grid.Column="2" Style="{StaticResource BadgeStyle}"
                                     VerticalAlignment="Center" Visibility="Collapsed">
-                                <TextBlock Text="FIXED" FontWeight="Bold" Foreground="#4E5963" />
+                                <TextBlock Text="FIXED" FontWeight="Bold" Foreground="#4E5963" VerticalAlignment="Center" />
                             </Border>
                             </Grid>
                     </Grid>
-                    <Grid Grid.Column="1">
+                    <Grid Grid.Column="2">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
@@ -311,7 +313,7 @@
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <Border Grid.Column="0" Height="24" Background="#E1E4E7" Padding="6,0"
+                                <Border Grid.Column="0" Style="{StaticResource BadgeStyle}"
                                         Margin="0,0,8,0" VerticalAlignment="Center">
                                     <TextBlock Text="VIEW:" FontWeight="Bold" Foreground="#4E5963"
                                                VerticalAlignment="Center" />
@@ -412,7 +414,7 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="4,2,4,0">
-                        <Border Height="24" Background="#E1E4E7" Padding="6,0"
+                        <Border Style="{StaticResource BadgeStyle}"
                                 Margin="0,0,8,0" VerticalAlignment="Center">
                             <TextBlock Text="VIEW:" FontWeight="Bold" Foreground="#4E5963"
                                        VerticalAlignment="Center" />

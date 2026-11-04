@@ -2972,6 +2972,11 @@ try {
     $pathviewConstructor = $pathviewType.GetConstructors()[0]
     $fixedPathview = $pathviewConstructor.Invoke([object[]] @([string] $directory, [bool] $false, $null, $null, $null, $null))
     $browsePathview = $pathviewConstructor.Invoke([object[]] @([string] $directory, [bool] $true, $null, $null, $null, $null))
+    foreach ($pathview in @($fixedPathview, $browsePathview)) {
+        $prefix = $pathview.FindName('LocationHeaderPrefix')
+        $group = @($prefix.Children | Where-Object { $_ -is [System.Windows.Controls.Grid] })[0]
+        Assert-True ($null -ne $group -and $group.ColumnDefinitions.Count -eq 4 -and $group.Background.Color -eq [System.Windows.Media.Colors]::White) 'The Pathview header prefix must have a white four-column background.'
+    }
     $fixedWindow = [System.Windows.Window]::new()
     try {
         $fixedWindow.ShowInTaskbar = $false
@@ -2988,6 +2993,25 @@ try {
         $fixedWindow.Content = $sidebarGrid
         $fixedWindow.Show()
         $fixedWindow.UpdateLayout()
+        $fixedBadge = $fixedPathview.FindName('FixedPathBadge')
+        $browseButton = $fixedPathview.FindName('BrowsePathviewButton')
+        Assert-True ([Math]::Abs($fixedBadge.ActualHeight - $browseButton.ActualHeight) -lt 0.1) 'The FIXED badge must match the Browse button height.'
+        $directoryContent = $fixedPathview.FindName('DirectoryContent')
+        foreach ($badge in @($directoryContent.FindName('DirectoryBadge'), $directoryContent.FindName('ViewControlsRow').Children[0], $directoryContent.FindName('SelectionControlsRow').Children[0])) {
+            Assert-True ($badge.Height -eq $browseButton.Height) 'Content badges must use the shared text-button height.'
+        }
+        foreach ($case in @(@{ View = $fixedPathview; Button = 'BrowsePathviewButton' }, @{ View = $browsePathview; Button = 'PinPathviewButton' })) {
+            $group = @($case.View.FindName('LocationHeaderPrefix').Children | Where-Object { $_ -is [System.Windows.Controls.Grid] })[0]
+            $button = $case.View.FindName($case.Button)
+            $offset = $button.TranslatePoint([System.Windows.Point]::new(0, 0), $group)
+            Assert-True ([Math]::Abs($group.ActualHeight - $button.ActualHeight) -lt 0.1 -and [Math]::Abs($offset.Y) -lt 0.1) 'The white header prefix must not extend above or below the button.'
+            $panel = $case.View.FindName('LocationHeaderPanel')
+            $prefix = $case.View.FindName('LocationHeaderPrefix')
+            $icon = $case.View.FindName('LocationIconSlot')
+            $prefixEnd = $prefix.TranslatePoint([System.Windows.Point]::new($prefix.ActualWidth, 0), $panel).X
+            $iconStart = $icon.TranslatePoint([System.Windows.Point]::new(0, 0), $panel).X
+            Assert-True ([Math]::Abs($iconStart - $prefixEnd - 8) -lt 0.1) 'The path icon must have an 8-DIP gap after the header prefix.'
+        }
         $subfolderList = $fixedPathview.FindName('ActivePathSubfoldersList')
         $subfolderEntry = @($subfolderList.Items | Where-Object { $_.Path -eq (Join-Path $directory 'OtherFolder') })[0]
         $siblingsTree = $browsePathview.FindName('ActivePathAndSiblingsTree')

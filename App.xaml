@@ -16,8 +16,8 @@
             <Thickness x:Key="ViewFrameThickness">0.7</Thickness>
             <Style x:Key="ContentPaneButtonStyle" TargetType="{x:Type Button}"
                    BasedOn="{StaticResource {x:Type Button}}">
-                <Setter Property="Height" Value="24" />
-                <Setter Property="MinHeight" Value="24" />
+                <Setter Property="Height" Value="{StaticResource ContentPaneControlHeight}" />
+                <Setter Property="MinHeight" Value="{StaticResource ContentPaneControlHeight}" />
                 <Setter Property="VerticalAlignment" Value="Center" />
                 <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             </Style>

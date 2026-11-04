@@ -416,7 +416,7 @@ public partial class Pathview : UserControl
             : 0;
         var titlePadding = LocationLabel.Padding.Left + LocationLabel.Padding.Right;
         LocationLabel.MaxWidth = Math.Max(0,
-            LocationHeaderPanel.ActualWidth - prefixWidth - locationIconWidth - titlePadding);
+            LocationHeaderPanel.ActualWidth - prefixWidth - LocationHeaderGap.ActualWidth - locationIconWidth - titlePadding);
     }
 
     private void UpdateLocationIcon(string path)
