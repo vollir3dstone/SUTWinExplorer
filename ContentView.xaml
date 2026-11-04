@@ -94,7 +94,6 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="1" Orientation="Horizontal">
                         <Button x:Name="PropertiesButton" Content="Properties…" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Properties" ToolTip="Properties"
