@@ -40,6 +40,7 @@ internal static class SutShell
             foreach (var item in source)
             {
                 token.ThrowIfCancellationRequested();
+                _ = item.Icons;
                 if (item.IsDirectory) directoryCount++;
                 try
                 {
@@ -602,9 +603,27 @@ internal sealed class DirectoryItem(string name, string fullPath, bool isDirecto
         get
         {
             lock (_sync)
-                return _entry ??= new FileEntry(Name, FullPath, IsDirectory, Type,
-                    Size is { } size ? SutShell.FormatSize(size) : string.Empty, Modified, Icons,
-                    MediaTypeIconMap.GetIcon(MediaType), MediaTypeMap.GetName(MediaType));
+            {
+                if (_entry is null)
+                    return _entry = new FileEntry(Name, FullPath, IsDirectory, Type,
+                        Size is { } size ? SutShell.FormatSize(size) : string.Empty, Modified, Icons,
+                        MediaTypeIconMap.GetIcon(MediaType), MediaTypeMap.GetName(MediaType));
+                if (_icons is { MayHaveOverlay: true })
+                {
+                    try
+                    {
+                        var refreshed = ShellIconProvider.GetSmallIcons(FullPath);
+                        if (refreshed is not null)
+                        {
+                            _icons = refreshed;
+                            _entry = _entry with { Icons = refreshed };
+                        }
+                    }
+                    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ExternalException)
+                    { Debug.WriteLine($"Could not refresh overlay for '{FullPath}': {exception.Message}"); }
+                }
+                return _entry;
+            }
         }
     }
 }

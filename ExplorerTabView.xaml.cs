@@ -1955,6 +1955,8 @@ public sealed record ShellIconSet(ImageSource? BaseIcon, ImageSource? OverlayIco
 {
     internal int BaseIconIndex { get; init; }
     internal int OverlaySlot { get; init; }
+    internal bool OverlayKnown { get; init; }
+    internal bool MayHaveOverlay { get; init; }
 }
 
 internal static class ShellDisplayNameProvider
@@ -2101,6 +2103,16 @@ internal static class ShellIconProvider
     private const uint ShellItemImageIconOnly = 0x00000004;
     private const uint UseFileAttributes = 0x00000010;
     private const int SmallShellImageList = 1;
+    private static IconCache? _cache;
+
+    internal static void InitializeCache(string path)
+    {
+        var cache = new IconCache(path);
+        cache.Load();
+        _cache = cache;
+    }
+
+    internal static void SaveCache() => _cache?.Save();
 
     public static ImageSource? GetTypeIcon(string extension, bool directory)
     {
@@ -2124,6 +2136,9 @@ internal static class ShellIconProvider
 
     public static ImageSource? GetIconAtSize(string path, int width, int height)
     {
+        var cached = _cache?.Find(path, "sized", width, height);
+        if (cached is not null)
+            return cached.Image;
         IShellItemImageFactory? imageFactory = null;
         IntPtr bitmapHandle = IntPtr.Zero;
         try
@@ -2142,6 +2157,20 @@ internal static class ShellIconProvider
                 Int32Rect.Empty,
                 BitmapSizeOptions.FromEmptyOptions());
             bitmap.Freeze();
+            if (_cache is not null)
+            {
+                try
+                {
+                    var smallIcons = GetSmallIcons(path);
+                    if (smallIcons is { OverlayKnown: true })
+                    {
+                        var smallCached = _cache.Find(path, "small", 16, 16);
+                        StoreIcon(path, "sized", width, height, bitmap, smallCached?.HasOverlay ?? (smallIcons.OverlaySlot > 0), null);
+                    }
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ExternalException)
+                { Debug.WriteLine($"Could not determine overlay for '{path}': {exception.Message}"); }
+            }
             return bitmap;
         }
         catch (ExternalException)
@@ -2158,6 +2187,72 @@ internal static class ShellIconProvider
     }
 
     public static ShellIconSet? GetSmallIcons(string path)
+    {
+        var cached = _cache?.Find(path, "small", 16, 16);
+        if (cached is not null)
+        {
+            var (overlay, slot, known) = cached.HasOverlay ? GetCurrentOverlay(path) : (null, 0, true);
+            return new ShellIconSet(cached.Image, overlay, GetOpacity(path))
+            {
+                BaseIconIndex = cached.BaseIconIndex ?? 0,
+                OverlaySlot = slot,
+                OverlayKnown = known,
+                MayHaveOverlay = cached.HasOverlay
+            };
+        }
+
+        var icons = GetSmallIconsUncached(path);
+        if (icons is { BaseIcon: BitmapSource bitmap, OverlayKnown: true })
+            StoreIcon(path, "small", 16, 16, bitmap, icons.OverlaySlot > 0, icons.BaseIconIndex);
+        return icons;
+    }
+
+    private static void StoreIcon(string path, string variant, int width, int height, BitmapSource bitmap, bool hasOverlay, int? baseIconIndex)
+    {
+        try { _cache?.Store(path, variant, width, height, bitmap, hasOverlay, baseIconIndex); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ExternalException or
+                                          InvalidOperationException or ArgumentException or NotSupportedException)
+        { Debug.WriteLine($"Could not cache icon for '{path}': {exception.Message}"); }
+    }
+
+    private static (ImageSource? Icon, int Slot, bool Known) GetCurrentOverlay(string path)
+    {
+        var isTopPath = ShellLocations.IsTopPath(path);
+        IntPtr itemIdList = IntPtr.Zero;
+        if (isTopPath &&
+            (SHParseDisplayName(path, IntPtr.Zero, out itemIdList, 0, out _) < 0 || itemIdList == IntPtr.Zero))
+            return (null, 0, false);
+        try
+        {
+            var info = new ShellFileInfo();
+            var result = isTopPath
+                ? SHGetFileInfo(itemIdList, 0, ref info, (uint)Marshal.SizeOf<ShellFileInfo>(), Icon | SmallIcon | OverlayIndex | AddOverlays | Pidl)
+                : SHGetFileInfo(path, 0, ref info, (uint)Marshal.SizeOf<ShellFileInfo>(), Icon | SmallIcon | OverlayIndex | AddOverlays);
+            if (info.IconHandle != IntPtr.Zero)
+                _ = DestroyIcon(info.IconHandle);
+            if (result == IntPtr.Zero)
+                return (null, 0, false);
+            var slot = (int)(unchecked((uint)info.IconIndex) >> 24);
+            if (slot == 0)
+                return (null, 0, true);
+            var interfaceId = typeof(IImageList).GUID;
+            Marshal.ThrowExceptionForHR(SHGetImageList(SmallShellImageList, ref interfaceId, out var imageList));
+            try
+            {
+                var overlay = GetImageListMethod<GetOverlayImageDelegate>(imageList, 31)(imageList, slot, out var index) >= 0
+                    ? GetImage(imageList, index) : null;
+                return (overlay, slot, true);
+            }
+            finally { _ = Marshal.Release(imageList); }
+        }
+        finally
+        {
+            if (itemIdList != IntPtr.Zero)
+                Marshal.FreeCoTaskMem(itemIdList);
+        }
+    }
+
+    internal static ShellIconSet? GetSmallIconsUncached(string path)
     {
         var isTopPath = ShellLocations.IsTopPath(path);
         IntPtr itemIdList = IntPtr.Zero;
@@ -2177,10 +2272,9 @@ internal static class ShellIconProvider
                 return null;
 
             var overlayInfo = new ShellFileInfo();
-            if (isTopPath)
-                _ = SHGetFileInfo(itemIdList, 0, ref overlayInfo, (uint)Marshal.SizeOf<ShellFileInfo>(), Icon | SmallIcon | OverlayIndex | AddOverlays | Pidl);
-            else
-                _ = SHGetFileInfo(path, 0, ref overlayInfo, (uint)Marshal.SizeOf<ShellFileInfo>(), Icon | SmallIcon | OverlayIndex | AddOverlays);
+            var overlayResult = isTopPath
+                ? SHGetFileInfo(itemIdList, 0, ref overlayInfo, (uint)Marshal.SizeOf<ShellFileInfo>(), Icon | SmallIcon | OverlayIndex | AddOverlays | Pidl)
+                : SHGetFileInfo(path, 0, ref overlayInfo, (uint)Marshal.SizeOf<ShellFileInfo>(), Icon | SmallIcon | OverlayIndex | AddOverlays);
             var overlaySlot = (int)(unchecked((uint)overlayInfo.IconIndex) >> 24);
             if (overlayInfo.IconHandle != IntPtr.Zero)
                 _ = DestroyIcon(overlayInfo.IconHandle);
@@ -2197,7 +2291,9 @@ internal static class ShellIconProvider
                 return new ShellIconSet(baseIcon, overlayIcon, GetOpacity(path))
                 {
                     BaseIconIndex = baseInfo.IconIndex,
-                    OverlaySlot = overlaySlot
+                    OverlaySlot = overlaySlot,
+                    OverlayKnown = overlayResult != IntPtr.Zero,
+                    MayHaveOverlay = overlaySlot > 0
                 };
             }
             finally
