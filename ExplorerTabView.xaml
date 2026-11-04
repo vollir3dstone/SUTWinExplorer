@@ -194,7 +194,7 @@
                                    FontWeight="{Binding FontWeight, ElementName=LocationLabel}"
                                    FontStyle="{Binding FontStyle, ElementName=LocationLabel}"
                                    FontStretch="{Binding FontStretch, ElementName=LocationLabel}" />
-                            <Grid Background="White" VerticalAlignment="Center">
+                            <Grid Background="#4D000000" VerticalAlignment="Center">
                                 <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />

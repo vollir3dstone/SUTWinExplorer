@@ -2975,7 +2975,7 @@ try {
     foreach ($pathview in @($fixedPathview, $browsePathview)) {
         $prefix = $pathview.FindName('LocationHeaderPrefix')
         $group = @($prefix.Children | Where-Object { $_ -is [System.Windows.Controls.Grid] })[0]
-        Assert-True ($null -ne $group -and $group.ColumnDefinitions.Count -eq 6 -and $group.Background.Color -eq [System.Windows.Media.Colors]::White) 'The Pathview header prefix must have a white six-column background.'
+        Assert-True ($null -ne $group -and $group.ColumnDefinitions.Count -eq 6 -and $group.Background.Color -eq [System.Windows.Media.Color]::FromArgb(77, 0, 0, 0)) 'The Pathview header prefix must have a black six-column background at 30% opacity.'
         Assert-True ([System.Windows.Controls.Grid]::GetColumn($pathview.FindName('OpenInExplorerButton')) -eq 2 -and [System.Windows.Controls.Grid]::GetColumn($pathview.FindName('FixedPathBadge')) -eq 4) 'The Explorer button must follow Browse or Pin and precede the FIXED badge.'
     }
     $fixedWindow = [System.Windows.Window]::new()
@@ -3006,7 +3006,7 @@ try {
             $button = $case.View.FindName($case.Button)
             $explorerButton = $case.View.FindName('OpenInExplorerButton')
             $offset = $button.TranslatePoint([System.Windows.Point]::new(0, 0), $group)
-            Assert-True ([Math]::Abs($group.ActualHeight - $button.ActualHeight) -lt 0.1 -and [Math]::Abs($offset.Y) -lt 0.1) 'The white header prefix must not extend above or below the button.'
+            Assert-True ([Math]::Abs($group.ActualHeight - $button.ActualHeight) -lt 0.1 -and [Math]::Abs($offset.Y) -lt 0.1) 'The black header prefix must not extend above or below the button.'
             Assert-True ([Math]::Abs($explorerButton.ActualHeight - $button.ActualHeight) -lt 0.1) 'The Explorer button must match the Browse or Pin button height.'
             $panel = $case.View.FindName('LocationHeaderPanel')
             $prefix = $case.View.FindName('LocationHeaderPrefix')
