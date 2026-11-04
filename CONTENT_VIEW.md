@@ -351,10 +351,13 @@ does not start a transfer and leaves the staged state available. See the
 for the full rules, error behavior, and acceptance criteria.
 
 The app-owned workflows do not use or change the Shell clipboard. Item clipboard copy
-copies the selected filesystem items to the clipboard; Item clipboard paste invokes the
-Shell paste command in the current directory, including Shell Cut semantics.
+copies the selected filesystem items to the clipboard; Item clipboard paste copies
+eligible clipboard items to the current directory. Cut, Link and clipboard data
+without an identifiable supported Copy effect are rejected without changing the
+source or clipboard. A Copy effect that also permits Link is accepted, but only
+a copy is performed.
 Item clipboard copy is in the same selection-row group as Name and Path clipboard copy;
-Item clipboard paste is in the DIRECTORY column before the Link group. Item clipboard paste is enabled for a filesystem clipboard
+Item clipboard paste is in the DIRECTORY column before the Link group. Item clipboard paste is enabled for supported filesystem Copy data
 and an existing destination directory. These clipboard actions and
 external clipboard operations do not alter any prepared workflow.
 
@@ -637,9 +640,11 @@ operation errors and clears the prepared state only after the operation
 returns successfully. Preflight cannot prevent subsequent changes and no
 rollback is performed after a partial transfer.
 
-Toolbar and Base Menu Item clipboard copy invoke the Shell Copy verb, and Item clipboard paste invokes
-the Shell Paste verb for the current directory. Clipboard changes update Item
-clipboard paste availability but do not prepare, cancel, or replace internal transfers.
+Toolbar and Base Menu Item clipboard copy invoke the Shell Copy verb. Item clipboard
+paste validates the clipboard's file paths and preferred drop effect again at
+execution, then explicitly copies the captured paths using `IFileOperation`.
+It does not invoke the Shell Paste verb. Clipboard changes update Item clipboard
+paste availability but do not prepare, cancel, or replace internal transfers.
 
 Rename is enabled for exactly one selected filesystem item and starts the
 Shell inline editor. Do not invoke the selection `IContextMenu` with the

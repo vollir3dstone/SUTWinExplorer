@@ -416,6 +416,7 @@ try {
     if (-not $copy.IsPrepared -or [System.Windows.Clipboard]::GetText() -cne 'sidebar copy sentinel') { throw 'Sidebar Copy mark item changed the clipboard or failed to prepare.' }
     $copy.Abort()
     $shellCopy = $assembly.GetType('SUTWinExplorer.SutShell', $true).GetMethod('CopyToClipboard', $staticFlags)
+    $containsItems = $assembly.GetType('SUTWinExplorer.SutShell', $true).GetMethod('ClipboardContainsItems', $staticFlags)
     foreach ($case in @(@('Link', $link), @('Copy', $copy), @('Move', $move))) {
         $name = $case[0]
         $state = $case[1]
@@ -428,6 +429,7 @@ try {
         $caseFile = [string] (Join-Path $source ($name + '.txt'))
         [IO.File]::WriteAllText($caseFile, $name)
         $null = $shellCopy.Invoke($null, [object[]] @([string[]] @($caseFile), $owner))
+        Wait-Until { $containsItems.Invoke($null, @()) } "$name clipboard copy availability"
         $backgroundActions = $pathview.GetType().GetMethod('CreateBackgroundMenuActions', $flags).Invoke($pathview, @())
         Assert-ItemMenu $backgroundActions ([string[]] @($secondDestination)) $true $owner
         $backgroundItemClipboardPaste = @($backgroundActions | Where-Object { $_.Id -eq 'ItemClipboardPaste' })[0]
@@ -451,10 +453,60 @@ try {
     $copy.Prepare([string[]] @($file))
     $backgroundActions = $pathview.GetType().GetMethod('CreateBackgroundMenuActions', $flags).Invoke($pathview, @())
     $backgroundItemClipboardPaste = @($backgroundActions | Where-Object { $_.Id -eq 'ItemClipboardPaste' })[0]
-    if (-not $backgroundItemClipboardPaste.IsEnabled) { throw 'Item clipboard paste is disabled for Shell Cut.' }
-    $backgroundItemClipboardPaste.Invoke.Invoke()
-    Wait-Until { [IO.File]::Exists((Join-Path $secondDestination 'cut.txt')) -and -not [IO.File]::Exists($cutFile) } 'Shell Cut and Item clipboard paste'
-    if (-not $copy.IsPrepared -or @($copy.PreparedPaths)[0] -cne $file) { throw 'Shell Cut and Item clipboard paste changed the prepared Copy.' }
+    if ($backgroundItemClipboardPaste.IsEnabled) { throw 'Item clipboard paste is enabled for Shell Cut.' }
+    $paste = $assembly.GetType('SUTWinExplorer.SutShell', $true).GetMethod('PasteFromClipboard', $staticFlags)
+    try { $null = $paste.Invoke($null, [object[]] @($secondDestination, $owner)); throw 'Direct paste accepted Shell Cut.' }
+    catch { if ($_.Exception.GetBaseException() -isnot [InvalidOperationException]) { throw } }
+    if (-not [IO.File]::Exists($cutFile) -or [IO.File]::Exists((Join-Path $secondDestination 'cut.txt')) -or
+        -not $copy.IsPrepared -or @($copy.PreparedPaths)[0] -cne $file) { throw 'Rejected Shell Cut changed a file or the prepared Copy.' }
+    $window.Content = $view
+    Wait-Until { $view.IsLoaded -and -not $itemClipboardPaste.IsEnabled } 'ContentView rejects Shell Cut'
+    foreach ($case in @(@('copy-only', 1, $true), @('copy-and-link', 5, $true), @('cut', 2, $false),
+        @('link', 4, $false), @('copy-and-cut', 3, $false), @('all-effects', 7, $false),
+        @('none', 0, $false), @('missing', -1, $false), @('short', -2, $false))) {
+        $name, $effect, $allowed = $case
+        $caseFile = [string] (Join-Path $source ("clipboard-$name.txt"))
+        [IO.File]::WriteAllText($caseFile, $name)
+        $data = [System.Windows.DataObject]::new()
+        $fileList = [System.Collections.Specialized.StringCollection]::new()
+        $null = $fileList.Add($caseFile)
+        $data.SetFileDropList($fileList)
+        if ($effect -ge 0) { $data.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] $effect))) }
+        elseif ($effect -eq -2) { $data.SetData('Preferred DropEffect', [IO.MemoryStream]::new([byte[]] @(1))) }
+        [System.Windows.Clipboard]::SetDataObject($data, $true)
+        if ([bool] $containsItems.Invoke($null, @()) -ne $allowed) { throw "Incorrect clipboard availability for $name." }
+        Wait-Until { $itemClipboardPaste.IsEnabled -eq $allowed } "clipboard button availability for $name"
+        $backgroundActions = $pathview.GetType().GetMethod('CreateBackgroundMenuActions', $flags).Invoke($pathview, @())
+        if ([bool] (@($backgroundActions | Where-Object { $_.Id -eq 'ItemClipboardPaste' })[0].IsEnabled) -ne $allowed) { throw "Incorrect menu availability for $name." }
+        if ($allowed) {
+            $null = $paste.Invoke($null, [object[]] @($secondDestination, $owner))
+            if (-not [IO.File]::Exists($caseFile) -or -not [IO.File]::Exists((Join-Path $secondDestination ([IO.Path]::GetFileName($caseFile))))) { throw "Clipboard copy failed for $name." }
+        } else {
+            try { $null = $paste.Invoke($null, [object[]] @($secondDestination, $owner)); throw "Direct paste accepted $name." }
+            catch { if ($_.Exception.GetBaseException() -isnot [InvalidOperationException]) { throw } }
+            if ([IO.File]::Exists((Join-Path $secondDestination ([IO.Path]::GetFileName($caseFile)))) -or -not [IO.File]::Exists($caseFile)) { throw "Rejected $name changed files." }
+        }
+    }
+    foreach ($case in @(@('external-copy', 1, $true), @('external-cut', 2, $false), @('external-link', 4, $false))) {
+        $name, $effect, $allowed = $case
+        $caseFile = [string] (Join-Path $source ("clipboard-$name.txt"))
+        [IO.File]::WriteAllText($caseFile, $name)
+        $escapedPath = $caseFile.Replace("'", "''")
+        $script = "Add-Type -AssemblyName PresentationFramework; `$data = [System.Windows.DataObject]::new(); `$paths = [System.Collections.Specialized.StringCollection]::new(); `$null = `$paths.Add('$escapedPath'); `$data.SetFileDropList(`$paths); `$data.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] $effect))); [System.Windows.Clipboard]::SetDataObject(`$data, `$true)"
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($script))
+        & pwsh -NoProfile -STA -EncodedCommand $encoded
+        if ($LASTEXITCODE -ne 0) { throw "Could not set $name clipboard data from another process." }
+        Wait-Until { $itemClipboardPaste.IsEnabled -eq $allowed } "external clipboard button availability for $name"
+        if ([bool] $containsItems.Invoke($null, @()) -ne $allowed) { throw "Incorrect external clipboard availability for $name." }
+        if ($allowed) {
+            $null = $paste.Invoke($null, [object[]] @($secondDestination, $owner))
+            if (-not [IO.File]::Exists($caseFile) -or -not [IO.File]::Exists((Join-Path $secondDestination ([IO.Path]::GetFileName($caseFile))))) { throw 'External clipboard copy failed.' }
+        } else {
+            try { $null = $paste.Invoke($null, [object[]] @($secondDestination, $owner)); throw "Direct paste accepted $name." }
+            catch { if ($_.Exception.GetBaseException() -isnot [InvalidOperationException]) { throw } }
+            if ([IO.File]::Exists((Join-Path $secondDestination ([IO.Path]::GetFileName($caseFile)))) -or -not [IO.File]::Exists($caseFile)) { throw "Rejected $name changed files." }
+        }
+    }
     Write-Output 'Item clipboard action tests passed.'
 } finally {
     $copy.Abort(); $link.Abort(); $move.Abort()

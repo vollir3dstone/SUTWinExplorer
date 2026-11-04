@@ -193,14 +193,33 @@ internal static class SutShell
 
     internal static bool ClipboardContainsItems()
     {
-        try { return System.Windows.Clipboard.ContainsFileDropList(); }
-        catch (ExternalException) { return false; }
+        return TryGetClipboardCopyPaths(out _);
     }
 
     internal static void PasteFromClipboard(string path, IntPtr owner)
     {
-        using var menu = SutContextMenuFactory.GetItemMenu([path], owner);
-        menu.InvokeVerb("paste");
+        if (!TryGetClipboardCopyPaths(out var paths))
+            throw new InvalidOperationException("The clipboard does not contain a supported copy operation.");
+        ShellFileOperations.Copy(paths, path, owner, new List<string>());
+    }
+
+    private static bool TryGetClipboardCopyPaths(out string[] paths)
+    {
+        paths = [];
+        try
+        {
+            var data = System.Windows.Clipboard.GetDataObject();
+            if (data is null || !data.GetDataPresent(System.Windows.DataFormats.FileDrop, false) ||
+                data.GetData(System.Windows.DataFormats.FileDrop, false) is not string[] items || items.Length == 0 ||
+                data.GetData("Preferred DropEffect", false) is not MemoryStream effect)
+                return false;
+            var bytes = effect.ToArray();
+            if (bytes.Length < sizeof(uint) || (BitConverter.ToUInt32(bytes, 0) is not (1 or 5)))
+                return false;
+            paths = items;
+            return true;
+        }
+        catch (ExternalException) { return false; }
     }
 
     internal static void Move(IReadOnlyList<string> paths, string destination, IntPtr owner, IList<string> insertedPaths) =>

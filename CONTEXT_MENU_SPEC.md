@@ -259,7 +259,9 @@ that workflow to be prepared. Link, Copy and Move use the application's mutually
 exclusive prepared-operation workflows, not the Windows clipboard: mark item prepares
 selected paths, execute operates in the current folder, and abort clears the
 prepared operation. Item clipboard copy invokes the Shell Copy verb for its selection and
-Item clipboard paste invokes the Shell Paste verb in the current directory; these actions
+Item clipboard paste explicitly copies supported clipboard file paths into the current
+directory. It rejects Cut, Link-only and ambiguous clipboard data; a Copy effect that
+also permits Link is accepted but cannot create a link. These actions
 and external clipboard operations do not change the internal workflows. Link execute
 creates Shell shortcuts without changing the sources.
 The application-owned New, Link execute, Copy execute and Move execute

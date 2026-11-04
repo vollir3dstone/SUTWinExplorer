@@ -50,7 +50,7 @@ appear in tooltips and Base Menus; the buttons use these compact labels and symb
 | **Name clipboard copy** | `Name` + Clipboard copy icon (clipboard with a left-pointing arrow) | Copies selected filesystem names as text. |
 | **Path clipboard copy** | `Path` + Clipboard copy icon | Copies selected full filesystem paths as text. |
 | **Item clipboard copy** | `Item` + Clipboard copy icon | Copies selected files and directories to the Windows clipboard. |
-| **Item clipboard paste** | `Item` + Clipboard paste icon (clipboard with a right-pointing arrow) | Pastes clipboard files and directories into the current directory; Shell Cut is supported. |
+| **Item clipboard paste** | `Item` + Clipboard paste icon (clipboard with a right-pointing arrow) | Copies supported clipboard files and directories into the current directory; Cut and Link are rejected. |
 
 The three Clipboard copy buttons are grouped in the selection row. Item clipboard
 paste is in the directory column before the transfer buttons. These actions are
@@ -368,10 +368,11 @@ may show its requested row in light gray without changing the active selection.
   Shell shortcut for each source, without modifying it; existing names are not
   overwritten. Copy uses native file copy and Move uses native file move.
   **Item clipboard copy** copies selected files and directories to the Windows clipboard;
-  **Item clipboard paste** invokes the Shell paste operation into the current directory.
+  **Item clipboard paste** copies supported clipboard filesystem items into the current directory.
   Item clipboard copy is in the selection-row group with Name and Path clipboard copy; Item clipboard paste is in the directory
-  column before the Link group and is enabled for a filesystem clipboard and an
-  existing destination directory. Shell Cut is handled by the Shell paste command.
+  column before the Link group and is enabled for a supported clipboard Copy and an
+  existing destination directory. Cut, Link-only and missing or ambiguous drop effects
+  are rejected. Copy with Link also permitted is accepted but always performs a copy.
   These actions are independent of all prepared transfers. Internal Mark item, Execute
   and Abort do not change the clipboard, and external clipboard operations do not
   change any internal transfer state. Staging records paths only: it does not keep
