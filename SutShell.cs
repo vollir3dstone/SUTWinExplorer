@@ -233,6 +233,10 @@ internal static class SutShell
         IList<(string OldPath, string NewPath)> movedDirectories) =>
         ShellFileOperations.Move(paths, destination, owner, insertedPaths, movedDirectories);
 
+    internal static void MoveDirectoryWithName(string path, string destination, string newName, IntPtr owner, IList<string> insertedPaths,
+        IList<(string OldPath, string NewPath)> movedDirectories) =>
+        ShellFileOperations.MoveDirectoryWithName(path, destination, newName, owner, insertedPaths, movedDirectories);
+
     internal static void Delete(IReadOnlyList<string> paths, IntPtr owner) =>
         ShellFileOperations.Delete(paths, owner);
 

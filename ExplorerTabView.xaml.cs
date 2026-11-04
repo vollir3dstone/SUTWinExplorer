@@ -508,10 +508,10 @@ public partial class Pathview : UserControl
         var parent = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(CurrentPath));
         if (parent is null)
             return;
-        var dialog = new DirectoryLocationDialog(true, parent, Window.GetWindow(this));
+        var dialog = new DirectoryLocationDialog(true, parent, Window.GetWindow(this), SutShell.GetEditName(CurrentPath));
         if (dialog.ShowDialog() != true)
             return;
-        try { RelocateCurrentDirectory(dialog.Value); }
+        try { RelocateCurrentDirectory(dialog.Value, dialog.DestinationIncludesName); }
         catch (OperationCanceledException) { }
         catch (Exception exception)
         {
@@ -530,31 +530,47 @@ public partial class Pathview : UserControl
         });
     }
 
-    internal void RelocateCurrentDirectory(string destination)
+    internal void RelocateCurrentDirectory(string destination, bool destinationIncludesName)
     {
         if (!Path.IsPathFullyQualified(destination))
             throw new ArgumentException("Enter an absolute destination directory path.");
         var oldPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(CurrentPath));
-        var target = Path.TrimEndingDirectorySeparator(Path.GetFullPath(destination));
+        var enteredPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(destination));
         var parent = Path.GetDirectoryName(oldPath);
         if (parent is null)
             throw new InvalidOperationException("A drive cannot be relocated.");
+        var target = destinationIncludesName ? Path.GetDirectoryName(enteredPath) : enteredPath;
+        var newName = destinationIncludesName ? Path.GetFileName(enteredPath) : Path.GetFileName(oldPath);
+        if (target is null || string.IsNullOrWhiteSpace(newName) || newName is "." or ".." || newName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            throw new ArgumentException("Enter a valid destination directory path.");
         if (!Directory.Exists(target))
             throw new DirectoryNotFoundException("The destination directory does not exist.");
-        if (string.Equals(parent, target, StringComparison.OrdinalIgnoreCase))
+        var targetPath = Path.Combine(target, newName);
+        if (string.Equals(parent, target, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(Path.GetFileName(oldPath), newName, StringComparison.Ordinal))
             return;
+        if (!string.Equals(oldPath, targetPath, StringComparison.OrdinalIgnoreCase) && (Directory.Exists(targetPath) || File.Exists(targetPath)))
+            throw new IOException("An item with that name already exists in the destination directory.");
+        if (string.Equals(parent, target, StringComparison.OrdinalIgnoreCase))
+        {
+            RenameCurrentDirectory(newName);
+            return;
+        }
         var relative = Path.GetRelativePath(oldPath, target);
         if (relative == "." || (!Path.IsPathRooted(relative) && relative != ".." && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)))
             throw new InvalidOperationException("A directory cannot be relocated into itself or one of its subdirectories.");
-        var targetPath = Path.Combine(target, Path.GetFileName(oldPath));
-        if (Directory.Exists(targetPath) || File.Exists(targetPath))
-            throw new IOException("An item with that name already exists in the destination directory.");
         var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
         var relocatedPaths = new List<string>();
         var relocatedDirectories = new List<(string OldPath, string NewPath)>();
         RunDirectoryOperation(() =>
         {
-            try { SutShell.MoveWithDirectoryChanges([oldPath], target, owner, relocatedPaths, relocatedDirectories); }
+            try
+            {
+                if (destinationIncludesName)
+                    SutShell.MoveDirectoryWithName(oldPath, target, newName, owner, relocatedPaths, relocatedDirectories);
+                else
+                    SutShell.MoveWithDirectoryChanges([oldPath], target, owner, relocatedPaths, relocatedDirectories);
+            }
             finally
             {
                 foreach (var (source, result) in relocatedDirectories)

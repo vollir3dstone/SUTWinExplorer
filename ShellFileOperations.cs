@@ -114,6 +114,11 @@ internal static class ShellFileOperations
         Transfer(sourcePaths, destinationPath, ownerWindow, "move", insertedPaths,
             (operation, source, destination, sink) => operation.MoveItem(source, destination, null, sink), movedDirectories);
 
+    internal static void MoveDirectoryWithName(string sourcePath, string destinationPath, string newName, IntPtr ownerWindow,
+        IList<string> insertedPaths, IList<(string OldPath, string NewPath)> movedDirectories) =>
+        Transfer([sourcePath], destinationPath, ownerWindow, "move", insertedPaths,
+            (operation, source, destination, sink) => operation.MoveItem(source, destination, newName, sink), movedDirectories);
+
     public static void Link(IReadOnlyList<string> sourcePaths, string destinationPath, IList<string> insertedPaths)
     {
         if (sourcePaths.Count == 0)

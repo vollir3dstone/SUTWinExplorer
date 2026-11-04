@@ -619,7 +619,9 @@ For an outermost coordinated operation the sequence is:
   This is disposal, not merely disabling event delivery.
 3. The coordinator executes the Shell operation. Rename returns its actual new
   path; prepared moves and Relocate collect actual source/destination pairs
-  from the Shell transfer progress sink. Move paths already reported as
+  from the Shell transfer progress sink. Relocate's full-path mode passes the
+  new name to the Shell move operation, or uses Rename for the same parent.
+  Move paths already reported as
   completed are propagated in a `finally` block even when the operation later
   fails or is canceled.
 4. While observers are still suspended, `DirectoryRenamed` reaches

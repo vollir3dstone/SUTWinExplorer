@@ -152,11 +152,22 @@ try {
         if (-not $parentView.FindName('RenameCurrentDirectoryButton').IsEnabled -or -not $parentView.FindName('RelocateCurrentDirectoryButton').IsEnabled) { throw 'The current-directory actions are not enabled.' }
         if ($parentView.FindName('RelocateCurrentDirectoryButton').Content -cne 'Relocate...') { throw 'The relocation button has an incorrect label.' }
         $dialogType = $assembly.GetType('SUTWinExplorer.DirectoryLocationDialog', $true)
-        $dialog = $dialogType.GetConstructors($flags)[0].Invoke([object[]] @($true, [string] $root, $null))
+        $dialog = $dialogType.GetConstructors($flags)[0].Invoke([object[]] @($true, [string] $root, $null, [string] 'operation-parent'))
         try {
-            if ($dialog.Title -cne 'Relocate directory' -or $dialog.Content.Children[0].Text -cne 'Destination directory' -or $dialog.Content.Children[2].Children[1].Content -cne 'Relocate') { throw 'The relocation dialog has incorrect labels.' }
+            $choices = $dialog.Content.Children[0].Children
+            if ($dialog.Title -cne 'Relocate directory' -or $choices[0].Content -cne 'Destination (parent)' -or $choices[0].IsChecked -ne $true -or $choices[1].Content -cne 'Destination and new name' -or $choices[1].IsChecked -eq $true -or $dialog.Content.Children[2].Children[1].Content -cne 'Relocate') { throw 'The relocation dialog has incorrect labels or default mode.' }
+            if ([System.Windows.Automation.AutomationProperties]::GetName($dialog.Content.Children[1]) -cne 'Destination (parent)') { throw 'The default destination editor has an incorrect accessible name.' }
+            $choices[1].IsChecked = $true
+            if (-not $dialogType.GetProperty('DestinationIncludesName', $flags).GetValue($dialog) -or $choices[0].IsChecked -eq $true) { throw 'The relocation modes are not mutually exclusive.' }
+            if ([System.Windows.Automation.AutomationProperties]::GetName($dialog.Content.Children[1]) -cne 'Destination and new name') { throw 'The named destination editor has an incorrect accessible name.' }
+            if ($dialog.Content.Children[1].Text -cne (Join-Path $root 'operation-parent')) { throw 'Switching to the named destination did not append the current directory name.' }
+            $dialog.Content.Children[1].Text = Join-Path $destination 'different-name'
+            $choices[0].IsChecked = $true
+            if ($dialog.Content.Children[1].Text -cne $destination) { throw 'Switching to the parent destination did not remove the entered name.' }
+            $choices[1].IsChecked = $true
+            if ($dialog.Content.Children[1].Text -cne (Join-Path $destination 'operation-parent')) { throw 'Switching back did not append the current directory name to the edited parent.' }
         } finally { $dialog.Close() }
-        $dialog = $dialogType.GetConstructors($flags)[0].Invoke([object[]] @($false, [string] 'example', $null))
+        $dialog = $dialogType.GetConstructors($flags)[0].Invoke([object[]] @($false, [string] 'example', $null, $null))
         try {
             if ($dialog.Title -cne 'Rename directory' -or $dialog.Content.Children[0].Text -cne 'Directory name' -or $dialog.Content.Children[2].Children[1].Content -cne 'Rename') { throw 'The rename dialog has incorrect labels.' }
         } finally { $dialog.Close() }
@@ -170,13 +181,34 @@ try {
         if ($savedUseCase.Pathviews[1].Path -cne $renamedParent -or $savedUseCase.Pathviews[2].Path -cne $renamedOperationChild -or $savedUseCase.Pathviews[2].Name -cne 'Child custom') { throw 'The internal rename did not persist both Pathviews.' }
         if ($childGenerationField.GetValue($childCache) -ne $childGeneration -or -not [object]::ReferenceEquals($childItemsBefore, $childItems.GetValue($childCache))) { throw 'The internal ancestor rename re-enumerated the child.' }
 
-        $parentView.GetType().GetMethod('RelocateCurrentDirectory', $flags).Invoke($parentView, [object[]] @([string] $destination))
+        $parentView.GetType().GetMethod('RelocateCurrentDirectory', $flags).Invoke($parentView, [object[]] @([string] $destination, $false))
         $movedParent = Join-Path $destination 'renamed-parent'
         $movedOperationChild = Join-Path $movedParent 'child'
         if ($parentView.CurrentPath -cne $movedParent -or $childView.CurrentPath -cne $movedOperationChild) { throw 'The internal move did not update both Pathviews.' }
         $savedUseCase = $storeType.GetMethod('Load').Invoke($store, @())
         if ($savedUseCase.Pathviews[1].Path -cne $movedParent -or $savedUseCase.Pathviews[2].Path -cne $movedOperationChild) { throw 'The internal move did not persist both paths.' }
         if ($childGenerationField.GetValue($childCache) -ne $childGeneration -or -not [object]::ReferenceEquals($childItemsBefore, $childItems.GetValue($childCache))) { throw 'The internal ancestor move re-enumerated the child.' }
+
+        $namedDestination = Join-Path $root 'relocated-and-renamed'
+        $parentView.GetType().GetMethod('RelocateCurrentDirectory', $flags).Invoke($parentView, [object[]] @([string] $namedDestination, $true))
+        $movedParent = $namedDestination
+        $movedOperationChild = Join-Path $movedParent 'child'
+        if ($parentView.CurrentPath -cne $movedParent -or $childView.CurrentPath -cne $movedOperationChild -or -not [IO.Directory]::Exists($movedOperationChild)) { throw 'Relocation with a new name did not update both Pathviews.' }
+        $savedUseCase = $storeType.GetMethod('Load').Invoke($store, @())
+        if ($savedUseCase.Pathviews[1].Path -cne $movedParent -or $savedUseCase.Pathviews[2].Path -cne $movedOperationChild -or $savedUseCase.Pathviews[2].Name -cne 'Child custom') { throw 'Relocation with a new name did not persist both paths and the custom name.' }
+        if ($childGenerationField.GetValue($childCache) -ne $childGeneration -or -not [object]::ReferenceEquals($childItemsBefore, $childItems.GetValue($childCache))) { throw 'Relocation with a new name re-enumerated the child.' }
+
+        $sameParentDestination = Join-Path $root 'renamed-in-place'
+        $parentView.GetType().GetMethod('RelocateCurrentDirectory', $flags).Invoke($parentView, [object[]] @([string] $sameParentDestination, $true))
+        $movedParent = $sameParentDestination
+        $movedOperationChild = Join-Path $movedParent 'child'
+        if ($parentView.CurrentPath -cne $movedParent -or $childView.CurrentPath -cne $movedOperationChild) { throw 'Relocation with a new name in the same parent did not update both Pathviews.' }
+        if ($childGenerationField.GetValue($childCache) -ne $childGeneration -or -not [object]::ReferenceEquals($childItemsBefore, $childItems.GetValue($childCache))) { throw 'Relocation in the same parent re-enumerated the child.' }
+        foreach ($invalidDestination in @((Join-Path $movedOperationChild 'nested'), (Join-Path $root 'missing-parent\name'), $destination, [IO.Path]::GetPathRoot($root))) {
+            $relocationFailed = $false
+            try { $parentView.GetType().GetMethod('RelocateCurrentDirectory', $flags).Invoke($parentView, [object[]] @([string] $invalidDestination, $true)) } catch { $relocationFailed = $true }
+            if (-not $relocationFailed -or $parentView.CurrentPath -cne $movedParent) { throw "Invalid named destination was not rejected: $invalidDestination" }
+        }
 
         $renameFailed = $false
         try {
