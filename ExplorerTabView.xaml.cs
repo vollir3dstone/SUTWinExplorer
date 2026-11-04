@@ -132,6 +132,10 @@ public partial class Pathview : UserControl
         catch (Exception exception) when (!isBrowsable && exception is IOException or UnauthorizedAccessException)
         {
         }
+        LinkWorkflowState.Shared.Changed += DirectoryWorkflowState_Changed;
+        CopyWorkflowState.Shared.Changed += DirectoryWorkflowState_Changed;
+        MoveWorkflowState.Shared.Changed += DirectoryWorkflowState_Changed;
+        UpdateMoveMarkCurrentDirectoryButton();
     }
 
     public bool IsBrowsable { get; }
@@ -437,6 +441,7 @@ public partial class Pathview : UserControl
         var canChangeDirectory = !IsTopPath(path) && Directory.Exists(path) && SutShell.GetEditName(path) is not null;
         RenameCurrentDirectoryButton.IsEnabled = canChangeDirectory;
         RelocateCurrentDirectoryButton.IsEnabled = canChangeDirectory;
+        UpdateMoveMarkCurrentDirectoryButton();
         UpdateLocationIcon(path);
         LocationLabel.Text = ShellDisplayNameProvider.GetDisplayPath(path);
         RefreshActivePathAndSiblingsTree();
@@ -487,6 +492,22 @@ public partial class Pathview : UserControl
 
     private void PaneColorButton_Click(object sender, RoutedEventArgs e) =>
         PaneColorPopup.IsOpen = true;
+
+    private void DirectoryWorkflowState_Changed(object? sender, EventArgs e) => UpdateMoveMarkCurrentDirectoryButton();
+
+    private void UpdateMoveMarkCurrentDirectoryButton()
+    {
+        MoveMarkCurrentDirectoryButton.IsEnabled = !IsTopPath(CurrentPath) && Directory.Exists(CurrentPath) &&
+            SutShell.GetEditName(CurrentPath) is not null && !LinkWorkflowState.Shared.IsPrepared &&
+            !CopyWorkflowState.Shared.IsPrepared && !MoveWorkflowState.Shared.IsPrepared;
+    }
+
+    private void MoveMarkCurrentDirectoryButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!MoveMarkCurrentDirectoryButton.IsEnabled)
+            return;
+        MoveWorkflowState.Shared.Prepare([CurrentPath]);
+    }
 
     private void RenameCurrentDirectoryButton_Click(object sender, RoutedEventArgs e)
     {
@@ -858,6 +879,9 @@ public partial class Pathview : UserControl
     internal void Close()
     {
         _closed = true;
+        LinkWorkflowState.Shared.Changed -= DirectoryWorkflowState_Changed;
+        CopyWorkflowState.Shared.Changed -= DirectoryWorkflowState_Changed;
+        MoveWorkflowState.Shared.Changed -= DirectoryWorkflowState_Changed;
         _suspendedDirectoryTimes = null;
         _observersSuspended = false;
         _fileSystemRefreshTimer.Stop();

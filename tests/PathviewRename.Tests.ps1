@@ -150,6 +150,21 @@ try {
         $childItemsBefore = $childItems.GetValue($childCache)
         $childGeneration = $childGenerationField.GetValue($childCache)
         if (-not $parentView.FindName('RenameCurrentDirectoryButton').IsEnabled -or -not $parentView.FindName('RelocateCurrentDirectoryButton').IsEnabled) { throw 'The current-directory actions are not enabled.' }
+        $moveMarkButton = $parentView.FindName('MoveMarkCurrentDirectoryButton')
+        $childMoveMarkButton = $childView.FindName('MoveMarkCurrentDirectoryButton')
+        $moveWorkflow = $assembly.GetType('SUTWinExplorer.MoveWorkflowState', $true).GetProperty('Shared').GetValue($null)
+        $copyWorkflow = $assembly.GetType('SUTWinExplorer.CopyWorkflowState', $true).GetProperty('Shared').GetValue($null)
+        $linkWorkflow = $assembly.GetType('SUTWinExplorer.LinkWorkflowState', $true).GetProperty('Shared').GetValue($null)
+        if (-not $moveMarkButton.IsEnabled -or $moveMarkButton.Content -cne 'Move🠝') { throw 'The current-directory Move mark item button is not available.' }
+        $moveMarkButton.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        if (-not $moveWorkflow.IsPrepared -or @($moveWorkflow.PreparedPaths).Count -ne 1 -or $moveWorkflow.PreparedPaths[0] -cne $operationParent -or $moveMarkButton.IsEnabled -or $childMoveMarkButton.IsEnabled) { throw 'The header button did not prepare the current directory or update other Pathviews.' }
+        $moveWorkflow.Abort()
+        if (-not $moveMarkButton.IsEnabled -or -not $childMoveMarkButton.IsEnabled) { throw 'The header buttons did not recover after Move abort.' }
+        foreach ($workflow in @($linkWorkflow, $copyWorkflow)) {
+            $workflow.Prepare([string[]] @($operationParent))
+            if ($moveMarkButton.IsEnabled -or $childMoveMarkButton.IsEnabled) { throw 'A prepared transfer did not disable the header buttons.' }
+            $workflow.Abort()
+        }
         if ($parentView.FindName('RelocateCurrentDirectoryButton').Content -cne 'Relocate...') { throw 'The relocation button has an incorrect label.' }
         $dialogType = $assembly.GetType('SUTWinExplorer.DirectoryLocationDialog', $true)
         $dialog = $dialogType.GetConstructors($flags)[0].Invoke([object[]] @($true, [string] $root, $null, [string] 'operation-parent'))
@@ -228,13 +243,19 @@ try {
         try { $coordinator.Invoke($mainWindow, [object[]] @($canceled)) } catch { }
         if ($parentView.GetType().GetField('_observersSuspended', $flags).GetValue($parentView) -or $childView.GetType().GetField('_observersSuspended', $flags).GetValue($childView)) { throw 'Observers were not resumed after cancellation.' }
 
+        $browseView = $tabs.Items[0].Content
+        $browseView.Navigate($destination, $null, $null, $null)
+        $moveMarkButton.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        $browseView.GetType().GetMethod('ExecuteDirectoryMenuAction', $flags).Invoke($browseView, [object[]] @([string] 'MoveExecute', $null))
+        $executedParent = Join-Path $destination 'renamed-in-place'
+        if ($moveWorkflow.IsPrepared -or $parentView.CurrentPath -cne $executedParent -or $childView.CurrentPath -cne (Join-Path $executedParent 'child') -or -not [IO.Directory]::Exists($executedParent)) { throw 'Executing the header-prepared Move in another Pathview did not move and update the directory.' }
+
         $closeChild = [Action] { $childView.GetType().GetMethod('Close', $flags).Invoke($childView, @()) }.GetNewClosure()
         $coordinator.Invoke($mainWindow, [object[]] @($closeChild))
         if ($null -ne $childContent.GetType().GetField('_directoryObserver', $flags).GetValue($childContent)) { throw 'A closed Pathview resumed its observers.' }
 
-        $browseView = $tabs.Items[0].Content
         $browseView.Navigate([IO.Path]::GetPathRoot($root), $null, $null, $null)
-        if ($browseView.FindName('RenameCurrentDirectoryButton').IsEnabled -or $browseView.FindName('RelocateCurrentDirectoryButton').IsEnabled) { throw 'Directory operations must be disabled for drive roots.' }
+        if ($browseView.FindName('RenameCurrentDirectoryButton').IsEnabled -or $browseView.FindName('RelocateCurrentDirectoryButton').IsEnabled -or $browseView.FindName('MoveMarkCurrentDirectoryButton').IsEnabled) { throw 'Directory operations must be disabled for drive roots.' }
     } finally { $mainWindow.Close() }
     Write-Output 'Pathview rename tests passed.'
 } finally {

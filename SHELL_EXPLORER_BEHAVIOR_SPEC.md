@@ -188,13 +188,15 @@ can be prepared at a time, but clipboard actions remain independent of it:
 - [x] Each Pathview retains its own location, **Hide directories**, and
   content **Hide internal** settings and sort history when the user switches
   tabs.
-- [x] The location row has **Rename...** and **Relocate...** before the Explorer
+- [x] The location row has **Move mark item**, **Rename...** and **Relocate...** before the Explorer
   button for filesystem directories other than drive roots. Rename accepts a directory
   name in the same parent. Relocate offers **Destination (parent)** (the default),
   interpreting the entry as an existing destination parent directory, and
   **Destination and new name**, interpreting it as the complete new directory path.
   Switching to the latter appends the current directory name to the editor's
   parent path; switching back removes the editor's final path component.
+  The location-row **Move mark item** prepares the current directory in the
+  shared Move workflow and is unavailable while any transfer is prepared.
   A successful operation updates affected Pathviews, descendant paths, tree,
   tab labels and saved use case paths while retaining custom names. The path
   change alone does not require re-enumerating the moved directory's contents.
