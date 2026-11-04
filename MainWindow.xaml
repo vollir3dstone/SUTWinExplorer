@@ -82,8 +82,7 @@
               <ComboBox Grid.Column="6" x:Name="AddressBox" IsEditable="True" IsTextSearchEnabled="False"
                       IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}"
                       StaysOpenOnEdit="True" DisplayMemberPath="DisplayPath" SelectedValuePath="TabIndex"
-                      Style="{StaticResource PathHeaderDisplayComboBoxStyle}"
-                      VerticalContentAlignment="Center" KeyDown="AddressBox_KeyDown"
+                      VerticalAlignment="Center" VerticalContentAlignment="Center" KeyDown="AddressBox_KeyDown"
                       SelectionChanged="AddressBox_SelectionChanged" Margin="6,0" />
             <Button Grid.Column="7" Content="Go" Click="Go_Click" Padding="12,4"
                     IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}" />
