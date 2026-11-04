@@ -3171,6 +3171,23 @@ try {
         try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
         $browseStatus = if ($null -ne $probe.ContentView) { $probe.ContentView.FindName('StatusLabel').Text } else { 'no ContentView' }
         Assert-True $probe.Ready "BROWSE startup did not render a Shell icon: $($probe.Error); status=$browseStatus"
+        $addressBox = $mainWindow.FindName('AddressBox')
+        $addressCopy = $mainWindow.FindName('AddressClipboardCopyButton')
+        Assert-True ($addressCopy.IsEnabled -and $addressCopy.Content.Template -eq $mainWindow.FindResource('ClipboardCopyIconTemplate')) 'The address copy button is disabled or has the wrong icon.'
+        $originalAddress = $addressBox.Text
+        $originalClipboard = [System.Windows.Clipboard]::GetDataObject()
+        try {
+            $addressBox.Text = 'C:\unconfirmed address'
+            $addressCopy.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            Assert-True ([System.Windows.Clipboard]::GetText() -ceq $addressBox.Text) 'Address copy did not copy the current editor text.'
+            $addressBox.Text = ''
+            $addressCopy.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            Assert-True ([System.Windows.Clipboard]::GetText() -ceq 'C:\unconfirmed address') 'An empty address changed the clipboard.'
+        } finally {
+            $addressBox.Text = $originalAddress
+            if ($null -eq $originalClipboard) { [System.Windows.Clipboard]::Clear() }
+            else { [System.Windows.Clipboard]::SetDataObject($originalClipboard, $true) }
+        }
         $mainView = $probe.ContentView
         $null = $mainView.GetType().GetMethod('SetCurrentPath', $viewFlags).Invoke($mainView, [object[]] @([string] $directory))
         $null = $mainView.GetType().GetMethod('Refresh', $viewFlags).Invoke($mainView, [object[]] @([bool] $true))

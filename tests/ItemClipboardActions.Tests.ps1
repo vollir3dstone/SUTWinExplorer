@@ -266,7 +266,7 @@ try {
         $button = $view.FindName("${name}ClipboardCopyButton")
         $icon = $button.Content.Children[1]
         if ([System.Windows.Automation.AutomationProperties]::GetName($button) -cne "$name clipboard copy" -or $button.ToolTip -cne "$name clipboard copy" -or
-            $icon.Template -ne $view.Resources['ClipboardCopyIconTemplate']) { throw "$name clipboard copy has an incorrect label or icon." }
+            $icon.Template -ne $view.FindResource('ClipboardCopyIconTemplate')) { throw "$name clipboard copy has an incorrect label or icon." }
         if ($button.Margin -ne [System.Windows.Thickness]::new(0) -or $null -eq $button.Template.FindName('outline', $button)) { throw "$name clipboard copy has an unexpected margin or button style." }
     }
     if ([System.Windows.Automation.AutomationProperties]::GetName($itemClipboardPaste) -cne 'Item clipboard paste' -or $itemClipboardPaste.ToolTip -cne 'Item clipboard paste' -or

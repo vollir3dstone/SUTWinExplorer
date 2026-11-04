@@ -7,6 +7,17 @@
     <SolidColorBrush x:Key="Input.FocusBorder" Color="#569DE5" />
     <SolidColorBrush x:Key="Input.DisabledBorder" Color="#D9D9D9" />
     <SolidColorBrush x:Key="PathHeaderDisplayForeground" Color="#263443" />
+    <ControlTemplate x:Key="ClipboardCopyIconTemplate" TargetType="Control">
+        <Viewbox Width="14" Height="14">
+            <Canvas Width="24" Height="24">
+                <Rectangle Canvas.Left="8" Canvas.Top="2" Width="8" Height="4" RadiusX="1" RadiusY="1"
+                           Stroke="{TemplateBinding Foreground}" StrokeThickness="2" />
+                <Path Data="M8,4 H6 A2,2 0 0 0 4,6 V20 A2,2 0 0 0 6,22 H18 A2,2 0 0 0 20,20 V18 M16,4 H18 A2,2 0 0 1 20,6 V10 M21,14 H11 M15,10 L11,14 15,18"
+                      Stroke="{TemplateBinding Foreground}" StrokeThickness="2" StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
     <Style x:Key="PathHeaderDisplayStyle" TargetType="{x:Type TextBlock}">
         <Setter Property="FontSize" Value="14" />
         <Setter Property="FontWeight" Value="SemiBold" />

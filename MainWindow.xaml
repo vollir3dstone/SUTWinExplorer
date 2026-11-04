@@ -43,6 +43,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
@@ -79,12 +80,18 @@
                        Source="/Assets/ic_fluent_arrow_up_16_regular.png" />
             </Button>
                   <Border Grid.Column="5" Width="1" Height="24" Margin="6,0" Background="#D8DDE3" />
-              <ComboBox Grid.Column="6" x:Name="AddressBox" IsEditable="True" IsTextSearchEnabled="False"
+              <Button Grid.Column="6" x:Name="AddressClipboardCopyButton" Width="24" Height="24" Padding="0"
+                      VerticalAlignment="Center" Click="AddressClipboardCopy_Click"
+                      IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}"
+                      ToolTip="Copy path to clipboard" AutomationProperties.Name="Copy path to clipboard">
+                  <Control Width="14" Height="14" Template="{StaticResource ClipboardCopyIconTemplate}" />
+              </Button>
+              <ComboBox Grid.Column="7" x:Name="AddressBox" IsEditable="True" IsTextSearchEnabled="False"
                       IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}"
                       StaysOpenOnEdit="True" DisplayMemberPath="DisplayPath" SelectedValuePath="TabIndex"
                       VerticalAlignment="Center" VerticalContentAlignment="Center" KeyDown="AddressBox_KeyDown"
                       SelectionChanged="AddressBox_SelectionChanged" Margin="6,0" />
-            <Button Grid.Column="7" Content="Go" Click="Go_Click" Padding="12,4"
+            <Button Grid.Column="8" Content="Go" Click="Go_Click" Padding="12,4"
                     IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}" />
         </Grid>
         <Grid>

@@ -184,6 +184,8 @@ can be prepared at a time, but clipboard actions remain independent of it:
   never a dropdown entry. Selecting a dropdown entry selects its associated tab.
   Typing a path selects an existing Pathview at that location, or navigates the
   browsable Pathview if none exists.
+  The clipboard-copy button before the field copies its current text, including
+  any unconfirmed edits; an empty field leaves the clipboard unchanged.
 - [x] A single Back/Forward history records successfully activated paths across
   browsable and fixed Pathviews, including tab selections. Consecutive
   activations of the same path do not create duplicate entries. Back and
