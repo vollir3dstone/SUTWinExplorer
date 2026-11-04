@@ -934,7 +934,7 @@ positive value derived from the inverse of **Hide directories**.
   `SHParseDisplayName`, `SHBindToParent`, and `BindToObject`.
 - A temporary trace confirmed that `QueryService` and `IncludeObject` were
   reached. The trace was removed after fixing folder binding.
-- Runtime UI Automation on the default profile observed 23 file rows with
+- Runtime UI Automation on the default use case observed 23 file rows with
   **Hide directories** checked, 28 rows when unchecked, and 23 again when
   checked. This proves
   live checkbox refresh in that folder; it is not a complete reparse-point

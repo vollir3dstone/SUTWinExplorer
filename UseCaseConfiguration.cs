@@ -4,45 +4,47 @@ using System.Text.Json.Serialization;
 
 namespace SUTWinExplorer;
 
-internal sealed class ProfileConfiguration
+internal sealed class UseCaseConfiguration
 {
     [JsonPropertyName("_type")]
+    [JsonPropertyOrder(-2)]
     public required string Type { get; set; }
-    public required string ProfileName { get; set; }
-    public required List<ProfilePathview> Pathviews { get; set; }
+    [JsonPropertyOrder(-1)]
+    public required string UseCaseName { get; set; }
+    public required List<UseCasePathview> Pathviews { get; set; }
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? AdditionalProperties { get; set; }
 }
 
-internal sealed class ProfilePathview
+internal sealed class UseCasePathview
 {
     [JsonPropertyName("_type")]
     public required string Type { get; set; }
     public required string? Name { get; set; }
     public string? TabColor { get; set; }
     public required string Path { get; set; }
-    public required string ActionOnProfileActivation { get; set; }
+    public required string ActionOnUseCaseActivation { get; set; }
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? AdditionalProperties { get; set; }
 }
 
-internal sealed class ProfileStore
+internal sealed class UseCaseStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private readonly string _filePath;
     private readonly string _directory;
-    private readonly string _profileName;
+    private readonly string _useCaseName;
 
-    public ProfileStore(string directory, string profileName)
+    public UseCaseStore(string directory, string useCaseName)
     {
-        if (string.IsNullOrWhiteSpace(profileName) || profileName.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0)
-            throw new ArgumentException("The profile name cannot be used in a filename.", nameof(profileName));
+        if (string.IsNullOrWhiteSpace(useCaseName) || useCaseName.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0)
+            throw new ArgumentException("The use case name cannot be used in a filename.", nameof(useCaseName));
         _directory = directory;
-        _profileName = profileName;
-        _filePath = System.IO.Path.Combine(directory, $"Profile \u201e{profileName}\u201c.kisexplorer.json");
+        _useCaseName = useCaseName;
+        _filePath = System.IO.Path.Combine(directory, $"Use case \u201e{useCaseName}\u201c.kisexplorer.json");
     }
 
-    public ProfileConfiguration LoadOrCreate()
+    public UseCaseConfiguration LoadOrCreate()
     {
         try
         {
@@ -50,43 +52,48 @@ internal sealed class ProfileStore
         }
         catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
         {
-            var profile = new ProfileConfiguration
+            var useCase = new UseCaseConfiguration
             {
-                Type = "KIS Explorer profile",
-                ProfileName = _profileName,
+                Type = "KIS Explorer use case",
+                UseCaseName = _useCaseName,
                 Pathviews = []
             };
-            Save(profile);
-            return profile;
+            Save(useCase);
+            return useCase;
         }
     }
 
-    public ProfileConfiguration Load()
+    public UseCaseConfiguration Load()
     {
-        ProfileConfiguration loaded;
+        UseCaseConfiguration loaded;
         using (var stream = File.OpenRead(_filePath))
-            loaded = JsonSerializer.Deserialize<ProfileConfiguration>(stream, JsonOptions)
-                ?? throw new InvalidDataException("The profile is empty.");
-        if (loaded.Type != "KIS Explorer profile" || loaded.ProfileName != _profileName || loaded.Pathviews is null)
-            throw new InvalidDataException("The profile has an invalid type, name, or Pathviews list.");
+            loaded = JsonSerializer.Deserialize<UseCaseConfiguration>(stream, JsonOptions)
+                ?? throw new InvalidDataException("The use case is empty.");
+        Validate(loaded, _useCaseName);
+        return loaded;
+    }
+
+    private static void Validate(UseCaseConfiguration loaded, string useCaseName)
+    {
+        if (loaded.Type != "KIS Explorer use case" || loaded.UseCaseName != useCaseName || loaded.Pathviews is null)
+            throw new InvalidDataException("The use case has an invalid type, name, or Pathviews list.");
 
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var view in loaded.Pathviews)
         {
             if (view is null || view.Type != "Pathview" || string.IsNullOrWhiteSpace(view.Path) ||
                 !System.IO.Path.IsPathFullyQualified(view.Path) ||
-                view.ActionOnProfileActivation != "open" ||
+                view.ActionOnUseCaseActivation != "open" ||
                 (view.TabColor is not null &&
                  (view.TabColor.Length != 9 || view.TabColor[0] != '#' || !view.TabColor[1..].All(Uri.IsHexDigit))) ||
                 !paths.Add(System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(view.Path))))
-                throw new InvalidDataException("The profile contains an invalid or duplicate Pathview.");
+                throw new InvalidDataException("The use case contains an invalid or duplicate Pathview.");
         }
-        return loaded;
     }
 
-    public IReadOnlyList<string> GetProfileNames()
+    public IReadOnlyList<string> GetUseCaseNames()
     {
-        const string prefix = "Profile \u201e";
+        const string prefix = "Use case \u201e";
         const string suffix = "\u201c.kisexplorer.json";
         return Directory.EnumerateFiles(_directory, "*.kisexplorer.json")
             .Select(System.IO.Path.GetFileName)
@@ -97,40 +104,40 @@ internal sealed class ProfileStore
             .ToArray();
     }
 
-    public ProfileStore ForProfile(string profileName) => new(_directory, profileName);
+    public UseCaseStore ForUseCase(string useCaseName) => new(_directory, useCaseName);
 
-    public void Save(ProfileConfiguration profile) => Write(profile, overwrite: true);
+    public void Save(UseCaseConfiguration useCase) => Write(useCase, overwrite: true);
 
-    public void Create(ProfileConfiguration profile)
+    public void Create(UseCaseConfiguration useCase)
     {
-        if (string.Equals(_profileName, "new", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(_useCaseName, "new", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The name 'new' is reserved.");
-        Write(profile, overwrite: false);
+        Write(useCase, overwrite: false);
     }
 
-    public ProfileStore Rename(ProfileConfiguration profile, string newName)
+    public UseCaseStore Rename(UseCaseConfiguration useCase, string newName)
     {
-        if (string.Equals(_profileName, "default", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("The default profile cannot be renamed.");
+        if (string.Equals(_useCaseName, "default", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The default use case cannot be renamed.");
         if (string.Equals(newName, "new", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("The name 'new' is reserved.", nameof(newName));
-        if (profile.ProfileName != _profileName)
-            throw new InvalidDataException("The profile name does not match its filename.");
+        if (useCase.UseCaseName != _useCaseName)
+            throw new InvalidDataException("The use case name does not match its filename.");
 
-        var target = ForProfile(newName);
-        if (string.Equals(_profileName, newName, StringComparison.Ordinal))
+        var target = ForUseCase(newName);
+        if (string.Equals(_useCaseName, newName, StringComparison.Ordinal))
             return target;
 
-        var renamed = new ProfileConfiguration
+        var renamed = new UseCaseConfiguration
         {
-            Type = profile.Type,
-            ProfileName = newName,
-            Pathviews = profile.Pathviews,
-            AdditionalProperties = profile.AdditionalProperties
+            Type = useCase.Type,
+            UseCaseName = newName,
+            Pathviews = useCase.Pathviews,
+            AdditionalProperties = useCase.AdditionalProperties
         };
         using (File.OpenRead(_filePath)) { }
 
-        if (string.Equals(_profileName, newName, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(_useCaseName, newName, StringComparison.OrdinalIgnoreCase))
         {
             var backupPath = System.IO.Path.Combine(_directory, $".{Guid.NewGuid():N}.tmp");
             File.Move(_filePath, backupPath);
@@ -149,7 +156,7 @@ internal sealed class ProfileStore
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
-                System.Diagnostics.Debug.WriteLine($"Cannot remove profile rename backup: {exception}");
+                System.Diagnostics.Debug.WriteLine($"Cannot remove use case rename backup: {exception}");
             }
         }
         else
@@ -166,22 +173,22 @@ internal sealed class ProfileStore
             }
         }
 
-        profile.ProfileName = newName;
+        useCase.UseCaseName = newName;
         return target;
     }
 
     public void Delete()
     {
-        if (string.Equals(_profileName, "default", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("The default profile cannot be deleted.");
+        if (string.Equals(_useCaseName, "default", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The default use case cannot be deleted.");
         using (File.OpenRead(_filePath)) { }
         File.Delete(_filePath);
     }
 
-    private void Write(ProfileConfiguration profile, bool overwrite)
+    private void Write(UseCaseConfiguration useCase, bool overwrite)
     {
-        if (profile.ProfileName != _profileName)
-            throw new InvalidDataException("The profile name does not match its filename.");
+        if (useCase.UseCaseName != _useCaseName)
+            throw new InvalidDataException("The use case name does not match its filename.");
         var directory = System.IO.Path.GetDirectoryName(_filePath)!;
         Directory.CreateDirectory(directory);
         var temporaryPath = System.IO.Path.Combine(directory, $".{Guid.NewGuid():N}.tmp");
@@ -189,7 +196,7 @@ internal sealed class ProfileStore
         {
             using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
-                JsonSerializer.Serialize(stream, profile, JsonOptions);
+                JsonSerializer.Serialize(stream, useCase, JsonOptions);
                 stream.Flush(flushToDisk: true);
             }
             File.Move(temporaryPath, _filePath, overwrite);

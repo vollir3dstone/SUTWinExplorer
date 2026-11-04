@@ -3172,11 +3172,11 @@ try {
     $previousContext = [System.Threading.SynchronizationContext]::Current
     [System.Threading.SynchronizationContext]::SetSynchronizationContext(
         [System.Windows.Threading.DispatcherSynchronizationContext]::new([System.Windows.Threading.Dispatcher]::CurrentDispatcher))
-    $profileDirectory = Join-Path $directory 'profiles'
-    $storeType = $assembly.GetType('SUTWinExplorer.ProfileStore', $true)
-    $store = $storeType.GetConstructor([type[]] @([string], [string])).Invoke([object[]] @([string] $profileDirectory, [string] 'default'))
-    $profile = $store.LoadOrCreate()
-    $application.GetType().GetMethod('SetActiveProfile', $viewFlags).Invoke($application, [object[]] @($store, $profile))
+    $useCaseDirectory = Join-Path $directory 'use-cases'
+    $storeType = $assembly.GetType('SUTWinExplorer.UseCaseStore', $true)
+    $store = $storeType.GetConstructor([type[]] @([string], [string])).Invoke([object[]] @([string] $useCaseDirectory, [string] 'default'))
+    $useCase = $store.LoadOrCreate()
+    $application.GetType().GetMethod('SetActiveUseCase', $viewFlags).Invoke($application, [object[]] @($store, $useCase))
     $mainWindow = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.MainWindow', $true))
     $mainWindow.ShowInTaskbar = $false
     $mainWindow.Left = -20000

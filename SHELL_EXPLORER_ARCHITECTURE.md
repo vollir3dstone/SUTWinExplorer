@@ -215,22 +215,22 @@ leading ellipsis prefix is omitted.
   first registered with its requested initial path, then its key is reconciled
   after each successful location commit. Entries remain indexed after an
   initial navigation failure and are removed when a fixed tab closes.
-- `App` owns a machine-wide named mutex and loads the active `default` profile
-  before creating `MainWindow`. `ProfileStore` validates and saves the profile
+- `App` owns a machine-wide named mutex and loads the active `default` use case
+  before creating `MainWindow`. `UseCaseStore` validates and saves the use case
   under roaming application data; `MainWindow` associates fixed Pathviews with
-  their profile entries and synchronizes successful location changes and
+  their use case entries and synchronizes successful location changes and
   explicit closes. Startup restores tabs without selecting them. Failed
   locations remain associated and marked. See [Configuration.md](Configuration.md).
-- `ProfilesView` owns profile-list selection, the read-only Pathview display,
-  and the profile-name draft and edit state. It raises create, rename, delete,
-  and activation requests to `MainWindow`. `ProfileStore` discovers and loads
-  profiles, creates without overwriting, renames, and protects `default` from
+- `UseCasesView` owns use case-list selection, the read-only Pathview display,
+  and the use case-name draft and edit state. It raises create, rename, delete,
+  and activation requests to `MainWindow`. `UseCaseStore` discovers and loads
+  use cases, creates without overwriting, renames, and protects `default` from
   rename and deletion. `MainWindow` validates activation, removes Fixed tabs
-  without deleting their entries, switches the active store and profile, and
-  restores the target's Fixed tabs. A newly created profile is activated;
-  deleting the active profile activates `default`. The BROWSE tab is retained.
+  without deleting their entries, switches the active store and use case, and
+  restores the target's Fixed tabs. A newly created use case is activated;
+  deleting the active use case activates `default`. The BROWSE tab is retained.
   The toolbar icon toggles the two top-level views outside name editing.
-  See [ProfilesView.md](ProfilesView.md).
+  See [UseCasesView.md](UseCasesView.md).
 - **Pin** looks up the browsable Pathview's current path in the fixed-path map.
   It selects the mapped tab when present, otherwise it creates a fixed
   Pathview, registers it, adds the tab after the first item, and selects it.
@@ -299,7 +299,7 @@ leading ellipsis prefix is omitted.
   column separates it from the path icon. The current
   directory's Shell icon and path expression follow. A pencil button before the color picker opens a custom-name
   dialog. The Pathview constructor receives the initial nullable name and a
-  name-change callback; `MainWindow` owns the profile entry and saves accepted
+  name-change callback; `MainWindow` owns the use case entry and saves accepted
   changes. The dialog editor is 28 DIP high and uses the path display's font
   and foreground. Its undefined-name placeholder uses the same font with a
   lighter gray foreground. Apply saves the name, including `null` for an empty
@@ -336,7 +336,7 @@ leading ellipsis prefix is omitted.
   `PaneColorSwatchTemplate` in a six-column grid. The swatch click updates the
   Pathview's `PaneBackground` and reports the color through a callback.
   `MainWindow` updates the matching `TabItem` and saves the color in the
-  associated profile entry. The constructor receives the initial color;
+  associated use case entry. The constructor receives the initial color;
   `null` preserves the default appearance. A color selected before an entry
   exists is included when initial navigation creates that entry.
 

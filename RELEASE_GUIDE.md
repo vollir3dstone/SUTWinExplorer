@@ -10,7 +10,7 @@ Edit [ReleaseDescription.txt](ReleaseDescription.txt) by hand. The first line is
 
 ```text
 1.2.0
-Improved profile management.
+Improved use case management.
 Updated navigation.
 ```
 

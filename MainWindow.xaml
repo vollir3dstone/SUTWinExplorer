@@ -1,4 +1,4 @@
-﻿<Window x:Class="SUTWinExplorer.MainWindow"
+<Window x:Class="SUTWinExplorer.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:SUTWinExplorer"
@@ -48,12 +48,12 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0">
-                <Button x:Name="ProfilesButton" Style="{StaticResource TabCloseButtonStyle}"
-                        Width="24" Height="24" Margin="0,0,6,0" Click="ProfilesButton_Click"
-                        ToolTip="Profiles" AutomationProperties.Name="Profiles">
+                <Button x:Name="UseCasesButton" Style="{StaticResource TabCloseButtonStyle}"
+                        Width="24" Height="24" Margin="0,0,6,0" Click="UseCasesButton_Click"
+                        ToolTip="Use cases" AutomationProperties.Name="Use cases">
                     <Image Width="24" Height="24" Source="/Assets/usecase 24.png" />
                 </Button>
-                <TextBlock x:Name="ProfileNameLabel" Style="{StaticResource PathHeaderDisplayStyle}"
+                <TextBlock x:Name="UseCaseNameLabel" Style="{StaticResource PathHeaderDisplayStyle}"
                            VerticalAlignment="Center" MaxWidth="200" TextTrimming="CharacterEllipsis"
                            ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
             </StackPanel>
@@ -103,7 +103,7 @@
         <Grid>
             <TabControl x:Name="ExplorerTabs" Padding="0" HorizontalContentAlignment="Stretch"
                         SelectionChanged="ExplorerTabs_SelectionChanged" />
-            <local:ProfilesView x:Name="ProfilesPane" Visibility="Collapsed" />
+            <local:UseCasesView x:Name="UseCasesPane" Visibility="Collapsed" />
         </Grid>
     </DockPanel>
 </Window>

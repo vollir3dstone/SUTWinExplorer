@@ -108,20 +108,20 @@ can be prepared at a time, but clipboard actions remain independent of it:
   [SHELL_EXPLORER_ARCHITECTURE.md](SHELL_EXPLORER_ARCHITECTURE.md#2026-11-01-separate-product-name-from-internal-identity).
 
 ### Navigation and tabs
-- [x] The active profile restores its stored filesystem Pathviews as Fixed tabs;
+- [x] The active use case restores its stored filesystem Pathviews as Fixed tabs;
   `default` is active at startup. Fixed tabs are saved on successful opening and removed from the
-  profile on explicit close; unavailable locations remain marked and stored.
+  use case on explicit close; unavailable locations remain marked and stored.
   BROWSE stays selected at startup, and virtual **This PC** cannot be pinned.
-  The active profile icon and name appear at the left of the top toolbar before
+  The active use case icon and name appear at the left of the top toolbar before
   the navigation buttons; the name uses the same font as the path display.
-  Only one KIS Explorer instance runs on the machine. Profile configuration
+  Only one KIS Explorer instance runs on the machine. Use case configuration
   and acceptance checks are specified in [Configuration.md](Configuration.md).
-- [x] The profile icon toggles between TabsView and ProfilesView. A single
-  profile-list selection displays its contents; double-click activates it and
-  returns to TabsView with its Fixed tabs. ProfilesView supports creating,
-  renaming, and confirmed deletion; it activates a newly created profile and
-  falls back to `default` when the active profile is deleted. `default` cannot
-  be renamed or deleted. See [ProfilesView.md](ProfilesView.md).
+- [x] The use case icon toggles between TabsView and UseCasesView. A single
+  use case-list selection displays its contents; double-click activates it and
+  returns to TabsView with its Fixed tabs. UseCasesView supports creating,
+  renaming, and confirmed deletion; it activates a newly created use case and
+  falls back to `default` when the active use case is deleted. `default` cannot
+  be renamed or deleted. See [UseCasesView.md](UseCasesView.md).
 - [x] The application starts with exactly one browsable Pathview in the first
   tab. Its tab title is **BROWSE**, independent of its current location, and it
   cannot be closed.
@@ -153,7 +153,7 @@ can be prepared at a time, but clipboard actions remain independent of it:
   displays `(Undefined custom name)`; applying an empty name stores `null`.
   Apply saves changes and Cancel or Escape discards them. Opening a Fixed tab
   and applying its name place keyboard focus in its Shell content when
-  available. Names are stored in the active profile. The dialog editor uses
+  available. Names are stored in the active use case. The dialog editor uses
   the path display's font and color; only the undefined-name placeholder uses
   a lighter gray.
   The Fixed tab label shows the complete custom name when set; otherwise it
@@ -173,10 +173,10 @@ can be prepared at a time, but clipboard actions remain independent of it:
   second-row split area (sidebar, splitter, and content pane) has a 4-DIP white
   inset; the outer tab content has no additional padding.
 - [x] Each fixed Pathview's location row starts with a white background unless
-  a profile color is saved. Its right-aligned palette offers twelve light colors
+  a use case color is saved. Its right-aligned palette offers twelve light colors
   distributed across the spectrum; choosing one changes only that Pathview's
-  location row outside the white prefix and its tab header and saves the color in the active profile. The
-  saved color is restored on profile activation and application restart. Until
+  location row outside the white prefix and its tab header and saves the color in the active use case. The
+  saved color is restored on use case activation and application restart. Until
   a color is chosen, tab headers retain their normal selected or unselected
   appearance. The browsable Pathview has no color-selection button.
   **Browse** and **Pin** remain keyboard-operable without a visible focus ring.

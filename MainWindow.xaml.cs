@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Windows;
@@ -23,10 +23,10 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, Pathview> _fixedPathviewsByPath = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<Pathview, string> _pathsByFixedPathview = new();
     private readonly Dictionary<Pathview, TabItem> _tabsByPathview = new();
-    private readonly Dictionary<Pathview, ProfilePathview> _profileEntriesByPathview = new();
-    private ProfileConfiguration _activeProfile;
-    private ProfileStore _profileStore;
-    private bool _activeProfileDirty;
+    private readonly Dictionary<Pathview, UseCasePathview> _useCaseEntriesByPathview = new();
+    private UseCaseConfiguration _activeUseCase;
+    private UseCaseStore _useCaseStore;
+    private bool _activeUseCaseDirty;
 
     public MainWindow()
     {
@@ -35,15 +35,15 @@ public partial class MainWindow : Window
         if (!string.IsNullOrEmpty(version))
             Title = $"{Title} v{version}";
         var application = (App)Application.Current;
-        _activeProfile = application.ActiveProfile;
-        _profileStore = application.ProfileStore;
-        ProfileNameLabel.Text = _activeProfile.ProfileName;
-        ProfilesPane.ProfileSelected += ProfilesPane_ProfileSelected;
-        ProfilesPane.ProfileActivationRequested += ProfilesPane_ProfileActivationRequested;
-        ProfilesPane.ProfileCreateRequested += ProfilesPane_ProfileCreateRequested;
-        ProfilesPane.ProfileRenameRequested += ProfilesPane_ProfileRenameRequested;
-        ProfilesPane.ProfileDeleteRequested += ProfilesPane_ProfileDeleteRequested;
-        ProfilesPane.ProfilesRefreshRequested += ProfilesPane_ProfilesRefreshRequested;
+        _activeUseCase = application.ActiveUseCase;
+        _useCaseStore = application.UseCaseStore;
+        UseCaseNameLabel.Text = _activeUseCase.UseCaseName;
+        UseCasesPane.UseCaseSelected += UseCasesPane_UseCaseSelected;
+        UseCasesPane.UseCaseActivationRequested += UseCasesPane_UseCaseActivationRequested;
+        UseCasesPane.UseCaseCreateRequested += UseCasesPane_UseCaseCreateRequested;
+        UseCasesPane.UseCaseRenameRequested += UseCasesPane_UseCaseRenameRequested;
+        UseCasesPane.UseCaseDeleteRequested += UseCasesPane_UseCaseDeleteRequested;
+        UseCasesPane.UseCasesRefreshRequested += UseCasesPane_UseCasesRefreshRequested;
         ContentRendered += MainWindow_ContentRendered;
     }
 
@@ -53,8 +53,8 @@ public partial class MainWindow : Window
         try
         {
             AddPaneview(GetInitialDirectory(), isBrowsable: true);
-            foreach (var entry in _activeProfile.Pathviews.ToArray())
-                AddPaneview(entry.Path, isBrowsable: false, profileEntry: entry, select: false);
+            foreach (var entry in _activeUseCase.Pathviews.ToArray())
+                AddPaneview(entry.Path, isBrowsable: false, useCaseEntry: entry, select: false);
         }
         catch (Exception exception)
         {
@@ -64,13 +64,13 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ProfilesButton_Click(object sender, RoutedEventArgs e)
+    private void UseCasesButton_Click(object sender, RoutedEventArgs e)
     {
-        if (ProfilesPane.Visibility == Visibility.Visible)
+        if (UseCasesPane.Visibility == Visibility.Visible)
         {
-            if (ProfilesPane.IsEditing)
+            if (UseCasesPane.IsEditing)
             {
-                MessageBox.Show(this, "Finish editing the profile name or press Escape to cancel.",
+                MessageBox.Show(this, "Finish editing the use case name or press Escape to cancel.",
                     "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
@@ -80,66 +80,66 @@ public partial class MainWindow : Window
 
         try
         {
-            ProfilesPane.SetProfiles(_profileStore.GetProfileNames(), _activeProfile.ProfileName);
+            UseCasesPane.SetUseCases(_useCaseStore.GetUseCaseNames(), _activeUseCase.UseCaseName);
             ExplorerTabs.Visibility = Visibility.Collapsed;
-            ProfilesPane.Visibility = Visibility.Visible;
+            UseCasesPane.Visibility = Visibility.Visible;
         }
         catch (Exception exception)
         {
-            MessageBox.Show(this, $"Cannot list profiles: {exception.Message}",
+            MessageBox.Show(this, $"Cannot list use cases: {exception.Message}",
                 "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
     private void ShowTabsView()
     {
-        ProfilesPane.Visibility = Visibility.Collapsed;
+        UseCasesPane.Visibility = Visibility.Collapsed;
         ExplorerTabs.Visibility = Visibility.Visible;
     }
 
-    private void ProfilesPane_ProfileSelected(string profileName)
+    private void UseCasesPane_UseCaseSelected(string useCaseName)
     {
         try
         {
-            var profile = string.Equals(profileName, _activeProfile.ProfileName, StringComparison.OrdinalIgnoreCase)
-                ? _activeProfile
-                : _profileStore.ForProfile(profileName).Load();
-            ProfilesPane.DisplayProfile(profile);
+            var useCase = string.Equals(useCaseName, _activeUseCase.UseCaseName, StringComparison.OrdinalIgnoreCase)
+                ? _activeUseCase
+                : _useCaseStore.ForUseCase(useCaseName).Load();
+            UseCasesPane.DisplayUseCase(useCase);
         }
         catch (Exception exception)
         {
-            ProfilesPane.DisplayProfile(null);
-            MessageBox.Show(this, $"Cannot open profile '{profileName}': {exception.Message}",
+            UseCasesPane.DisplayUseCase(null);
+            MessageBox.Show(this, $"Cannot open use case '{useCaseName}': {exception.Message}",
                 "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
-    private void ProfilesPane_ProfileActivationRequested(string profileName)
+    private void UseCasesPane_UseCaseActivationRequested(string useCaseName)
     {
-        if (_activeProfileDirty && !SaveActiveProfile())
+        if (_activeUseCaseDirty && !SaveActiveUseCase())
             return;
 
-        ProfileStore targetStore;
-        ProfileConfiguration targetProfile;
+        UseCaseStore targetStore;
+        UseCaseConfiguration targetUseCase;
         try
         {
-            targetStore = _profileStore.ForProfile(profileName);
-            targetProfile = string.Equals(profileName, _activeProfile.ProfileName, StringComparison.OrdinalIgnoreCase)
-                ? _activeProfile
+            targetStore = _useCaseStore.ForUseCase(useCaseName);
+            targetUseCase = string.Equals(useCaseName, _activeUseCase.UseCaseName, StringComparison.OrdinalIgnoreCase)
+                ? _activeUseCase
                 : targetStore.Load();
         }
         catch (Exception exception)
         {
-            MessageBox.Show(this, $"Cannot activate profile '{profileName}': {exception.Message}",
+            MessageBox.Show(this, $"Cannot activate use case '{useCaseName}': {exception.Message}",
                 "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
 
-        SwitchActiveProfile(targetStore, targetProfile);
+        SwitchActiveUseCase(targetStore, targetUseCase);
         ShowTabsView();
     }
 
-    private void SwitchActiveProfile(ProfileStore targetStore, ProfileConfiguration targetProfile)
+    private void SwitchActiveUseCase(UseCaseStore targetStore, UseCaseConfiguration targetUseCase)
     {
         if (_browsableTab is not null)
             SelectTabForNavigation(_browsableTab);
@@ -147,91 +147,91 @@ public partial class MainWindow : Window
         {
             var tab = _tabsByPathview[view];
             _tabsByPathview.Remove(view);
-            _profileEntriesByPathview.Remove(view);
+            _useCaseEntriesByPathview.Remove(view);
             RemoveFixedPathview(view);
             ExplorerTabs.Items.Remove(tab);
         }
 
-        _profileStore = targetStore;
-        _activeProfile = targetProfile;
-        _activeProfileDirty = false;
-        ((App)Application.Current).SetActiveProfile(targetStore, targetProfile);
-        ProfileNameLabel.Text = targetProfile.ProfileName;
-        foreach (var entry in targetProfile.Pathviews.ToArray())
-            AddPaneview(entry.Path, isBrowsable: false, profileEntry: entry, select: false);
+        _useCaseStore = targetStore;
+        _activeUseCase = targetUseCase;
+        _activeUseCaseDirty = false;
+        ((App)Application.Current).SetActiveUseCase(targetStore, targetUseCase);
+        UseCaseNameLabel.Text = targetUseCase.UseCaseName;
+        foreach (var entry in targetUseCase.Pathviews.ToArray())
+            AddPaneview(entry.Path, isBrowsable: false, useCaseEntry: entry, select: false);
         RefreshPathChoices();
     }
 
-    private bool ProfilesPane_ProfileCreateRequested(ProfileConfiguration profile)
+    private bool UseCasesPane_UseCaseCreateRequested(UseCaseConfiguration useCase)
     {
         try
         {
-            _profileStore.ForProfile(profile.ProfileName).Create(profile);
+            _useCaseStore.ForUseCase(useCase.UseCaseName).Create(useCase);
             return true;
         }
         catch (Exception exception)
         {
-            MessageBox.Show(this, $"Cannot create profile '{profile.ProfileName}': {exception.Message}",
+            MessageBox.Show(this, $"Cannot create use case '{useCase.UseCaseName}': {exception.Message}",
                 "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
             return false;
         }
     }
 
-    private bool ProfilesPane_ProfileRenameRequested(ProfileConfiguration profile, string newName)
+    private bool UseCasesPane_UseCaseRenameRequested(UseCaseConfiguration useCase, string newName)
     {
         try
         {
-            var oldName = profile.ProfileName;
-            var isActive = string.Equals(oldName, _activeProfile.ProfileName, StringComparison.OrdinalIgnoreCase);
-            var renamedProfile = isActive ? _activeProfile : profile;
-            var renamedStore = _profileStore.ForProfile(oldName).Rename(renamedProfile, newName);
+            var oldName = useCase.UseCaseName;
+            var isActive = string.Equals(oldName, _activeUseCase.UseCaseName, StringComparison.OrdinalIgnoreCase);
+            var renamedUseCase = isActive ? _activeUseCase : useCase;
+            var renamedStore = _useCaseStore.ForUseCase(oldName).Rename(renamedUseCase, newName);
             if (isActive)
             {
-                _profileStore = renamedStore;
+                _useCaseStore = renamedStore;
                 if (!string.Equals(oldName, newName, StringComparison.Ordinal))
-                    _activeProfileDirty = false;
-                ((App)Application.Current).SetActiveProfile(renamedStore, renamedProfile);
-                ProfileNameLabel.Text = renamedProfile.ProfileName;
+                    _activeUseCaseDirty = false;
+                ((App)Application.Current).SetActiveUseCase(renamedStore, renamedUseCase);
+                UseCaseNameLabel.Text = renamedUseCase.UseCaseName;
             }
             return true;
         }
         catch (Exception exception)
         {
-            MessageBox.Show(this, $"Cannot rename profile: {exception.Message}",
+            MessageBox.Show(this, $"Cannot rename use case: {exception.Message}",
                 "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
             return false;
         }
     }
 
-    private bool ProfilesPane_ProfileDeleteRequested(string profileName)
+    private bool UseCasesPane_UseCaseDeleteRequested(string useCaseName)
     {
         try
         {
-            var deletingActive = string.Equals(profileName, _activeProfile.ProfileName, StringComparison.OrdinalIgnoreCase);
-            var targetStore = deletingActive ? _profileStore.ForProfile("default") : null;
-            var targetProfile = targetStore?.LoadOrCreate();
-            _profileStore.ForProfile(profileName).Delete();
-            if (targetStore is not null && targetProfile is not null)
-                SwitchActiveProfile(targetStore, targetProfile);
+            var deletingActive = string.Equals(useCaseName, _activeUseCase.UseCaseName, StringComparison.OrdinalIgnoreCase);
+            var targetStore = deletingActive ? _useCaseStore.ForUseCase("default") : null;
+            var targetUseCase = targetStore?.LoadOrCreate();
+            _useCaseStore.ForUseCase(useCaseName).Delete();
+            if (targetStore is not null && targetUseCase is not null)
+                SwitchActiveUseCase(targetStore, targetUseCase);
             return true;
         }
         catch (Exception exception)
         {
-            MessageBox.Show(this, $"Cannot delete profile '{profileName}': {exception.Message}",
+            MessageBox.Show(this, $"Cannot delete use case '{useCaseName}': {exception.Message}",
                 "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
             return false;
         }
     }
 
-    private void ProfilesPane_ProfilesRefreshRequested(string? selectedName)
+    private void UseCasesPane_UseCasesRefreshRequested(string? selectedName)
     {
         try
         {
-            ProfilesPane.SetProfiles(_profileStore.GetProfileNames(), selectedName ?? _activeProfile.ProfileName);
+            UseCasesPane.SetUseCases(_useCaseStore.GetUseCaseNames(), selectedName ?? _activeUseCase.UseCaseName);
         }
         catch (Exception exception)
         {
-            MessageBox.Show(this, $"Cannot list profiles: {exception.Message}",
+            MessageBox.Show(this, $"Cannot list use cases: {exception.Message}",
                 "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -256,7 +256,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void AddPaneview(string path, bool isBrowsable, ProfilePathview? profileEntry = null, bool select = true)
+    private void AddPaneview(string path, bool isBrowsable, UseCasePathview? useCaseEntry = null, bool select = true)
     {
         if (!isBrowsable && ShellLocations.IsTopPath(path))
             throw new InvalidOperationException("This PC cannot be opened as a fixed Pathview.");
@@ -273,10 +273,10 @@ public partial class MainWindow : Window
 
         Pathview? view = null;
         Action? updateTabTitle = null;
-        var tabColor = profileEntry?.TabColor is string savedColor
+        var tabColor = useCaseEntry?.TabColor is string savedColor
             ? (Color?)ColorConverter.ConvertFromString(savedColor)
             : null;
-        view = new Pathview(path, isBrowsable, profileEntry?.Name, isBrowsable ? null : name =>
+        view = new Pathview(path, isBrowsable, useCaseEntry?.Name, isBrowsable ? null : name =>
         {
             updateTabTitle?.Invoke();
             if (view is not null)
@@ -286,10 +286,10 @@ public partial class MainWindow : Window
             if (view is not null)
                 Pathview_TabColorChanged(view, color);
         });
-        if (profileEntry is not null)
-            _profileEntriesByPathview.Add(view, profileEntry);
+        if (useCaseEntry is not null)
+            _useCaseEntriesByPathview.Add(view, useCaseEntry);
         var hasCurrentPath = !string.IsNullOrWhiteSpace(view.CurrentPath);
-        var navigationFailed = profileEntry is not null && !hasCurrentPath;
+        var navigationFailed = useCaseEntry is not null && !hasCurrentPath;
         var title = new TextBlock
         {
             FontSize = 13,
@@ -361,7 +361,7 @@ public partial class MainWindow : Window
             if (!view.IsBrowsable)
             {
                 RegisterFixedPathview(view, currentPath);
-                UpdateProfilePathview(view, currentPath);
+                UpdateUseCasePathview(view, currentPath);
             }
             navigationFailed = false;
             updateTabTitle();
@@ -403,18 +403,18 @@ public partial class MainWindow : Window
             tooltipText.Text = $"Cannot open location: {path}";
         }
         if (!view.IsBrowsable && hasCurrentPath)
-            UpdateProfilePathview(view, view.CurrentPath);
+            UpdateUseCasePathview(view, view.CurrentPath);
         if (select)
             ExplorerTabs.SelectedItem = tab;
         RefreshPathChoices();
     }
 
-    private void UpdateProfilePathview(Pathview view, string path)
+    private void UpdateUseCasePathview(Pathview view, string path)
     {
         if (!_tabsByPathview.ContainsKey(view))
             return;
 
-        if (_profileEntriesByPathview.TryGetValue(view, out var entry))
+        if (_useCaseEntriesByPathview.TryGetValue(view, out var entry))
         {
             if (string.Equals(entry.Path, path, StringComparison.Ordinal))
                 return;
@@ -422,54 +422,54 @@ public partial class MainWindow : Window
         }
         else
         {
-            entry = new ProfilePathview
+            entry = new UseCasePathview
             {
                 Type = "Pathview",
                 Name = view.CustomName,
                 TabColor = view.TabColor?.ToString(),
                 Path = path,
-                ActionOnProfileActivation = "open"
+                ActionOnUseCaseActivation = "open"
             };
-            _activeProfile.Pathviews.Add(entry);
-            _profileEntriesByPathview.Add(view, entry);
+            _activeUseCase.Pathviews.Add(entry);
+            _useCaseEntriesByPathview.Add(view, entry);
         }
-        _activeProfileDirty = true;
-        SaveActiveProfile();
+        _activeUseCaseDirty = true;
+        SaveActiveUseCase();
     }
 
     private void Pathview_CustomNameChanged(Pathview view, string? name)
     {
-        if (!_profileEntriesByPathview.TryGetValue(view, out var entry) ||
+        if (!_useCaseEntriesByPathview.TryGetValue(view, out var entry) ||
             string.Equals(entry.Name, name, StringComparison.Ordinal))
             return;
         entry.Name = name;
-        _activeProfileDirty = true;
-        SaveActiveProfile();
+        _activeUseCaseDirty = true;
+        SaveActiveUseCase();
     }
 
     private void Pathview_TabColorChanged(Pathview view, Color color)
     {
         SetPathviewTabBackground(view, view.PaneBackground);
         var tabColor = color.ToString();
-        if (!_profileEntriesByPathview.TryGetValue(view, out var entry) ||
+        if (!_useCaseEntriesByPathview.TryGetValue(view, out var entry) ||
             string.Equals(entry.TabColor, tabColor, StringComparison.Ordinal))
             return;
         entry.TabColor = tabColor;
-        _activeProfileDirty = true;
-        SaveActiveProfile();
+        _activeUseCaseDirty = true;
+        SaveActiveUseCase();
     }
 
-    private bool SaveActiveProfile()
+    private bool SaveActiveUseCase()
     {
         try
         {
-            _profileStore.Save(_activeProfile);
-            _activeProfileDirty = false;
+            _useCaseStore.Save(_activeUseCase);
+            _activeUseCaseDirty = false;
             return true;
         }
         catch (Exception exception)
         {
-            MessageBox.Show(this, $"Cannot save the active profile: {exception.Message}",
+            MessageBox.Show(this, $"Cannot save the active use case: {exception.Message}",
                 "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
             return false;
         }
@@ -662,11 +662,11 @@ public partial class MainWindow : Window
             ExplorerTabs.Items.Remove(tab);
             _tabsByPathview.Remove(view);
             RemoveFixedPathview(view);
-            if (_profileEntriesByPathview.Remove(view, out var entry))
+            if (_useCaseEntriesByPathview.Remove(view, out var entry))
             {
-                _activeProfile.Pathviews.Remove(entry);
-                _activeProfileDirty = true;
-                SaveActiveProfile();
+                _activeUseCase.Pathviews.Remove(entry);
+                _activeUseCaseDirty = true;
+                SaveActiveUseCase();
             }
             RefreshPathChoices();
         }

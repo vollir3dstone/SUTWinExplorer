@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Threading;
 using System.Windows;
 
@@ -12,13 +12,13 @@ public partial class App : Application
 	private Mutex? _instanceMutex;
 	private bool _ownsInstanceMutex;
 
-	internal ProfileStore ProfileStore { get; private set; } = null!;
-	internal ProfileConfiguration ActiveProfile { get; private set; } = null!;
+	internal UseCaseStore UseCaseStore { get; private set; } = null!;
+	internal UseCaseConfiguration ActiveUseCase { get; private set; } = null!;
 
-	internal void SetActiveProfile(ProfileStore store, ProfileConfiguration profile)
+	internal void SetActiveUseCase(UseCaseStore store, UseCaseConfiguration useCase)
 	{
-		ProfileStore = store;
-		ActiveProfile = profile;
+		UseCaseStore = store;
+		ActiveUseCase = useCase;
 	}
 
 	protected override void OnStartup(StartupEventArgs e)
@@ -35,8 +35,8 @@ public partial class App : Application
 			}
 
 			var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KIS Explorer");
-			ProfileStore = new ProfileStore(directory, "default");
-			ActiveProfile = ProfileStore.LoadOrCreate();
+			UseCaseStore = new UseCaseStore(directory, "default");
+			ActiveUseCase = UseCaseStore.LoadOrCreate();
 			var window = new MainWindow();
 			MainWindow = window;
 			window.Show();
