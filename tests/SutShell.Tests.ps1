@@ -3197,8 +3197,9 @@ try {
         Assert-True $probe.Ready "BROWSE startup did not render a Shell icon: $($probe.Error); status=$browseStatus"
         $addressBox = $mainWindow.FindName('AddressBox')
         $addressCopy = $mainWindow.FindName('AddressClipboardCopyButton')
+        $addressPaste = $mainWindow.FindName('AddressClipboardPasteButton')
         Assert-True ($addressCopy.IsEnabled -and $addressCopy.Content.Template -eq $mainWindow.FindResource('ClipboardCopyIconTemplate')) 'The address copy button is disabled or has the wrong icon.'
-        $originalAddress = $addressBox.Text
+        Assert-True ($addressPaste.IsEnabled -and $addressPaste.Content.Template -eq $mainWindow.FindResource('ClipboardPasteIconTemplate')) 'The address paste button is disabled or has the wrong icon.'
         $originalClipboard = [System.Windows.Clipboard]::GetDataObject()
         try {
             $addressBox.Text = 'C:\unconfirmed address'
@@ -3207,8 +3208,17 @@ try {
             $addressBox.Text = ''
             $addressCopy.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
             Assert-True ([System.Windows.Clipboard]::GetText() -ceq 'C:\unconfirmed address') 'An empty address changed the clipboard.'
+            [System.Windows.Clipboard]::SetText([string] $directory)
+            $addressPaste.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            Assert-True ([string]::Equals($mainWindow.FindName('ExplorerTabs').SelectedItem.Content.CurrentPath, $directory, [StringComparison]::OrdinalIgnoreCase)) 'Address paste did not navigate to the clipboard path.'
+            $pastedAddress = $addressBox.Text
+            [System.Windows.Clipboard]::SetText('   ')
+            $addressPaste.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            Assert-True ($addressBox.Text -ceq $pastedAddress) 'Whitespace clipboard text changed the address.'
+            [System.Windows.Clipboard]::SetDataObject([System.Windows.DataObject]::new('SutNonTextProbe', 'value'), $true)
+            $addressPaste.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            Assert-True ($addressBox.Text -ceq $pastedAddress) 'Non-text clipboard content changed the address.'
         } finally {
-            $addressBox.Text = $originalAddress
             if ($null -eq $originalClipboard) { [System.Windows.Clipboard]::Clear() }
             else { [System.Windows.Clipboard]::SetDataObject($originalClipboard, $true) }
         }

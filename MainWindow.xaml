@@ -80,12 +80,18 @@
                        Source="/Assets/ic_fluent_arrow_up_16_regular.png" />
             </Button>
                   <Border Grid.Column="5" Width="1" Height="24" Margin="6,0" Background="#D8DDE3" />
-              <Button Grid.Column="6" x:Name="AddressClipboardCopyButton" Width="24" Height="24" Padding="0"
-                      VerticalAlignment="Center" Click="AddressClipboardCopy_Click"
-                      IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}"
-                      ToolTip="Copy path to clipboard" AutomationProperties.Name="Copy path to clipboard">
-                  <Control Width="14" Height="14" Template="{StaticResource ClipboardCopyIconTemplate}" />
-              </Button>
+              <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center">
+                  <Button x:Name="AddressClipboardPasteButton" Width="24" Height="24" Padding="0" Margin="0,0,4,0"
+                          Click="AddressClipboardPaste_Click" IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}"
+                          ToolTip="Paste path and navigate" AutomationProperties.Name="Paste path and navigate">
+                      <Control Width="14" Height="14" Template="{StaticResource ClipboardPasteIconTemplate}" />
+                  </Button>
+                  <Button x:Name="AddressClipboardCopyButton" Width="24" Height="24" Padding="0"
+                          Click="AddressClipboardCopy_Click" IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}"
+                          ToolTip="Copy path to clipboard" AutomationProperties.Name="Copy path to clipboard">
+                      <Control Width="14" Height="14" Template="{StaticResource ClipboardCopyIconTemplate}" />
+                  </Button>
+              </StackPanel>
               <ComboBox Grid.Column="7" x:Name="AddressBox" IsEditable="True" IsTextSearchEnabled="False"
                       IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}"
                       StaysOpenOnEdit="True" DisplayMemberPath="DisplayPath" SelectedValuePath="TabIndex"

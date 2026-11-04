@@ -806,6 +806,23 @@ public partial class MainWindow : Window
 
     private void Go_Click(object sender, RoutedEventArgs e) => NavigateAddress();
 
+    private void AddressClipboardPaste_Click(object sender, RoutedEventArgs e)
+    {
+        string text;
+        try { text = Clipboard.ContainsText() ? Clipboard.GetText() : string.Empty; }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, exception.Message, "Clipboard paste failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+            return;
+
+        AddressBox.Text = text;
+        NavigateAddress();
+    }
+
     private void AddressClipboardCopy_Click(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrEmpty(AddressBox.Text))

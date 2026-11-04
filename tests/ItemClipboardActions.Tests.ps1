@@ -270,7 +270,7 @@ try {
         if ($button.Margin -ne [System.Windows.Thickness]::new(0) -or $null -eq $button.Template.FindName('outline', $button)) { throw "$name clipboard copy has an unexpected margin or button style." }
     }
     if ([System.Windows.Automation.AutomationProperties]::GetName($itemClipboardPaste) -cne 'Item clipboard paste' -or $itemClipboardPaste.ToolTip -cne 'Item clipboard paste' -or
-        $itemClipboardPaste.Content.Children[1].Template -ne $view.Resources['ClipboardPasteIconTemplate']) { throw 'Item clipboard paste has an incorrect label or icon.' }
+        $itemClipboardPaste.Content.Children[1].Template -ne $view.FindResource('ClipboardPasteIconTemplate')) { throw 'Item clipboard paste has an incorrect label or icon.' }
     foreach ($name in @('Link', 'Copy', 'Move')) {
         foreach ($action in @(@('MarkItem', 'mark item'), @('Execute', 'execute'))) {
             $button = $view.FindName("$name$($action[0])Button")
