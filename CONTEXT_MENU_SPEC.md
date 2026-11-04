@@ -187,10 +187,10 @@ ambiguous commands and provider-specific differences can prevent a match; the
 presence of a registration alone is not proof of an identical command.
 
 The Base Menu includes the application's common actions. With no selected
-item, Properties, Rename, Name get, Path get and Delete are disabled; unavailable Link/Copy/Move actions
-are omitted, while prepared abort and paste actions remain available according
+item, Properties, Rename, Name clipboard copy, Path clipboard copy and Delete are disabled; unavailable Link/Copy/Move actions
+are omitted, while prepared abort and execute actions remain available according
 to workflow state.
-Paste targets the current directory. The background Content Menu starts with a
+Execute targets the current directory. The background Content Menu starts with a
 fresh native background menu and removes unique matches to the displayed Base
 Menu snapshot. `New` is in the Content Menu, not the Base Menu, and opens the
 same application-owned type and name dialog as the ContentView New button.
@@ -218,28 +218,32 @@ Shift background menu is not filtered.
 
 ## Base Menu
 
-The Base Menu starts with `Properties`, a separator, `Name get`, `Path get`,
-and the available Link, Copy and Move actions. The Shell section follows, then a separator,
+The Base Menu starts with `Properties`, a separator, `Name clipboard copy`, `Path clipboard copy`,
+`Item clipboard copy`, another separator, `Item clipboard paste`, and a separator before the
+available Link, Copy and Move actions. The Shell section follows, then a separator,
 `Rename`, another separator, and `Delete`. Disabled transfer actions are
 omitted rather than grayed out; other unavailable actions remain visible and
-disabled. In the idle state with an eligible selection, Link get, Copy get and Move get
-are shown. A prepared transfer shows its abort and paste actions instead. Each entry uses the corresponding
+disabled. In the idle state with an eligible selection, Link mark item, Copy mark item and Move mark item
+are shown. A prepared transfer shows its abort and execute actions instead. Each entry uses the corresponding
 toolbar button's current label, enabled state and click handler in ContentView.
-In the sidebar, the same labels are used but the
-actions operate on the clicked directory rather than the ContentView selection;
-Rename uses the sidebar inline editor. Link paste, Copy paste and Move paste use the current
+In the sidebar, the same labels are used; item-targeted actions operate on the
+clicked directory rather than the ContentView selection. Rename uses the sidebar
+inline editor. Item clipboard paste, Link execute, Copy execute and Move execute use the current
 Pathview directory as their destination, not necessarily the clicked directory.
 Properties invokes the Shell properties command for one or more loaded selected
-items. Rename requires one loaded item with an editable Shell name; Name get and Path
-get require one or more loaded items. Name get copies their filesystem leaf names,
-including any file extensions, while Path get copies their full filesystem paths.
-For multiple items both actions use text with one item per line. Link get, Copy get and
-Move get require loaded selected items and no prepared transfer. Their respective paste and abort actions require
+items. Rename requires one loaded item with an editable Shell name; Name clipboard copy and Path
+clipboard copy require one or more loaded items. Name clipboard copy copies their filesystem leaf names,
+including any file extensions, while Path clipboard copy copies their full filesystem paths.
+For multiple items both actions use text with one item per line. Link mark item, Copy mark item and
+Move mark item require loaded selected items and no prepared transfer. Their respective execute and abort actions require
 that workflow to be prepared. Link, Copy and Move use the application's mutually
-exclusive prepared-operation workflows, not the Windows clipboard: get prepares
-selected paths, paste operates in the current folder, and abort clears the
-prepared operation. Link paste creates Shell shortcuts without changing the sources.
-The application-owned New, Link paste, Copy paste and Move paste
+exclusive prepared-operation workflows, not the Windows clipboard: mark item prepares
+selected paths, execute operates in the current folder, and abort clears the
+prepared operation. Item clipboard copy invokes the Shell Copy verb for its selection and
+Item clipboard paste invokes the Shell Paste verb in the current directory; these actions
+and external clipboard operations do not change the internal workflows. Link execute
+creates Shell shortcuts without changing the sources.
+The application-owned New, Link execute, Copy execute and Move execute
 actions use the same ContentView insertion completion as the toolbar: they
 reset filters that hide inserted items, select the inserted items and scroll the
 first into view. This includes items transferred before a later failure. Native
@@ -282,8 +286,8 @@ its extensions receive the mixed selection and decide what to offer. The
 application does not establish that every offered command applies to every
 item, or that the resulting menu is a subset of the normal Windows menu.
 The directory-only registry and whitelist classification is not used. Rename
-is disabled for multiple selections; Name get and Path get copy all selected
-names or paths, Link get, Copy get and Move get stage all selected items, and Delete
+is disabled for multiple selections; Name clipboard copy and Path clipboard copy copy all selected
+names or paths, Link mark item, Copy mark item and Move mark item stage all selected items, and Delete
 requires each item to be deletable.
 
 ### Directory Classification: Three Alternative Criteria
@@ -462,10 +466,10 @@ includes mixed selections; "directories" means directory-only selections.
 
 | Shell action and verb | Base Menu | Content Menu | Reason or application equivalent |
 | --- | --- | --- | --- |
-| Copy `copy` | Excluded | Excluded | Copy get prepares the application workflow. |
-| Cut `cut` | Excluded | Excluded | Move get prepares the application workflow. |
-| Paste `paste` | Excluded | Excluded | Copy paste or Move paste completes a prepared workflow. |
-| Copy as path `copyaspath` | Excluded | Excluded | Path get copies the selected paths as text. |
+| Copy `copy` | Excluded | Excluded | Item clipboard copy copies the selected items to the clipboard. |
+| Cut `cut` | Excluded | Excluded | Move mark item prepares the application workflow. |
+| Paste `paste` | Excluded | Excluded | Item clipboard paste uses the Windows clipboard. |
+| Copy as path `copyaspath` | Excluded | Excluded | Path clipboard copy copies the selected paths as text. |
 | Rename `rename` | Excluded | Excluded | Rename starts the application's inline editor. |
 | Delete `delete` | Excluded | Excluded | Delete uses the application's Shell-backed operation. |
 | Create shortcut `link` | Files: excluded; directories: retained when matched | Files: excluded; directories: retained unless identified as a duplicate | There is no application replacement. |

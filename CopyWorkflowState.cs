@@ -11,7 +11,7 @@ internal sealed class CopyWorkflowState
     public bool IsPrepared => _preparedPaths is not null;
 
     public IReadOnlyList<string> PreparedPaths => _preparedPaths ??
-        throw new InvalidOperationException("There is no prepared copy to paste.");
+        throw new InvalidOperationException("There is no prepared copy to execute.");
 
     public void Prepare(IEnumerable<string> paths)
     {
@@ -20,27 +20,13 @@ internal sealed class CopyWorkflowState
 
         var selectedPaths = paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (selectedPaths.Length == 0)
-            throw new InvalidOperationException("Select one or more items before using Copy get.");
+            throw new InvalidOperationException("Select one or more items before using Copy mark item.");
 
         _preparedPaths = selectedPaths;
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    public bool TryPrepareFromShell(IEnumerable<string> paths)
-    {
-        if (IsPrepared)
-            return false;
-
-        var selectedPaths = paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        if (selectedPaths.Length == 0)
-            return false;
-
-        _preparedPaths = selectedPaths;
-        Changed?.Invoke(this, EventArgs.Empty);
-        return true;
-    }
-
-    public void CompletePaste() => ClearPreparedPaths();
+    public void CompleteExecute() => ClearPreparedPaths();
 
     public void Abort() => ClearPreparedPaths();
 

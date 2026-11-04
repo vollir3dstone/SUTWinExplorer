@@ -185,6 +185,24 @@ internal static class SutShell
     internal static void Copy(IReadOnlyList<string> paths, string destination, IntPtr owner, IList<string> insertedPaths) =>
         ShellFileOperations.Copy(paths, destination, owner, insertedPaths);
 
+    internal static void CopyToClipboard(IReadOnlyList<string> paths, IntPtr owner)
+    {
+        using var menu = SutContextMenuFactory.GetItemMenu(paths, owner);
+        menu.InvokeVerb("copy");
+    }
+
+    internal static bool ClipboardContainsItems()
+    {
+        try { return System.Windows.Clipboard.ContainsFileDropList(); }
+        catch (ExternalException) { return false; }
+    }
+
+    internal static void PasteFromClipboard(string path, IntPtr owner)
+    {
+        using var menu = SutContextMenuFactory.GetItemMenu([path], owner);
+        menu.InvokeVerb("paste");
+    }
+
     internal static void Move(IReadOnlyList<string> paths, string destination, IntPtr owner, IList<string> insertedPaths) =>
         ShellFileOperations.Move(paths, destination, owner, insertedPaths);
 

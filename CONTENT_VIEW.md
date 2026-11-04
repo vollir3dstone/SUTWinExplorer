@@ -169,7 +169,7 @@ Each placeholder carries its snapshot path, so ContentView can retain selections
 even before their full records are loaded. On refresh it restores the selected
 paths in the new snapshot, including off-screen rows; paths no longer present or
 excluded by the filters are dropped. Navigating to another location clears the
-selection. Link get, Copy get and Move get stage all selected paths. Name get and Path get
+selection. Link mark item, Copy mark item and Move mark item stage all selected paths. Name clipboard copy and Path clipboard copy
 copy all selected filesystem leaf names or paths as text, one per line; file
 names include their extensions. Rename requires exactly one loaded selection.
 Delete operates on selected files
@@ -286,11 +286,11 @@ The **VIEW** and **FOR SELECTED** rows are above the table; the area above the
 DIRECTORY column is empty. The **VIEW** row controls the content's **Hide directories**, **Hide internal**,
 and **Name pattern** filters. These settings are local to the Pathview; the
 content **Hide internal** setting is independent of the tree filters. The
-**DIRECTORY** column to the left of the table offers New and Link/Copy/Move abort and paste. New opens a
+**DIRECTORY** column to the left of the table offers New, Item clipboard paste and Link/Copy/Move abort and execute. New opens a
 dialog to choose a type and name before creating the item in the current
 filesystem directory. It is disabled for virtual or unavailable locations.
 The background Content Menu opens the same dialog. The **FOR SELECTED** row offers
-Properties, Name get, Path get, Link get, Copy get, Move get, Rename, and Delete. Properties opens
+Properties, Name clipboard copy, Path clipboard copy, Item clipboard copy, Link mark item, Copy mark item, Move mark item, Rename, and Delete. Properties opens
 the Windows Shell properties for one or more loaded selected items. Button availability
 depends on the local selection and on the shared transfer state.
 
@@ -320,15 +320,15 @@ creation never overwrites an existing item.
 
 Link, Copy and Move are logically content operations, but their prepared states are
 shared application-wide, not stored in a ContentView instance. A user can
-stage source paths in one tab and paste into the current directory of another
-tab. A prepared operation enables its own paste and abort actions and disables
-the other transfer groups. Link paste creates `.lnk` files pointing to the
+mark source paths in one tab and execute into the current directory of another
+tab. A prepared operation enables its own execute and abort actions and disables
+the other transfer groups. Link execute creates `.lnk` files pointing to the
 selected sources without changing them. Its names use ` - Shortcut` and a
 number when necessary to avoid overwriting existing items. Abort clears the prepared paths; a
-successful paste clears them after the operation returns. Selection and filter
+successful execute clears them after the operation returns. Selection and filter
 settings remain local to each view.
 
-New and application-owned Link/Copy/Move pastes finish through the same ContentView
+New and application-owned Link/Copy/Move operations finish through the same ContentView
 operation, `RevealInsertedItems`. It disables Hide directories for inserted
 directories, disables Hide internal for inserted internal items, and clears the
 name pattern if any inserted item does not match. Other filters and other views
@@ -338,17 +338,20 @@ by the Shell, and Link reports the shortcut names it creates; items already tran
 a later item fails. Native Shell menu and extension operations remain
 Shell-owned and do not use this completion.
 
-Staging stores paths, not handles or reservations. Paste performs preflight
+Marking stores paths, not handles or reservations. Execute performs preflight
 checks, but paths and permissions can change afterward; a multi-item operation
 is not atomic and can partially complete before a later error. Failed preflight
 does not start a transfer and leaves the staged state available. See the
 [behavior specification](./SHELL_EXPLORER_BEHAVIOR_SPEC.md#content-listing)
 for the full rules, error behavior, and acceptance criteria.
 
-The app-owned workflows do not use the Shell clipboard for their transfer
-state. An optional Shell Copy integration bridges Shell Copy into the Copy
-workflow; it does not turn Shell Cut into Move. Shell context-menu and
-clipboard operations remain Shell-owned.
+The app-owned workflows do not use or change the Shell clipboard. Item clipboard copy
+copies the selected filesystem items to the clipboard; Item clipboard paste invokes the
+Shell paste command in the current directory, including Shell Cut semantics.
+Item clipboard copy is in the same selection-row group as Name and Path clipboard copy;
+Item clipboard paste is in the DIRECTORY column before the Link group. Item clipboard paste is enabled for a filesystem clipboard
+and an existing destination directory. These clipboard actions and
+external clipboard operations do not alter any prepared workflow.
 
 ## Historical Interface to Pathview
 
@@ -629,10 +632,9 @@ operation errors and clears the prepared state only after the operation
 returns successfully. Preflight cannot prevent subsequent changes and no
 rollback is performed after a partial transfer.
 
-`MainWindow` owns the optional `ShellCopyIntegration` clipboard listener.
-Toolbar Copy get stages the selection and asks this integration to invoke the
-Shell Copy verb. An external Shell Copy notification aborts a prepared Link or Move
-and attempts to prepare Copy; an already prepared Copy is not replaced.
+Toolbar and Base Menu Item clipboard copy invoke the Shell Copy verb, and Item clipboard paste invokes
+the Shell Paste verb for the current directory. Clipboard changes update Item
+clipboard paste availability but do not prepare, cancel, or replace internal transfers.
 
 Rename is enabled for exactly one selected filesystem item and starts the
 Shell inline editor. Do not invoke the selection `IContextMenu` with the
@@ -642,7 +644,7 @@ Shell IDList Array as `TYMED_HGLOBAL`, and calls `IShellView.SelectItem` with
 the single relative child PIDL and `SVSI_EDIT` (`0x0003`). The medium remains
 locked during that call; the medium and managed/raw COM references are
 released in `finally`. The Shell owns validation, commit/cancel, and
-name-collision behavior. Name get uses the filesystem leaf name; Path get uses the
+name-collision behavior. Name clipboard copy uses the filesystem leaf name; Path clipboard copy uses the
 selected filesystem path; Delete and native Shell context-menu operations remain
 selection-aware.
 

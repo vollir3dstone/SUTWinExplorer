@@ -85,8 +85,8 @@ try {
         $pattern.Text = 'unrelated*'
         $copyWorkflow = $assembly.GetType('SUTWinExplorer.CopyWorkflowState', $true).GetProperty('Shared').GetValue($null)
         $copyWorkflow.Prepare([string[]] @($hiddenFile, $newFolder))
-        if (-not $view.FindName('CopyPasteButton').IsEnabled) { throw 'Copy paste did not become enabled.' }
-        $view.FindName('CopyPasteButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        if (-not $view.FindName('CopyExecuteButton').IsEnabled) { throw 'Copy execute did not become enabled.' }
+        $view.FindName('CopyExecuteButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         $copyTargets = [string[]] @((Join-Path $destination '.inserted.txt'), (Join-Path $destination 'inserted-folder'))
         Wait-Selection $view $copyTargets
         if ($hideDirectories.IsChecked -or $hideInternal.IsChecked -or $pattern.Text -ne '') {
@@ -96,13 +96,13 @@ try {
         $linkWorkflow = $assembly.GetType('SUTWinExplorer.LinkWorkflowState', $true).GetProperty('Shared').GetValue($null)
         $pattern.Text = 'unrelated*'
         $linkWorkflow.Prepare([string[]] @($first, $second))
-        if (-not $view.FindName('LinkPasteButton').IsEnabled -or $view.FindName('CopyGetButton').IsEnabled -or
-            $view.FindName('MoveGetButton').IsEnabled) { throw 'Prepared Link did not update the transfer buttons.' }
-        $view.FindName('LinkPasteButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        if (-not $view.FindName('LinkExecuteButton').IsEnabled -or $view.FindName('CopyMarkItemButton').IsEnabled -or
+            $view.FindName('MoveMarkItemButton').IsEnabled) { throw 'Prepared Link did not update the transfer buttons.' }
+        $view.FindName('LinkExecuteButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         $linkTargets = [string[]] @((Join-Path $destination 'first.txt - Shortcut.lnk'), (Join-Path $destination 'second.txt - Shortcut.lnk'))
         Wait-Selection $view $linkTargets
         if ($linkWorkflow.IsPrepared -or $pattern.Text -ne '' -or -not [IO.File]::Exists($first) -or -not [IO.File]::Exists($second)) {
-            throw 'Link paste did not complete, retain its sources, and clear the blocking name filter.'
+            throw 'Link execute did not complete, retain its sources, and clear the blocking name filter.'
         }
 
         foreach ($index in 1..80) { [IO.File]::WriteAllText((Join-Path $destination ('earlier-{0:D3}.txt' -f $index)), 'row') }
@@ -113,7 +113,7 @@ try {
         $pattern.Text = '*.txt'
         $moveWorkflow = $assembly.GetType('SUTWinExplorer.MoveWorkflowState', $true).GetProperty('Shared').GetValue($null)
         $moveWorkflow.Prepare([string[]] @($moveFile))
-        $view.FindName('MovePasteButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        $view.FindName('MoveExecuteButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         Wait-Selection $view ([string[]] @((Join-Path $destination 'zzzz-visible-move.txt')))
         if (-not $hideDirectories.IsChecked -or -not $hideInternal.IsChecked -or $pattern.Text -ne '*.txt') {
             throw 'Move cleared filters that do not hide the inserted item.'
@@ -138,23 +138,23 @@ try {
         [IO.File]::WriteAllText($menuCopy, 'menu')
         $copyWorkflow.Prepare([string[]] @($menuCopy))
         $menuAction = $pathview.GetType().GetMethod('ExecuteDirectoryMenuAction', $viewFlags)
-        $null = $menuAction.Invoke($pathview, [object[]] @([string] 'CopyPaste', $null))
+        $null = $menuAction.Invoke($pathview, [object[]] @([string] 'CopyExecute', $null))
         Wait-Selection $directoryContent ([string[]] @((Join-Path $destination 'menu-copy.txt')))
         if ($directoryContent.FindName('NamePatternTextBox').Text -ne '') { throw 'Directory menu copy did not clear the blocking name filter.' }
 
         $menuMove = Join-Path $source 'menu-move.txt'
         [IO.File]::WriteAllText($menuMove, 'menu move')
         $moveWorkflow.Prepare([string[]] @($menuMove))
-        $null = $menuAction.Invoke($pathview, [object[]] @([string] 'MovePaste', $null))
+        $null = $menuAction.Invoke($pathview, [object[]] @([string] 'MoveExecute', $null))
         Wait-Selection $directoryContent ([string[]] @((Join-Path $destination 'menu-move.txt')))
         $menuLink = Join-Path $source 'menu-link.txt'
         [IO.File]::WriteAllText($menuLink, 'menu link')
         $directoryContent.FindName('NamePatternTextBox').Text = 'unrelated*'
         $linkWorkflow.Prepare([string[]] @($menuLink))
-        $null = $menuAction.Invoke($pathview, [object[]] @([string] 'LinkPaste', $null))
+        $null = $menuAction.Invoke($pathview, [object[]] @([string] 'LinkExecute', $null))
         Wait-Selection $directoryContent ([string[]] @((Join-Path $destination 'menu-link.txt - Shortcut.lnk')))
         if ($linkWorkflow.IsPrepared -or $directoryContent.FindName('NamePatternTextBox').Text -ne '' -or -not [IO.File]::Exists($menuLink)) {
-            throw 'Directory menu Link paste did not complete and reveal its shortcut.'
+            throw 'Directory menu Link execute did not complete and reveal its shortcut.'
         }
         $sourceView = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
         $null = $sourceView.GetType().GetMethod('Initialize', $viewFlags).Invoke($sourceView, [object[]] @([bool] $false))
@@ -170,23 +170,15 @@ try {
             [IO.File]::WriteAllText($crossTabFile, 'cross tab')
             $null = $sourceView.GetType().GetMethod('RevealInsertedItems', $viewFlags).Invoke($sourceView, [object[]] @(,[string[]] @($crossTabFile)))
             Wait-Selection $sourceView ([string[]] @($crossTabFile))
-            $sourceView.FindName('LinkGetButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-            if (-not $linkWorkflow.IsPrepared -or -not $directoryContent.FindName('LinkPasteButton').IsEnabled -or
-                $directoryContent.FindName('CopyGetButton').IsEnabled) { throw 'Prepared Link was not shared across ContentViews.' }
-            $directoryContent.FindName('LinkPasteButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            $sourceView.FindName('LinkMarkItemButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            if (-not $linkWorkflow.IsPrepared -or -not $directoryContent.FindName('LinkExecuteButton').IsEnabled -or
+                $directoryContent.FindName('CopyMarkItemButton').IsEnabled) { throw 'Prepared Link was not shared across ContentViews.' }
+            $directoryContent.FindName('LinkExecuteButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
             Wait-Selection $directoryContent ([string[]] @((Join-Path $destination 'cross-tab.txt - Shortcut.lnk')))
-            if ($linkWorkflow.IsPrepared -or $sourceView.FindName('LinkPasteButton').IsEnabled -or -not [IO.File]::Exists($crossTabFile)) {
-                throw 'Cross-view Link paste did not reset the shared state and retain the source.'
+            if ($linkWorkflow.IsPrepared -or $sourceView.FindName('LinkExecuteButton').IsEnabled -or -not [IO.File]::Exists($crossTabFile)) {
+                throw 'Cross-view Link execute did not reset the shared state and retain the source.'
             }
         } finally { $sourceWindow.Close() }
-        $linkWorkflow.Prepare([string[]] @($first))
-        $mainWindowType = $assembly.GetType('SUTWinExplorer.MainWindow', $true)
-        $mainWindow = [Runtime.CompilerServices.RuntimeHelpers]::GetUninitializedObject($mainWindowType)
-        $null = $mainWindowType.GetMethod('HandleExternalShellCopy', $viewFlags).Invoke($mainWindow, [object[]] @(,[string[]] @($second)))
-        if ($linkWorkflow.IsPrepared -or -not $copyWorkflow.IsPrepared -or @($copyWorkflow.PreparedPaths)[0] -cne $second) {
-            throw 'External Shell Copy did not replace the prepared Link.'
-        }
-        $copyWorkflow.Abort()
     } finally {
         $window.Close()
         [System.Threading.SynchronizationContext]::SetSynchronizationContext($previousContext)

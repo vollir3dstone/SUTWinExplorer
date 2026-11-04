@@ -326,7 +326,7 @@ public sealed class SutShellRightClickProbe : System.IDisposable
     private long secondClickAt;
     private long noMenuCheckAt;
     public static uint PropertiesCommandId;
-    public static uint NameGetCommandId;
+    public static uint NameClipboardCopyCommandId;
     public bool FirstMenu;
     public bool SecondMenu;
     public bool SecondWasBase;
@@ -397,7 +397,7 @@ public sealed class SutShellRightClickProbe : System.IDisposable
                 var menu = SendMessage(window, 0x01E1, System.IntPtr.Zero, System.IntPtr.Zero);
                 var label = new System.Text.StringBuilder(512);
                 GetMenuString(menu, 2, label, label.Capacity, 0x400);
-                var isBase = GetMenuItemID(menu, 0) == PropertiesCommandId && GetMenuItemID(menu, 2) == NameGetCommandId;
+                var isBase = GetMenuItemID(menu, 0) == PropertiesCommandId && GetMenuItemID(menu, 2) == NameClipboardCopyCommandId;
                 if (phase == 0 && ObservedFirstLabel == null) ObservedFirstLabel = label.ToString();
                 if (phase == 0 && isBase)
                 {
@@ -621,9 +621,9 @@ function Assert-True([bool] $condition, [string] $message) {
 }
 
 function Test-BaseMenu($probe) {
-    $probe.ItemCount -ge 5 -and $probe.CommandIds[0] -eq (Get-ActionCommandId 'Properties') -and $probe.CommandIds[2] -eq (Get-ActionCommandId 'NameGet')
+    $probe.ItemCount -ge 5 -and $probe.CommandIds[0] -eq (Get-ActionCommandId 'Properties') -and $probe.CommandIds[2] -eq (Get-ActionCommandId 'NameClipboardCopy')
 }
-$standardActionIds = @('Properties', 'NameGet', 'PathGet', 'LinkGet', 'LinkAbort', 'LinkPaste', 'CopyGet', 'CopyAbort', 'CopyPaste', 'MoveGet', 'MoveAbort', 'MovePaste', 'Rename', 'Delete')
+$standardActionIds = @('Properties', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', 'ItemClipboardPaste', 'LinkMarkItem', 'LinkAbort', 'LinkExecute', 'CopyMarkItem', 'CopyAbort', 'CopyExecute', 'MoveMarkItem', 'MoveAbort', 'MoveExecute', 'Rename', 'Delete')
 function Get-ActionCommandId([string] $id) {
     $index = [Array]::IndexOf($menuActionOrder, $id)
     if ($index -lt 0) { throw "Unknown menu action: $id" }
@@ -1188,7 +1188,7 @@ try {
     $null = $view.GetType().GetMethod('Initialize', $viewFlags).Invoke($view, [object[]] @([bool] $true))
     $menuActionOrder = @($view.GetType().GetMethod('CreateContextMenuActions', $viewFlags).Invoke($view, @()) | ForEach-Object { $_.Id })
     [SutShellRightClickProbe]::PropertiesCommandId = Get-ActionCommandId 'Properties'
-    [SutShellRightClickProbe]::NameGetCommandId = Get-ActionCommandId 'NameGet'
+    [SutShellRightClickProbe]::NameClipboardCopyCommandId = Get-ActionCommandId 'NameClipboardCopy'
     $window = [System.Windows.Window]::new()
     $window.ShowInTaskbar = $false
     $window.Left = -20000
@@ -1300,13 +1300,13 @@ try {
         Assert-True ($newButton.IsEnabled -and -not $propertiesButton.IsEnabled -and
             $newPosition.X + $newButton.ActualWidth -le $listPosition.X -and $propertiesPosition.Y -lt $listPosition.Y -and
             $badge.Child.Text -eq 'DIRECTORY') 'The directory column, selection row or initial button states were incorrect.'
-        foreach ($buttonName in @('NewButton', 'LinkAbortButton', 'LinkPasteButton', 'CopyAbortButton', 'CopyPasteButton', 'MoveAbortButton', 'MovePasteButton')) {
+        foreach ($buttonName in @('NewButton', 'LinkAbortButton', 'LinkExecuteButton', 'CopyAbortButton', 'CopyExecuteButton', 'MoveAbortButton', 'MoveExecuteButton')) {
             $button = $view.FindName($buttonName)
             Assert-True ([Math]::Abs($button.ActualWidth - $badge.ActualWidth) -lt 1) "$buttonName did not match the directory badge width."
         }
         $previousBottom = $headingPosition.Y + $heading.ActualHeight
         $gaps = @()
-        foreach ($group in @(@('NewButton'), @('LinkAbortButton', 'LinkPasteButton'), @('CopyAbortButton', 'CopyPasteButton'), @('MoveAbortButton', 'MovePasteButton'))) {
+        foreach ($group in @(@('NewButton'), @('LinkAbortButton', 'LinkExecuteButton'), @('CopyAbortButton', 'CopyExecuteButton'), @('MoveAbortButton', 'MoveExecuteButton'))) {
             $first = $view.FindName($group[0])
             $last = $view.FindName($group[-1])
             $firstPosition = $first.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
@@ -1317,7 +1317,7 @@ try {
         }
         $gaps += $listPosition.Y + $list.ActualHeight - $previousBottom
         Assert-True (($gaps | Measure-Object -Maximum).Maximum - ($gaps | Measure-Object -Minimum).Minimum -lt 1) 'Directory action groups were not evenly spaced.'
-        foreach ($buttonName in @('RenameButton', 'NameGetButton', 'PathGetButton', 'LinkGetButton', 'CopyGetButton', 'MoveGetButton', 'DeleteButton')) {
+        foreach ($buttonName in @('RenameButton', 'NameClipboardCopyButton', 'PathClipboardCopyButton', 'LinkMarkItemButton', 'CopyMarkItemButton', 'MoveMarkItemButton', 'DeleteButton')) {
             $position = $view.FindName($buttonName).TranslatePoint([System.Windows.Point]::new(0, 0), $view)
             Assert-True ([Math]::Abs($position.Y - $propertiesPosition.Y) -lt 1 -and $position.X -gt $propertiesPosition.X) "$buttonName was not after Properties in the selection row."
         }
@@ -1506,8 +1506,8 @@ try {
         $list.SelectedItems.Add($list.Items[$list.Items.Count - 1]) | Out-Null
         $selectedEntries = @($list.SelectedItems | ForEach-Object { $_.Entry })
         $selectedPaths = @($list.SelectedItems | ForEach-Object { $_.Entry.FullPath })
-        Assert-True ($list.SelectedItems.Count -eq 2 -and $view.FindName('CopyGetButton').IsEnabled -and
-            $view.FindName('NameGetButton').IsEnabled -and $view.FindName('PathGetButton').IsEnabled -and -not $view.FindName('RenameButton').IsEnabled) 'Multiple selection or its toolbar state failed.'
+        Assert-True ($list.SelectedItems.Count -eq 2 -and $view.FindName('CopyMarkItemButton').IsEnabled -and
+            $view.FindName('NameClipboardCopyButton').IsEnabled -and $view.FindName('PathClipboardCopyButton').IsEnabled -and -not $view.FindName('RenameButton').IsEnabled) 'Multiple selection or its toolbar state failed.'
         $columns[6].Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         Assert-True ($view.FindName('SizeSortIndicator').Visibility -eq 'Visible' -and
             $view.FindName('SizeSortIndicator').Text -ceq [string] [char] 0x25B2) 'Ascending size indicator was not shown.'
@@ -1567,7 +1567,7 @@ try {
             Assert-True ([object]::ReferenceEquals($selectedEntry, $restoredEntry)) 'GUI sorting or filtering reloaded a cached entry.'
         }
         foreach ($operation in @('Copy', 'Move')) {
-            $view.FindName("${operation}GetButton").RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            $view.FindName("${operation}MarkItemButton").RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
             $workflowType = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true)
             $workflow = $workflowType.GetProperty('Shared').GetValue($null)
             $preparedPaths = @($workflow.PreparedPaths)
@@ -1825,7 +1825,7 @@ try {
         $list.SelectedItems.Clear()
         $list.SelectedItems.Add($notesMenuRow) | Out-Null
         $list.SelectedItems.Add($otherFileRow) | Out-Null
-        foreach ($selection in @($null, 'LinkGet', 'LinkAbort', 'CopyGet', 'CopyAbort', 'MoveGet', 'MoveAbort')) {
+        foreach ($selection in @($null, 'LinkMarkItem', 'LinkAbort', 'CopyMarkItem', 'CopyAbort', 'MoveMarkItem', 'MoveAbort')) {
             $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
             if ($null -ne $selection) { $menuProbe.SelectCommandId = Get-ActionCommandId $selection }
             try {
@@ -1834,12 +1834,12 @@ try {
                 Assert-True (($menuProbe.States[0] -band 3) -eq 0 -and ($menuProbe.States[2] -band 3) -eq 0 -and ($menuProbe.States[3] -band 3) -eq 0 -and ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'Rename')] -band 3) -ne 0) 'Multiple file selection actions have incorrect states.'
                 if ($null -ne $selection) { Assert-True ($menuProbe.SelectIndex -ge 0 -and ($menuProbe.States[$menuProbe.SelectIndex] -band 3) -eq 0) "Multi-file command $selection was disabled." }
             } finally { $menuProbe.Dispose() }
-            if ($selection -in @('LinkGet', 'CopyGet', 'MoveGet')) {
+            if ($selection -in @('LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem')) {
                 $operation = $selection -replace 'Get$', ''
                 $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
                 $preparedPaths = @($workflow.PreparedPaths)
                 Assert-True ($workflow.IsPrepared -and $preparedPaths.Count -eq 2 -and
-                    @($multiPaths | Where-Object { $_ -notin $preparedPaths }).Count -eq 0) "Multi-file $operation get did not prepare both files."
+                    @($multiPaths | Where-Object { $_ -notin $preparedPaths }).Count -eq 0) "Multi-file $operation mark item did not prepare both files."
             } elseif ($selection -in @('LinkAbort', 'CopyAbort', 'MoveAbort')) {
                 $operation = $selection -replace 'Abort$', ''
                 $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
@@ -2197,12 +2197,12 @@ try {
                     $list.SelectedItems.Count -eq 1 -and $list.SelectedItem.Entry.FullPath -eq $otherMenuRow.Entry.FullPath) "A right-click on another selected row after dismissing the menu did not start a new single-item menu: menu=$($menuProbe.ItemCount), selection=$($list.SelectedItems.Count), selected=$($list.SelectedItem.Entry.FullPath), handled=$($rightClick.Handled)."
             } finally { $menuProbe.Dispose() }
             $copyWorkflow = $assembly.GetType('SUTWinExplorer.CopyWorkflowState', $true).GetProperty('Shared').GetValue($null)
-            Assert-True (-not $copyWorkflow.IsPrepared) 'The second right-click activated Copy get.'
+            Assert-True (-not $copyWorkflow.IsPrepared) 'The second right-click activated Copy mark item.'
             $list.SelectedItems.Clear()
             $list.SelectedItem = $notesMenuRow
             [SutShellRightClickProbe]::MovePointer([int] $startPoint.X, [int] $startPoint.Y)
             $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-            $menuProbe.SelectCommandId = Get-ActionCommandId 'CopyGet'
+            $menuProbe.SelectCommandId = Get-ActionCommandId 'CopyMarkItem'
             $menuProbe.SelectWithRightButton = $true
             try {
                 $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
@@ -2323,7 +2323,7 @@ try {
         } finally { $menuProbe.Dispose() }
         $originalClipboard = [System.Windows.Clipboard]::GetDataObject()
         try {
-            foreach ($selection in @($null, 'NameGet', 'PathGet', 'LinkGet', 'LinkAbort', 'CopyGet', 'CopyAbort', 'MoveGet', 'MoveAbort', 'Rename')) {
+            foreach ($selection in @($null, 'NameClipboardCopy', 'PathClipboardCopy', 'LinkMarkItem', 'LinkAbort', 'CopyMarkItem', 'CopyAbort', 'MoveMarkItem', 'MoveAbort', 'Rename')) {
                 $buttonStates = @($standardActionIds |
                     ForEach-Object { $view.FindName($_ + 'Button').IsEnabled })
                 $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
@@ -2355,14 +2355,14 @@ try {
                     }
                     if ($null -ne $selection) { Assert-True ($menuProbe.SelectIndex -ge 0 -and ($menuProbe.States[$menuProbe.SelectIndex] -band 3) -eq 0) "Command $selection was disabled." }
                 } finally { $menuProbe.Dispose() }
-                if ($selection -eq 'NameGet') {
-                    Assert-True ([System.Windows.Clipboard]::GetText() -ceq 'notes.txt') 'Name get did not put the selected name on the clipboard.'
-                } elseif ($selection -eq 'PathGet') {
-                    Assert-True ([System.Windows.Clipboard]::GetText() -ceq (Join-Path $directory 'notes.txt')) 'Path get did not put the selected path on the clipboard.'
-                } elseif ($selection -in @('LinkGet', 'CopyGet', 'MoveGet')) {
+                if ($selection -eq 'NameClipboardCopy') {
+                    Assert-True ([System.Windows.Clipboard]::GetText() -ceq 'notes.txt') 'Name clipboard copy did not put the selected name on the clipboard.'
+                } elseif ($selection -eq 'PathClipboardCopy') {
+                    Assert-True ([System.Windows.Clipboard]::GetText() -ceq (Join-Path $directory 'notes.txt')) 'Path clipboard copy did not put the selected path on the clipboard.'
+                } elseif ($selection -in @('LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem')) {
                     $operation = $selection -replace 'Get$', ''
                     $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
-                    Assert-True ($workflow.IsPrepared -and @($workflow.PreparedPaths)[0] -ceq (Join-Path $directory 'notes.txt')) "$operation get did not prepare the selected file."
+                    Assert-True ($workflow.IsPrepared -and @($workflow.PreparedPaths)[0] -ceq (Join-Path $directory 'notes.txt')) "$operation mark item did not prepare the selected file."
                 } elseif ($selection -in @('LinkAbort', 'CopyAbort', 'MoveAbort')) {
                     $operation = $selection -replace 'Abort$', ''
                     $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
@@ -2386,13 +2386,13 @@ try {
                 $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
                 $workflow.Prepare([string[]] @($sourceFile))
                 $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-                $menuProbe.SelectCommandId = Get-ActionCommandId "${operation}Paste"
+                $menuProbe.SelectCommandId = Get-ActionCommandId "${operation}Execute"
                 try {
                     $null = $showMenu.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject))
-                    Assert-True (($menuProbe.States[$menuProbe.SelectIndex] -band 3) -eq 0) "$operation paste was disabled."
+                    Assert-True (($menuProbe.States[$menuProbe.SelectIndex] -band 3) -eq 0) "$operation execute was disabled."
                 } finally { $menuProbe.Dispose() }
-                Assert-True ([System.IO.File]::Exists($destinationFile) -and -not $workflow.IsPrepared) "$operation paste did not complete the prepared workflow."
-                Assert-True (([System.IO.File]::Exists($sourceFile)) -eq ($operation -eq 'Copy')) "$operation paste did not preserve the expected source state."
+                Assert-True ([System.IO.File]::Exists($destinationFile) -and -not $workflow.IsPrepared) "$operation execute did not complete the prepared workflow."
+                Assert-True (([System.IO.File]::Exists($sourceFile)) -eq ($operation -eq 'Copy')) "$operation execute did not preserve the expected source state."
                 $frame = [System.Windows.Threading.DispatcherFrame]::new()
                 $probe = [SutShellUiProbe]::new()
                 $probe.List = $list
@@ -2403,7 +2403,7 @@ try {
                 $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
                 $timer.Start()
                 try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-                Assert-True $probe.Ready "Rows did not reload after $operation paste: $($probe.Error)"
+                Assert-True $probe.Ready "Rows did not reload after $operation execute: $($probe.Error)"
                 $notesMenuRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'notes.txt') })[0]
                 $list.SelectedItem = $notesMenuRow
                 Remove-Item -LiteralPath $destinationFile -Force
@@ -2475,7 +2475,7 @@ try {
         try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
         Assert-True $probe.Ready "Scrolling did not load and render the requested range: $($probe.Error)"
         $list.SelectedItem = $list.Items[0]
-        Assert-True ($view.FindName('NameGetButton').IsEnabled -and $view.FindName('PathGetButton').IsEnabled) 'Selecting a loaded row must enable Name get and Path get.'
+        Assert-True ($view.FindName('NameClipboardCopyButton').IsEnabled -and $view.FindName('PathClipboardCopyButton').IsEnabled) 'Selecting a loaded row must enable Name clipboard copy and Path clipboard copy.'
         $frame = [System.Windows.Threading.DispatcherFrame]::new()
         $probe = [SutShellUiProbe]::new()
         $probe.List = $list
@@ -2731,12 +2731,12 @@ try {
             Assert-True ($menuProbe.SelectIndex -eq 0 -and $propertiesProbe.Opened) 'Directory properties did not open a Windows dialog from the Base Menu.'
         } finally { $menuProbe.Dispose(); $propertiesProbe.Dispose() }
         $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-        $menuProbe.SelectCommandId = Get-ActionCommandId 'CopyGet'
+        $menuProbe.SelectCommandId = Get-ActionCommandId 'CopyMarkItem'
         try {
             $null = $showMenu.Invoke($view, [object[]] @($folderRow.PSObject.BaseObject))
             $workflow = $assembly.GetType('SUTWinExplorer.CopyWorkflowState', $true).GetProperty('Shared').GetValue($null)
             Assert-True ($workflow.IsPrepared -and @($workflow.PreparedPaths).Count -eq 1 -and
-                @($workflow.PreparedPaths)[0] -eq $folderRow.Entry.FullPath) 'Copy get did not prepare the selected directory.'
+                @($workflow.PreparedPaths)[0] -eq $folderRow.Entry.FullPath) 'Copy mark item did not prepare the selected directory.'
         } finally {
             $menuProbe.Dispose()
             $view.FindName('CopyAbortButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
@@ -2816,7 +2816,7 @@ try {
                     Assert-True ($isBase -eq ($menuKind -eq 'base')) "The mixed menu did not alternate to $menuKind."
                     if ($isBase) {
                         Assert-True (($menuProbe.States[0] -band 3) -eq 0 -and ($menuProbe.States[2] -band 3) -eq 0 -and ($menuProbe.States[3] -band 3) -eq 0 -and
-                            ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'CopyGet')] -band 3) -eq 0 -and ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'MoveGet')] -band 3) -eq 0 -and
+                            ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'CopyMarkItem')] -band 3) -eq 0 -and ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'MoveMarkItem')] -band 3) -eq 0 -and
                             ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'Delete')] -band 3) -eq 0) 'Mixed-selection action states were incorrect.'
                         Assert-True ((Get-MenuActionIndex $menuProbe 'Properties') -eq 0) 'Mixed-selection Base Menu lost Properties.'
                     } else {
@@ -2830,7 +2830,7 @@ try {
             }
             foreach ($operation in @('Copy', 'Move')) {
                 $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-                $menuProbe.SelectCommandId = Get-ActionCommandId "${operation}Get"
+                $menuProbe.SelectCommandId = Get-ActionCommandId "${operation}MarkItem"
                 try { $null = $showMenu.Invoke($view, [object[]] @($firstRow.PSObject.BaseObject)) } finally { $menuProbe.Dispose() }
                 $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
                 $preparedPaths = @($workflow.PreparedPaths)
@@ -2917,7 +2917,7 @@ try {
             $list.SelectedItems.Add($firstDeleteRow) | Out-Null
             $list.SelectedItems.Add($secondDeleteRow) | Out-Null
             Assert-True $view.FindName('DeleteButton').IsEnabled 'Delete was not enabled for two files.'
-            $view.FindName('CopyGetButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            $view.FindName('CopyMarkItemButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
             Assert-True (-not $view.FindName('DeleteButton').IsEnabled) 'Delete was enabled during a prepared Copy.'
             $view.FindName('CopyAbortButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
             $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
@@ -3009,7 +3009,7 @@ try {
                     Assert-True ($isBase -eq ($menuKind -eq 'base')) "Sidebar menu did not alternate independently: tree=$($case.Tree), expected=$menuKind, count=$($menuProbe.ItemCount), path=$($case.Entry.Path), exists=$([IO.Directory]::Exists($case.Entry.Path)), items=$($menuProbe.Items -join '|')."
                     if ($isBase) {
                         Assert-True (($menuProbe.States[0] -band 3) -eq 0 -and ($menuProbe.States[2] -band 3) -eq 0 -and ($menuProbe.States[3] -band 3) -eq 0 -and
-                            ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'CopyGet')] -band 3) -eq 0 -and ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'Delete')] -band 3) -eq 0) 'Sidebar directory action states were incorrect.'
+                            ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'CopyMarkItem')] -band 3) -eq 0 -and ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'Delete')] -band 3) -eq 0) 'Sidebar directory action states were incorrect.'
                     }
                 } finally { $menuProbe.Dispose() }
             }
@@ -3065,7 +3065,7 @@ try {
             try {
                 $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $true))
                 Assert-True (($menuProbe.States[0] -band 3) -ne 0 -and ($menuProbe.States[2] -band 3) -ne 0 -and ($menuProbe.States[3] -band 3) -ne 0 -and
-                    (Get-MenuActionIndex $menuProbe 'CopyGet') -lt 0 -and (Get-MenuActionIndex $menuProbe 'MoveGet') -lt 0 -and ($menuProbe.States[$menuProbe.SelectIndex] -band 3) -eq 0 -and
+                    (Get-MenuActionIndex $menuProbe 'CopyMarkItem') -lt 0 -and (Get-MenuActionIndex $menuProbe 'MoveMarkItem') -lt 0 -and ($menuProbe.States[$menuProbe.SelectIndex] -band 3) -eq 0 -and
                     -not $workflow.IsPrepared) "The sidebar background $operation action did not match the workflow state."
             } finally { $menuProbe.Dispose(); $workflow.Abort() }
         }
@@ -3074,7 +3074,7 @@ try {
             $sidebarOwner = [System.Windows.Interop.WindowInteropHelper]::new($case.Window).Handle
             foreach ($operation in @('Copy', 'Move')) {
                 $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
-                $menuProbe.SelectCommandId = Get-ActionCommandId "${operation}Get"
+                $menuProbe.SelectCommandId = Get-ActionCommandId "${operation}MarkItem"
                 try { $null = $showDirectoryMenu.Invoke($case.View, [object[]] @($case.Entry.PSObject.BaseObject, [bool] $case.Tree, [bool] $false)) }
                 finally { $menuProbe.Dispose() }
                 $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)

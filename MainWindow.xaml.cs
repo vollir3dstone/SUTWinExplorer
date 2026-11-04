@@ -27,7 +27,6 @@ public partial class MainWindow : Window
     private ProfileConfiguration _activeProfile;
     private ProfileStore _profileStore;
     private bool _activeProfileDirty;
-    private ShellCopyIntegration? _shellCopyIntegration;
 
     public MainWindow()
     {
@@ -45,8 +44,6 @@ public partial class MainWindow : Window
         ProfilesPane.ProfileRenameRequested += ProfilesPane_ProfileRenameRequested;
         ProfilesPane.ProfileDeleteRequested += ProfilesPane_ProfileDeleteRequested;
         ProfilesPane.ProfilesRefreshRequested += ProfilesPane_ProfilesRefreshRequested;
-        SourceInitialized += MainWindow_SourceInitialized;
-        Closed += MainWindow_Closed;
         ContentRendered += MainWindow_ContentRendered;
     }
 
@@ -246,38 +243,6 @@ public partial class MainWindow : Window
             return arguments[1].Trim().Trim('\"');
 
         return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-    }
-
-    private void MainWindow_SourceInitialized(object? sender, EventArgs e)
-    {
-        var windowHandle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-        try
-        {
-            _shellCopyIntegration = new ShellCopyIntegration(windowHandle, HandleExternalShellCopy);
-        }
-        catch (Exception exception)
-        {
-            System.Diagnostics.Debug.WriteLine($"Optional Shell Copy integration unavailable: {exception}");
-        }
-    }
-
-    private void MainWindow_Closed(object? sender, EventArgs e)
-    {
-        _shellCopyIntegration?.Dispose();
-        _shellCopyIntegration = null;
-    }
-
-    internal void InvokeToolbarShellCopy(Action invokeShellCopy) =>
-        _shellCopyIntegration?.InvokeToolbarCopy(invokeShellCopy);
-
-    private void HandleExternalShellCopy(IReadOnlyList<string> copiedPaths)
-    {
-        if (LinkWorkflowState.Shared.IsPrepared)
-            LinkWorkflowState.Shared.Abort();
-        if (MoveWorkflowState.Shared.IsPrepared)
-            MoveWorkflowState.Shared.Abort();
-
-        _ = CopyWorkflowState.Shared.TryPrepareFromShell(copiedPaths);
     }
 
     private Pathview? CurrentPathview => (ExplorerTabs.SelectedItem as TabItem)?.Content as Pathview;

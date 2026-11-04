@@ -77,6 +77,7 @@ internal static class SutContextMenuFactory
         var directorySelection = !background && paths.All(Directory.Exists);
         var shortcutSelection = !background && paths.Any(path => string.Equals(Path.GetExtension(path), ".lnk", StringComparison.OrdinalIgnoreCase));
         var absolutePidls = new List<IntPtr>();
+        var menuBitmaps = new List<IntPtr>();
         IntPtr childPidlArray = IntPtr.Zero;
         IntPtr menu = IntPtr.Zero;
         IntPtr keyArray = IntPtr.Zero;
@@ -92,6 +93,7 @@ internal static class SutContextMenuFactory
         void Release()
         {
             if (menu != IntPtr.Zero) _ = DestroyMenu(menu);
+            foreach (var bitmap in menuBitmaps) ShellMenuIcons.Release(bitmap);
             if (contextMenu is not null && Marshal.IsComObject(contextMenu)) _ = Marshal.FinalReleaseComObject(contextMenu);
             if (parentFolder is not null && Marshal.IsComObject(parentFolder)) _ = Marshal.FinalReleaseComObject(parentFolder);
             if (targetFolder is not null && Marshal.IsComObject(targetFolder)) _ = Marshal.FinalReleaseComObject(targetFolder);
@@ -206,7 +208,10 @@ internal static class SutContextMenuFactory
                     if (shortcutSelection) RemoveOpenContaining(menu, contextMenu);
                 }
                 if (actions!.Count > 0)
+                {
                     InsertActions(menu, actions);
+                    ShellMenuIcons.Apply(menu, actions, BaseMenuCommandFirst, menuBitmaps);
+                }
             }
             else if (excludedCommands is not null)
             {
@@ -567,12 +572,15 @@ internal static class SutContextMenuFactory
     private static void InsertActions(IntPtr menu, IReadOnlyList<ShellMenuAction> actions)
     {
         var position = 0u;
+        var insertedTransfer = false;
         for (var index = 0; index < actions.Count; index++)
         {
             var action = actions[index];
             if (action.Id is "Rename" or "Delete" || (action.IsTransfer && !action.IsEnabled))
                 continue;
-            if (action.SeparatorBefore && !InsertMenu(menu, position++, MenuByPosition | MenuSeparator, UIntPtr.Zero, null))
+            var separator = action.SeparatorBefore || (action.IsTransfer && !insertedTransfer);
+            if (action.IsTransfer) insertedTransfer = true;
+            if (separator && !InsertMenu(menu, position++, MenuByPosition | MenuSeparator, UIntPtr.Zero, null))
                 throw new InvalidOperationException("Could not insert the menu separator.");
             if (!InsertMenu(menu, position++, MenuByPosition | (action.IsEnabled ? 0u : MenuDisabled),
                     (UIntPtr)(BaseMenuCommandFirst + (uint)index), action.Label))
@@ -992,7 +1000,10 @@ internal static class SutContextMenuFactory
 
 }
 
-internal sealed record ShellMenuAction(string Id, string Label, bool IsEnabled, Action Invoke, bool IsTransfer = false, bool SeparatorBefore = false);
+internal sealed record ShellMenuAction(string Id, string Label, bool IsEnabled, Action Invoke, bool IsTransfer = false, bool SeparatorBefore = false)
+{
+    public System.Windows.Controls.Button? IconSource { get; init; }
+}
 
 [StructLayout(LayoutKind.Sequential)]
 internal struct ShellCommandInvokeInfo

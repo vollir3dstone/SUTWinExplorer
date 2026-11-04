@@ -28,16 +28,59 @@ when it is created and cannot be changed by the user.
 A **transfer operation** is the application's Link, Copy or Move workflow. Each
 consists of three suboperations:
 
-- **Get** prepares the selected files and directories as sources without
+- **Mark item** prepares the selected files and directories as sources without
   linking, copying or moving them.
-- **Paste** creates shortcuts to, copies or moves the prepared sources into the current directory.
+- **Execute** creates shortcuts to, copies or moves the prepared sources into the current directory.
 - **Abort** discards the prepared sources without transferring them.
 
 The prepared transfer is shared across tabs, so its sources can be selected in
-one Pathview and pasted in another. Only one Link, Copy or Move can be prepared at a
-time. A successful Paste or Abort returns the transfer to its idle state; if
-Paste fails, the prepared sources remain available. A failed transfer may
+one Pathview and transferred in another. Only one Link, Copy or Move can be prepared at a
+time. A successful Execute or Abort returns the transfer to its idle state; if
+Execute fails, the prepared sources remain available. A failed transfer may
 already have completed some items.
+
+### Clipboard actions and transfer functions
+
+Clipboard actions use the Windows clipboard and are completely independent of
+the application's prepared Link, Copy and Move transfers. The full action names
+appear in tooltips and Base Menus; the buttons use these compact labels and symbols:
+
+| Action | Button | Effect |
+| --- | --- | --- |
+| **Name clipboard copy** | `Name` + Clipboard copy icon (clipboard with a left-pointing arrow) | Copies selected filesystem names as text. |
+| **Path clipboard copy** | `Path` + Clipboard copy icon | Copies selected full filesystem paths as text. |
+| **Item clipboard copy** | `Item` + Clipboard copy icon | Copies selected files and directories to the Windows clipboard. |
+| **Item clipboard paste** | `Item` + Clipboard paste icon (clipboard with a right-pointing arrow) | Pastes clipboard files and directories into the current directory; Shell Cut is supported. |
+
+The three Clipboard copy buttons are grouped in the selection row. Item clipboard
+paste is in the directory column before the transfer buttons. These actions are
+also available in the applicable Base Menus, using the same icons as their buttons.
+
+The application-owned transfers have separate controls and do not use clipboard
+icons:
+
+| Transfer | Mark item button | Abort button | Execute button |
+| --- | --- | --- | --- |
+| Link | **Link mark item**: `Link🠝` | **Link abort**: `Link✕` | **Link execute**: `Link🠟` |
+| Copy | **Copy mark item**: `Copy🠝` | **Copy abort**: `Copy✕` | **Copy execute**: `Copy🠟` |
+| Move | **Move mark item**: `Move🠝` | **Move abort**: `Move✕` | **Move execute**: `Move🠟` |
+
+The upward arrow prepares sources, the cross aborts a prepared transfer, and
+the downward arrow performs that transfer. The three Mark item buttons form one
+group in the selection row. The corresponding Base Menu entries
+use the same symbols, as does Delete. Only one Link, Copy or Move transfer
+can be prepared at a time, but clipboard actions remain independent of it:
+
+- Clipboard copy and paste neither prepare, execute, abort nor replace a transfer.
+  They remain available during a prepared transfer when their own selection,
+  clipboard and destination requirements are met.
+- Transfer Mark item, Execute and Abort do not copy to or read from the Windows clipboard.
+  In particular, **Copy mark item** prepares an internal Copy; it is not **Item clipboard copy**.
+- Clipboard changes or pastes in Windows Explorer or other applications do not
+  prepare, complete, cancel or otherwise change the application's transfer state.
+  An external paste is not treated as an application's transfer Execute.
+- Both mechanisms operate on real filesystem items: changing or removing a staged
+  source through either mechanism can still cause a later transfer to fail.
 
 ## P0: Core Behavior
 
@@ -311,26 +354,29 @@ may show its requested row in light gray without changing the active selection.
 - [x] The WPF application chrome keeps the app's custom tabs, address field,
   directory trees, and item-count status area.
 - [x] Below the two visibility checkboxes, the content pane provides the
-  separated action groups **Properties**; **Name get** and **Path get**; **Link get**,
-  **Link abort**, and **Link paste**; **Copy get**,
-  **Copy abort**, and **Copy paste**; **Move get**, **Move abort**, and **Move paste**;
+  separated action groups **Properties**; **Name clipboard copy**, **Path clipboard copy**, and **Item clipboard copy**; **Item clipboard paste**; **Link mark item**,
+  **Link abort**, and **Link execute**; **Copy mark item**,
+  **Copy abort**, and **Copy execute**; **Move mark item**, **Move abort**, and **Move execute**;
   **Rename**; and **Delete**. Properties opens the Windows Shell properties
   for one or more loaded selected items. Link, Copy and Move each have an app-owned two-state workflow,
-  independent of Shell clipboard state. Their **get** buttons stage selected
-  filesystem paths; **paste** performs the operation into the active folder;
-  **abort** clears the staged paths. Initially, Get is enabled when there is a
-  selection, while Paste and Abort are disabled. A prepared transfer disables
-  the other transfer groups and enables only its own paste and abort actions.
-  Successful Paste or Abort returns that workflow to idle. Link creates a Windows
+  independent of Shell clipboard state. Their **mark item** buttons stage selected
+  filesystem paths; **execute** performs the operation into the active folder;
+  **abort** clears the staged paths. Initially, Mark item is enabled when there is a
+  selection, while Execute and Abort are disabled. A prepared transfer disables
+  the other transfer groups and enables only its own execute and abort actions.
+  Successful Execute or Abort returns that workflow to idle. Link creates a Windows
   Shell shortcut for each source, without modifying it; existing names are not
-  overwritten. Copy uses native file copy and Move uses native file move; none of
-  the workflows reads or writes Shell clipboard
-  state. As an optional integration, toolbar **Copy get** also invokes the
-  Shell Copy verb, and an external Shell Copy stages its file paths through the
-  same Copy get transition. Shell Cut and unrelated clipboard contents do not
-  affect the internal workflows. Staging records paths only: it does not keep
+  overwritten. Copy uses native file copy and Move uses native file move.
+  **Item clipboard copy** copies selected files and directories to the Windows clipboard;
+  **Item clipboard paste** invokes the Shell paste operation into the current directory.
+  Item clipboard copy is in the selection-row group with Name and Path clipboard copy; Item clipboard paste is in the directory
+  column before the Link group and is enabled for a filesystem clipboard and an
+  existing destination directory. Shell Cut is handled by the Shell paste command.
+  These actions are independent of all prepared transfers. Internal Mark item, Execute
+  and Abort do not change the clipboard, and external clipboard operations do not
+  change any internal transfer state. Staging records paths only: it does not keep
   file handles, reserve the objects, or lock them against changes by the user,
-  another process, or the Shell. Before Paste starts, the app checks that the
+  another process, or the Shell. Before Execute starts, the app checks that the
   destination is an accessible folder, reads filesystem attributes for every
   staged source, and resolves all Shell items for Copy and Move before beginning the transfer. If
   these preflight checks fail, no transfer is started, an error is shown, and
@@ -343,16 +389,16 @@ may show its requested row in light gray without changing the active selection.
   **Rename** is enabled only for a single loaded item and starts an inline
   rename editor. Enter commits and Escape cancels; invalid names and existing
   target names are reported without overwriting the existing item.
-  **Name get** and **Path get** are enabled when at least one item is selected
-  and every selected item is loaded. Name get copies filesystem names, including
-  file extensions, to the clipboard; Path get copies full filesystem paths. Both
+  **Name clipboard copy** and **Path clipboard copy** are enabled when at least one item is selected
+  and every selected item is loaded. Name clipboard copy copies filesystem names, including
+  file extensions, to the clipboard; Path clipboard copy copies full filesystem paths. Both
   place plain text, not a file list, on the clipboard. With multiple items, the
   text contains one name or path per line in selection order, separated by Windows
   line breaks (CRLF). There is no line break after the last item; a single item
   is copied without any line break. **Delete** remains
   selection-aware; other selection-dependent actions are disabled when nothing
   is selected.
-- [x] After the application-owned **New**, **Link paste**, **Copy paste**, or **Move paste**
+- [x] After the application-owned **New**, **Link execute**, **Copy execute**, or **Move execute**
   inserts items into the current directory, the destination ContentView selects
   all inserted items and scrolls the first into view. It turns off **Hide
   directories** if an inserted item is a directory, turns off **Hide internal**
@@ -366,22 +412,22 @@ may show its requested row in light gray without changing the active selection.
 
 ### Link transfer
 
-- [x] **Link get** prepares one or more selected files or directories as
+- [x] **Link mark item** prepares one or more selected files or directories as
   shortcut targets. It is available in the selection row and the Base Menu,
-  after **Path get** and before **Copy get**. A directory can also be prepared
+  after **Item clipboard copy** and before **Copy mark item**. A directory can also be prepared
   from its sidebar Base Menu.
-- [x] **Link paste** creates one Windows shortcut (`.lnk`) per prepared path
+- [x] **Link execute** creates one Windows shortcut (`.lnk`) per prepared path
   in the current directory, including when that directory is in another tab.
   The original files and directories remain unchanged. Each shortcut is named
   after its source with ` - Shortcut.lnk` appended; a number is added when
   needed to avoid overwriting an existing item. Created shortcuts are selected
   and brought into view using the normal insertion completion.
 - [x] **Link abort** discards the prepared paths without creating shortcuts.
-  Paste and Abort are available in the directory column and in the applicable
+  Execute and Abort are available in the directory column and in the applicable
   Base Menus, including background menus. While Link is prepared, starting
-  another transfer and Delete are disabled. An external Shell Copy cancels
-  the prepared Link and prepares Copy instead.
-- [x] If a source or destination is unavailable at paste time, the operation
+  another transfer and Delete are disabled. External clipboard operations do not
+  cancel the prepared Link.
+- [x] If a source or destination is unavailable at execution time, the operation
   reports an error and keeps the prepared Link for retry or abort. All sources
   are checked before creation starts; a later failure can nevertheless leave
   already-created shortcuts in place, without rolling them back.
@@ -399,12 +445,12 @@ may show its requested row in light gray without changing the active selection.
 ### Context menus and file operations
 
 - [x] The Base Menu starts with the application-owned **Properties**, followed
-  by a separator, **Name get**, **Path get**, and the available Link, Copy and Move
+  by a separator, **Name clipboard copy**, **Path clipboard copy**, **Item clipboard copy**, another separator, **Item clipboard paste**, and the available Link, Copy and Move
   actions. Shell commands follow, then a separator, **Rename**, another separator,
   and **Delete**. Unavailable transfer actions are
   omitted; other unavailable actions remain visible and disabled. With an
-  eligible selection and no prepared transfer, Link get, Copy get and Move get
-  are available. A prepared transfer shows its abort and paste actions. The same rules apply to the content and
+  eligible selection and no prepared transfer, Link mark item, Copy mark item and Move mark item
+  are available. A prepared transfer shows its abort and execute actions. The same rules apply to the content and
   sidebar menus and their backgrounds.
 - [x] ContentView file and folder selections use the Base and Content Menu pair
   described in [CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md).
@@ -541,35 +587,35 @@ SUTWinExplorer installation before testing a new installation.
   characters, `.` is literal, and a blank pattern removes only the pattern
   constraint. Verify both files and directories are filtered without
   navigation.
-11. Select multiple files and directories and use **Link get**. Verify Link
-  paste and Link abort become enabled and the other transfer actions are
-  disabled. Paste in another tab and verify that each `.lnk` points to its
+11. Select multiple files and directories and use **Link mark item**. Verify Link
+  execute and Link abort become enabled and the other transfer actions are
+  disabled. Execute in another tab and verify that each `.lnk` points to its
   original source, existing items are not overwritten, and the sources remain
-  unchanged. Repeat with Link abort and with a source removed before paste.
-  Select multiple items and use **Copy get**. Verify Copy paste and Copy
-  abort become enabled, Copy get becomes disabled, and all Move buttons remain
-  disabled. Use Copy paste and verify the items are copied into the active
+  unchanged. Repeat with Link abort and with a source removed before execution.
+  Select multiple items and use **Copy mark item**. Verify Copy execute and Copy
+  abort become enabled, Copy mark item becomes disabled, and all Move buttons remain
+  disabled. Verify the clipboard is unchanged. Use Copy execute and verify the items are copied into the active
   folder without changing Shell clipboard state. Repeat and use Copy abort;
   verify the source items remain unchanged. Also stage a Copy, remove or rename
-  one source before Paste, and verify preflight reports an error,
+  one source before Execute, and verify preflight reports an error,
   starts no transfer, and preserves the staged workflow. Confirm staging does
   not prevent another process from changing a source path.
-12. Use **Move get** and verify the Copy group becomes disabled while Move
-  paste/abort become enabled. Use Move paste and verify the sources move into
+12. Use **Move mark item** and verify the Copy group becomes disabled while Move
+  execute/abort become enabled. Use Move execute and verify the sources move into
   the active folder without changing Shell clipboard state. Repeat and use
   Move abort; verify the source items remain in place. Select one item and
-  verify **Name get** copies its filesystem name and **Path get** its path.
+  verify **Name clipboard copy** copies its filesystem name and **Path clipboard copy** its path.
   Repeat with multiple files and directories and verify one text line per item;
   verify both buttons are disabled when nothing is selected.
   Also stage a Move, remove
-  or rename one source before Paste, and verify preflight reports an
+  or rename one source before Execute, and verify preflight reports an
   error, starts no transfer, and preserves the staged workflow. A change after
-  preflight may still cause a late failure; multi-item Paste is not atomic and
+  preflight may still cause a late failure; multi-item Execute is not atomic and
   may leave already-transferred items in place.
-  For New, Link paste, Copy paste and Move paste, verify inserted items are selected, the
+  For New, Link execute, Copy execute and Move execute, verify inserted items are selected, the
   first is scrolled into view, and only filters hiding an inserted item are
   reset. Include a directory, an internal item, a nonmatching name, multiple
-  items, and a paste from a paired directory menu. Verify unaffected filters
+  items, and an execute from a paired directory menu. Verify unaffected filters
   and other views retain their settings; test partial transfers and Shell
   conflict decisions where available.
 13. Select exactly one item and click **Rename** or press F2. Verify the inline

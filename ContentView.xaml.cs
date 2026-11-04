@@ -17,6 +17,7 @@ public partial class ContentView : UserControl
 {
     private bool _initialized;
     private IDisposable? _directoryObserver;
+    private ClipboardChangeMonitor? _clipboardMonitor;
     private CancellationTokenSource? _refreshCancellation;
     private CancellationTokenSource? _rangeCancellation;
     private DirectorySnapshot? _snapshot;
@@ -88,12 +89,12 @@ public partial class ContentView : UserControl
     }
 
     private IReadOnlyList<ShellMenuAction> CreateContextMenuActions() =>
-        new[] { PropertiesButton, NameGetButton, PathGetButton, LinkGetButton, LinkAbortButton, LinkPasteButton, CopyGetButton, CopyAbortButton, CopyPasteButton,
-            MoveGetButton, MoveAbortButton, MovePasteButton, RenameButton, DeleteButton }.Select(button => new ShellMenuAction(
+        new[] { PropertiesButton, NameClipboardCopyButton, PathClipboardCopyButton, ItemClipboardCopyButton, ItemClipboardPasteButton, LinkMarkItemButton, LinkAbortButton, LinkExecuteButton, CopyMarkItemButton, CopyAbortButton, CopyExecuteButton,
+            MoveMarkItemButton, MoveAbortButton, MoveExecuteButton, RenameButton, DeleteButton }.Select(button => new ShellMenuAction(
                 (string)button.Tag, System.Windows.Automation.AutomationProperties.GetName(button), button.IsEnabled,
                 () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)),
                 IsTransfer: button.Tag is string action && (action.StartsWith("Link", StringComparison.Ordinal) || action.StartsWith("Copy", StringComparison.Ordinal) || action.StartsWith("Move", StringComparison.Ordinal)),
-                SeparatorBefore: button == NameGetButton || button == DeleteButton)).ToArray();
+                SeparatorBefore: button == NameClipboardCopyButton || button == ItemClipboardPasteButton || button == DeleteButton) { IconSource = button }).ToArray();
 
     private ShellMenuAction? CreateOpenLocationAction(IReadOnlyList<string> paths)
     {
@@ -326,6 +327,7 @@ public partial class ContentView : UserControl
         LinkWorkflowState.Shared.Changed += WorkflowState_Changed;
         CopyWorkflowState.Shared.Changed += WorkflowState_Changed;
         MoveWorkflowState.Shared.Changed += WorkflowState_Changed;
+        _clipboardMonitor = new ClipboardChangeMonitor(UpdateClipboardButton);
         UpdateToolbarOperationButtons();
     }
 
@@ -337,6 +339,8 @@ public partial class ContentView : UserControl
         LinkWorkflowState.Shared.Changed -= WorkflowState_Changed;
         CopyWorkflowState.Shared.Changed -= WorkflowState_Changed;
         MoveWorkflowState.Shared.Changed -= WorkflowState_Changed;
+        _clipboardMonitor?.Dispose();
+        _clipboardMonitor = null;
     }
 
     private void FiltersChanged(object sender, RoutedEventArgs e)
@@ -503,65 +507,73 @@ public partial class ContentView : UserControl
                 case "Rename":
                     BeginRename();
                     break;
-                case "LinkGet":
+                case "ItemClipboardCopy":
+                    if (selectedPaths.Count == 0)
+                        throw new InvalidOperationException("Select one or more items before using Item clipboard copy.");
+                    SutShell.CopyToClipboard(selectedPaths, owner);
+                    break;
+                case "ItemClipboardPaste":
+                    SutShell.PasteFromClipboard(CurrentPath, owner);
+                    break;
+                case "LinkMarkItem":
                     if (CopyWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared)
                         throw new InvalidOperationException("Abort or complete the prepared transfer before starting a Link.");
                     LinkWorkflowState.Shared.Prepare(selectedPaths);
                     break;
-                case "LinkPaste":
+                case "LinkExecute":
                     var linked = new List<string>();
                     try
                     {
                         SutShell.Link(LinkWorkflowState.Shared.PreparedPaths, CurrentPath, linked);
-                        LinkWorkflowState.Shared.CompletePaste();
+                        LinkWorkflowState.Shared.CompleteExecute();
                     }
                     finally { RevealInsertedItems(linked); }
                     break;
                 case "LinkAbort":
                     LinkWorkflowState.Shared.Abort();
                     break;
-                case "CopyGet":
+                case "CopyMarkItem":
                     if (LinkWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared)
                         throw new InvalidOperationException("Abort or complete the prepared transfer before starting a Copy.");
                     CopyWorkflowState.Shared.Prepare(selectedPaths);
                     break;
-                case "CopyPaste":
+                case "CopyExecute":
                     var copied = new List<string>();
                     try
                     {
                         SutShell.Copy(CopyWorkflowState.Shared.PreparedPaths, CurrentPath, owner, copied);
-                        CopyWorkflowState.Shared.CompletePaste();
+                        CopyWorkflowState.Shared.CompleteExecute();
                     }
                     finally { RevealInsertedItems(copied); }
                     break;
                 case "CopyAbort":
                     CopyWorkflowState.Shared.Abort();
                     break;
-                case "MoveGet":
+                case "MoveMarkItem":
                     if (LinkWorkflowState.Shared.IsPrepared || CopyWorkflowState.Shared.IsPrepared)
                         throw new InvalidOperationException("Abort or complete the prepared transfer before starting a Move.");
                     MoveWorkflowState.Shared.Prepare(selectedPaths);
                     break;
-                case "MovePaste":
+                case "MoveExecute":
                     var moved = new List<string>();
                     try
                     {
                         SutShell.Move(MoveWorkflowState.Shared.PreparedPaths, CurrentPath, owner, moved);
-                        MoveWorkflowState.Shared.CompletePaste();
+                        MoveWorkflowState.Shared.CompleteExecute();
                     }
                     finally { RevealInsertedItems(moved); }
                     break;
                 case "MoveAbort":
                     MoveWorkflowState.Shared.Abort();
                     break;
-                case "NameGet":
+                case "NameClipboardCopy":
                     if (selectedPaths.Count == 0)
-                        throw new InvalidOperationException("Select one or more items before using Name get.");
+                        throw new InvalidOperationException("Select one or more items before using Name clipboard copy.");
                     Clipboard.SetText(string.Join(Environment.NewLine, selectedPaths.Select(SutShell.GetFileSystemName)));
                     break;
-                case "PathGet":
+                case "PathClipboardCopy":
                     if (selectedPaths.Count == 0)
-                        throw new InvalidOperationException("Select one or more items before using Path get.");
+                        throw new InvalidOperationException("Select one or more items before using Path clipboard copy.");
                     Clipboard.SetText(string.Join(Environment.NewLine, selectedPaths));
                     break;
                 case "Delete":
@@ -602,22 +614,27 @@ public partial class ContentView : UserControl
         PropertiesButton.IsEnabled = hasSelection;
         RenameButton.IsEnabled = hasSelection && selectedRows.Length == 1 &&
                      SutShell.GetEditName(selectedRows[0].FullPath) is not null;
-        NameGetButton.IsEnabled = PathGetButton.IsEnabled = hasSelection;
+        NameClipboardCopyButton.IsEnabled = PathClipboardCopyButton.IsEnabled = hasSelection;
+        ItemClipboardCopyButton.IsEnabled = hasSelection;
+        UpdateClipboardButton();
         var linkPrepared = LinkWorkflowState.Shared.IsPrepared;
         var copyPrepared = CopyWorkflowState.Shared.IsPrepared;
         var movePrepared = MoveWorkflowState.Shared.IsPrepared;
         var canStartOperation = !linkPrepared && !copyPrepared && !movePrepared;
         DeleteButton.IsEnabled = hasSelection && canStartOperation && selectedRows.All(row => ShellFileOperations.CanDelete(row.FullPath));
-        LinkGetButton.IsEnabled = hasSelection && canStartOperation;
-        LinkPasteButton.IsEnabled = linkPrepared;
+        LinkMarkItemButton.IsEnabled = hasSelection && canStartOperation;
+        LinkExecuteButton.IsEnabled = linkPrepared;
         LinkAbortButton.IsEnabled = linkPrepared;
-        CopyGetButton.IsEnabled = hasSelection && canStartOperation;
-        CopyPasteButton.IsEnabled = copyPrepared;
+        CopyMarkItemButton.IsEnabled = hasSelection && canStartOperation;
+        CopyExecuteButton.IsEnabled = copyPrepared;
         CopyAbortButton.IsEnabled = copyPrepared;
-        MoveGetButton.IsEnabled = hasSelection && canStartOperation;
-        MovePasteButton.IsEnabled = movePrepared;
+        MoveMarkItemButton.IsEnabled = hasSelection && canStartOperation;
+        MoveExecuteButton.IsEnabled = movePrepared;
         MoveAbortButton.IsEnabled = movePrepared;
     }
+
+    private void UpdateClipboardButton() =>
+        ItemClipboardPasteButton.IsEnabled = Directory.Exists(CurrentPath) && SutShell.ClipboardContainsItems();
 
     private void FileList_SizeChanged(object sender, SizeChangedEventArgs e)
     {

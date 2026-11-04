@@ -71,11 +71,11 @@ Verb strings are optional and may be noncanonical or malformed.
 ## Experimental File Menu
 
 In ContentView, right-clicking a selection of one or more files opens the experimental menu. Its first
-section mirrors the toolbar: Rename, Path get, Copy get/abort/paste, Move
-get/abort/paste and Delete. Each command calls the same button handler and has
+section mirrors the toolbar: Rename, Path clipboard copy, Copy mark item/abort/execute, Move
+mark item/abort/execute and Delete. Each command calls the same button handler and has
 the same enabled state. Copy and Move use the application's prepared workflows,
 not the Windows clipboard; Delete uses the Shell's file operation API. Rename
-and Path get are disabled for multiple files. Properties is a
+and Path clipboard copy are disabled for multiple files. Properties is a
 Shell command in the second section, not a toolbar button.
 
 The second section comes from `SHCreateDefaultContextMenu` with the `*` and
@@ -115,10 +115,10 @@ and Move actions remain in the generic menu.
 
 | Shell action | Current behavior |
 | --- | --- |
-| Copy (`copy`) | Replaced by the application's Copy get. |
-| Cut (`cut`) | Replaced by the application's Move get. |
-| Paste (`paste`) | Replaced by the application's Copy paste or Move paste. |
-| Copy as path (`copyaspath`) | The application's Path get copies the path of one selected file. |
+| Copy (`copy`) | Replaced by the application's Copy mark item. |
+| Cut (`cut`) | Replaced by the application's Move mark item. |
+| Paste (`paste`) | Replaced by the application's Copy execute or Move execute. |
+| Copy as path (`copyaspath`) | The application's Path clipboard copy copies the path of one selected file. |
 | Rename (`rename`) | The application's Rename edits one selected file. |
 | Delete (`delete`) | Replaced by the application's Delete action, which uses the Shell file operation API. |
 | Create shortcut (`link`) | Removed; there is no application replacement. |
@@ -127,7 +127,7 @@ and Move actions remain in the generic menu.
 | Open with (`openas` and the Shell submenu) | Removed from the generic menu; remains in the special menu when provided by the Shell. |
 
 Copy and Move use prepared application workflows, not the Windows clipboard;
-their get, paste and abort actions are therefore not identical to the Shell
+their mark item, execute and abort actions are therefore not identical to the Shell
 clipboard commands. This table covers the standard verbs explicitly handled by
 the implementation, not every possible Shell command. Other built-in or
 extension entries can vary by file, selection and installation. Shift-right-click
@@ -253,7 +253,7 @@ have not been independently verified; no Link Shell Extension commands are filte
 Shift-right-click opens the original Windows item menu. Folders, background and
 mixed file-and-folder selections retain their existing menus. The integration test
 exercises the alternating menus and toolbar actions, including multiple-file Copy
-and Move and Copy and Move paste with temporary files.
+and Move and Copy and Move execute with temporary files.
 
 `CategoryHints` are text-based guesses for Archive, VersionControl, Links and
 Verification, not authoritative classifications or rules for production. The

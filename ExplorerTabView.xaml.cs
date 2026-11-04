@@ -1004,11 +1004,12 @@ public partial class Pathview : UserControl
         var actions = new (string Name, bool Enabled)[]
         {
             ("Properties", Directory.Exists(entry.Path)),
-            ("NameGet", Directory.Exists(entry.Path)),
-            ("PathGet", Directory.Exists(entry.Path)),
-            ("LinkGet", canStart), ("LinkAbort", linkPrepared), ("LinkPaste", linkPrepared),
-            ("CopyGet", canStart), ("CopyAbort", copyPrepared), ("CopyPaste", copyPrepared),
-            ("MoveGet", canStart), ("MoveAbort", movePrepared), ("MovePaste", movePrepared),
+            ("NameClipboardCopy", Directory.Exists(entry.Path)),
+            ("PathClipboardCopy", Directory.Exists(entry.Path)),
+            ("ItemClipboardCopy", Directory.Exists(entry.Path)), ("ItemClipboardPaste", Directory.Exists(CurrentPath) && SutShell.ClipboardContainsItems()),
+            ("LinkMarkItem", canStart), ("LinkAbort", linkPrepared), ("LinkExecute", linkPrepared),
+            ("CopyMarkItem", canStart), ("CopyAbort", copyPrepared), ("CopyExecute", copyPrepared),
+            ("MoveMarkItem", canStart), ("MoveAbort", movePrepared), ("MoveExecute", movePrepared),
             ("Rename", !entry.IsTop && Directory.Exists(entry.Path)),
             ("Delete", canStart && ShellFileOperations.CanDelete(entry.Path))
         };
@@ -1017,7 +1018,8 @@ public partial class Pathview : UserControl
             System.Windows.Automation.AutomationProperties.GetName((Button)DirectoryContent.FindName(action.Name + "Button")),
             action.Enabled, () => ExecuteDirectoryMenuAction(action.Name, entry),
             IsTransfer: action.Name.StartsWith("Link", StringComparison.Ordinal) || action.Name.StartsWith("Copy", StringComparison.Ordinal) || action.Name.StartsWith("Move", StringComparison.Ordinal),
-            SeparatorBefore: action.Name is "NameGet" or "Delete")).ToArray();
+            SeparatorBefore: action.Name is "NameClipboardCopy" or "ItemClipboardPaste" or "Delete")
+            { IconSource = (Button)DirectoryContent.FindName(action.Name + "Button") }).ToArray();
     }
 
     private IReadOnlyList<ShellMenuAction> CreateBackgroundMenuActions()
@@ -1027,17 +1029,19 @@ public partial class Pathview : UserControl
         var movePrepared = MoveWorkflowState.Shared.IsPrepared;
         var actions = new (string Name, bool Enabled)[]
         {
-            ("Properties", false), ("NameGet", false), ("PathGet", false), ("LinkGet", false),
-            ("LinkAbort", linkPrepared), ("LinkPaste", linkPrepared), ("CopyGet", false),
-            ("CopyAbort", copyPrepared), ("CopyPaste", copyPrepared), ("MoveGet", false),
-            ("MoveAbort", movePrepared), ("MovePaste", movePrepared), ("Rename", false), ("Delete", false)
+            ("Properties", false), ("NameClipboardCopy", false), ("PathClipboardCopy", false),
+            ("ItemClipboardCopy", false), ("ItemClipboardPaste", Directory.Exists(CurrentPath) && SutShell.ClipboardContainsItems()), ("LinkMarkItem", false),
+            ("LinkAbort", linkPrepared), ("LinkExecute", linkPrepared), ("CopyMarkItem", false),
+            ("CopyAbort", copyPrepared), ("CopyExecute", copyPrepared), ("MoveMarkItem", false),
+            ("MoveAbort", movePrepared), ("MoveExecute", movePrepared), ("Rename", false), ("Delete", false)
         };
         return actions.Select(action => new ShellMenuAction(
             action.Name,
             System.Windows.Automation.AutomationProperties.GetName((Button)DirectoryContent.FindName(action.Name + "Button")),
             action.Enabled, () => ExecuteDirectoryMenuAction(action.Name, null),
             IsTransfer: action.Name.StartsWith("Link", StringComparison.Ordinal) || action.Name.StartsWith("Copy", StringComparison.Ordinal) || action.Name.StartsWith("Move", StringComparison.Ordinal),
-            SeparatorBefore: action.Name is "NameGet" or "Delete")).ToArray();
+            SeparatorBefore: action.Name is "NameClipboardCopy" or "ItemClipboardPaste" or "Delete")
+            { IconSource = (Button)DirectoryContent.FindName(action.Name + "Button") }).ToArray();
     }
 
     private void ExecuteDirectoryMenuAction(string action, TreeEntry? entry)
@@ -1049,20 +1053,22 @@ public partial class Pathview : UserControl
             {
                 case "Properties": SutShell.ShowProperties([entry!.Path], owner); break;
                 case "Rename": BeginTreeRename(entry!); break;
-                case "NameGet": Clipboard.SetText(SutShell.GetFileSystemName(entry!.Path)); break;
-                case "PathGet": Clipboard.SetText(entry!.Path); break;
-                case "LinkGet":
+                case "NameClipboardCopy": Clipboard.SetText(SutShell.GetFileSystemName(entry!.Path)); break;
+                case "PathClipboardCopy": Clipboard.SetText(entry!.Path); break;
+                case "ItemClipboardCopy": SutShell.CopyToClipboard([entry!.Path], owner); break;
+                case "ItemClipboardPaste": SutShell.PasteFromClipboard(CurrentPath, owner); break;
+                case "LinkMarkItem":
                     if (CopyWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared)
                         throw new InvalidOperationException("Abort or complete the prepared transfer before starting a Link.");
                     LinkWorkflowState.Shared.Prepare([entry!.Path]);
                     break;
                 case "LinkAbort": LinkWorkflowState.Shared.Abort(); break;
-                case "LinkPaste":
+                case "LinkExecute":
                     var linked = new List<string>();
                     try
                     {
                         SutShell.Link(LinkWorkflowState.Shared.PreparedPaths, CurrentPath, linked);
-                        LinkWorkflowState.Shared.CompletePaste();
+                        LinkWorkflowState.Shared.CompleteExecute();
                     }
                     finally
                     {
@@ -1071,18 +1077,18 @@ public partial class Pathview : UserControl
                         RefreshCurrentRouteTree();
                     }
                     break;
-                case "CopyGet":
+                case "CopyMarkItem":
                     if (LinkWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared)
                         throw new InvalidOperationException("Abort or complete the prepared transfer before starting a Copy.");
                     CopyWorkflowState.Shared.Prepare([entry!.Path]);
                     break;
                 case "CopyAbort": CopyWorkflowState.Shared.Abort(); break;
-                case "CopyPaste":
+                case "CopyExecute":
                     var copied = new List<string>();
                     try
                     {
                         SutShell.Copy(CopyWorkflowState.Shared.PreparedPaths, CurrentPath, owner, copied);
-                        CopyWorkflowState.Shared.CompletePaste();
+                        CopyWorkflowState.Shared.CompleteExecute();
                     }
                     finally
                     {
@@ -1091,18 +1097,18 @@ public partial class Pathview : UserControl
                         RefreshCurrentRouteTree();
                     }
                     break;
-                case "MoveGet":
+                case "MoveMarkItem":
                     if (LinkWorkflowState.Shared.IsPrepared || CopyWorkflowState.Shared.IsPrepared)
                         throw new InvalidOperationException("Abort or complete the prepared transfer before starting a Move.");
                     MoveWorkflowState.Shared.Prepare([entry!.Path]);
                     break;
                 case "MoveAbort": MoveWorkflowState.Shared.Abort(); break;
-                case "MovePaste":
+                case "MoveExecute":
                     var moved = new List<string>();
                     try
                     {
                         SutShell.Move(MoveWorkflowState.Shared.PreparedPaths, CurrentPath, owner, moved);
-                        MoveWorkflowState.Shared.CompletePaste();
+                        MoveWorkflowState.Shared.CompleteExecute();
                     }
                     finally
                     {
