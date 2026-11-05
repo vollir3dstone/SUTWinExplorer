@@ -1,5 +1,39 @@
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
+Add-Type -TypeDefinition @'
+public sealed class SortOrderDragProbe : System.IDisposable
+{
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct Point { public int X, Y; }
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetCursorPos(out Point point);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern void mouse_event(uint flags, uint dx, uint dy, uint data, System.UIntPtr extra);
+    private readonly int startX, startY, targetX, targetY;
+    private readonly System.Threading.Timer timer;
+    private int phase;
+    public volatile bool Finished;
+    public SortOrderDragProbe(int startX, int startY, int targetX, int targetY)
+    {
+        this.startX = startX; this.startY = startY; this.targetX = targetX; this.targetY = targetY;
+        timer = new System.Threading.Timer(Tick, null, 100, 150);
+    }
+    private void Tick(object state)
+    {
+        switch (System.Threading.Interlocked.Increment(ref phase))
+        {
+            case 1: SetCursorPos(startX, startY); break;
+            case 2: mouse_event(2, 0, 0, 0, System.UIntPtr.Zero); break;
+            case 3: SetCursorPos(startX + 12, startY); break;
+            case 4: SetCursorPos(targetX, targetY); break;
+            case 5: ReleaseButton(); Finished = true; timer.Change(-1, -1); break;
+        }
+    }
+    public static int[] CursorPosition() { GetCursorPos(out var point); return new[] { point.X, point.Y }; }
+    public static void MovePointer(int x, int y) => SetCursorPos(x, y);
+    public static void ReleaseButton() => mouse_event(4, 0, 0, 0, System.UIntPtr.Zero);
+    public void Dispose() => timer.Dispose();
+}
+'@
 
 function Find-VisualChild($parent, [type] $type) {
     for ($index = 0; $index -lt [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($parent); $index++) {
@@ -123,6 +157,64 @@ try {
     $window.Show()
     [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([action] {}, [System.Windows.Threading.DispatcherPriority]::ApplicationIdle)
     $window.UpdateLayout()
+    $viewFlags = [System.Reflection.BindingFlags]'Instance,NonPublic'
+    $viewSort = $view.GetType().GetField('_sorting', $viewFlags).GetValue($view)
+    $pairsProperty = $viewSort.GetType().GetProperty('Pairs', $viewFlags)
+    $sortWidget = $view.FindName('SortOrderEditor')
+    $sortBoxes = $sortWidget.Child
+    $defaultOrder = 'Name,MediaTypeIcon,TypeApp1Icon,TypeApp2Name,DateModified,Size'
+    if ((@($pairsProperty.GetValue($viewSort)).Column -join ',') -cne $defaultOrder -or
+        @($pairsProperty.GetValue($viewSort) | Where-Object { $_.Criterion -ne 'Ascending' }).Count -ne 0 -or
+        ($sortBoxes.Children | ForEach-Object { $_.Content.Children[0].Text }) -join ',' -cne 'Name,MT,TA1,TA2,Date,Size' -or
+        $view.FindName('NameSortIndicator').Visibility -ne 'Visible') { throw 'The initial sort widget or its criteria are incorrect.' }
+    $sortBoxes.Children[1].RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+    if (@($pairsProperty.GetValue($viewSort))[1].Criterion -ne 'Descending' -or
+        $sortBoxes.Children[1].Content.Children[1].Text -cne [string] [char] 0x25BC) { throw 'Clicking a sort box did not reverse its direction.' }
+    $view.FindName('MediaTypeIcon').Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+    if (@($pairsProperty.GetValue($viewSort))[0].Column -ne 'MediaTypeIcon' -or
+        @($pairsProperty.GetValue($viewSort))[0].Criterion -ne 'Descending' -or
+        $sortBoxes.Children[0].Tag -ne 1 -or $view.FindName('MediaTypeIconSortIndicator').Text -cne [string] [char] 0x25BC) { throw 'A header click did not preserve the box direction and promote it.' }
+    $moveSortColumn = $sortWidget.GetType().GetMethod('MoveItem', $viewFlags)
+    $null = $moveSortColumn.Invoke($sortWidget, [object[]] @([int] 1, [int] 6))
+    if (@($pairsProperty.GetValue($viewSort))[5].Column -ne 'MediaTypeIcon' -or
+        @($pairsProperty.GetValue($viewSort))[5].Criterion -ne 'Descending' -or $sortBoxes.Children[5].Tag -ne 1) { throw 'Moving a sort box did not preserve its criterion.' }
+    $sortWidget.Configure([string[]] @('Name', 'MT', 'TA1', 'TA2', 'Date', 'Size'))
+    $originalCursor = [SortOrderDragProbe]::CursorPosition()
+    try {
+        $window.Left = 20
+        $window.Top = 20
+        $window.Width = [Math]::Min(1200, [System.Windows.SystemParameters]::WorkArea.Width - 40)
+        $null = $window.Activate()
+        $sortWidget.BringIntoView()
+        $null = $sortBoxes.Children[0].Focus()
+        [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([action] {}, [System.Windows.Threading.DispatcherPriority]::ApplicationIdle)
+        $window.UpdateLayout()
+        $start = $sortBoxes.Children[0].PointToScreen([System.Windows.Point]::new($sortBoxes.Children[0].ActualWidth / 2, $sortBoxes.Children[0].ActualHeight / 2))
+        $target = $sortBoxes.Children[2].PointToScreen([System.Windows.Point]::new($sortBoxes.Children[2].ActualWidth - 4, $sortBoxes.Children[2].ActualHeight / 2))
+        $drag = [SortOrderDragProbe]::new([int] $start.X, [int] $start.Y, [int] $target.X, [int] $target.Y)
+        $frame = [System.Windows.Threading.DispatcherFrame]::new()
+        $timer = [System.Windows.Threading.DispatcherTimer]::new()
+        $timer.Interval = [TimeSpan]::FromMilliseconds(100)
+        $deadline = [DateTime]::UtcNow.AddSeconds(5)
+        $timer.add_Tick({ if ($drag.Finished -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
+        $timer.Start()
+        try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop(); $drag.Dispose() }
+        if (-not $drag.Finished -or (@($pairsProperty.GetValue($viewSort)).Column -join ',') -cne 'MediaTypeIcon,TypeApp1Icon,Name,TypeApp2Name,DateModified,Size' -or
+            @($pairsProperty.GetValue($viewSort) | Where-Object { $_.Criterion -ne 'Ascending' }).Count -ne 0) {
+            throw "Dragging a sort box did not preserve directions and reorder the criteria: start=$start, target=$target, pairs=$(@($pairsProperty.GetValue($viewSort)) -join '; ')."
+        }
+    } finally {
+        [SortOrderDragProbe]::ReleaseButton()
+        [SortOrderDragProbe]::MovePointer($originalCursor[0], $originalCursor[1])
+        $window.Left = -20000
+        $window.Top = -20000
+        $window.Width = 1000
+        $sortWidget.Configure([string[]] @('Name', 'MT', 'TA1', 'TA2', 'Date', 'Size'))
+        $view.FindName('ViewControlsScroll').ScrollToLeftEnd()
+    }
+    $view = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
+    $window.Content = $view
+    $window.UpdateLayout()
     Assert-Baselines $view
     $editor = $view.FindName('SortOrderEditor')
     $boxes = $editor.Child
@@ -137,7 +229,7 @@ try {
     $sortState = $view.GetType().GetField('_sorting', $viewFlags).GetValue($view)
     $pairs = @($sortState.GetType().GetProperty('Pairs', $viewFlags).GetValue($sortState))
     if (($pairs.Column -join ',') -cne 'MediaTypeIcon,TypeApp1Icon,TypeApp2Name,DateModified,Size,Name' -or
-        $pairs[5].Criterion -ne 'Descending') { throw 'ContentView did not map widget indices and directions.' }
+        $pairs[5].Criterion -ne 'Descending') { throw "ContentView did not map widget indices and directions: $($pairs -join '; ')." }
     $view.FindName('NameColumn').Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
     $pairs = @($sortState.GetType().GetProperty('Pairs', $viewFlags).GetValue($sortState))
     if ($pairs[0].Column -ne 'Name' -or $pairs[0].Criterion -ne 'Descending' -or

@@ -20,6 +20,17 @@ Prefer focused tests for the affected behavior. If no suitable focused test is
 available, use the necessary broader test or add a focused test where practical.
 Report which checks ran and any relevant behavior that remains unverified.
 
+## Test Organization
+
+Keep Shell access-layer tests separate from interactive behavior. Test individual
+components in their own test files, interactions within one fixed Pathview in
+Pathview tests, and interactions between Pathviews in MultiPathview tests. Keep
+main-window and application-start behavior in their respective tests.
+
+Each test must create and clean up its own fixtures and must not depend on the
+order in which tests run. Shared helpers may provide probes and assertions, but
+must not supply state established by another test.
+
 ## Production and Experimental Tests
 
 Production tests cover supported application behavior and belong in the standard
