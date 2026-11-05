@@ -128,6 +128,19 @@ function Pump([int] $milliseconds) {
         finally { $stream.Dispose() }
     }
 
+    function Test-ObserverIdle($observer, $observerType, $flags) {
+        $sync = $observerType.GetField('_sync', $flags).GetValue($observer)
+        [Threading.Monitor]::Enter($sync)
+        try {
+            return -not $observerType.GetField('_refreshAll', $flags).GetValue($observer) -and
+                $observerType.GetField('_pending', $flags).GetValue($observer).Count -eq 0 -and
+                $observerType.GetField('_pendingExtensions', $flags).GetValue($observer).Count -eq 0 -and
+                $null -eq $observerType.GetField('_activePath', $flags).GetValue($observer) -and
+                $null -eq $observerType.GetField('_remainingGlobalPaths', $flags).GetValue($observer)
+        }
+        finally { [Threading.Monitor]::Exit($sync) }
+    }
+
 function Get-IconHash([string] $path) {
     $handle = [IconNotificationProbe]::GetIcon($path)
     if ($handle -eq [IntPtr]::Zero) { throw "Could not get icon for $path" }
@@ -225,13 +238,20 @@ try {
         $probes.Add([pscustomobject] @{ Name = $specification.Name; Probe = $probe; Window = $window; Hook = $hook })
     }
     Pump 1500
+    Wait-Until { Test-ObserverIdle $observer $observerType $instanceFlags } 'Setup notification processing did not finish.'
     foreach ($entry in $probes) { [void] $entry.Probe.Drain() }
+    $storeCache.Invoke($cache, [object[]] @([string] $sentinelPath, [string] 'small', [int] 16, [int] 16, $sentinelBitmap, [bool] $false, [int] 999999))
+    $sentinelBefore = Get-CachedHash $cache $sentinelPath 'small' 16
 
     $shortcut.IconLocation = (Join-Path $env:SystemRoot 'System32\shell32.dll') + ',4'
     $shortcut.Save()
     Pump 3000
     Wait-Until { (Get-CachedHash $cache $shortcutPath 'small' 16) -ne $cachedShortcutBefore -and (Get-CachedHash $cache $shortcutPath 'sized' 32) -ne $cachedShortcutSizedBefore } 'An UPDATEITEM did not refresh all cached shortcut variants.'
-    if ((Get-CachedHash $cache $sentinelPath 'small' 16) -ne $sentinelBefore) { throw 'A shortcut UPDATEITEM refreshed an unrelated cached item.' }
+    if ((Get-CachedHash $cache $sentinelPath 'small' 16) -ne $sentinelBefore) {
+        Write-Output "Sentinel hash before: $sentinelBefore; after: $(Get-CachedHash $cache $sentinelPath 'small' 16)"
+        foreach ($entry in $probes) { Write-Output "Events on failure / $($entry.Name): $(@($entry.Probe.Drain()) -join '; ')" }
+        throw 'A shortcut UPDATEITEM refreshed an unrelated cached item.'
+    }
     $after = Get-IconHash $shortcutPath
     Write-Output "Shortcut icon hash before: $before"
     Write-Output "Shortcut icon hash after:  $after"
@@ -248,6 +268,12 @@ try {
     [IconNotificationProbe]::SHChangeNotify(0x00002000, 0x1005, $shortcutPath, [IntPtr]::Zero)
     Pump 1500
     foreach ($entry in $probes) { Write-Output "Explicit UPDATEITEM / $($entry.Name): $(@($entry.Probe.Drain()) -join '; ')" }
+
+    [IconNotificationProbe]::SHChangeNotify(0x00002000, 0x1005, $sentinelPath, [IntPtr]::Zero)
+    Wait-Until { (Get-CachedHash $cache $sentinelPath 'small' 16) -ne $sentinelBefore } 'An UPDATEITEM for the sentinel did not refresh its cache entry.'
+    Wait-Until { Test-ObserverIdle $observer $observerType $instanceFlags } 'Sentinel notification processing did not finish.'
+    $storeCache.Invoke($cache, [object[]] @([string] $sentinelPath, [string] 'small', [int] 16, [int] 16, $sentinelBitmap, [bool] $false, [int] 999999))
+    $sentinelBefore = Get-CachedHash $cache $sentinelPath 'small' 16
 
     $identifier = [guid]::NewGuid().ToString('N')
     $extension = '.kisicon' + $identifier
