@@ -179,3 +179,38 @@ The drag-and-drop integration test also starts external PowerShell probes. It
 waits for them to exit normally, requests window closure when needed, and checks
 their exit codes. Forced termination is reserved for a probe that does not
 close in time and is reported as a test failure.
+
+### Open Issue: Test Process Shutdown and Explorer Mutex
+
+Some GUI test PowerShell processes have intermittently remained in Windows
+process shutdown after printing their success message. The process reported an
+exit code of zero, but waiting on the process handle did not complete. In the
+observed cases Windows still listed one thread, and the runner could not proceed
+while waiting for that process. A success message alone therefore does not prove
+that the test process has fully exited.
+
+The affected process retained an open handle to the named `Global\KIS Explorer`
+mutex. The mutex was not owned, but the application checks whether the named
+mutex already exists when starting. Consequently, a later test or app launch
+could display `KIS Explorer is already running.` even though no usable Explorer
+instance was running. In the observed cases the matching handle was identified
+and closed manually, making the mutex disappear; this did not resolve the
+underlying process shutdown hang. Do not treat closing an arbitrary process
+handle as a general test recovery procedure.
+
+The hang was first observed after `MultiPathview.Tests.ps1`, then after
+`DeleteActions.Tests.ps1` and `NewItemActions.Tests.ps1` in two runs using the
+same permuted order before MultiPathview. These runs used a diagnostic launcher
+with a timeout, not the unmodified standard runner. Each affected test printed
+its success message before the process failed to finish exiting. Five isolated
+MultiPathview repetitions and a MoveActions-to-MultiPathview sequence exited
+normally. The observations do not establish that a particular preceding test,
+test ordering, or the mutex itself causes the hang.
+
+The root cause remains open. Further investigation should capture process and
+thread state when a test exceeds its timeout, distinguish a process exit code
+from a signaled process handle, and report any retained mutex without assuming
+that a success message means shutdown completed. Avoid starting another GUI
+test while the Explorer mutex exists. The standard runner currently has no
+per-test timeout, so a process that does not finish exiting can stall the full
+run indefinitely.

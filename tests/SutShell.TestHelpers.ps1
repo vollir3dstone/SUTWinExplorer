@@ -394,8 +394,10 @@ public sealed class SutShellRightClickProbe : System.IDisposable
                 var name = new System.Text.StringBuilder(64);
                 GetClassName(window, name, name.Capacity);
                 if (name.ToString() != "#32768") return true;
-                popupFound = true;
                 var menu = SendMessage(window, 0x01E1, System.IntPtr.Zero, System.IntPtr.Zero);
+                var itemCount = GetMenuItemCount(menu);
+                if (itemCount < 0) return true;
+                popupFound = true;
                 var label = new System.Text.StringBuilder(512);
                 GetMenuString(menu, 2, label, label.Capacity, 0x400);
                 var isBase = GetMenuItemID(menu, 0) == PropertiesCommandId && GetMenuItemID(menu, 2) == NameClipboardCopyCommandId;
@@ -429,7 +431,7 @@ public sealed class SutShellRightClickProbe : System.IDisposable
                 {
                     SecondMenu = true;
                     SecondWasBase = isBase;
-                    SecondItems = new string[GetMenuItemCount(menu)];
+                    SecondItems = new string[itemCount];
                     SecondCommandIds = new uint[SecondItems.Length];
                     for (var index = 0; index < SecondItems.Length; index++)
                     {
