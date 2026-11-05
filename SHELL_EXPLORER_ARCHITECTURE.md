@@ -669,7 +669,7 @@ changes can likewise be missed. Re-registering the watchers cannot replay
 missed notifications. Conversely, moving or renaming a Pathview's directory
 alone does not mark its unchanged content enumeration-dirty; its timestamp keys
 are remapped before comparison. The integration checks in
-[PathviewRename.Tests.ps1](tests/PathviewRename.Tests.ps1) cover real ancestor
+[MultiPathviewDirectoryChanges.Tests.ps1](tests/MultiPathviewDirectoryChanges.Tests.ps1) cover real ancestor
 rename and relocation with multiple Pathviews, cached contents, Use Case paths,
 observer restoration after failure or cancellation, and a directory change
 during suspension.

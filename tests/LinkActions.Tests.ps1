@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'SutShell.TestHelpers.ps1')
 if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne [Threading.ApartmentState]::STA) { throw 'Run this test in an STA process.' }
 $assembly = [Reflection.Assembly]::LoadFrom((Join-Path $PSScriptRoot '../bin/Debug/net10.0-windows/SUTWinExplorer.dll'))
 $operations = $assembly.GetType('SUTWinExplorer.ShellFileOperations', $true)
@@ -25,7 +25,6 @@ try {
     if (-not $rejectedDuplicate -or @($workflow.PreparedPaths).Count -ne 2) { throw 'Preparing Link again changed the active workflow.' }
     $workflow.Abort()
     if ($workflow.IsPrepared) { throw 'Link abort did not clear the workflow.' }
-    $workflow.Prepare([string[]] @($file, $folder))
     $existing = Join-Path $destination 'example.txt - Shortcut.lnk'
     [IO.File]::WriteAllText($existing, 'keep')
     $inserted = [Collections.Generic.List[string]]::new()
@@ -34,8 +33,6 @@ try {
     $arguments[1] = [string] $destination
     $arguments[2] = $inserted
     $null = $link.Invoke($null, $arguments)
-    $workflow.CompleteExecute()
-    if ($workflow.IsPrepared) { throw 'Link completion did not clear the workflow.' }
     if ($inserted.Count -ne 2 -or [IO.File]::ReadAllText($existing) -cne 'keep') { throw 'Link creation did not preserve the existing item.' }
     if ($inserted[0] -cne (Join-Path $destination 'example.txt - Shortcut (2).lnk') -or
         @(Get-ChildItem -LiteralPath $destination -Filter '*.tmp').Count -ne 0) { throw 'Link creation chose an incorrect name or left a temporary file.' }
@@ -83,6 +80,7 @@ try {
         @(Get-ChildItem -LiteralPath $partialDestination -Filter '*.tmp').Count -ne 0) {
         throw "A later link failure did not preserve completed shortcuts and clean up temporary files: failed=$failed, count=$($partial.Count), files=$(@(Get-ChildItem -LiteralPath $partialDestination | ForEach-Object Name) -join ',')."
     }
+    Test-TransferActionExecution $assembly 'Link' $source $destination
     'Link action tests passed.'
 } finally {
     $workflow.Abort()

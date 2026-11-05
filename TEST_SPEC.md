@@ -88,13 +88,15 @@ one-test-file-per-subject partition. Important examples are:
 	action entry points. `Pathview.Tests.ps1` includes Pathview entry points;
 	`MultiPathview.Tests.ps1` covers interactions across Pathviews.
 - `InsertedItems.Tests.ps1` tests selection, visibility and filter updates
-	after insertion, including interactions across views. `PathviewRename.Tests.ps1`
-	currently combines single- and multi-Pathview path-change integration,
-	observer behavior and some action-related checks.
+	after insertion, including interactions across views and actual Pathview
+	background-menu execution. `PathviewRename.Tests.ps1` covers path changes
+	within one Pathview; `MultiPathviewDirectoryChanges.Tests.ps1` covers their
+	propagation and observer coordination across Pathviews.
 
 Some action tests still use a view or dialog to reach the behavior under test.
-For example, Relocate currently invokes Pathview's operation method, while
-Delete and New item tests exercise GUI flows. Conversely, location-specific
+Copy, Move and Link test successful and failed execution in both existing view
+handlers; Relocate currently invokes Pathview's operation method, while Delete
+and New item tests exercise GUI flows. Conversely, location-specific
 tests such as `ContentViewActionInteractions.Tests.ps1` still include checks
 of workflow state and action outcomes alongside menu and trigger checks. Shell
 access and action tests can also overlap on a contract. These are descriptions

@@ -1,5 +1,4 @@
-$ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName PresentationFramework
+. (Join-Path $PSScriptRoot 'SutShell.TestHelpers.ps1')
 $assembly = [Reflection.Assembly]::LoadFrom((Join-Path $PSScriptRoot '../bin/Debug/net10.0-windows/SUTWinExplorer.dll'))
 $shell = $assembly.GetType('SUTWinExplorer.SutShell', $true)
 $flags = [Reflection.BindingFlags]'Static,NonPublic'
@@ -117,25 +116,36 @@ try {
         $window.Content = $pathview
         [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([action] {}, [System.Windows.Threading.DispatcherPriority]::ApplicationIdle)
         $directoryContent = $pathview.FindName('DirectoryContent')
+        $menuActionOrder = @($directoryContent.GetType().GetMethod('CreateContextMenuActions', $viewFlags).Invoke($directoryContent, @()) | ForEach-Object { $_.Id })
+        $sidebarController = $pathview.GetType().GetField('_subdirectoryContextMenu', $viewFlags).GetValue($pathview)
+        $sidebarOwner = [System.Windows.Interop.WindowInteropHelper]::new($window).Handle
+        function Invoke-PathviewBackgroundTransfer([string] $operation) {
+            $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
+            $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
+            $menuProbe.SelectCommandId = Get-ActionCommandId "${operation}Execute"
+            try {
+                $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $false))
+                if ($menuProbe.SelectIndex -lt 0 -or ($menuProbe.States[$menuProbe.SelectIndex] -band 3) -ne 0) { throw "Pathview background $operation execute was not available." }
+            } finally { $menuProbe.Dispose() }
+        }
         $directoryContent.FindName('NamePatternTextBox').Text = 'unrelated*'
         $menuCopy = Join-Path $source 'menu-copy.txt'
         [IO.File]::WriteAllText($menuCopy, 'menu')
         $copyWorkflow.Prepare([string[]] @($menuCopy))
-        $menuAction = $pathview.GetType().GetMethod('ExecuteDirectoryMenuAction', $viewFlags)
-        $null = $menuAction.Invoke($pathview, [object[]] @([string] 'CopyExecute', $null))
+        Invoke-PathviewBackgroundTransfer 'Copy'
         Wait-Selection $directoryContent ([string[]] @((Join-Path $destination 'menu-copy.txt')))
         if ($directoryContent.FindName('NamePatternTextBox').Text -ne '') { throw 'Directory menu copy did not clear the blocking name filter.' }
 
         $menuMove = Join-Path $source 'menu-move.txt'
         [IO.File]::WriteAllText($menuMove, 'menu move')
         $moveWorkflow.Prepare([string[]] @($menuMove))
-        $null = $menuAction.Invoke($pathview, [object[]] @([string] 'MoveExecute', $null))
+        Invoke-PathviewBackgroundTransfer 'Move'
         Wait-Selection $directoryContent ([string[]] @((Join-Path $destination 'menu-move.txt')))
         $menuLink = Join-Path $source 'menu-link.txt'
         [IO.File]::WriteAllText($menuLink, 'menu link')
         $directoryContent.FindName('NamePatternTextBox').Text = 'unrelated*'
         $linkWorkflow.Prepare([string[]] @($menuLink))
-        $null = $menuAction.Invoke($pathview, [object[]] @([string] 'LinkExecute', $null))
+        Invoke-PathviewBackgroundTransfer 'Link'
         Wait-Selection $directoryContent ([string[]] @((Join-Path $destination 'menu-link.txt - Shortcut.lnk')))
         if ($linkWorkflow.IsPrepared -or $directoryContent.FindName('NamePatternTextBox').Text -ne '' -or -not [IO.File]::Exists($menuLink)) {
             throw 'Directory menu Link execute did not complete and reveal its shortcut.'
@@ -164,10 +174,15 @@ try {
             }
         } finally { $sourceWindow.Close() }
     } finally {
+        if ($null -ne $pathview) { $pathview.GetType().GetMethod('Close', $viewFlags).Invoke($pathview, @()) }
         $window.Close()
         [System.Threading.SynchronizationContext]::SetSynchronizationContext($previousContext)
     }
 } finally {
-    [IO.Directory]::Delete($directory, $true)
+    foreach ($operation in @('Link', 'Copy', 'Move')) {
+        $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null).Abort()
+    }
+    if ($null -ne $application) { $application.Shutdown() }
+    if ([IO.Directory]::Exists($directory)) { [IO.Directory]::Delete($directory, $true) }
 }
 Write-Host 'Inserted item transfer, filter and selection tests passed.'

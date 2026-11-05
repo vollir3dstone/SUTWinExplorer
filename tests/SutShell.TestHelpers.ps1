@@ -837,3 +837,67 @@ function Start-NewDialogProbe([string] $mode) {
     return $result
 }
 
+function Test-TransferActionExecution($assembly, [string] $operation, [string] $source, [string] $destination) {
+    $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
+    [System.Windows.Application].GetField('_resourceAssembly', [Reflection.BindingFlags]'Static,NonPublic').SetValue($null, $assembly)
+    $application = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.App', $true))
+    $application.InitializeComponent()
+    $application.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
+    $previousContext = [System.Threading.SynchronizationContext]::Current
+    $viewFlags = [Reflection.BindingFlags]'Instance,NonPublic'
+    try {
+        [System.Threading.SynchronizationContext]::SetSynchronizationContext(
+            [System.Windows.Threading.DispatcherSynchronizationContext]::new([System.Windows.Threading.Dispatcher]::CurrentDispatcher))
+        foreach ($location in @('ContentView', 'Pathview')) {
+            $view = $null
+            $window = [System.Windows.Window]::new()
+            try {
+                if ($location -eq 'ContentView') {
+                    $view = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
+                    $null = $view.GetType().GetMethod('Initialize', $viewFlags).Invoke($view, [object[]] @([bool] $false))
+                    $null = $view.GetType().GetMethod('SetCurrentPath', $viewFlags).Invoke($view, [object[]] @([string] $destination))
+                } else {
+                    $view = $assembly.GetType('SUTWinExplorer.Pathview', $true).GetConstructors()[0].Invoke([object[]] @([string] $destination, $false, $null, $null, $null, $null))
+                }
+                $window.ShowInTaskbar = $false
+                $window.Left = -20000
+                $window.Top = -20000
+                $window.Content = $view
+                $window.Show()
+                $file = Join-Path $source "execute-$operation-$location.txt"
+                [IO.File]::WriteAllText($file, $location)
+                $workflow.Prepare([string[]] @($file))
+                if ($location -eq 'ContentView') {
+                    $view.FindName("${operation}ExecuteButton").RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+                } else {
+                    $null = $view.GetType().GetMethod('ExecuteDirectoryMenuAction', $viewFlags).Invoke($view, [object[]] @([string] "${operation}Execute", $null))
+                }
+                $targetName = [IO.Path]::GetFileName($file)
+                if ($operation -eq 'Link') { $targetName += ' - Shortcut.lnk' }
+                $target = Join-Path $destination $targetName
+                Assert-True (-not $workflow.IsPrepared -and [IO.File]::Exists($target) -and
+                    ([IO.File]::Exists($file) -eq ($operation -ne 'Move'))) "$location $operation execute did not complete with the expected source and destination."
+
+                $missing = Join-Path $source "missing-$operation-$location.txt"
+                $workflow.Prepare([string[]] @($missing))
+                $errorProbe = [SutShellPropertiesProbe]::new('Operation failed')
+                try {
+                    if ($location -eq 'ContentView') {
+                        $view.FindName("${operation}ExecuteButton").RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+                    } else {
+                        $null = $view.GetType().GetMethod('ExecuteDirectoryMenuAction', $viewFlags).Invoke($view, [object[]] @([string] "${operation}Execute", $null))
+                    }
+                    Assert-True ($errorProbe.Opened -and $workflow.IsPrepared -and @($workflow.PreparedPaths)[0] -ceq $missing) "$location $operation failure did not report the error and retain the prepared source."
+                } finally { $errorProbe.Dispose(); $workflow.Abort() }
+            } finally {
+                $workflow.Abort()
+                if ($location -eq 'Pathview' -and $null -ne $view) { $view.GetType().GetMethod('Close', $viewFlags).Invoke($view, @()) }
+                $window.Close()
+            }
+        }
+    } finally {
+        [System.Threading.SynchronizationContext]::SetSynchronizationContext($previousContext)
+        $application.Shutdown()
+    }
+}
+

@@ -26,17 +26,15 @@ try {
     Assert-True ($failed -and @($workflow.PreparedPaths).Count -eq 2) 'Preparing Copy again changed the active workflow.'
     $workflow.Abort()
     Assert-True (-not $workflow.IsPrepared) 'Copy abort did not clear the workflow.'
-    $workflow.Prepare([string[]] @($first, $second))
     $inserted = [Collections.Generic.List[string]]::new()
-    $null = $copy.Invoke($null, [object[]] @([string[]] @($workflow.PreparedPaths), [string] $destination, [IntPtr]::Zero, $inserted))
-    $workflow.CompleteExecute()
+    $null = $copy.Invoke($null, [object[]] @([string[]] @($first, $second), [string] $destination, [IntPtr]::Zero, $inserted))
     Assert-True ($inserted.Count -eq 2 -and (Join-Path $destination 'first.txt') -in $inserted -and
-        (Join-Path $destination 'second.txt') -in $inserted -and [IO.File]::Exists($first) -and [IO.File]::Exists($second) -and
-        -not $workflow.IsPrepared) 'Copy did not return both destinations, retain its sources and clear the workflow.'
+        (Join-Path $destination 'second.txt') -in $inserted -and [IO.File]::Exists($first) -and [IO.File]::Exists($second)) 'Copy did not return both destinations and retain its sources.'
     $inserted.Clear()
     $null = $copy.Invoke($null, [object[]] @([string[]] @($folder), [string] $destination, [IntPtr]::Zero, $inserted))
     Assert-True ($inserted.Count -eq 1 -and $inserted[0] -eq (Join-Path $destination 'folder') -and
         [IO.File]::Exists((Join-Path $folder 'nested.txt')) -and [IO.File]::Exists((Join-Path $inserted[0] 'nested.txt'))) 'Copy returned an incorrect directory destination or lost its contents.'
+    Test-TransferActionExecution $assembly 'Copy' $source $destination
     'Copy action tests passed.'
 } finally {
     $workflow.Abort()
