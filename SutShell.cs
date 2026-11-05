@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Windows.Interop;
 using System.Windows.Media;
 
 namespace SUTWinExplorer;
@@ -275,7 +276,168 @@ internal static class SutShell
         new DirectoryObserver(paths, _ => changed(), null);
 
     internal static IDisposable ObservePathviewDirectories(IEnumerable<string> paths, string currentPath, Action<DirectoryNotification> changed) =>
-        new DirectoryObserver(paths, changed, currentPath);
+        string.Equals(Environment.GetEnvironmentVariable("KIS_DIRECTORY_OBSERVER"), "shell", StringComparison.OrdinalIgnoreCase)
+            ? new ShellDirectoryObserver(paths, changed)
+            : new DirectoryObserver(paths, changed, currentPath);
+
+    private sealed class ShellDirectoryObserver : IDisposable
+    {
+        private const int RenameItem = 0x00000001;
+        private const int CreateItem = 0x00000002;
+        private const int DeleteItem = 0x00000004;
+        private const int CreateDirectory = 0x00000008;
+        private const int DeleteDirectory = 0x00000010;
+        private const int Attributes = 0x00000800;
+        private const int UpdateDirectory = 0x00001000;
+        private const int UpdateItem = 0x00002000;
+        private const int UpdateImage = 0x00008000;
+        private const int RenameDirectory = 0x00020000;
+        private const int ExtendedEvent = 0x04000000;
+        private const int AssociationChanged = 0x08000000;
+        private const int AllEvents = 0x7fffffff;
+        private const int NotificationMessage = 0x8000 + 0x272;
+        private readonly HwndSource _window;
+        private readonly HashSet<string> _paths = new(StringComparer.OrdinalIgnoreCase);
+        private readonly List<uint> _registrations = [];
+        private readonly Action<DirectoryNotification> _changed;
+
+        internal ShellDirectoryObserver(IEnumerable<string> paths, Action<DirectoryNotification> changed)
+        {
+            _changed = changed;
+            _window = new HwndSource(new HwndSourceParameters("KIS directory observer"));
+            _window.AddHook(WindowProcedure);
+            foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (SHParseDisplayName(path, IntPtr.Zero, out var itemIdList, 0, out _) < 0 || itemIdList == IntPtr.Zero)
+                    continue;
+                try
+                {
+                    var entry = new ShellChangeNotifyEntry { ItemIdList = itemIdList, Recursive = false };
+                    var registration = SHChangeNotifyRegister(_window.Handle, 0x0001 | 0x0002 | 0x8000,
+                        AllEvents, NotificationMessage, 1, ref entry);
+                    if (registration == 0)
+                    {
+                        Debug.WriteLine($"Could not observe '{path}' using Shell notifications.");
+                        continue;
+                    }
+                    _paths.Add(Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)));
+                    _registrations.Add(registration);
+                }
+                finally
+                {
+                    Marshal.FreeCoTaskMem(itemIdList);
+                }
+            }
+        }
+
+        private IntPtr WindowProcedure(IntPtr window, int message, IntPtr changeHandle, IntPtr processId, ref bool handled)
+        {
+            if (message != NotificationMessage)
+                return IntPtr.Zero;
+            handled = true;
+            var notificationLock = SHChangeNotificationLock(changeHandle, unchecked((uint)processId.ToInt64()),
+                out var itemIdLists, out var eventId);
+            if (notificationLock == IntPtr.Zero)
+                return IntPtr.Zero;
+            try
+            {
+                if ((eventId & (UpdateImage | ExtendedEvent | AssociationChanged)) != 0 || itemIdLists == IntPtr.Zero)
+                    return IntPtr.Zero;
+                var oldPath = GetShellPath(Marshal.ReadIntPtr(itemIdLists));
+                if (oldPath is null)
+                    return IntPtr.Zero;
+                var isRename = (eventId & (RenameItem | RenameDirectory)) != 0;
+                var newPath = isRename ? GetShellPath(Marshal.ReadIntPtr(itemIdLists, IntPtr.Size)) : null;
+                foreach (var directory in _paths)
+                {
+                    var oldIsChild = IsDirectChild(directory, oldPath);
+                    var newIsChild = newPath is not null && IsDirectChild(directory, newPath);
+                    if (isRename && oldIsChild && newIsChild)
+                        _changed(new(directory, new RenamedEventArgs(WatcherChangeTypes.Renamed, directory,
+                            Path.GetFileName(newPath!), Path.GetFileName(oldPath))));
+                    else if (isRename && (oldIsChild || newIsChild))
+                        _changed(new(directory, new FileSystemEventArgs(oldIsChild ? WatcherChangeTypes.Deleted : WatcherChangeTypes.Created,
+                            directory, Path.GetFileName(oldIsChild ? oldPath : newPath!))));
+                    else if ((eventId & UpdateDirectory) != 0)
+                    {
+                        if (string.Equals(directory, Path.TrimEndingDirectorySeparator(oldPath), StringComparison.OrdinalIgnoreCase))
+                            _changed(new(directory, null));
+                    }
+                    else if (oldIsChild)
+                    {
+                        var changeType = (eventId & (CreateItem | CreateDirectory)) != 0 ? WatcherChangeTypes.Created
+                            : (eventId & (DeleteItem | DeleteDirectory)) != 0 ? WatcherChangeTypes.Deleted
+                            : (eventId & (Attributes | UpdateItem)) != 0 ? WatcherChangeTypes.Changed
+                            : (WatcherChangeTypes?)null;
+                        _changed(new(directory, changeType is null ? null : new FileSystemEventArgs(changeType.Value, directory, Path.GetFileName(oldPath))));
+                    }
+                    else if (string.Equals(directory, Path.TrimEndingDirectorySeparator(oldPath), StringComparison.OrdinalIgnoreCase))
+                        _changed(new(directory, null));
+                }
+            }
+            finally
+            {
+                _ = SHChangeNotificationUnlock(notificationLock);
+            }
+            return IntPtr.Zero;
+        }
+
+        private static bool IsDirectChild(string directory, string path)
+        {
+            var parent = Path.GetDirectoryName(path);
+            return parent is not null && string.Equals(Path.TrimEndingDirectorySeparator(parent), directory, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string? GetShellPath(IntPtr itemIdList)
+        {
+            if (itemIdList == IntPtr.Zero || SHGetNameFromIDList(itemIdList, 0x80058000, out var name) < 0)
+                return null;
+            try
+            {
+                return Marshal.PtrToStringUni(name);
+            }
+            finally
+            {
+                Marshal.FreeCoTaskMem(name);
+            }
+        }
+
+        public void Dispose()
+        {
+            foreach (var registration in _registrations)
+                _ = SHChangeNotifyDeregister(registration);
+            _registrations.Clear();
+            _window.RemoveHook(WindowProcedure);
+            _window.Dispose();
+        }
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+        private static extern int SHParseDisplayName(string name, IntPtr bindContext, out IntPtr itemIdList, uint attributesIn, out uint attributesOut);
+
+        [DllImport("shell32.dll")]
+        private static extern int SHGetNameFromIDList(IntPtr itemIdList, uint nameType, out IntPtr name);
+
+        [DllImport("shell32.dll")]
+        private static extern uint SHChangeNotifyRegister(IntPtr window, int sources, int events, int message, int entryCount, ref ShellChangeNotifyEntry entry);
+
+        [DllImport("shell32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SHChangeNotifyDeregister(uint registration);
+
+        [DllImport("shell32.dll", EntryPoint = "SHChangeNotification_Lock")]
+        private static extern IntPtr SHChangeNotificationLock(IntPtr changeHandle, uint processId, out IntPtr itemIdLists, out int eventId);
+
+        [DllImport("shell32.dll", EntryPoint = "SHChangeNotification_Unlock")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SHChangeNotificationUnlock(IntPtr notificationLock);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct ShellChangeNotifyEntry
+        {
+            internal IntPtr ItemIdList;
+            [MarshalAs(UnmanagedType.Bool)] internal bool Recursive;
+        }
+    }
 
     private sealed class DirectoryObserver : IDisposable
     {

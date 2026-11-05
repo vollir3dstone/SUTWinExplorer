@@ -159,7 +159,7 @@ try {
     $newDate = [datetime]::Now.AddDays(-2)
     [IO.Directory]::SetLastWriteTime($folderPath, $newDate)
     Wait-Until { $displayDirty.GetValue($view) -and [Math]::Abs(($modifiedProperty.GetValue($folderItem) - $newDate).TotalSeconds) -lt 2 } 'The changed folder metadata was not updated in the cache.'
-    if ($enumerationDirty.GetValue($view) -or $generation.GetValue($cache) -ne $metadataGeneration -or $folderRow.Entry.Modified -ne $oldDisplayDate) { throw 'A folder metadata change enumerated or changed the display before activation.' }
+    if ($enumerationDirty.GetValue($view) -or $generation.GetValue($cache) -ne $metadataGeneration -or $folderRow.Entry.Modified -ne $oldDisplayDate) { throw "A folder metadata change enumerated or changed the display before activation: enumerationDirty=$($enumerationDirty.GetValue($view)), generation=$metadataGeneration -> $($generation.GetValue($cache)), displayed=$oldDisplayDate -> $($folderRow.Entry.Modified)." }
     $tabs.SelectedItem = $fixed
     Wait-Until { $null -ne $snapshot.GetValue($content) -and @($content.FindName('FileList').Items | Where-Object { $_.FullPath -eq $folderPath -and $null -ne $_.Entry -and [Math]::Abs(($_.Entry.Modified - $newDate).TotalSeconds) -lt 2 }).Count -eq 1 } 'The updated folder metadata was not displayed on activation.'
     if ($generation.GetValue($cache) -ne $metadataGeneration -or
