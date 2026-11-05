@@ -228,6 +228,15 @@ internal static class SutShell
         DirectoryDataCache cache, string directoryPath, string itemPath) =>
         RunOnShellThread(_ => cache.RefreshItemMetadata(directoryPath, itemPath), CancellationToken.None);
 
+    internal static Task<bool> ApplyCachedItemChangesAsync(
+        DirectoryDataCache cache, string directoryPath, IReadOnlyList<FileSystemEventArgs> changes) =>
+        RunOnShellThread(_ => cache.ApplyItemChanges(directoryPath, changes), CancellationToken.None);
+
+    internal static Task<Dictionary<string, FileEntry>> GetChangedEntriesAsync(
+        DirectorySnapshot snapshot, HashSet<string> paths) =>
+        RunOnShellThread(_ => snapshot.Items.Where(item => paths.Contains(item.FullPath))
+            .ToDictionary(item => item.FullPath, item => item.Entry, StringComparer.OrdinalIgnoreCase), CancellationToken.None);
+
     private static Task<T> RunOnShellThread<T>(Func<CancellationToken, T> operation, CancellationToken cancellationToken)
     {
         var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -814,6 +823,50 @@ internal sealed class DirectoryDataCache
             return false;
         item.RefreshMetadata();
         return true;
+    }
+
+    internal bool ApplyItemChanges(string directoryPath, IReadOnlyList<FileSystemEventArgs> changes)
+    {
+        var updates = new List<(FileSystemEventArgs Change, DirectoryItem? Replacement)>();
+        foreach (var change in changes)
+        {
+            if (change.ChangeType == WatcherChangeTypes.Changed)
+                continue;
+            DirectoryItem? replacement = null;
+            if (change.ChangeType != WatcherChangeTypes.Deleted)
+            {
+                try
+                {
+                    var attributes = File.GetAttributes(change.FullPath);
+                    var isDirectory = (attributes & FileAttributes.Directory) != 0;
+                    var name = ShellDisplayNameProvider.GetDisplayName(change.FullPath) ?? Path.GetFileName(change.FullPath);
+                    replacement = new DirectoryItem(name, change.FullPath, isDirectory, false);
+                }
+                catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+                {
+                }
+            }
+            updates.Add((change, replacement));
+        }
+        lock (_sync)
+        {
+            if (_items is null || !string.Equals(_path, directoryPath, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (updates.Count == 0)
+                return true;
+            var items = _items.ToList();
+            foreach (var (change, replacement) in updates)
+            {
+                var oldPath = change is RenamedEventArgs renamed ? renamed.OldFullPath : change.FullPath;
+                items.RemoveAll(item => string.Equals(item.FullPath, oldPath, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(item.FullPath, change.FullPath, StringComparison.OrdinalIgnoreCase));
+                if (replacement is not null)
+                    items.Add(replacement);
+            }
+            _items = items.ToArray();
+            return true;
+        }
     }
 
     internal DirectoryItem[] GetDirectory(string path, CancellationToken token)

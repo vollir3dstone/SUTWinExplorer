@@ -82,20 +82,17 @@ directory trees. It is a performance contract, not a claim that every rule is
 already implemented. The implementation description below records the current
 behavior where it differs from this contract.
 
-1. **Enumeration dirty:** A directory is marked enumeration-dirty when its
-	immediate items are added, removed, or renamed. A metadata change is handled
-	separately under rule 4 and must not set enumeration-dirty. Dirty state
-	belongs to the affected directory; it is not a request to enumerate unrelated
-	directories. A filesystem notification only records the dirty state: it does
-	not itself enumerate, including when the tab is visible. When a tab is next
-	opened or activated, its enumeration-dirty directories are enumerated again;
-	the complete results are then filtered and displayed. Opening a clean tab
-	does not enumerate or rebuild its unchanged directory contents or trees.
-	Initial loading of a directory still requires its first enumeration.
+1. **Item changes:** Notifications identifying immediate additions, removals or
+	renames are recorded until the next tab activation. The affected cached records
+	are then updated without re-enumerating the content directory; the filtered,
+	sorted snapshot is reconciled with existing rows. Dirty tree nodes can still
+	require enumeration. Unknown notifications, detected notification loss and
+	changes detected after observer suspension require a full refresh. Opening a clean tab does not rebuild its unchanged
+	contents or trees. Initial loading still requires enumeration.
 2. **Filters:** Changing filter conditions never causes a new enumeration, even
 	when a directory is dirty. Filtering uses the existing complete, unfiltered
-	enumeration. A dirty directory is re-enumerated on the next tab activation,
-	not as a side effect of filtering.
+	cache; pending notifications are applied on the next tab activation, not as a
+	side effect of filtering.
 3. **Path or name changes:** An internally or externally renamed or moved directory
 	represented by a Pathview, including a change to an ancestor in its path,
 	updates that Pathview's path, its tab label, and its Use Case entry without
@@ -107,9 +104,9 @@ behavior where it differs from this contract.
 	contents enumeration-dirty.
 4. **Display dirty:** An immediate item's metadata change updates that item's
 	cached metadata and marks the view display-dirty, not enumeration-dirty. The
-	cache update does not enumerate the directory. On the next activation, the
-	display and any affected filtering or sorting are updated from the existing
-	complete enumeration. A change solely inside a subdirectory never causes
+	cache update does not enumerate the directory. On the next activation, affected
+	rows and any affected filtering or sorting are updated from the existing cache.
+	A change solely inside a subdirectory never causes
 	enumeration of its parent: a child directory's timestamp change follows the
 	same display-dirty rule regardless of its cause. Structural changes still
 	follow rule 1.
@@ -192,10 +189,10 @@ just changed records. In the current ContentView/Pathview integration:
 | --- | --- |
 | Change name pattern, Hide directories, Hide internal or a sort column/direction | Keep cache; create a new filtered/sorted snapshot. |
 | Navigate or invoke ContentView `Refresh(true)` | Invalidate; the next snapshot enumerates again. `Refresh(false)` leaves content unchanged. |
-| Immediate item metadata notification | Update that item's cached metadata and mark the view display-dirty; do not invalidate or enumerate the directory. |
-| Immediate item addition, removal or rename | Mark the affected directory enumeration-dirty without refreshing, even while visible. |
+| Immediate item metadata notification | Update that item's cached metadata and queue a targeted display update; do not invalidate or enumerate the directory. |
+| Immediate item addition, removal or rename | Queue the specific item change without refreshing, even while visible. On activation update the affected cached records without enumerating the content directory. |
 | Successful inline rename, New, or Link/Copy/Move with reported inserted items | Refresh and invalidate; insertion completion also handles items reported before a later transfer failure. |
-| Pathview becomes visible or loads | Enumerate enumeration-dirty directories; otherwise redraw a display-dirty view from the cached records. A clean tab retains its snapshot and trees. |
+| Pathview becomes visible or loads | Apply identified item changes to existing rows; enumerate dirty tree nodes separately. Unknown notifications or detected missed changes fall back to a full content refresh. A clean tab retains its snapshot and trees. |
 | Filter or refresh while inline rename is active | Defer rebuilding the view until editing ends; a requested invalidation occurs before deferral. Successful rename also invalidates. |
 
 Pathview receives filesystem events, including both paths for a direct rename,
@@ -206,9 +203,8 @@ renames and internally reported Shell moves rebase affected Pathviews and their
 caches without invalidating their contents. External moves reported only as
 separate deletion and creation events cannot be paired reliably. On Windows,
 watchers on descendants can prevent a directory's ancestor from being renamed
-or moved while those watchers are open. Watcher errors currently mark
-the affected route enumeration-dirty and are not yet handled separately as
-required by the contract above.
+or moved while those watchers are open. Watcher errors fall back to a full
+refresh of the affected content directory.
 
 `FileSystemWatcher` is best-effort, and the cache is not an atomic filesystem
 snapshot. Items can change between enumeration and lazy loading, or after a

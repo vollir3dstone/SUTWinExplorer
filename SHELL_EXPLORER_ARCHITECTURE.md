@@ -582,11 +582,12 @@ directory route from the drive root through `CurrentPath`, plus a recursive
 name-only watcher to detect immediate child-directory content changes. They remain active
 while the tab is hidden or unloaded, and are replaced on navigation and disposed
 when the tab closes. Ancestor watchers track directory changes, not unrelated
-files. Structural notifications mark affected content and/or route trees
-enumeration-dirty. Metadata notifications update the cached item and mark the
-view display-dirty; they do not enumerate. When a dirty tab next becomes
-visible, only enumeration-dirty route nodes are enumerated, while display-dirty
-content is rebuilt from cached records. Both trees share the current directory's
+files. Structural notifications mark affected route trees dirty and queue
+identified item changes; metadata notifications update the cached item and queue
+its display update. When a dirty tab next becomes visible, content changes are
+reconciled into existing rows without re-enumerating the directory, while dirty
+route nodes may be enumerated. Unknown changes and watcher errors require a full
+content refresh. Both trees share the current directory's
 subdirectory enumeration. A clean tab retains its existing snapshot and trees. Explicit user operations and
 navigation can still refresh their affected views. Watchers are best-effort and
 cannot guarantee delivery of all filesystem or Shell metadata changes. When a

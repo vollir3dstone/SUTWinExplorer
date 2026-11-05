@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
@@ -23,9 +24,13 @@ public partial class ContentView : UserControl
     private CancellationTokenSource? _overlayWaitCancellation;
     private Task _snapshotReady = Task.CompletedTask;
     private readonly HashSet<Task> _metadataUpdates = [];
+    private readonly List<FileSystemEventArgs> _pendingFileSystemChanges = [];
+    private bool _applyingFileSystemChanges;
+    private bool _closed;
     private readonly List<(string OldPath, string NewPath)> _pathRemaps = [];
     private DirectorySnapshot? _snapshot;
     private DirectoryRow[]? _rows;
+    private ObservableCollection<DirectoryRow>? _displayRows;
     private readonly DirectorySortState _sorting = new();
     private readonly DirectoryDataCache _directoryCache = new();
     private readonly HashSet<string> _selectedPaths = new(StringComparer.OrdinalIgnoreCase);
@@ -235,6 +240,7 @@ public partial class ContentView : UserControl
         _selectedPaths.Clear();
         _revealedPath = null;
         _pathRemaps.Clear();
+        _pendingFileSystemChanges.Clear();
         CurrentPath = path;
         ClearRows();
         DirectoryCountLabel.Text = "-";
@@ -316,7 +322,8 @@ public partial class ContentView : UserControl
             _restoringSelection = true;
             try
             {
-                FileList.ItemsSource = _rows;
+                _displayRows = new ObservableCollection<DirectoryRow>(_rows);
+                FileList.ItemsSource = _displayRows;
                 foreach (var row in _rows)
                     if (_selectedPaths.Contains(row.FullPath))
                         FileList.SelectedItems.Add(row);
@@ -411,10 +418,205 @@ public partial class ContentView : UserControl
 
     internal void RefreshDisplay() => RefreshCore(invalidate: false);
 
+    internal void ApplyFileSystemChanges(IEnumerable<FileSystemEventArgs> changes)
+    {
+        if (_closed)
+            return;
+        _pendingFileSystemChanges.AddRange(changes);
+        _ = ProcessFileSystemChangesAsync();
+    }
+
+    private async Task ProcessFileSystemChangesAsync()
+    {
+        if (_applyingFileSystemChanges || _editingRow is not null || _closed)
+            return;
+        _applyingFileSystemChanges = true;
+        try
+        {
+            while (_pendingFileSystemChanges.Count > 0 && _editingRow is null && !_closed)
+            {
+                var changes = _pendingFileSystemChanges.ToArray();
+                _pendingFileSystemChanges.Clear();
+                var path = CurrentPath;
+                try
+                {
+                    Task ready;
+                    do
+                    {
+                        ready = _snapshotReady;
+                        await ready;
+                    }
+                    while (!ReferenceEquals(ready, _snapshotReady));
+                    await WaitForMetadataUpdatesAsync();
+                    foreach (var (oldDirectory, newDirectory) in _pathRemaps)
+                        path = ShellLocations.RemapPath(path, oldDirectory, newDirectory);
+                    if (_closed || !string.Equals(path, CurrentPath, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    changes = changes.Select(RemapFileSystemChange).ToArray();
+                    var previousSnapshot = _snapshot;
+                    var previousRows = _displayRows;
+                    if (previousSnapshot is null || previousRows is null ||
+                        !await SutShell.ApplyCachedItemChangesAsync(_directoryCache, path, changes))
+                    {
+                        RefreshCore(invalidate: true);
+                        continue;
+                    }
+                    var snapshot = await SutShell.OpenCachedDirectoryAsync(path,
+                        HideDirectoriesCheckBox.GetCheckBox().IsChecked != true,
+                        HideInternalContentCheckBox.GetCheckBox().IsChecked == true,
+                        NamePatternTextBox.Text, _sorting, _directoryCache, CancellationToken.None);
+                    var changedPaths = changes.Select(change => change.FullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    changedPaths.UnionWith(changes.OfType<RenamedEventArgs>().Select(change => change.OldFullPath));
+                    var entries = await SutShell.GetChangedEntriesAsync(snapshot, changedPaths);
+                    if (_closed)
+                        continue;
+                    if (!string.Equals(path, CurrentPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        foreach (var (oldDirectory, newDirectory) in _pathRemaps)
+                            path = ShellLocations.RemapPath(path, oldDirectory, newDirectory);
+                        if (string.Equals(path, CurrentPath, StringComparison.OrdinalIgnoreCase))
+                            _pendingFileSystemChanges.InsertRange(0, changes);
+                        continue;
+                    }
+                    if (!ReferenceEquals(previousSnapshot, _snapshot) || !ReferenceEquals(previousRows, _displayRows) || _editingRow is not null)
+                    {
+                        _pendingFileSystemChanges.InsertRange(0, changes);
+                        continue;
+                    }
+                    ApplyFileSystemSnapshot(snapshot, changes, changedPaths, entries);
+                }
+                catch (Exception exception)
+                {
+                    Debug.WriteLine($"Could not apply directory changes: {exception}");
+                    foreach (var (oldDirectory, newDirectory) in _pathRemaps)
+                        path = ShellLocations.RemapPath(path, oldDirectory, newDirectory);
+                    if (!_closed && string.Equals(path, CurrentPath, StringComparison.OrdinalIgnoreCase))
+                        RefreshCore(invalidate: true);
+                }
+            }
+        }
+        finally
+        {
+            _applyingFileSystemChanges = false;
+        }
+    }
+
+    private FileSystemEventArgs RemapFileSystemChange(FileSystemEventArgs change)
+    {
+        var path = change.FullPath;
+        var oldPath = (change as RenamedEventArgs)?.OldFullPath;
+        foreach (var (oldDirectory, newDirectory) in _pathRemaps)
+        {
+            path = ShellLocations.RemapPath(path, oldDirectory, newDirectory);
+            if (oldPath is not null)
+                oldPath = ShellLocations.RemapPath(oldPath, oldDirectory, newDirectory);
+        }
+        var directory = Path.GetDirectoryName(path)!;
+        return oldPath is null
+            ? new FileSystemEventArgs(change.ChangeType, directory, Path.GetFileName(path))
+            : new RenamedEventArgs(change.ChangeType, directory, Path.GetFileName(path), Path.GetFileName(oldPath));
+    }
+
+    private void ApplyFileSystemSnapshot(DirectorySnapshot snapshot, IReadOnlyList<FileSystemEventArgs> changes,
+        HashSet<string> changedPaths, IReadOnlyDictionary<string, FileEntry> entries)
+    {
+        var rows = _displayRows!;
+        var oldRows = rows.ToArray();
+        var scroll = FindVisualChild<ScrollViewer>(FileList);
+        var oldOffset = scroll?.VerticalOffset ?? 0;
+        var firstVisible = Math.Clamp((int)Math.Floor(oldOffset), 0, oldRows.Length);
+        _rangeCancellation?.Cancel();
+        CancelOverlayWait();
+        _restoringSelection = true;
+        try
+        {
+            foreach (var rename in changes.OfType<RenamedEventArgs>())
+            {
+                var row = rows.FirstOrDefault(candidate => string.Equals(candidate.FullPath, rename.OldFullPath, StringComparison.OrdinalIgnoreCase));
+                if (row is null)
+                    continue;
+                var replaced = rows.FirstOrDefault(candidate => !ReferenceEquals(candidate, row) &&
+                    string.Equals(candidate.FullPath, rename.FullPath, StringComparison.OrdinalIgnoreCase));
+                if (replaced is not null)
+                    rows.Remove(replaced);
+                entries.TryGetValue(rename.FullPath, out var renamedEntry);
+                row.ApplyRename(rename.OldFullPath, rename.FullPath, renamedEntry);
+                if (_selectedPaths.Remove(rename.OldFullPath))
+                    _selectedPaths.Add(rename.FullPath);
+                if (_revealedPath is not null && string.Equals(_revealedPath, rename.OldFullPath, StringComparison.OrdinalIgnoreCase))
+                    _revealedPath = rename.FullPath;
+            }
+
+            var desiredPaths = snapshot.Items.Select(item => item.FullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            for (var index = rows.Count - 1; index >= 0; index--)
+                if (!desiredPaths.Contains(rows[index].FullPath))
+                    rows.RemoveAt(index);
+            var existing = rows.ToDictionary(row => row.FullPath, StringComparer.OrdinalIgnoreCase);
+            var desired = snapshot.Items.Select(item => existing.GetValueOrDefault(item.FullPath) ?? new DirectoryRow(item.FullPath)).ToArray();
+            for (var index = 0; index < desired.Length; index++)
+                if (!existing.ContainsKey(desired[index].FullPath))
+                    rows.Insert(index, desired[index]);
+
+            for (var index = 0; index < desired.Length; index++)
+            {
+                if (ReferenceEquals(rows[index], desired[index]))
+                    continue;
+                var current = rows[index];
+                if (changedPaths.Contains(current.FullPath) && !changedPaths.Contains(desired[index].FullPath))
+                {
+                    rows.Move(index, Array.IndexOf(desired, current));
+                    index--;
+                }
+                else
+                    rows.Move(rows.IndexOf(desired[index]), index);
+            }
+
+            foreach (var row in rows)
+                if (row.Entry is not null && entries.TryGetValue(row.FullPath, out var entry))
+                    row.Entry = entry;
+            _selectedPaths.IntersectWith(desiredPaths);
+            foreach (var row in rows)
+                if (_selectedPaths.Contains(row.FullPath) && !FileList.SelectedItems.Contains(row))
+                    FileList.SelectedItems.Add(row);
+        }
+        finally
+        {
+            _restoringSelection = false;
+        }
+        _snapshot = snapshot;
+        _rows = rows.ToArray();
+        if (scroll is not null && scroll.CanContentScroll && firstVisible < oldRows.Length)
+        {
+            var anchor = oldRows.Skip(firstVisible).FirstOrDefault(row => !changedPaths.Contains(row.FullPath) && rows.Contains(row));
+            if (anchor is not null)
+            {
+                var adjustment = rows.IndexOf(anchor) - Array.IndexOf(oldRows, anchor);
+                if (adjustment != 0)
+                {
+                    FileList.UpdateLayout();
+                    scroll.ScrollToVerticalOffset(oldOffset + adjustment);
+                }
+            }
+        }
+        _nextBackgroundIndex = 0;
+        DirectoryCountLabel.Text = snapshot.DirectoryCount.ToString(CultureInfo.CurrentCulture);
+        FileCountLabel.Text = snapshot.FileCount.ToString(CultureInfo.CurrentCulture);
+        UpdateToolbarOperationButtons();
+        ScheduleRangeLoad();
+        if (snapshot.OverlayCompletion is { } overlayCompletion)
+        {
+            var overlayWait = new CancellationTokenSource();
+            _overlayWaitCancellation = overlayWait;
+            _ = RefreshAfterOverlaysAsync(snapshot, CurrentPath, overlayCompletion, overlayWait);
+        }
+    }
+
     internal void CancelOverlayWait() => _overlayWaitCancellation?.Cancel();
 
     internal void Close()
     {
+        _closed = true;
+        _pendingFileSystemChanges.Clear();
         _refreshCancellation?.Cancel();
         _rangeCancellation?.Cancel();
         CancelOverlayWait();
@@ -453,6 +655,7 @@ public partial class ContentView : UserControl
         _restoringSelection = true;
         try
         {
+            _displayRows = null;
             FileList.ItemsSource = null;
         }
         finally
@@ -1217,6 +1420,7 @@ public partial class ContentView : UserControl
             _deferredRefresh = false;
             RefreshCore(invalidate: renamed);
         }
+        _ = ProcessFileSystemChangesAsync();
     }
 }
 
@@ -1281,6 +1485,15 @@ internal sealed class DirectoryRow : INotifyPropertyChanged
         }
     }
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    internal void ApplyRename(string oldPath, string newPath, FileEntry? entry)
+    {
+        FullPath = ShellLocations.RemapPath(FullPath, oldPath, newPath);
+        _overlayIcons = null;
+        Failed = false;
+        Entry = entry;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(FullPath)));
+    }
 
     internal void RemapPath(string oldPath, string newPath)
     {

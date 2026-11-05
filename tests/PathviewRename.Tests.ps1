@@ -79,6 +79,12 @@ try {
     $externalPath = $casePath
     [IO.File]::WriteAllText((Join-Path $externalPath 'added.txt'), 'new')
     Wait-Until { $view.GetType().GetField('_enumerationDirty', $flags).GetValue($view) } 'The watcher did not follow the renamed directory.'
+    $queuedPath = Join-Path $root 'renamed-with-pending-change'
+    [IO.Directory]::Move($externalPath, $queuedPath)
+    Wait-Until { $view.CurrentPath -ceq $queuedPath } 'The directory rename with a pending change was not detected.'
+    $window.Show()
+    Wait-Until { @($list.Items | Where-Object { $_.FullPath -eq (Join-Path $queuedPath 'added.txt') }).Count -eq 1 } 'A pending change was lost when the directory was renamed.'
+    if ($generation.GetValue($cache) -ne $initialGeneration -or $list.SelectedItem.FullPath -cne (Join-Path $queuedPath 'file.txt')) { throw 'A pending change after directory rename invalidated the cache or lost selection.' }
 
     $storeType = $assembly.GetType('SUTWinExplorer.UseCaseStore', $true)
     $store = [Activator]::CreateInstance($storeType, [object[]] @([string] (Join-Path $root 'use-cases'), [string] 'test'))

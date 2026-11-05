@@ -493,6 +493,43 @@ may show its requested row in light gray without changing the active selection.
 - [x] Refresh preserves selected paths still present in the filtered listing;
   navigation to another location clears the selection.
 
+### External directory changes
+
+Identified filesystem notifications are collected and applied on the next tab
+activation. The existing table and unaffected row objects remain in place; the
+content directory is not re-enumerated for an identified item change. Active
+filters and sorting still apply.
+
+1. **Rename:** Keep the existing row and its selection, including in a multiple
+  selection. Update its name and path without rebuilding the table. Sorting can
+  move the row; a changed extension or Shell metadata can also change its type
+  and icons. If the renamed item no longer passes the filters, remove its row
+  and selection. Preserve the remaining viewport and focus where possible.
+  A rename is identity-preserving only when the notification contains both
+  paths; separate delete/create events cannot reliably be paired.
+2. **Add:** Insert only the new rows at their filtered, sorted positions. Do not
+  select them or automatically scroll them into view. Items added after the
+  viewport do not move it; items added before it adjust the logical scroll
+  offset to keep the first unchanged visible row in place. Items inserted within
+  the viewport shift following rows only as needed. Existing selection and
+  focus remain unchanged where possible.
+3. **Remove:** Remove only the affected rows. Removing an item after the
+  viewport does not move it; removing one before it adjusts the logical scroll
+  offset to keep the first unchanged visible row in place. Removing a visible
+  row shifts following rows only as needed. Selection of removed items is lost;
+  all remaining selections and focus are retained where possible. If the anchor
+  itself disappears, the next unchanged row is used; the viewport can also be
+  clamped when too few rows remain to retain its previous position.
+4. **Metadata:** Update only the affected item's displayed details and move it
+  if the changed values affect sorting. Unchanged rows and selections remain
+  intact, with the same viewport anchoring rules.
+
+Unknown notifications, watcher errors, or detected changes while observation
+was suspended require a full refresh. In that fallback, row identity, focus and
+scroll position are not guaranteed. Notifications are best-effort and can be
+lost without detection. Explicit application operations can have different
+selection and scrolling behavior, such as selecting and revealing new items.
+
 ### Context menus and file operations
 
 - [x] The Base Menu starts with the application-owned **Properties**, followed

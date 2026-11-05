@@ -53,6 +53,8 @@ public partial class Pathview : UserControl
     private bool _fileSystemStateDirty;
     private bool _enumerationDirty;
     private bool _displayDirty;
+    private bool _fullContentRefresh;
+    private readonly List<FileSystemEventArgs> _contentChanges = [];
     private bool _refreshWholeTree;
     private bool _observersSuspended;
     private bool _closed;
@@ -443,6 +445,8 @@ public partial class Pathview : UserControl
         _fileSystemStateDirty = false;
         _enumerationDirty = false;
         _displayDirty = false;
+        _fullContentRefresh = false;
+        _contentChanges.Clear();
         _refreshWholeTree = false;
         _dirtyDirectories.Clear();
         SynchronizeContentChangeNotifications();
@@ -853,7 +857,10 @@ public partial class Pathview : UserControl
             _fileSystemStateDirty = true;
             _dirtyDirectories.Add(path);
             if (string.Equals(Path.TrimEndingDirectorySeparator(path), Path.TrimEndingDirectorySeparator(CurrentPath), StringComparison.OrdinalIgnoreCase))
+            {
                 _enumerationDirty = true;
+                _fullContentRefresh = true;
+            }
         }
         ScheduleFileSystemRefreshIfVisible();
     }
@@ -902,6 +909,7 @@ public partial class Pathview : UserControl
             if (string.Equals(Path.TrimEndingDirectorySeparator(path), Path.TrimEndingDirectorySeparator(CurrentPath), StringComparison.OrdinalIgnoreCase))
             {
                 DirectoryContent.UpdateCachedItemMetadata(change.FullPath);
+                _contentChanges.Add(change);
                 _displayDirty = true;
             }
             return;
@@ -909,7 +917,13 @@ public partial class Pathview : UserControl
         _fileSystemStateDirty = true;
         _dirtyDirectories.Add(path);
         if (string.Equals(Path.TrimEndingDirectorySeparator(path), Path.TrimEndingDirectorySeparator(CurrentPath), StringComparison.OrdinalIgnoreCase))
+        {
             _enumerationDirty = true;
+            if (notification.Change is { } itemChange)
+                _contentChanges.Add(itemChange);
+            else
+                _fullContentRefresh = true;
+        }
     }
 
     internal void Close()
@@ -941,13 +955,15 @@ public partial class Pathview : UserControl
         if ((!_fileSystemStateDirty && !_displayDirty) || !IsLoaded || !IsVisible || _editingTreeEntry is not null)
             return;
 
-        var refreshContentView = _enumerationDirty;
-        var refreshDisplay = _displayDirty;
+        var refreshContentView = _fullContentRefresh || (_enumerationDirty && _contentChanges.Count == 0);
+        var changes = _contentChanges.ToArray();
         var refreshWholeTree = _refreshWholeTree;
         var dirtyDirectories = _dirtyDirectories.ToHashSet(StringComparer.OrdinalIgnoreCase);
         _fileSystemStateDirty = false;
         _enumerationDirty = false;
         _displayDirty = false;
+        _fullContentRefresh = false;
+        _contentChanges.Clear();
         _refreshWholeTree = false;
         _dirtyDirectories.Clear();
         if (refreshWholeTree)
@@ -957,21 +973,8 @@ public partial class Pathview : UserControl
             DirectoryContent.Refresh(refreshContentView);
             RefreshDirtyDirectories(dirtyDirectories);
         }
-        if (refreshDisplay && !refreshContentView)
-            _ = RefreshDisplayWhenReadyAsync(CurrentPath);
-    }
-
-    private async Task RefreshDisplayWhenReadyAsync(string path)
-    {
-        await DirectoryContent.WaitForMetadataUpdatesAsync();
-        if (!string.Equals(CurrentPath, path, StringComparison.OrdinalIgnoreCase))
-            return;
-        if (!IsLoaded || !IsVisible)
-        {
-            _displayDirty = true;
-            return;
-        }
-        DirectoryContent.RefreshDisplay();
+        if (!refreshContentView && changes.Length > 0)
+            DirectoryContent.ApplyFileSystemChanges(changes);
     }
 
     private void RefreshDirtyDirectories(HashSet<string> dirtyDirectories)
@@ -1844,7 +1847,10 @@ public partial class Pathview : UserControl
                     _fileSystemStateDirty = true;
                     _dirtyDirectories.Add(parentPath);
                     if (string.Equals(parentPath, CurrentPath, StringComparison.OrdinalIgnoreCase))
+                    {
                         _enumerationDirty = true;
+                        _fullContentRefresh = true;
+                    }
                     ScheduleFileSystemRefreshIfVisible();
                 }
             }

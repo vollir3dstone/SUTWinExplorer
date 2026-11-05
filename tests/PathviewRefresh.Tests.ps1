@@ -123,13 +123,13 @@ try {
     $currentRouteEntry.add_PropertyChanged($unchangedParentHandler)
     [IO.File]::WriteAllText((Join-Path $directory 'visible.txt'), 'visible')
     Wait-Until { $dirtyDirectories.Contains($directory) } 'A visible tab did not become dirty.'
-    Pump 700
-    if ($generation.GetValue($cache) -ne $initialGeneration -or
-        -not [object]::ReferenceEquals($initialSnapshot, $snapshot.GetValue($content))) { throw 'A notification refreshed the visible tab.' }
-    $tabs.SelectedItem = $other
     Pump 300
+    if (-not [object]::ReferenceEquals($initialSnapshot, $snapshot.GetValue($content))) { throw 'A notification refreshed the visible tab before activation.' }
+    $tabs.SelectedItem = $other
+    Pump 100
     $tabs.SelectedItem = $fixed
-    Wait-Until { $generation.GetValue($cache) -gt $initialGeneration -and $null -ne $snapshot.GetValue($content) } 'The dirty visible tab did not refresh on activation.'
+    Wait-Until { @($content.FindName('FileList').Items | Where-Object { $_.FullPath -eq (Join-Path $directory 'visible.txt') }).Count -eq 1 } 'A dirty tab did not update on activation.'
+    if ($generation.GetValue($cache) -ne $initialGeneration) { throw 'A notification invalidated the directory cache.' }
     $currentRouteEntry.remove_PropertyChanged($unchangedParentHandler)
     if ($unchangedParentProbe.Count -ne 0) { throw 'A current-directory change refreshed an unchanged ancestor.' }
     if (-not @($content.FindName('FileList').Items | Where-Object { $_.FullPath -eq (Join-Path $directory 'visible.txt') }).Count) { throw 'The refreshed content omitted the new file.' }
@@ -143,7 +143,8 @@ try {
     Pump 700
     if ($generation.GetValue($cache) -ne $hiddenGeneration) { throw 'A notification refreshed the hidden tab.' }
     $tabs.SelectedItem = $fixed
-    Wait-Until { $generation.GetValue($cache) -gt $hiddenGeneration -and $null -ne $snapshot.GetValue($content) } 'The dirty hidden tab did not refresh on activation.'
+    Wait-Until { @($content.FindName('FileList').Items | Where-Object { $_.FullPath -eq (Join-Path $directory 'hidden-folder') }).Count -eq 1 } 'The dirty hidden tab did not update on activation.'
+    if ($generation.GetValue($cache) -ne $hiddenGeneration) { throw 'A hidden-tab change invalidated the directory cache.' }
     if (-not @($content.FindName('FileList').Items | Where-Object { $_.FullPath -eq (Join-Path $directory 'hidden-folder') }).Count) { throw 'The refreshed content omitted the new directory.' }
     if (-not @($view.FindName('ActivePathSubdirectoriesList').Items | Where-Object { $_.Path -eq (Join-Path $directory 'hidden-folder') }).Count) { throw 'The refreshed tree omitted the new directory.' }
 
@@ -215,23 +216,27 @@ try {
     if ($generation.GetValue($cache) -ne $metadataGeneration -or
         -not [object]::ReferenceEquals($cachedItems, $cacheItemsField.GetValue($cache))) { throw 'Displaying updated file metadata enumerated its parent.' }
 
+    $applyingChanges = $content.GetType().GetField('_applyingFileSystemChanges', $flags)
+    Wait-Until { -not $applyingChanges.GetValue($content) } 'The previous incremental update did not finish.'
     $visibleSnapshot = $snapshot.GetValue($content)
+    $visibleEntry = @($content.FindName('FileList').Items | Where-Object { $_.FullPath -eq $filePath })[0].Entry
     [IO.File]::AppendAllText($filePath, ' again')
     $expectedSize = [IO.FileInfo]::new($filePath).Length
     Wait-Until { $displayDirty.GetValue($view) -and $sizeProperty.GetValue($fileItem) -eq $expectedSize } 'Visible file metadata did not update in the cache.'
-    Pump 500
-    if ($enumerationDirty.GetValue($view) -or $generation.GetValue($cache) -ne $metadataGeneration -or
-        -not [object]::ReferenceEquals($visibleSnapshot, $snapshot.GetValue($content))) { throw 'A visible metadata change refreshed the display or enumerated.' }
-    $tabs.SelectedItem = $other
     Pump 300
+    if (-not [object]::ReferenceEquals($visibleSnapshot, $snapshot.GetValue($content))) { throw 'A metadata notification refreshed the visible tab before activation.' }
+    $tabs.SelectedItem = $other
+    Pump 100
     $tabs.SelectedItem = $fixed
-    Wait-Until { -not $displayDirty.GetValue($view) -and $null -ne $snapshot.GetValue($content) -and -not [object]::ReferenceEquals($visibleSnapshot, $snapshot.GetValue($content)) } 'The visible metadata change was not displayed after reactivation.'
-    if ($generation.GetValue($cache) -ne $metadataGeneration) { throw 'Reactivating a display-dirty tab enumerated.' }
+    Wait-Until { $sizeProperty.GetValue($fileItem) -eq $expectedSize -and -not [object]::ReferenceEquals($visibleEntry, @($content.FindName('FileList').Items | Where-Object { $_.FullPath -eq $filePath })[0].Entry) } 'A visible metadata change was not displayed.'
+    if ($enumerationDirty.GetValue($view) -or $generation.GetValue($cache) -ne $metadataGeneration) { throw 'A visible metadata change enumerated the directory.' }
 
     $overlayWait = $content.GetType().GetField('_overlayWaitCancellation', $flags)
     $refreshWait = $content.GetType().GetField('_refreshCancellation', $flags)
+    $refreshTimer = $view.GetType().GetField('_fileSystemRefreshTimer', $flags).GetValue($view)
     Wait-Until { $null -ne $snapshot.GetValue($content) -and $null -eq $overlayWait.GetValue($content) -and
-        $null -eq $refreshWait.GetValue($content) } 'The overlay redisplay did not settle before the ancestor-change check.'
+        $null -eq $refreshWait.GetValue($content) -and -not $applyingChanges.GetValue($content) -and
+        -not $refreshTimer.IsEnabled } 'The content updates did not settle before the ancestor-change check.'
     $ancestorGeneration = $generation.GetValue($cache)
     $ancestorSnapshot = $snapshot.GetValue($content)
     $ancestorTree = $tree.ItemsSource
@@ -250,9 +255,8 @@ try {
     if ($dirty.GetValue($view)) { throw 'A file in an ancestor directory marked the tab dirty.' }
     [void] [IO.Directory]::CreateDirectory($siblingDirectory)
     Wait-Until { $dirtyDirectories.Contains($parentPath) } 'An ancestor directory change did not mark the tree dirty.'
-    Pump 700
     $tabs.SelectedItem = $other
-    Pump 300
+    Pump 100
     $tabs.SelectedItem = $fixed
     Wait-Until { $probe.Count -gt 0 } 'The changed ancestor tree node was not refreshed.'
     $routeEntry.remove_PropertyChanged($handler)
@@ -273,9 +277,11 @@ try {
     [IO.File]::Move($oldPath, $newPath)
     Wait-Until { $notificationProbe.NewPath -eq $newPath } 'The rename notification was not delivered.'
     if ($notificationProbe.DirectoryPath -ne $directory -or $notificationProbe.OldPath -ne $oldPath) { throw 'The rename notification did not preserve the watched directory and old path.' }
-    Pump 500
-    if ($generation.GetValue($cache) -ne $renameGeneration -or
-        -not [object]::ReferenceEquals($renameSnapshot, $snapshot.GetValue($content))) { throw 'A rename notification refreshed the visible directory.' }
+    $tabs.SelectedItem = $other
+    Pump 100
+    $tabs.SelectedItem = $fixed
+    Wait-Until { @($content.FindName('FileList').Items | Where-Object { $_.FullPath -eq $newPath }).Count -eq 1 } 'The renamed item was not displayed.'
+    if ($generation.GetValue($cache) -ne $renameGeneration) { throw 'A rename notification invalidated the directory cache.' }
     $null = $notificationEvent.GetRemoveMethod($true).Invoke($content, [object[]] @($notificationHandler))
     $view.GetType().GetMethod('Close', $flags).Invoke($view, @())
     if ($null -ne $observer.GetValue($content)) { throw 'Closing the tab did not dispose its observer.' }
@@ -341,6 +347,156 @@ try {
     } finally {
         $overlayView.GetType().GetMethod('Close', $flags).Invoke($overlayView, @())
         $overlayWindow.Close()
+    }
+    $incrementalView = $constructor.Invoke([object[]] @([string] $overlayDirectory, $false, $null, $null, $null, $null))
+    $incrementalWindow = [System.Windows.Window]::new()
+    $incrementalWindow.ShowInTaskbar = $false
+    $incrementalWindow.Left = -20000
+    $incrementalWindow.Top = -20000
+    $incrementalWindow.Width = 800
+    $incrementalWindow.Height = 300
+    $incrementalWindow.Content = $incrementalView
+    try {
+        $incrementalWindow.Show()
+        $incrementalContent = $incrementalView.FindName('DirectoryContent')
+        $incrementalList = $incrementalContent.FindName('FileList')
+        $incrementalDirty = $incrementalView.GetType().GetField('_fileSystemStateDirty', $flags)
+        $incrementalDisplayDirty = $incrementalView.GetType().GetField('_displayDirty', $flags)
+        function Activate-Incremental {
+            Wait-Until { $incrementalDirty.GetValue($incrementalView) -or $incrementalDisplayDirty.GetValue($incrementalView) } 'The filesystem notification was not recorded.'
+            $incrementalView.Visibility = 'Collapsed'
+            Pump 100
+            $incrementalView.Visibility = 'Visible'
+        }
+        Wait-Until { $incrementalList.Items.Count -eq 90 } 'The incremental fixture did not load.'
+        $incrementalScroll = Find-VisualChild $incrementalList ([System.Windows.Controls.ScrollViewer])
+        $selectedRow = @($incrementalList.Items | Where-Object { $_.FullPath -eq (Join-Path $overlayDirectory 'item-045.txt') })[0]
+        $secondSelectedRow = @($incrementalList.Items | Where-Object { $_.FullPath -eq (Join-Path $overlayDirectory 'item-046.txt') })[0]
+        $unchangedRow = @($incrementalList.Items | Where-Object { $_.FullPath -eq (Join-Path $overlayDirectory 'item-080.txt') })[0]
+        $incrementalList.SelectedItems.Add($selectedRow) | Out-Null
+        $incrementalList.SelectedItems.Add($secondSelectedRow) | Out-Null
+        $incrementalList.ScrollIntoView($selectedRow)
+        Wait-Until { $incrementalScroll.VerticalOffset -gt 0 -and $null -ne $selectedRow.Entry -and $null -ne $unchangedRow.Entry } 'The incremental fixture did not load its selected rows.'
+        $null = $incrementalList.Focus()
+        $source = $incrementalList.ItemsSource
+        $focus = [System.Windows.Input.Keyboard]::FocusedElement
+        $offset = $incrementalScroll.VerticalOffset
+        $events = [System.Collections.Generic.List[string]]::new()
+        $collectionHandler = [System.Collections.Specialized.NotifyCollectionChangedEventHandler] { param($sender, $eventArgs) $events.Add($eventArgs.Action.ToString()) }.GetNewClosure()
+        $source.add_CollectionChanged($collectionHandler)
+
+        $oldEntry = $unchangedRow.Entry
+        $selectedEntry = $selectedRow.Entry
+        [IO.File]::AppendAllText($unchangedRow.FullPath, ' changed')
+        Activate-Incremental
+        Wait-Until { -not [object]::ReferenceEquals($oldEntry, $unchangedRow.Entry) } 'The changed row was not updated.'
+        if ($events.Count -ne 0 -or -not [object]::ReferenceEquals($source, $incrementalList.ItemsSource) -or
+            -not [object]::ReferenceEquals($selectedRow, $incrementalList.SelectedItems[0]) -or
+            -not [object]::ReferenceEquals($selectedEntry, $selectedRow.Entry) -or
+            $incrementalList.SelectedItems.Count -ne 2 -or $incrementalScroll.VerticalOffset -ne $offset -or
+            -not [object]::ReferenceEquals($focus, [System.Windows.Input.Keyboard]::FocusedElement)) { throw 'A metadata change disturbed unrelated rows or UI state.' }
+
+        $addedPath = Join-Path $overlayDirectory 'zzzz-added.txt'
+        [IO.File]::WriteAllText($addedPath, 'new')
+        Activate-Incremental
+        Wait-Until { @($incrementalList.Items | Where-Object { $_.FullPath -eq $addedPath }).Count -eq 1 } 'An external addition was not displayed.'
+        [IO.File]::Delete($addedPath)
+        Activate-Incremental
+        Wait-Until { @($incrementalList.Items | Where-Object { $_.FullPath -eq $addedPath }).Count -eq 0 } 'An external deletion was not displayed.'
+        if ($events.Contains('Reset') -or -not [object]::ReferenceEquals($source, $incrementalList.ItemsSource) -or
+            -not $incrementalList.SelectedItems.Contains($selectedRow) -or -not $incrementalList.SelectedItems.Contains($secondSelectedRow) -or
+            $incrementalScroll.VerticalOffset -ne $offset) { throw 'An addition or deletion disturbed unrelated rows or UI state.' }
+
+        $renamedPath = Join-Path $overlayDirectory 'item-045-renamed.txt'
+        [IO.File]::Move($selectedRow.FullPath, $renamedPath)
+        Activate-Incremental
+        Wait-Until { $selectedRow.FullPath -eq $renamedPath -and $null -ne $selectedRow.Entry -and $selectedRow.Entry.FullPath -eq $renamedPath } 'The selected external rename did not update its existing row.'
+        if (-not $incrementalList.SelectedItems.Contains($selectedRow) -or -not $incrementalList.SelectedItems.Contains($secondSelectedRow) -or
+            -not [object]::ReferenceEquals($source, $incrementalList.ItemsSource) -or $events.Contains('Reset') -or
+            $incrementalScroll.VerticalOffset -ne $offset) { throw 'An external rename lost selection or rebuilt the list.' }
+
+        $container = $incrementalList.ItemContainerGenerator.ContainerFromItem($selectedRow)
+        $anchorY = $container.TranslatePoint([System.Windows.Point]::new(0, 0), $incrementalScroll).Y
+        $beforePath = Join-Path $overlayDirectory 'item-001a.txt'
+        [IO.File]::WriteAllText($beforePath, 'new')
+        Activate-Incremental
+        Wait-Until { @($incrementalList.Items | Where-Object { $_.FullPath -eq $beforePath }).Count -eq 1 } 'An insertion before the viewport was not displayed.'
+        $incrementalList.UpdateLayout()
+        $container = $incrementalList.ItemContainerGenerator.ContainerFromItem($selectedRow)
+        if ($null -eq $container -or [Math]::Abs($container.TranslatePoint([System.Windows.Point]::new(0, 0), $incrementalScroll).Y - $anchorY) -gt 1) { throw 'An insertion before the viewport moved the visible anchor.' }
+        [IO.File]::Delete($beforePath)
+        Activate-Incremental
+        Wait-Until { @($incrementalList.Items | Where-Object { $_.FullPath -eq $beforePath }).Count -eq 0 } 'A deletion before the viewport was not displayed.'
+        $incrementalList.UpdateLayout()
+        $container = $incrementalList.ItemContainerGenerator.ContainerFromItem($selectedRow)
+        if ($null -eq $container -or [Math]::Abs($container.TranslatePoint([System.Windows.Point]::new(0, 0), $incrementalScroll).Y - $anchorY) -gt 1) { throw 'A deletion before the viewport moved the visible anchor.' }
+
+        $otherAnchor = $incrementalList.Items[[int][Math]::Floor($incrementalScroll.VerticalOffset)]
+        $container = $incrementalList.ItemContainerGenerator.ContainerFromItem($otherAnchor)
+        $anchorY = $container.TranslatePoint([System.Windows.Point]::new(0, 0), $incrementalScroll).Y
+        $movedPath = Join-Path $overlayDirectory 'item-070-renamed.txt'
+        [IO.File]::Move($selectedRow.FullPath, $movedPath)
+        Activate-Incremental
+        Wait-Until { $selectedRow.FullPath -eq $movedPath -and $null -ne $selectedRow.Entry } 'A rename that changes sort order did not finish.'
+        $incrementalList.UpdateLayout()
+        $container = $incrementalList.ItemContainerGenerator.ContainerFromItem($otherAnchor)
+        if ($null -eq $container -or [Math]::Abs($container.TranslatePoint([System.Windows.Point]::new(0, 0), $incrementalScroll).Y - $anchorY) -gt 1 -or
+            -not $incrementalList.SelectedItems.Contains($selectedRow) -or -not $incrementalList.SelectedItems.Contains($secondSelectedRow) -or
+            -not [object]::ReferenceEquals($source, $incrementalList.ItemsSource) -or $events.Contains('Reset')) { throw "A sorted rename disturbed the visible anchor, selection, or row collection: anchor=$anchorY -> $(if ($container) { $container.TranslatePoint([System.Windows.Point]::new(0, 0), $incrementalScroll).Y } else { 'missing' }), selected=$($incrementalList.SelectedItems.Contains($selectedRow)), second=$($incrementalList.SelectedItems.Contains($secondSelectedRow)), source=$([object]::ReferenceEquals($source, $incrementalList.ItemsSource)), events=$($events -join ',')." }
+        $names = @($incrementalList.Items | ForEach-Object { [IO.Path]::GetFileName($_.FullPath) })
+        if ([Array]::IndexOf($names, 'item-069.txt') -ge [Array]::IndexOf($names, 'item-070-renamed.txt') -or
+            [Array]::IndexOf($names, 'item-070-renamed.txt') -ge [Array]::IndexOf($names, 'item-071.txt')) { throw 'The renamed row was not moved into sorted order.' }
+
+        $intermediatePath = Join-Path $overlayDirectory 'intermediate-name.txt'
+        $finalPath = Join-Path $overlayDirectory 'final-name.txt'
+        [IO.File]::Move($selectedRow.FullPath, $intermediatePath)
+        [IO.File]::Move($intermediatePath, $finalPath)
+        Activate-Incremental
+        Wait-Until { $selectedRow.FullPath -eq $finalPath -and $null -ne $selectedRow.Entry } 'A batch of external renames lost the original row.'
+        if (-not $incrementalList.SelectedItems.Contains($selectedRow) -or -not $incrementalList.SelectedItems.Contains($secondSelectedRow)) { throw 'A batch of external renames lost selection.' }
+
+        $casePath = Join-Path $overlayDirectory 'FINAL-NAME.txt'
+        [IO.File]::Move($finalPath, $casePath)
+        Activate-Incremental
+        Wait-Until { $selectedRow.FullPath -ceq $casePath -and $null -ne $selectedRow.Entry -and $selectedRow.Entry.FullPath -ceq $casePath } 'A case-only rename did not update the existing row.'
+        if (-not $incrementalList.SelectedItems.Contains($selectedRow)) { throw 'A case-only rename lost selection.' }
+
+        [IO.File]::Delete($casePath)
+        Activate-Incremental
+        Wait-Until { -not $incrementalList.Items.Contains($selectedRow) } 'The deleted selected row remained in the list.'
+        if ($incrementalList.SelectedItems.Count -ne 1 -or -not $incrementalList.SelectedItems.Contains($secondSelectedRow) -or
+            -not [object]::ReferenceEquals($source, $incrementalList.ItemsSource) -or $events.Contains('Reset')) { throw 'Deleting a selected item disturbed the remaining selection or rebuilt the list.' }
+        $source.remove_CollectionChanged($collectionHandler)
+
+        $incrementalContent.FindName('NamePatternTextBox').Text = 'item*'
+        Wait-Until { $null -ne $incrementalContent.GetType().GetField('_snapshot', $flags).GetValue($incrementalContent) -and
+            -not [object]::ReferenceEquals($source, $incrementalList.ItemsSource) } 'The name filter did not finish.'
+        $source = $incrementalList.ItemsSource
+        $filteredRow = @($incrementalList.Items | Where-Object { $_.FullPath -eq (Join-Path $overlayDirectory 'item-046.txt') })[0]
+        $incrementalList.SelectedItem = $filteredRow
+        $outsideFilter = Join-Path $overlayDirectory 'outside-filter.txt'
+        [IO.File]::Move($filteredRow.FullPath, $outsideFilter)
+        Activate-Incremental
+        Wait-Until { -not $incrementalList.Items.Contains($filteredRow) } 'A rename outside the active filter did not remove the row.'
+        if ($incrementalList.SelectedItems.Count -ne 0 -or -not [object]::ReferenceEquals($source, $incrementalList.ItemsSource)) { throw 'A filtered rename retained a missing selection or replaced the list.' }
+        $insideFilter = Join-Path $overlayDirectory 'item-returned.txt'
+        [IO.File]::Move($outsideFilter, $insideFilter)
+        Activate-Incremental
+        Wait-Until { @($incrementalList.Items | Where-Object { $_.FullPath -eq $insideFilter }).Count -eq 1 } 'A rename into the active filter did not add the row.'
+        if (-not [object]::ReferenceEquals($source, $incrementalList.ItemsSource)) { throw 'A rename into the filter replaced the list.' }
+
+        $incrementalCache = $incrementalContent.GetType().GetField('_directoryCache', $flags).GetValue($incrementalContent)
+        $incrementalGeneration = $incrementalCache.GetType().GetField('_generation', $flags)
+        $beforeFallback = $incrementalGeneration.GetValue($incrementalCache)
+        $notificationType = $assembly.GetType('SUTWinExplorer.DirectoryNotification', $true)
+        $unknownNotification = $notificationType.GetConstructors([Reflection.BindingFlags]'Instance,Public,NonPublic')[0].Invoke([object[]] @([string] $overlayDirectory, $null))
+        $incrementalView.GetType().GetMethod('ContentView_FileSystemChanged', $flags).Invoke($incrementalView, [object[]] @($incrementalContent, $unknownNotification))
+        Activate-Incremental
+        Wait-Until { $incrementalGeneration.GetValue($incrementalCache) -gt $beforeFallback -and
+            $null -ne $incrementalContent.GetType().GetField('_snapshot', $flags).GetValue($incrementalContent) } 'An unknown notification did not trigger a full refresh.'
+    } finally {
+        $incrementalView.GetType().GetMethod('Close', $flags).Invoke($incrementalView, @())
+        $incrementalWindow.Close()
     }
     Write-Output 'Pathview refresh lifecycle passed.'
 } finally {

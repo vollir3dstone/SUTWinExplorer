@@ -173,7 +173,11 @@ Each placeholder carries its snapshot path, so ContentView can retain selections
 even before their full records are loaded. On refresh it restores the selected
 paths in the new snapshot, including off-screen rows; paths no longer present or
 excluded by the filters are dropped. Navigating to another location clears the
-selection. Link mark item, Copy mark item and Move mark item stage all selected paths. Name clipboard copy and Path clipboard copy
+selection. Filesystem notifications instead reconcile the existing row collection:
+unchanged rows retain their identity, a rename updates its existing row and selection,
+and only affected rows are added, removed, updated or moved. When changes before the
+viewport shift its first unchanged row, the logical scroll offset is adjusted to
+keep that row in place. Link mark item, Copy mark item and Move mark item stage all selected paths. Name clipboard copy and Path clipboard copy
 copy all selected filesystem leaf names or paths as text, one per line; file
 names include their extensions. Rename requires exactly one loaded selection.
 Delete operates on selected files
@@ -256,10 +260,13 @@ reliably paired.
   Individual unavailable metadata or icons can instead produce an entry with
   empty fields without failing the whole range.
 - SutShell's directory observer is best-effort. ContentView marshals its change
-  callback to the dispatcher; structural changes mark the view enumeration-dirty,
-  while metadata changes update the cached item and mark it display-dirty.
-  The next tab activation re-enumerates only for enumeration-dirty state; a
-  display-only refresh reuses the cached directory records.
+  callback to the dispatcher. Known item changes are collected until the next tab
+  activation; metadata is updated in the cache as notifications arrive. On
+  activation, identified additions, deletions and renames update only the affected
+  cached items, and the filtered, sorted snapshot is reconciled with existing rows.
+  The parent directory is not re-enumerated for those events. Unknown notifications,
+  watcher errors, and detected changes while observation is suspended fall back
+  to a full refresh. Tree nodes can still require their own directory enumeration.
   Explicit refresh, successful rename, copy or move, and navigation also invalidate it. Filter and
   sort changes do not. Notifications and snapshots do not guarantee an atomic
   filesystem view; Shell icon or overlay changes may not generate notifications.

@@ -20,10 +20,11 @@ filter a recursive drive-wide stream. The ancestor paths support the path and
 tree views, including directory renames. The current directory and each
 ancestor are registered separately; files are not individually registered.
 
-Pathview receives notifications on the WPF dispatcher. Structural changes mark
-directory enumeration dirty; a direct item metadata change updates cached
-metadata and marks the display dirty. A dirty view is refreshed on tab
-activation, rather than immediately on every notification. Observers remain
+Pathview receives notifications on the WPF dispatcher. Identified item changes
+are queued for incremental content updates; metadata is updated in the cache.
+Dirty tree nodes are handled separately. A dirty view is updated on tab
+activation, rather than immediately on every notification. Unidentified changes
+and watcher errors require a full refresh. Observers remain
 active when a tab is unloaded, and are replaced when the observed paths change
 and disposed when the tab closes. Suspension and resumption are handled
 separately by Pathview.
