@@ -207,6 +207,16 @@ MultiPathview repetitions and a MoveActions-to-MultiPathview sequence exited
 normally. The observations do not establish that a particular preceding test,
 test ordering, or the mutex itself causes the hang.
 
+Before the probe cleanup was changed, the drag-and-drop test forcibly
+terminated a still-running external PowerShell probe during normal cleanup.
+That may have been intended to avoid shutdown hangs, but its original purpose
+is not established. The observed hangs above affected other test processes,
+before the drag-and-drop test ran, so they do not demonstrate that the probe
+cleanup change caused them. The current probe cleanup still uses forced
+termination as a timeout fallback, but waits without a timeout after `Kill()`;
+whether that fallback can itself block during the observed Windows shutdown
+problem remains to be investigated.
+
 The root cause remains open. Further investigation should capture process and
 thread state when a test exceeds its timeout, distinguish a process exit code
 from a signaled process handle, and report any retained mutex without assuming
