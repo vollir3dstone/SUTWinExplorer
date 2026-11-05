@@ -252,6 +252,19 @@ try {
         Invoke-MouseDrag @($linkDrop) (Get-TargetPoint $folderTarget) 0xFF $false
         Wait-Until { @([IO.Directory]::GetFiles($folderTarget, '*mouse-link*.lnk')).Count -eq 1 } 'mouse drag link'
         if (-not [IO.File]::Exists($linkDrop) -or [IO.File]::Exists((Join-Path $folderTarget 'mouse-link.txt'))) { throw 'Link drop changed or copied the source.' }
+        function Stop-ExternalProbe([Diagnostics.Process] $process) {
+            try {
+                if (-not $process.WaitForExit(2000)) {
+                    $null = $process.CloseMainWindow()
+                    if (-not $process.WaitForExit(5000)) {
+                        $process.Kill()
+                        $process.WaitForExit()
+                        throw 'External drag probe did not exit after its window was closed.'
+                    }
+                }
+                if ($process.ExitCode -ne 0) { throw "External drag probe exited with code $($process.ExitCode)." }
+            } finally { $process.Dispose() }
+        }
         function Start-ExternalProbe([string] $mode, [string] $path, [string] $result) {
             $title = 'SutDragProbe-' + [Guid]::NewGuid().ToString('N')
             $startInfo = [Diagnostics.ProcessStartInfo]::new('pwsh')
@@ -262,7 +275,7 @@ try {
                 Wait-Until ({ ([IO.File]::Exists($result + '.ready') -and [DragMouseProbe]::FindWindowByTitle($title) -ne [IntPtr]::Zero) -or $process.HasExited }.GetNewClosure()) "external $mode window"
                 if ($process.HasExited) { throw "External $mode probe exited early with code $($process.ExitCode)." }
                 return @($process, [DragMouseProbe]::WindowCenter([DragMouseProbe]::FindWindowByTitle($title)))
-            } catch { if (-not $process.HasExited) { $process.Kill() }; throw }
+            } catch { Stop-ExternalProbe $process; throw }
         }
         $externalFile = [string] (Join-Path $source 'external-source.txt')
         [IO.File]::WriteAllText($externalFile, 'external source')
@@ -280,7 +293,7 @@ try {
                 $expected = if ($mode -eq 'source') { 'Copy' } else { 'None' }
                 if ([IO.File]::ReadAllText($result) -ne $expected) { throw "Unexpected external $mode drag effect." }
                 if ($mode -eq 'source' -and (-not [IO.File]::Exists((Join-Path $folderTarget 'external-source.txt')) -or -not [IO.File]::Exists($externalFile))) { throw 'External file copy failed.' }
-            } finally { if (-not $process.HasExited) { $process.Kill() }; $process.Dispose() }
+            } finally { Stop-ExternalProbe $process }
         }
         $externalDestination = [string] (Join-Path $root 'external-destination')
         [IO.Directory]::CreateDirectory($externalDestination) | Out-Null
@@ -293,7 +306,7 @@ try {
             Invoke-MouseDrag @($outgoingFile) ([System.Windows.Point]::new($position[0], $position[1])) 0 $false
             Wait-Until { [IO.File]::Exists($result) -and [IO.File]::Exists((Join-Path $externalDestination 'external-target.txt')) } 'drag to external target'
             if (-not [IO.File]::Exists($outgoingFile)) { throw 'External target copy removed its source.' }
-        } finally { if (-not $process.HasExited) { $process.Kill() }; $process.Dispose() }
+        } finally { Stop-ExternalProbe $process }
         $null = $viewType.GetMethod('RevealInsertedItems', $flags).Invoke($views[0], [object[]] @(,[string[]] @($outgoingFile)))
         Wait-Until { $sourceList.SelectedItems.Count -eq 1 -and $null -ne $sourceList.ItemContainerGenerator.ContainerFromItem($sourceList.SelectedItems[0]) } 'right-click target row'
         $sourceRow = $sourceList.ItemContainerGenerator.ContainerFromItem($sourceList.SelectedItems[0])
@@ -370,7 +383,7 @@ try {
             try { Wait-Until { $probe.Done -and [IO.File]::Exists($result) -and [IO.File]::Exists((Join-Path $sidebarExternalDestination 'sidebar-source/nested.txt')) } 'drag sidebar folder to external target' }
             finally { $probe.Dispose() }
             if (-not [IO.Directory]::Exists($sidebarSource) -or $navigation.Paths.Count -ne 0) { throw 'External sidebar copy removed its source or triggered navigation.' }
-        } finally { if (-not $process.HasExited) { $process.Kill() }; $process.Dispose() }
+        } finally { Stop-ExternalProbe $process }
         foreach ($mode in @('source', 'text', 'right-source')) {
             $result = Join-Path $root ("sidebar-$mode-result.txt")
             $external = Start-ExternalProbe $mode $externalFile $result
@@ -383,7 +396,7 @@ try {
                 $expected = if ($mode -eq 'source') { 'Copy' } else { 'None' }
                 if (-not [IO.File]::Exists($result) -or [IO.File]::ReadAllText($result) -ne $expected) { throw "Unexpected external $mode sidebar drag effect." }
                 if ($mode -eq 'source') { Wait-Until { [IO.File]::Exists((Join-Path $sidebarSource 'external-source.txt')) } 'external file copy to sidebar' }
-            } finally { if (-not $process.HasExited) { $process.Kill() }; $process.Dispose() }
+            } finally { Stop-ExternalProbe $process }
         }
         $start = Get-SidebarPoint $sidebarSource
         $probe = [DragMouseProbe]::new([int] $start.X, [int] $start.Y, [int] $start.X, [int] $start.Y, 0, $false, $true)

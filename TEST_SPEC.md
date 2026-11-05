@@ -95,8 +95,13 @@ one-test-file-per-subject partition. Important examples are:
 
 Some action tests still use a view or dialog to reach the behavior under test.
 Copy, Move and Link test successful and failed execution in both existing view
-handlers; Relocate currently invokes Pathview's operation method, while Delete
-and New item tests exercise GUI flows. Conversely, location-specific
+handlers using a shared test helper. The ContentView path raises the execute
+button's event; the Pathview path invokes its menu handler directly. Separately,
+`InsertedItems.Tests.ps1` selects the commands in the actual Pathview background
+menu and checks the resulting selection and filter behavior. These checks cover
+different boundaries; the direct handler call alone does not test menu wiring.
+Relocate currently invokes Pathview's operation method, while Delete and New
+item tests exercise GUI flows. Conversely, location-specific
 tests such as `ContentViewActionInteractions.Tests.ps1` still include checks
 of workflow state and action outcomes alongside menu and trigger checks. Shell
 access and action tests can also overlap on a contract. These are descriptions
@@ -162,3 +167,15 @@ test runs last and covers the production FileSystemWatcher observer. Tests in
 `tests/experimental` are excluded from the standard run. The runner selects the
 production observer for all its test processes, regardless of the caller's
 environment. It continues after failures and reports them at the end.
+
+When invoking the runner or an individual test from a persistent interactive
+PowerShell session, let the `pwsh -File` child process return normally; do not
+call `exit` in the surrounding session. Inspect the child's exit code and
+report failures rather than masking them. A session termination reported by the
+terminal and a nonzero test-process exit are distinct events and should be
+diagnosed separately.
+
+The drag-and-drop integration test also starts external PowerShell probes. It
+waits for them to exit normally, requests window closure when needed, and checks
+their exit codes. Forced termination is reserved for a probe that does not
+close in time and is reported as a test failure.
