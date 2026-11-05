@@ -113,9 +113,11 @@ The initial directory snapshot can be displayed as soon as its base icons and
 other required sort data are ready; it does not wait for overlay lookups. The
 MO cells therefore initially may be empty even when Windows has overlays for
 those items. Once the directory's queued overlay attempts finish, each view
-still displaying that snapshot rebuilds its display using the in-memory overlay
-results. A view that navigated away or was closed is not refreshed for the old
-directory. If another snapshot is requested while overlay work is in progress,
+still displaying that snapshot updates only affected MO image bindings using the
+in-memory overlay results. The table, rows, scroll position, selection and focus
+are retained. Rows whose details are still loading receive the overlay when
+their details arrive. A view that navigated away or was closed is not updated
+for the old directory. If another snapshot is requested while overlay work is in progress,
 it can already show the subset of overlays obtained so far; a partial result is
 not itself the directory-completion refresh.
 

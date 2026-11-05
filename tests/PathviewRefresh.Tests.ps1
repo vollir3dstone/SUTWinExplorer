@@ -44,6 +44,16 @@ function Find-TreeEntry($entries, [string] $path) {
     return $null
 }
 
+    function Find-VisualChild($parent, [type] $type) {
+        for ($index = 0; $index -lt [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($parent); $index++) {
+            $child = [System.Windows.Media.VisualTreeHelper]::GetChild($parent, $index)
+            if ($type.IsInstanceOfType($child)) { return $child }
+            $found = Find-VisualChild $child $type
+            if ($null -ne $found) { return $found }
+        }
+        return $null
+    }
+
 $assemblyPath = Join-Path $PSScriptRoot '..\bin\Debug\net10.0-windows\SUTWinExplorer.dll'
 $assembly = [Reflection.Assembly]::Load([IO.File]::ReadAllBytes($assemblyPath))
 [System.Windows.Application].GetField('_resourceAssembly', [Reflection.BindingFlags]'Static,NonPublic').SetValue($null, $assembly)
@@ -269,6 +279,69 @@ try {
     $null = $notificationEvent.GetRemoveMethod($true).Invoke($content, [object[]] @($notificationHandler))
     $view.GetType().GetMethod('Close', $flags).Invoke($view, @())
     if ($null -ne $observer.GetValue($content)) { throw 'Closing the tab did not dispose its observer.' }
+    $overlayDirectory = Join-Path $directory 'overlay-scroll-test'
+    [void] [IO.Directory]::CreateDirectory($overlayDirectory)
+    foreach ($index in 1..90) { [IO.File]::WriteAllText((Join-Path $overlayDirectory ('item-{0:D3}.txt' -f $index)), 'test') }
+    $overlayView = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
+    $overlayView.GetType().GetMethod('Initialize', $flags).Invoke($overlayView, [object[]] @([bool] $true))
+    $overlayWindow = [System.Windows.Window]::new()
+    $overlayWindow.ShowInTaskbar = $false
+    $overlayWindow.Left = -20000
+    $overlayWindow.Top = -20000
+    $overlayWindow.Width = 800
+    $overlayWindow.Height = 300
+    $overlayWindow.Content = $overlayView
+    try {
+        $overlayWindow.Show()
+        $overlayView.GetType().GetMethod('SetCurrentPath', $flags).Invoke($overlayView, [object[]] @([string] $overlayDirectory))
+        $overlayView.GetType().GetMethod('Refresh', $flags).Invoke($overlayView, [object[]] @([bool] $true))
+        $overlaySnapshotField = $overlayView.GetType().GetField('_snapshot', $flags)
+        $overlayWaitField = $overlayView.GetType().GetField('_overlayWaitCancellation', $flags)
+        Wait-Until { $null -ne $overlaySnapshotField.GetValue($overlayView) -and $null -eq $overlayWaitField.GetValue($overlayView) } 'The overlay scroll fixture did not finish loading.'
+        $overlayList = $overlayView.FindName('FileList')
+        $scroll = Find-VisualChild $overlayList ([System.Windows.Controls.ScrollViewer])
+        if ($null -eq $scroll) { throw 'The overlay fixture has no scroll viewer.' }
+        $overlayList.SelectedItems.Add($overlayList.Items[45]) | Out-Null
+        $overlayList.SelectedItems.Add($overlayList.Items[46]) | Out-Null
+        $overlayList.ScrollIntoView($overlayList.Items[45])
+        Wait-Until { $scroll.VerticalOffset -gt 0 -and $null -ne $overlayList.Items[45].Entry } 'The selected rows did not load at a scrolled position.'
+        $null = $overlayList.Focus()
+        $selectedRow = $overlayList.Items[45]
+        $container = $overlayList.ItemContainerGenerator.ContainerFromItem($selectedRow)
+        $presenter = Find-VisualChild $container ([System.Windows.Controls.GridViewRowPresenter])
+        if ($null -eq $presenter) { throw 'The selected row is not visually realized.' }
+        $overlayCell = Find-VisualChild ([System.Windows.Media.VisualTreeHelper]::GetChild($presenter, 2)) ([System.Windows.Controls.Image])
+        if ($null -eq $overlayCell) { throw 'The selected row has no visible MO image.' }
+        $beforeItems = $overlayList.ItemsSource
+        $beforeSnapshot = $overlaySnapshotField.GetValue($overlayView)
+        $beforeOffset = $scroll.VerticalOffset
+        $beforeFocus = [System.Windows.Input.Keyboard]::FocusedElement
+        $overlayImage = [System.Windows.Media.DrawingImage]::new()
+        $overlayImage.Freeze()
+        $iconSetType = $assembly.GetType('SUTWinExplorer.ShellIconSet', $true)
+        $icons = [Activator]::CreateInstance($iconSetType, [object[]] @($selectedRow.Entry.Icons.BaseIcon, $overlayImage, [double] 1))
+        $session = $beforeSnapshot.GetType().GetProperty('IconSession', $flags).GetValue($beforeSnapshot)
+        $sessionIcons = $session.GetType().GetField('_icons', $flags).GetValue($session)
+        $sessionIcons[$selectedRow.FullPath] = $icons
+        $completion = [Threading.Tasks.TaskCompletionSource]::new([Threading.Tasks.TaskCreationOptions]::RunContinuationsAsynchronously)
+        $cancellation = [Threading.CancellationTokenSource]::new()
+        $null = $overlayView.GetType().GetMethod('RefreshAfterOverlaysAsync', $flags).Invoke($overlayView,
+            [object[]] @($beforeSnapshot, [string] $overlayDirectory, $completion.Task, $cancellation))
+        $completion.SetResult()
+        Wait-Until { [object]::ReferenceEquals($selectedRow.OverlayIcon, $overlayImage) } 'The scrolled row did not receive its overlay.'
+        Wait-Until { [object]::ReferenceEquals($overlayCell.Source, $overlayImage) } 'The visible MO cell did not display the updated overlay.'
+        Pump 200
+        if (-not [object]::ReferenceEquals($beforeSnapshot, $overlaySnapshotField.GetValue($overlayView)) -or
+            -not [object]::ReferenceEquals($beforeItems, $overlayList.ItemsSource) -or
+            $scroll.VerticalOffset -ne $beforeOffset -or $overlayList.SelectedItems.Count -ne 2 -or
+            -not $overlayList.SelectedItems.Contains($selectedRow) -or
+            -not [object]::ReferenceEquals($beforeFocus, [System.Windows.Input.Keyboard]::FocusedElement)) {
+            throw 'The overlay update changed the snapshot, rows, scroll position, selection, or focus.'
+        }
+    } finally {
+        $overlayView.GetType().GetMethod('Close', $flags).Invoke($overlayView, @())
+        $overlayWindow.Close()
+    }
     Write-Output 'Pathview refresh lifecycle passed.'
 } finally {
     if ($null -ne $view) { $view.GetType().GetMethod('Close', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($view, @()) }

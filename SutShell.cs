@@ -137,7 +137,8 @@ internal static class SutShell
                 throw;
             }
             lock (OverlayScheduleLock) FailedOverlayDirectories.Remove(key);
-            var overlayCompletion = DirectoryIcons.GetOrAdd(key, _ => new DirectoryIconSession()).Prepare(source);
+            var iconSession = DirectoryIcons.GetOrAdd(key, _ => new DirectoryIconSession());
+            var overlayCompletion = iconSession.Prepare(source);
             ScheduleOverlays();
             var items = new List<DirectoryItem>();
             var directoryCount = 0;
@@ -198,7 +199,7 @@ internal static class SutShell
                 .ThenBy(value => value.Item.FullPath, StringComparer.OrdinalIgnoreCase)
                 .Select(value => value.Item).ToArray();
             token.ThrowIfCancellationRequested();
-            return new DirectorySnapshot(result, directoryCount, source.Length - directoryCount, overlayCompletion);
+            return new DirectorySnapshot(result, directoryCount, source.Length - directoryCount, overlayCompletion, iconSession);
         }, cancellationToken);
     }
 
@@ -647,6 +648,12 @@ internal sealed class DirectoryIconSession
     internal bool HasPending { get { lock (_sync) return _pending.Count > 0; } }
     internal bool IsPrepared { get { lock (_sync) return _prepared; } }
 
+    internal ShellIconSet?[] GetIcons(IReadOnlyList<string> paths)
+    {
+        lock (_sync)
+            return paths.Select(path => _icons.GetValueOrDefault(path)).ToArray();
+    }
+
     internal Task? Prepare(DirectoryItem[] items)
     {
         lock (_sync)
@@ -1038,10 +1045,11 @@ internal sealed class DirectorySortState
 internal sealed record DirectorySortValues(DirectoryItem Item, long? Size, DateTime? Modified, string Type,
     MediaType MediaType, int? BaseIconIndex);
 
-internal sealed class DirectorySnapshot(DirectoryItem[] items, int directoryCount, int fileCount, Task? overlayCompletion)
+internal sealed class DirectorySnapshot(DirectoryItem[] items, int directoryCount, int fileCount, Task? overlayCompletion, DirectoryIconSession iconSession)
 {
     internal IReadOnlyList<DirectoryItem> Items { get; } = items;
     internal Task? OverlayCompletion { get; } = overlayCompletion;
+    internal DirectoryIconSession IconSession { get; } = iconSession;
     public int Count => Items.Count;
     public int DirectoryCount { get; } = directoryCount;
     public int FileCount { get; } = fileCount;

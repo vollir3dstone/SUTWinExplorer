@@ -88,14 +88,42 @@ try {
     if ($pairs[0].Column -ne 'Size' -or $pairs[0].Criterion -ne 'Descending') { throw 'The copied sort order was not applied to the content.' }
     $snapshot = $destination.GetType().GetField('_snapshot', $flags)
     Wait-Until { $null -ne $snapshot.GetValue($destination) } 'The copied view did not finish loading.'
+    $overlayWait = $destination.GetType().GetField('_overlayWaitCancellation', $flags)
+    Wait-Until { $null -eq $overlayWait.GetValue($destination) } 'The original overlay update did not finish.'
     $destination.GetType().GetMethod('CancelOverlayWait', $flags).Invoke($destination, @())
     $beforeOverlayCompletion = $snapshot.GetValue($destination)
+    $list = $destination.FindName('FileList')
+    $rows = $list.ItemsSource
+    $getRange = $shell.GetMethod('GetDirectoryRangeAsync', $staticFlags)
+    $entries = $getRange.Invoke($null, [object[]] @($beforeOverlayCompletion, [int] 0, [int] 2, [Threading.CancellationToken]::None)).GetAwaiter().GetResult()
+    $rows[0].Entry = $entries[0]
+    $list.SelectedItems.Add($rows[0]) | Out-Null
+    $overlayImage = [System.Windows.Media.DrawingImage]::new()
+    $overlayImage.Freeze()
+    $iconSetType = $assembly.GetType('SUTWinExplorer.ShellIconSet', $true)
+    $overlayIcons = [Activator]::CreateInstance($iconSetType, [object[]] @($entries[0].Icons.BaseIcon, $overlayImage, [double] 1))
+    $session = $beforeOverlayCompletion.GetType().GetProperty('IconSession', $flags).GetValue($beforeOverlayCompletion)
+    $sessionIcons = $session.GetType().GetField('_icons', $flags).GetValue($session)
+    $sessionIcons[$rows[0].FullPath] = $overlayIcons
+    $sessionIcons[$rows[1].FullPath] = $overlayIcons
+    $changes = [System.Collections.Generic.List[string]]::new()
+    $changeHandler = [ComponentModel.PropertyChangedEventHandler] { param($sender, $eventArgs) $changes.Add($eventArgs.PropertyName) }.GetNewClosure()
+    $rows[0].add_PropertyChanged($changeHandler)
     $overlayCompletion = [Threading.Tasks.TaskCompletionSource]::new([Threading.Tasks.TaskCreationOptions]::RunContinuationsAsynchronously)
     $overlayCancellation = [Threading.CancellationTokenSource]::new()
     $null = $destination.GetType().GetMethod('RefreshAfterOverlaysAsync', $flags).Invoke($destination,
         [object[]] @($beforeOverlayCompletion, [string] $browse.CurrentPath, $overlayCompletion.Task, $overlayCancellation))
     $overlayCompletion.SetResult()
-    Wait-Until { $null -ne $snapshot.GetValue($destination) -and -not [object]::ReferenceEquals($beforeOverlayCompletion, $snapshot.GetValue($destination)) } 'Overlay completion did not redisplay the current directory.'
+    Wait-Until { [object]::ReferenceEquals($rows[0].OverlayIcon, $overlayImage) } 'Overlay completion did not update the existing row.'
+    $rows[0].remove_PropertyChanged($changeHandler)
+    if (-not [object]::ReferenceEquals($beforeOverlayCompletion, $snapshot.GetValue($destination)) -or
+        -not [object]::ReferenceEquals($rows, $list.ItemsSource) -or $list.SelectedItems.Count -ne 1 -or
+        -not [object]::ReferenceEquals($list.SelectedItems[0], $rows[0]) -or
+        -not [object]::ReferenceEquals($rows[0].Entry.Icons.OverlayIcon, $overlayImage) -or
+        ($changes -join ',') -cne 'OverlayIcon') { throw 'Overlay completion changed the table, selection, or unrelated row bindings.' }
+    $rows[1].Entry = $entries[1]
+    if (-not [object]::ReferenceEquals($rows[1].OverlayIcon, $overlayImage) -or
+        -not [object]::ReferenceEquals($rows[1].Entry.Icons.OverlayIcon, $overlayImage)) { throw 'A later row load replaced the completed overlay.' }
     $actualNames = @($destination.FindName('FileList').Items | ForEach-Object { [IO.Path]::GetFileName($_.FullPath) }) -join ','
     if ($actualNames -cne 'large.txt,.middle.txt,small.txt') { throw "The copied filters or sort order produced unexpected rows: $actualNames" }
 

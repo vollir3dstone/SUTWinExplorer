@@ -288,7 +288,7 @@
                             </GridViewColumn.Header>
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
-                                    <Image Width="16" Height="16" Source="{Binding Entry.Icons.OverlayIcon}" Stretch="Uniform"
+                                    <Image Width="16" Height="16" Source="{Binding OverlayIcon}" Stretch="Uniform"
                                            Opacity="{Binding Entry.Icons.Opacity, TargetNullValue=1, FallbackValue=1}" />
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>

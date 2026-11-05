@@ -426,9 +426,18 @@ public partial class ContentView : UserControl
         {
             await Task.Yield();
             await overlayCompletion.WaitAsync(cancellation.Token);
-            if (!cancellation.IsCancellationRequested && ReferenceEquals(_snapshot, snapshot) &&
-                string.Equals(CurrentPath, path, StringComparison.OrdinalIgnoreCase))
-                RefreshCore(invalidate: false);
+            var rows = _rows;
+            if (cancellation.IsCancellationRequested || !ReferenceEquals(_snapshot, snapshot) || rows is null ||
+                !string.Equals(CurrentPath, path, StringComparison.OrdinalIgnoreCase))
+                return;
+            var paths = rows.Select(row => row.FullPath).ToArray();
+            var icons = await Task.Run(() => snapshot.IconSession.GetIcons(paths), cancellation.Token);
+            if (cancellation.IsCancellationRequested || !ReferenceEquals(_snapshot, snapshot) || !ReferenceEquals(_rows, rows) ||
+                !string.Equals(CurrentPath, path, StringComparison.OrdinalIgnoreCase))
+                return;
+            for (var index = 0; index < rows.Length; index++)
+                if (icons[index] is { } icon)
+                    rows[index].UpdateOverlay(icon);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
         finally
@@ -1218,6 +1227,7 @@ internal sealed class DirectoryRow : INotifyPropertyChanged
     public string FullPath { get; private set; }
     public string DisplayName => Entry?.Name ?? Path.GetFileName(FullPath);
     private FileEntry? _entry;
+    private ShellIconSet? _overlayIcons;
     private bool _isEditing;
     private string _editName = string.Empty;
     public FileEntry? Entry
@@ -1225,10 +1235,31 @@ internal sealed class DirectoryRow : INotifyPropertyChanged
         get => _entry;
         set
         {
-            _entry = value;
+            _entry = WithOverlay(value, _overlayIcons);
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Entry)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DisplayName)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(OverlayIcon)));
         }
+    }
+    public ImageSource? OverlayIcon => _overlayIcons is null ? _entry?.Icons?.OverlayIcon : _overlayIcons.OverlayIcon;
+
+    internal void UpdateOverlay(ShellIconSet icons)
+    {
+        var oldOverlay = OverlayIcon;
+        _overlayIcons = icons;
+        _entry = WithOverlay(_entry, icons);
+        if (!ReferenceEquals(oldOverlay, OverlayIcon))
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(OverlayIcon)));
+    }
+
+    private static FileEntry? WithOverlay(FileEntry? entry, ShellIconSet? overlay)
+    {
+        if (entry?.Icons is not { } icons || overlay is null ||
+            (ReferenceEquals(icons.OverlayIcon, overlay.OverlayIcon) && icons.OverlaySlot == overlay.OverlaySlot &&
+             icons.OverlayKnown == overlay.OverlayKnown && icons.MayHaveOverlay == overlay.MayHaveOverlay))
+            return entry;
+        return entry with { Icons = icons with { OverlayIcon = overlay.OverlayIcon, OverlaySlot = overlay.OverlaySlot,
+            OverlayKnown = overlay.OverlayKnown, MayHaveOverlay = overlay.MayHaveOverlay } };
     }
     internal bool Failed { get; set; }
     public bool IsEditing
