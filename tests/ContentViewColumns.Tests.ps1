@@ -62,8 +62,12 @@ function Assert-State($view, $window, [bool] $hidden) {
     $expectedName = if ($hidden) { 'Show right columns' } else { 'Hide right columns' }
     $scroll = Find-VisualChild $view.FindName('FileList') ([System.Windows.Controls.ScrollViewer])
     $width = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
+    $nameIndex = $columns.IndexOf($view.FindName('NameColumn'))
+    $typeApp1Index = $columns.IndexOf($view.FindName('TypeApp1Icon'))
+    $toggleIndex = $columns.IndexOf($view.FindName('RightColumnsToggleColumn'))
     if ($columns.Count -ne $(if ($hidden) { 5 } else { 8 }) -or
-        $columns[3].Header.Tag -ne 'Name' -or -not [object]::ReferenceEquals($columns[4].Header, $header) -or
+        $nameIndex -lt 0 -or $typeApp1Index -ne $nameIndex + 1 -or $toggleIndex -ne $typeApp1Index + 1 -or
+        -not [object]::ReferenceEquals($view.FindName('RightColumnsToggleColumn').Header, $header) -or
         $symbol.Text -cne [string] $expectedSymbol -or $header.ToolTip -cne $expectedName -or
         [System.Windows.Automation.AutomationProperties]::GetName($header) -cne $expectedName -or
         $header.Padding.Left -ne 0 -or $header.Padding.Right -ne 0 -or
@@ -111,7 +115,11 @@ try {
     Assert-State $view $window $true
     $header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
     Assert-State $view $window $false
-    if (($list.View.Columns[5..7].Header.Tag -join ',') -cne 'TypeApp2Name,Size,DateModified') { throw 'Restored columns are out of order.' }
+    $columns = $list.View.Columns
+    $toggleIndex = $columns.IndexOf($view.FindName('RightColumnsToggleColumn'))
+    if ($columns.IndexOf($view.FindName('TypeApp2Name')) -ne $toggleIndex + 1 -or
+        $columns.IndexOf($view.FindName('SizeColumn')) -ne $toggleIndex + 2 -or
+        $columns.IndexOf($view.FindName('DateColumn')) -ne $toggleIndex + 3) { throw 'Restored columns are out of order.' }
     $window.Width = 500
     Assert-State $view $window $true
     $header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
@@ -127,11 +135,13 @@ try {
         $window.Top = [System.Windows.SystemParameters]::WorkArea.Top + 20
         $null = $window.Activate()
         Update-Layout $window
-        $nameHeader = $list.View.Columns[3].Header
+        $nameColumn = $view.FindName('NameColumn')
+        $typeColumn = $view.FindName('TypeApp2Name')
+        $nameHeader = $nameColumn.Header
         $gripper = $nameHeader.Template.FindName('PART_HeaderGripper', $nameHeader)
         $gripPoint = $gripper.PointToScreen([System.Windows.Point]::new($gripper.ActualWidth / 2, $gripper.ActualHeight / 2))
-        $oldNameWidth = $list.View.Columns[3].Width
-        $oldTypeWidth = $list.View.Columns[5].Width
+        $oldNameWidth = $nameColumn.Width
+        $oldTypeWidth = $typeColumn.Width
         $drag = [ColumnResizeProbe]::new([int] $gripPoint.X, [int] $gripPoint.Y)
         $frame = [System.Windows.Threading.DispatcherFrame]::new()
         $timer = [System.Windows.Threading.DispatcherTimer]::new()
@@ -140,18 +150,25 @@ try {
         $timer.add_Tick({ if ($drag.Finished -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
         $timer.Start()
         try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop(); $drag.Dispose() }
-        if (-not $drag.Finished -or $list.View.Columns[3].Width -le $oldNameWidth + 10 -or
-            $list.View.Columns[5].Width -ge $oldTypeWidth - 10) { throw 'The Name column resize grip did not resize Name and TA2.' }
-        $point = $header.PointToScreen([System.Windows.Point]::new($header.ActualWidth / 2, $header.ActualHeight / 2))
-        $null = [ColumnToggleMouseProbe]::SetCursorPos([int] $point.X, [int] $point.Y)
-        Update-Layout $window
-        $hit = $window.InputHitTest($window.PointFromScreen($point))
-        while ($null -ne $hit -and -not [object]::ReferenceEquals($hit, $header)) {
-            $hit = [System.Windows.Media.VisualTreeHelper]::GetParent($hit)
+        if (-not $drag.Finished -or $nameColumn.Width -le $oldNameWidth + 10 -or
+            $typeColumn.Width -ge $oldTypeWidth - 10) { throw 'The Name column resize grip did not resize Name and TA2.' }
+        $typeHeader = $view.FindName('TypeApp1Icon').Header
+        $typeGripper = $typeHeader.Template.FindName('PART_HeaderGripper', $typeHeader)
+        if ($typeGripper.IsHitTestVisible) { throw 'The TA1 resize grip must not intercept clicks.' }
+        $hidden = $false
+        foreach ($offset in @(2, ($header.ActualWidth / 2), ($header.ActualWidth - 2))) {
+            $point = $header.PointToScreen([System.Windows.Point]::new($offset, $header.ActualHeight / 2))
+            $null = [ColumnToggleMouseProbe]::SetCursorPos([int] $point.X, [int] $point.Y)
+            Update-Layout $window
+            $hit = $window.InputHitTest($window.PointFromScreen($point))
+            while ($null -ne $hit -and -not [object]::ReferenceEquals($hit, $header)) {
+                $hit = [System.Windows.Media.VisualTreeHelper]::GetParent($hit)
+            }
+            if ($null -eq $hit) { throw "The toggle header is covered at $point." }
+            [ColumnToggleMouseProbe]::Click()
+            $hidden = -not $hidden
+            Assert-State $view $window $hidden
         }
-        if ($null -eq $hit) { throw "The toggle header is covered at $point." }
-        [ColumnToggleMouseProbe]::Click()
-        Assert-State $view $window $true
     } finally {
         [ColumnToggleMouseProbe]::Up()
         $null = [ColumnToggleMouseProbe]::SetCursorPos($cursor.X, $cursor.Y)

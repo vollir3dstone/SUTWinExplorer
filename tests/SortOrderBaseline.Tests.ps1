@@ -32,7 +32,7 @@ function Assert-Baselines($view) {
             throw "$name baseline $baseline differs from the surrounding text baseline $lineBaseline."
         }
     }
-    $headerContent = $view.FindName('FileList').View.Columns[3].Header.Content
+    $headerContent = $view.FindName('NameColumn').Header.Content
     $headerLabel = $headerContent.Children[0]
     $headerArrow = $headerContent.Children[1]
     $headerOffset = $headerArrow.TranslatePoint([System.Windows.Point]::new(0, $headerArrow.BaselineOffset), $view).Y -
@@ -138,7 +138,7 @@ try {
     $pairs = @($sortState.GetType().GetProperty('Pairs', $viewFlags).GetValue($sortState))
     if (($pairs.Column -join ',') -cne 'MediaTypeIcon,TypeApp1Icon,TypeApp2Name,DateModified,Size,Name' -or
         $pairs[5].Criterion -ne 'Descending') { throw 'ContentView did not map widget indices and directions.' }
-    $view.FindName('FileList').View.Columns[3].Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+    $view.FindName('NameColumn').Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
     $pairs = @($sortState.GetType().GetProperty('Pairs', $viewFlags).GetValue($sortState))
     if ($pairs[0].Column -ne 'Name' -or $pairs[0].Criterion -ne 'Descending' -or
         @($editor.Items)[0].Index -ne 0 -or @($editor.Items)[0].Direction -ne 'Descending') { throw 'A table header did not synchronize the widget and sorting.' }

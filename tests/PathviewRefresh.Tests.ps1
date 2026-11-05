@@ -316,7 +316,9 @@ try {
         $container = $overlayList.ItemContainerGenerator.ContainerFromItem($selectedRow)
         $presenter = Find-VisualChild $container ([System.Windows.Controls.GridViewRowPresenter])
         if ($null -eq $presenter) { throw 'The selected row is not visually realized.' }
-        $overlayCell = Find-VisualChild ([System.Windows.Media.VisualTreeHelper]::GetChild($presenter, 2)) ([System.Windows.Controls.Image])
+        $overlayColumnIndex = $overlayList.View.Columns.IndexOf($overlayView.FindName('ModifierIconColumn'))
+        if ($overlayColumnIndex -lt 0) { throw 'The MO column is missing.' }
+        $overlayCell = Find-VisualChild ([System.Windows.Media.VisualTreeHelper]::GetChild($presenter, $overlayColumnIndex)) ([System.Windows.Controls.Image])
         if ($null -eq $overlayCell) { throw 'The selected row has no visible MO image.' }
         $beforeItems = $overlayList.ItemsSource
         $beforeSnapshot = $overlaySnapshotField.GetValue($overlayView)

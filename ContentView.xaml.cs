@@ -1163,6 +1163,7 @@ public partial class ContentView : UserControl
             header.Template.FindName("PART_HeaderGripper", header) is Thumb gripper)
         {
             gripper.IsEnabled = ReferenceEquals(header.Column, NameColumn) && !_rightColumnsHidden;
+            gripper.IsHitTestVisible = ReferenceEquals(header.Column, NameColumn);
             if (ReferenceEquals(header.Column, NameColumn))
                 gripper.RenderTransform = new TranslateTransform(-8, 0);
         }

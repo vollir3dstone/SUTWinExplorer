@@ -267,20 +267,7 @@
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
                         </GridViewColumn>
-                        <GridViewColumn x:Name="TypeApp1Icon" Width="36">
-                            <GridViewColumn.Header>
-                                <GridViewColumnHeader Tag="TypeApp1Icon" Padding="1,0" ToolTip="Sort by TA1 (type and/or default app, coarse)" Loaded="FileList_HeaderLoaded">
-                                    <StackPanel Orientation="Horizontal"><TextBlock Text="TA1" /><TextBlock x:Name="TypeApp1IconSortIndicator" Visibility="Collapsed" Margin="1,0,0,0" FontSize="9" /></StackPanel>
-                                </GridViewColumnHeader>
-                            </GridViewColumn.Header>
-                            <GridViewColumn.CellTemplate>
-                                <DataTemplate>
-                                    <Image Width="16" Height="16" Source="{Binding Entry.Icons.BaseIcon}" Stretch="None"
-                                           Opacity="{Binding Entry.Icons.Opacity, TargetNullValue=1, FallbackValue=1}" />
-                                </DataTemplate>
-                            </GridViewColumn.CellTemplate>
-                        </GridViewColumn>
-                        <GridViewColumn Width="32">
+                        <GridViewColumn x:Name="ModifierIconColumn" Width="32">
                             <GridViewColumn.Header>
                                 <GridViewColumnHeader Padding="1,0" ToolTip="Modifier icon" Loaded="FileList_HeaderLoaded">
                                     <TextBlock Text="MO" />
@@ -315,6 +302,19 @@
                                             <Setter TargetName="ItemNameEditor" Property="Visibility" Value="Visible" />
                                         </DataTrigger>
                                     </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn x:Name="TypeApp1Icon" Width="36">
+                            <GridViewColumn.Header>
+                                <GridViewColumnHeader Tag="TypeApp1Icon" Padding="1,0" ToolTip="Sort by TA1 (type and/or default app, coarse)" Loaded="FileList_HeaderLoaded">
+                                    <StackPanel Orientation="Horizontal"><TextBlock Text="TA1" /><TextBlock x:Name="TypeApp1IconSortIndicator" Visibility="Collapsed" Margin="1,0,0,0" FontSize="9" /></StackPanel>
+                                </GridViewColumnHeader>
+                            </GridViewColumn.Header>
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Image Width="16" Height="16" Source="{Binding Entry.Icons.BaseIcon}" Stretch="None"
+                                           Opacity="{Binding Entry.Icons.Opacity, TargetNullValue=1, FallbackValue=1}" />
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
                         </GridViewColumn>

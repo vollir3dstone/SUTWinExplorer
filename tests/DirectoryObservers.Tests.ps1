@@ -7,6 +7,10 @@ param(
         'shell-folder-update', 'shell-file-rename')
 )
 
+$scenarioCount = $Modes.Count * $Scenarios.Count
+$minimumSeconds = $scenarioCount * 4
+Write-Host "Directory observer tests: $scenarioCount scenarios; expected minimum runtime is $minimumSeconds seconds. Results are shown after all scenarios finish."
+
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
 Add-Type -TypeDefinition @'

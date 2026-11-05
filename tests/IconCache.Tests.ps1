@@ -183,7 +183,7 @@ try {
     $viewSort = $view.GetType().GetField('_sorting', $flags).GetValue($view)
     $sortPairs = $viewSort.GetType().GetProperty('Pairs', $flags).GetValue($viewSort)
     Assert-True (@($sortPairs | Where-Object { $_.Column.ToString() -eq 'Overlay' }).Count -eq 0 -and
-        $view.FindName('FileList').View.Columns[2].Header.Tag -eq $null) 'MO remains available in the sort widget or header.'
+        $view.FindName('ModifierIconColumn').Header.Tag -eq $null) 'MO remains available in the sort widget or header.'
     $setDirectories = $shell.GetMethod('SetOverlayDirectories', $staticFlags)
     $null = $setDirectories.Invoke($null, [object[]] @([string[]] @(), $null))
     $priorityPaths = @('active', 'visited', 'unvisited', 'left') | ForEach-Object {
