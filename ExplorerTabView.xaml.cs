@@ -2114,6 +2114,8 @@ internal static class ShellIconProvider
     private const int SmallShellImageList = 1;
     private static IconCache? _cache;
 
+    internal static IconCache? Cache => _cache;
+
     internal static void InitializeCache(string path)
     {
         var cache = new IconCache(path);
@@ -2148,6 +2150,28 @@ internal static class ShellIconProvider
         var cached = _cache?.Find(path, "sized", width, height);
         if (cached is not null)
             return cached.Image;
+        var bitmap = GetSizedIconUncached(path, width, height);
+        if (bitmap is null)
+            return null;
+        if (_cache is not null)
+        {
+            try
+            {
+                var smallIcons = GetSmallIcons(path);
+                if (smallIcons is { OverlayKnown: true })
+                {
+                    var smallCached = _cache.Find(path, "small", 16, 16);
+                    StoreIcon(path, "sized", width, height, bitmap, smallCached?.HasOverlay ?? (smallIcons.OverlaySlot > 0), null);
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ExternalException)
+            { Debug.WriteLine($"Could not determine overlay for '{path}': {exception.Message}"); }
+        }
+        return bitmap;
+    }
+
+    private static BitmapSource? GetSizedIconUncached(string path, int width, int height)
+    {
         IShellItemImageFactory? imageFactory = null;
         IntPtr bitmapHandle = IntPtr.Zero;
         try
@@ -2166,20 +2190,6 @@ internal static class ShellIconProvider
                 Int32Rect.Empty,
                 BitmapSizeOptions.FromEmptyOptions());
             bitmap.Freeze();
-            if (_cache is not null)
-            {
-                try
-                {
-                    var smallIcons = GetSmallIcons(path);
-                    if (smallIcons is { OverlayKnown: true })
-                    {
-                        var smallCached = _cache.Find(path, "small", 16, 16);
-                        StoreIcon(path, "sized", width, height, bitmap, smallCached?.HasOverlay ?? (smallIcons.OverlaySlot > 0), null);
-                    }
-                }
-                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ExternalException)
-                { Debug.WriteLine($"Could not determine overlay for '{path}': {exception.Message}"); }
-            }
             return bitmap;
         }
         catch (ExternalException)
@@ -2193,6 +2203,47 @@ internal static class ShellIconProvider
             if (imageFactory is not null && Marshal.IsComObject(imageFactory))
                 _ = Marshal.FinalReleaseComObject(imageFactory);
         }
+    }
+
+    internal static Action? PrepareCachedItemRefresh(IconCache cache, string path)
+    {
+        var item = cache.GetFileSystemItem(path);
+        if (item is null)
+            return null;
+
+        ShellIconSet? icons = null;
+        try
+        {
+            if (File.Exists(path) || Directory.Exists(path))
+                icons = GetSmallIconsUncached(path);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ExternalException or
+                                          InvalidOperationException or ArgumentException or NotSupportedException)
+        { Debug.WriteLine($"Could not refresh icon for '{path}': {exception.Message}"); }
+
+        var valid = icons is { BaseIcon: BitmapSource, OverlayKnown: true };
+        var variants = new List<IconCache.RefreshedVariant>();
+        foreach (var variant in item.Variants)
+        {
+            BitmapSource? bitmap = null;
+            if (valid)
+            {
+                try
+                {
+                    bitmap = variant.Name switch
+                    {
+                        "small" when variant.Width == 16 && variant.Height == 16 => (BitmapSource)icons!.BaseIcon!,
+                        "sized" => GetSizedIconUncached(path, variant.Width, variant.Height),
+                        _ => null
+                    };
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ExternalException or
+                                                  InvalidOperationException or ArgumentException or NotSupportedException)
+                { Debug.WriteLine($"Could not refresh icon variant for '{path}': {exception.Message}"); }
+            }
+            variants.Add(new IconCache.RefreshedVariant(variant, bitmap, valid && icons!.OverlaySlot > 0));
+        }
+        return () => cache.ReplaceCachedItem(item, variants, valid ? icons!.BaseIconIndex : null);
     }
 
     public static ShellIconSet? GetSmallIcons(string path)

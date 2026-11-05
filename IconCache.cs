@@ -10,6 +10,7 @@ namespace SUTWinExplorer;
 internal sealed class IconCache
 {
     private const string DocumentType = "IconCache";
+    private const string FileSystemPrefix = "filesystem:";
     private static readonly JsonSerializerOptions JsonOptions = new() { MaxDepth = 1024 };
     private readonly object _sync = new();
     private readonly string _filePath;
@@ -17,6 +18,98 @@ internal sealed class IconCache
     private readonly Dictionary<string, BitmapSource> _decoded = new(StringComparer.Ordinal);
 
     internal IconCache(string filePath) => _filePath = filePath;
+
+    internal event Action<string>? FileSystemRootAdded;
+
+    internal string[] GetFileSystemRoots()
+    {
+        lock (_sync)
+            return _document.Roots.Keys.Where(key => key.StartsWith(FileSystemPrefix, StringComparison.OrdinalIgnoreCase))
+                .Select(key => key[FileSystemPrefix.Length..] + Path.DirectorySeparatorChar).ToArray();
+    }
+
+    internal CachedItem[] GetFileSystemItems()
+    {
+        lock (_sync)
+        {
+            var items = new List<CachedItem>();
+            var pending = new Stack<(string Path, CacheNode Node)>();
+            foreach (var (root, node) in _document.Roots)
+                if (root.StartsWith(FileSystemPrefix, StringComparison.OrdinalIgnoreCase))
+                    pending.Push((root[FileSystemPrefix.Length..] + Path.DirectorySeparatorChar, node));
+            while (pending.TryPop(out var entry))
+            {
+                if (entry.Node.Images is not null)
+                {
+                    var variants = entry.Node.Images.Select(pair => ParseVariant(pair.Key, pair.Value, entry.Node.VariantVersions.GetValueOrDefault(pair.Key))).OfType<IconVariant>().ToArray();
+                    if (variants.Length > 0)
+                        items.Add(new CachedItem(entry.Path, variants));
+                }
+                foreach (var (name, child) in entry.Node.Children)
+                    pending.Push((Path.Combine(entry.Path, name), child));
+            }
+            return items.ToArray();
+        }
+    }
+
+    internal CachedItem? GetFileSystemItem(string path)
+    {
+        if (ShellLocations.IsTopPath(path))
+            return null;
+        lock (_sync)
+        {
+            var node = GetNode(path, false);
+            if (node?.Images is null)
+                return null;
+            var variants = node.Images.Select(pair => ParseVariant(pair.Key, pair.Value, node.VariantVersions.GetValueOrDefault(pair.Key))).OfType<IconVariant>().ToArray();
+            return variants.Length == 0 ? null : new CachedItem(Path.GetFullPath(path), variants);
+        }
+    }
+
+    internal void InvalidateFileSystemItems(IEnumerable<string> paths)
+    {
+        lock (_sync)
+        {
+            foreach (var path in paths)
+            {
+                var node = GetNode(path, false);
+                if (node is null)
+                    continue;
+                node.Images?.Clear();
+                node.VariantVersions.Clear();
+                node.BaseIconIndex = null;
+            }
+        }
+    }
+
+    internal void InvalidateAllFileSystemItems()
+    {
+        lock (_sync)
+        {
+            var pending = new Stack<CacheNode>(_document.Roots
+                .Where(pair => pair.Key.StartsWith(FileSystemPrefix, StringComparison.OrdinalIgnoreCase))
+                .Select(pair => pair.Value));
+            while (pending.TryPop(out var node))
+            {
+                node.Images?.Clear();
+                node.VariantVersions.Clear();
+                node.BaseIconIndex = null;
+                foreach (var child in node.Children.Values)
+                    pending.Push(child);
+            }
+        }
+    }
+
+    private static IconVariant? ParseVariant(string key, string imageId, long version)
+    {
+        var separator = key.IndexOf(':');
+        var sizeSeparator = key.IndexOf('x', separator + 1);
+        if (separator <= 0 || sizeSeparator <= separator + 1 ||
+            !int.TryParse(key.AsSpan(separator + 1, sizeSeparator - separator - 1), out var width) ||
+            !int.TryParse(key.AsSpan(sizeSeparator + 1), out var height) || width <= 0 || height <= 0)
+            return null;
+        return new IconVariant(key[..separator], width, height, imageId, version);
+    }
 
     internal void Load()
     {
@@ -103,31 +196,72 @@ internal sealed class IconCache
 
     internal void Store(string path, string variant, int width, int height, BitmapSource bitmap, bool hasOverlay, int? baseIconIndex)
     {
+        var image = PrepareImage(bitmap, hasOverlay);
+        var root = ShellLocations.IsTopPath(path) ? null : Path.GetPathRoot(Path.GetFullPath(path));
+        var newRoot = false;
+        lock (_sync)
+        {
+            newRoot = root is not null && !_document.Roots.ContainsKey(FileSystemPrefix + root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            AddImage(image);
+            var node = GetNode(path, true)!;
+            node.Images ??= new Dictionary<string, string>(StringComparer.Ordinal);
+            var key = SizeKey(variant, width, height);
+            node.Images[key] = image.Id;
+            node.VariantVersions[key] = ++node.NextVariantVersion;
+            if (baseIconIndex.HasValue)
+                node.BaseIconIndex = baseIconIndex;
+        }
+        if (newRoot)
+            FileSystemRootAdded?.Invoke(root!);
+    }
+
+    internal void ReplaceCachedItem(CachedItem item, IReadOnlyList<RefreshedVariant> variants, int? baseIconIndex)
+    {
+        var prepared = variants.Select(variant => (variant.Variant,
+            Image: variant.Bitmap is null ? null : PrepareImage(variant.Bitmap, variant.HasOverlay))).ToArray();
+        lock (_sync)
+        {
+            var node = GetNode(item.Path, false);
+            if (node?.Images is null)
+                return;
+            foreach (var (variant, image) in prepared)
+            {
+                var key = SizeKey(variant.Name, variant.Width, variant.Height);
+                if (!node.Images.TryGetValue(key, out var currentId) || currentId != variant.ImageId ||
+                    node.VariantVersions.GetValueOrDefault(key) != variant.Version)
+                    continue;
+                if (image is null)
+                    node.Images.Remove(key);
+                else
+                {
+                    AddImage(image);
+                    node.Images[key] = image.Id;
+                }
+                node.VariantVersions[key] = ++node.NextVariantVersion;
+                if (variant.Name == "small" && variant.Width == 16 && variant.Height == 16)
+                    node.BaseIconIndex = image is null ? null : baseIconIndex;
+            }
+        }
+    }
+
+    private static PreparedImage PrepareImage(BitmapSource bitmap, bool hasOverlay)
+    {
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(bitmap));
         using var stream = new MemoryStream();
         encoder.Save(stream);
         var bytes = stream.ToArray();
-        var id = Convert.ToHexString(SHA256.HashData(bytes)) + (hasOverlay ? "-1" : "-0");
-        lock (_sync)
-        {
-            if (!_document.Images.ContainsKey(id))
-            {
-                if (!bitmap.IsFrozen)
-                    bitmap.Freeze();
-                _document.Images.Add(id, new CacheImage
-                {
-                    Width = bitmap.PixelWidth, Height = bitmap.PixelHeight,
-                    Png = Convert.ToBase64String(bytes), HasOverlay = hasOverlay
-                });
-                _decoded.Add(id, bitmap);
-            }
-            var node = GetNode(path, true)!;
-            node.Images ??= new Dictionary<string, string>(StringComparer.Ordinal);
-            node.Images[SizeKey(variant, width, height)] = id;
-            if (baseIconIndex.HasValue)
-                node.BaseIconIndex = baseIconIndex;
-        }
+        if (!bitmap.IsFrozen)
+            bitmap.Freeze();
+        return new PreparedImage(Convert.ToHexString(SHA256.HashData(bytes)) + (hasOverlay ? "-1" : "-0"),
+            new CacheImage { Width = bitmap.PixelWidth, Height = bitmap.PixelHeight,
+                Png = Convert.ToBase64String(bytes), HasOverlay = hasOverlay }, bitmap);
+    }
+
+    private void AddImage(PreparedImage image)
+    {
+        if (_document.Images.TryAdd(image.Id, image.Image))
+            _decoded.Add(image.Id, image.Bitmap);
     }
 
     private CacheNode? GetNode(string path, bool create)
@@ -143,7 +277,7 @@ internal sealed class IconCache
         {
             var fullPath = Path.GetFullPath(path);
             root = Path.GetPathRoot(fullPath) ?? throw new ArgumentException("Path has no root.", nameof(path));
-            root = "filesystem:" + root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            root = FileSystemPrefix + root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             components = fullPath[Path.GetPathRoot(fullPath)!.Length..]
                 .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
         }
@@ -179,6 +313,10 @@ internal sealed class IconCache
     private static string SizeKey(string variant, int width, int height) => $"{variant}:{width}x{height}";
 
     internal sealed record CachedIcon(BitmapSource Image, bool HasOverlay, int? BaseIconIndex);
+    private sealed record PreparedImage(string Id, CacheImage Image, BitmapSource Bitmap);
+    internal sealed record IconVariant(string Name, int Width, int Height, string ImageId, long Version);
+    internal sealed record CachedItem(string Path, IconVariant[] Variants);
+    internal sealed record RefreshedVariant(IconVariant Variant, BitmapSource? Bitmap, bool HasOverlay);
 
     public sealed class CacheDocument
     {
@@ -199,6 +337,10 @@ internal sealed class IconCache
         public Dictionary<string, CacheNode> Children { get; set; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string>? Images { get; set; }
         public int? BaseIconIndex { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore]
+        internal Dictionary<string, long> VariantVersions { get; } = new(StringComparer.Ordinal);
+        [System.Text.Json.Serialization.JsonIgnore]
+        internal long NextVariantVersion { get; set; }
     }
 
     public sealed class CacheImage

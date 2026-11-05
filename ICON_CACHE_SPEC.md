@@ -82,17 +82,79 @@ from current file attributes when small icons are requested: hidden items use
 ContentView table displays the base and selected overlay in separate columns;
 other controls can layer the same images.
 
-An item initially recorded without an overlay is not queried for overlays on
-cache hits. Consequently, an overlay that appears later is not detected by this
-policy. A previously recorded overlay can disappear or change and is then
-requeried; this does not change the stored presence flag. Per-item changes to
-base icons, renames, deletions, and changes of an item at the same path do not
-invalidate or move persistent entries in this initial version. Stale icons and
-orphaned entries are accepted until the cache is cleared. `DirectoryItem` also
-retains its first icon result in the current directory-data cache, including a
-failed result, until its metadata or directory cache is invalidated. When a
-previously materialized entry with a known overlay is requested again, the
-provider is called again and the current overlay is obtained.
+An item recorded without an overlay is not queried for overlays on ordinary
+cache hits. The change observer described below can update its stored overlay
+flag. A previously recorded overlay is requeried on a hit, but that lookup alone
+does not change the stored presence flag. `DirectoryItem` also retains its first
+icon result in the current directory-data cache, including a failed result, until
+its metadata or directory cache is invalidated. When a previously materialized
+entry with a known overlay is requested again, the provider is called again and
+the current overlay is obtained.
+
+## Icon change observation
+
+At startup the application registers a recursive Shell change observer for each
+filesystem root already in the cache. When a first item on a new root is stored,
+the root is registered dynamically on the application's dispatcher, including
+when the store came from a background thread. Registration failures are logged;
+device-change messages trigger another registration attempt for missing roots.
+Virtual Shell items are outside this observer's scope.
+
+For `SHCNE_UPDATEITEM`, only the named item is refreshed if it is in the cache.
+The provider asks the Shell again for its small base icon, overlay state and
+index, and for every cached size variant. Failed or unavailable variants are
+removed so a later lookup can retry. In-memory variant revisions prevent an
+older refresh from overwriting a newer store, even when their image IDs match.
+
+### Association notification: deliberate deviation
+
+Microsoft's [`SHChangeNotify` documentation](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shchangenotify)
+specifies that senders of `SHCNE_ASSOCCHANGED` must pass `NULL` for both item
+parameters. We deliberately also interpret a non-null first item delivered to
+the observer, based on an actual Windows test, even though its meaning is not
+documented as a supported contract.
+
+On Windows 11, build 26200, changing a temporary file extension's default app
+through Windows Settings delivered `SHCNE_ASSOCCHANGED` with a non-null first
+item and a null second item. Resolving the first item using
+`SHGetNameFromIDList` with `SIGDN_DESKTOPABSOLUTEPARSING` produced a name like
+`C:\*.kistesta31fa0f8`, containing the changed extension. The test did not send
+the notification itself. A subsequent real Settings change exercised the
+production observer and confirmed that matching cached file icons were refreshed
+while an unrelated file and a directory with the same extension were not.
+
+For this observed `*.extension` form, the observer extracts the extension and
+requeries matching cached files and their variants across all filesystem roots,
+ignoring case. The drive in the parsing name does not restrict the refresh to
+that drive. A null first item triggers the previous global requery of all cached
+filesystem items and their variants. A non-null item that cannot be resolved to
+the recognized wildcard form is logged and ignored, not treated as a global
+refresh. Consequently, its affected icons can remain stale.
+
+This behavior is based on the tested Settings workflow, not a Windows guarantee.
+Other Windows versions or notification producers may provide null, a different
+item, or no notification. The optimization must not be assumed to cover every
+association change or to identify all effects of a notification.
+
+Repeated requests are coalesced and Shell lookups run serially on an STA
+background thread. On normal shutdown, unfinished items are invalidated before
+the cache is saved, and late results are discarded without waiting for a Shell
+handler.
+
+### Changes while the application is closed
+
+Observation works only while the application is running, the relevant root is
+successfully registered, and Windows delivers a supported notification. Shell
+notifications are not replayed for the period when the application was closed.
+At the next startup, the persisted cache is loaded without checking whether its
+icons, overlays, or associations changed in the meantime. An offline change can
+therefore leave stale icons in the cache, potentially across subsequent restarts,
+until a later observed event or another cache miss causes a fresh lookup.
+
+How to detect or reconcile changes that occurred while the application was
+closed is entirely undecided. There is currently no startup validation, offline
+change journal, association snapshot comparison, or other implemented recovery
+mechanism; no choice of future strategy is implied here.
 
 ## Sorting and the Windows index
 
@@ -185,10 +247,24 @@ behavior; cache entries are not authoritative filesystem data.
 - The cache grows without eviction or a size limit. Images and paths can consume
   substantial disk space and memory; paths in the per-user JSON reveal visited
   filesystem locations.
-- Stale base icons and newly appearing overlays are not refreshed automatically.
-  A future invalidation strategy must address changed icons, renames, deletions,
-  path reuse, file associations and removable or network locations. A cache-clear
-  mechanism is desirable, but its user interface is not specified.
+- The observer only handles `SHCNE_UPDATEITEM` and `SHCNE_ASSOCCHANGED` received
+  while the application is running. Windows can coalesce item events into other
+  event types, and association changes require the changing application to send
+  the notification. Changes while the application is closed are not detected;
+  how to handle them remains an open decision. Renames, deletions and path reuse
+  are not comprehensively tracked. UNC and removable roots and reconnection
+  behavior have not been comprehensively validated. Existing UI objects do not
+  necessarily replace already materialized icons immediately when the cache
+  changes.
+- A temporarily unavailable path can lose its cached variants on refresh and
+  require a later lookup. Invalidation does not remove orphaned PNGs or path
+  nodes; there is no image-table garbage collection or cache-clear UI.
+- The extension-bearing association item is undocumented and was observed for a
+  Windows 11 Settings change; other sources may use different or null items.
+  Unrecognized non-null items leave affected icons unchanged.
+- The cost of association refreshes has not been measured. The observer scans
+  cached filesystem items and performs the selected Shell calls sequentially;
+  a null item can require refreshing the entire cache.
 - The persisted Windows sort index is experimental. Its stability across Windows
   restarts must still be validated; a stable result in a particular test does not
   establish a general Windows guarantee.
@@ -216,6 +292,20 @@ trees, concurrent access, JSON save/load and malformed or unsupported files. It
 also exercises Shell-backed small and sized icons, known-overlay requery,
 preloading before sorting, real Windows indices and sorting using deliberately
 distinct persisted indices. The test uses a temporary directory and cache.
+
+`tests/IconChangeNotifications.Tests.ps1` exercises real shortcut and explicit
+association notifications on a local drive, dynamically registered and loaded
+roots, background-thread registration, item-only and global variant refreshes,
+and interrupted refresh invalidation including save and reload. The association
+test uses temporary per-user registry entries and explicitly sends the global
+notification. It does not establish coverage for all Shell extensions, event
+sources, network or removable drives.
+
+`tests/ManualAssociationNotifications.ps1` observes a real Windows Settings
+association change without sending a notification. It checks matching files,
+case-insensitive extensions, icon variants, an unrelated file and a directory
+whose name matches the extension. It requires a user to select an app for a
+temporary extension and removes its test data afterwards.
 
 These tests do not establish that Windows image-list indices remain stable across
 Windows restarts or changes to installed software and icon associations. That

@@ -11,6 +11,7 @@ public partial class App : Application
 {
 	private Mutex? _instanceMutex;
 	private bool _ownsInstanceMutex;
+	private IconChangeObserver? _iconChangeObserver;
 
 	internal UseCaseStore UseCaseStore { get; private set; } = null!;
 	internal UseCaseConfiguration ActiveUseCase { get; private set; } = null!;
@@ -37,6 +38,7 @@ public partial class App : Application
 			var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KIS Explorer");
 			var cacheDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KIS Explorer");
 			ShellIconProvider.InitializeCache(Path.Combine(cacheDirectory, "IconCache.json"));
+			_iconChangeObserver = new IconChangeObserver(ShellIconProvider.Cache!, Dispatcher);
 			UseCaseStore = new UseCaseStore(directory, "default");
 			ActiveUseCase = UseCaseStore.LoadOrCreate();
 			var window = new MainWindow();
@@ -54,6 +56,7 @@ public partial class App : Application
 	{
 		if (_ownsInstanceMutex)
 		{
+			_iconChangeObserver?.Dispose();
 			ShellIconProvider.SaveCache();
 			_instanceMutex?.ReleaseMutex();
 		}

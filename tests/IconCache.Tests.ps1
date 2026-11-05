@@ -20,6 +20,12 @@ public static class IconCacheConcurrencyProbe
         });
     }
 }
+
+public sealed class IconCacheRootProbe
+{
+    public readonly System.Collections.Generic.List<string> Roots = new();
+    public void OnRootAdded(string root) { lock (Roots) Roots.Add(root); }
+}
 '@
 
 function Assert-True([bool] $condition, [string] $message) {
@@ -38,6 +44,10 @@ $find = $cacheType.GetMethod('Find', $flags)
 $store = $cacheType.GetMethod('Store', $flags)
 $load = $cacheType.GetMethod('Load', $flags)
 $save = $cacheType.GetMethod('Save', $flags)
+$getRoots = $cacheType.GetMethod('GetFileSystemRoots', $flags)
+$getItems = $cacheType.GetMethod('GetFileSystemItems', $flags)
+$getItem = $cacheType.GetMethod('GetFileSystemItem', $flags)
+$rootEvent = $cacheType.GetEvent('FileSystemRootAdded', $flags)
 function Find-Icon($cache, [string] $path, [string] $variant, [int] $width, [int] $height) {
     return $find.Invoke($cache, [object[]] @([string] $path, [string] $variant, [int] $width, [int] $height))
 }
@@ -57,11 +67,21 @@ try {
     $bitmap.Freeze()
     $cache = $constructor.Invoke([object[]] @([string] $filePath))
     $load.Invoke($cache, @())
+    $rootProbe = [IconCacheRootProbe]::new()
+    $rootHandler = [Delegate]::CreateDelegate($rootEvent.EventHandlerType, $rootProbe, $rootProbe.GetType().GetMethod('OnRootAdded'))
+    $rootEvent.GetAddMethod($true).Invoke($cache, [object[]] @($rootHandler))
     Assert-True ($null -eq (Find-Icon $cache $first 'small' 16 16)) 'Missing path unexpectedly found.'
     Store-Icon $cache $first 'small' 16 16 $bitmap $false ([int] 101)
     Store-Icon $cache $second 'small' 16 16 $bitmap $false ([int] 202)
     Store-Icon $cache $third 'small' 16 16 $bitmap $true
     Store-Icon $cache $first 'sized' 32 32 $bitmap $false
+    Store-Icon $cache 'Z:\other\item.txt' 'small' 16 16 $bitmap $false
+    Assert-True ($rootProbe.Roots.Count -eq 2 -and $rootProbe.Roots.Contains([IO.Path]::GetPathRoot($directory)) -and $rootProbe.Roots.Contains('Z:\')) 'New filesystem roots were not reported exactly once.'
+    $roots = @($getRoots.Invoke($cache, @()))
+    Assert-True ($roots.Count -eq 2 -and $roots -contains 'Z:\') 'Filesystem roots were not enumerated.'
+    $cachedItem = $getItem.Invoke($cache, [object[]] @([string] $first.ToUpperInvariant()))
+    Assert-True ($null -ne $cachedItem -and $cachedItem.Variants.Count -eq 2 -and @($cachedItem.Variants | Where-Object { $_.Name -eq 'sized' -and $_.Width -eq 32 -and $_.Height -eq 32 }).Count -eq 1) 'Cached item variants were not enumerated.'
+    Assert-True (@($getItems.Invoke($cache, @()) | Where-Object { $_.Path -eq $first }).Count -eq 1) 'Cached filesystem item paths were not enumerated.'
     $deep = $directory
     foreach ($number in 1..40) { $deep = Join-Path $deep "level$number" }
     Store-Icon $cache $deep 'small' 16 16 $bitmap $false
@@ -133,6 +153,27 @@ try {
     }
     $sized = $getSized.Invoke($null, [object[]] @([string] $shellPath, [int] 32, [int] 32))
     Assert-True ($null -ne $sized -and $null -ne (Find-Icon $providerCache $shellPath 'sized' 32 32)) 'Size-specific Shell icon was not cached.'
+    $prepareRefresh = $provider.GetMethod('PrepareCachedItemRefresh', $staticFlags)
+    Store-Icon $providerCache $shellPath 'small' 16 16 $bitmap $false ([int] 999999)
+    Store-Icon $providerCache $shellPath 'sized' 32 32 $bitmap $false
+    $refresh = $prepareRefresh.Invoke($null, [object[]] @($providerCache, [string] $shellPath))
+    Assert-True ($null -ne $refresh) 'A cached filesystem item did not prepare a refresh.'
+    $refresh.Invoke()
+    $refreshedSmall = Find-Icon $providerCache $shellPath 'small' 16 16
+    $refreshedSized = Find-Icon $providerCache $shellPath 'sized' 32 32
+    Assert-True ($null -ne $refreshedSmall -and $refreshedSmall.Image.PixelWidth -eq 16 -and $refreshedSmall.BaseIconIndex -ne 999999) 'Small icon and index were not refreshed from the Shell.'
+    Assert-True ($null -ne $refreshedSized -and $refreshedSized.Image.PixelWidth -gt 2) 'Sized icon was not refreshed from the Shell.'
+    $staleRefresh = $prepareRefresh.Invoke($null, [object[]] @($providerCache, [string] $shellPath))
+    Store-Icon $providerCache $shellPath 'small' 16 16 $refreshedSmall.Image $refreshedSmall.HasOverlay ([int] 999998)
+    $staleRefresh.Invoke()
+    Assert-True ((Find-Icon $providerCache $shellPath 'small' 16 16).BaseIconIndex -eq 999998) 'An older refresh overwrote a newer cached variant.'
+    $refresh = $prepareRefresh.Invoke($null, [object[]] @($providerCache, [string] $shellPath))
+    $refresh.Invoke()
+    $missingPath = Join-Path $directory 'missing.txt'
+    Store-Icon $providerCache $missingPath 'small' 16 16 $bitmap $false ([int] 10)
+    $missingRefresh = $prepareRefresh.Invoke($null, [object[]] @($providerCache, [string] $missingPath))
+    $missingRefresh.Invoke()
+    Assert-True ($null -eq (Find-Icon $providerCache $missingPath 'small' 16 16)) 'An unavailable item retained a stale cached icon.'
     $saveProvider.Invoke($null, @())
     $initialize.Invoke($null, [object[]] @([string] $filePath))
     $providerCache = $provider.GetField('_cache', $staticFlags).GetValue($null)
