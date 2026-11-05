@@ -28,6 +28,26 @@ try {
         $fixedWindow.Content = $fixedPathview
         $fixedWindow.Show()
         $fixedWindow.UpdateLayout()
+        foreach ($action in @(@{ Button = 'RenameCurrentDirectoryButton'; Title = 'Rename directory'; Value = [IO.Path]::GetFileName($directory) },
+                              @{ Button = 'RelocateCurrentDirectoryButton'; Title = 'Relocate directory'; Value = [IO.Path]::GetDirectoryName($directory) })) {
+            $button = $fixedPathview.FindName($action.Button)
+            Assert-True $button.IsEnabled "$($action.Button) was disabled for the current directory."
+            $state = @{ Seen = $false; Value = $null }
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+            $timer.add_Tick({
+                $dialog = @([System.Windows.Application]::Current.Windows | Where-Object { $_.Title -eq $action.Title -and $_.IsVisible }) | Select-Object -First 1
+                if ($null -ne $dialog) {
+                    $state.Seen = $true
+                    $state.Value = $dialog.Content.Children[1].Text
+                    $dialog.DialogResult = $false
+                }
+            }.GetNewClosure())
+            $timer.Start()
+            try { $button.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)) }
+            finally { $timer.Stop() }
+            Assert-True ($state.Seen -and $state.Value -ceq $action.Value -and $fixedPathview.CurrentPath -ceq $directory) "$($action.Button) did not open the expected dialog for the current path."
+        }
         $subdirectoryList = $fixedPathview.FindName('ActivePathSubdirectoriesList')
         $subdirectoryEntry = @($subdirectoryList.Items | Where-Object { $_.Path -eq (Join-Path $directory 'OtherFolder') })[0]
         Assert-True ($null -ne $subdirectoryEntry) 'The fixed Pathview fixture did not find its subdirectory.'
@@ -98,6 +118,41 @@ try {
             Assert-True ($menuProbe.ItemCount -eq -1) 'The fixed Active path tree unexpectedly opened a menu.'
             } finally { $menuProbe.Dispose() }
     } finally { $fixedWindow.Close() }
+    $operationPath = Join-Path $directory 'operation'
+    $destination = Join-Path $directory 'destination'
+    [void] [IO.Directory]::CreateDirectory($operationPath)
+    [void] [IO.Directory]::CreateDirectory($destination)
+    $operationView = $pathviewType.GetConstructors()[0].Invoke([object[]] @([string] $operationPath, [bool] $false, $null, $null, $null, $null))
+    $operationWindow = [System.Windows.Window]::new()
+    try {
+        $operationWindow.ShowInTaskbar = $false
+        $operationWindow.Left = -20000
+        $operationWindow.Top = -20000
+        $operationWindow.Content = $operationView
+        $operationWindow.Show()
+        foreach ($action in @(@{ Button = 'RenameCurrentDirectoryButton'; Title = 'Rename directory'; Value = 'renamed'; Expected = (Join-Path $directory 'renamed') },
+                              @{ Button = 'RelocateCurrentDirectoryButton'; Title = 'Relocate directory'; Value = $destination; Expected = (Join-Path $destination 'renamed') })) {
+            $state = @{ Seen = $false }
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+            $timer.add_Tick({
+                $dialog = @([System.Windows.Application]::Current.Windows | Where-Object { $_.Title -eq $action.Title -and $_.IsVisible }) | Select-Object -First 1
+                if ($null -ne $dialog) {
+                    $state.Seen = $true
+                    $dialog.Content.Children[1].Text = $action.Value
+                    $dialog.DialogResult = $true
+                }
+            }.GetNewClosure())
+            $timer.Start()
+            try { $operationView.FindName($action.Button).RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)) }
+            finally { $timer.Stop() }
+            $activeEntry = $operationView.GetType().GetField('_activePathEntry', $viewFlags).GetValue($operationView)
+            Assert-True ($state.Seen -and $operationView.CurrentPath -ceq $action.Expected -and $activeEntry.Path -ceq $action.Expected) "$($action.Button) did not update the visible active path."
+        }
+    } finally {
+        $operationView.GetType().GetMethod('Close', $viewFlags).Invoke($operationView, @())
+        $operationWindow.Close()
+    }
     'Pathview tests passed.'
 } finally {
     [System.Threading.SynchronizationContext]::SetSynchronizationContext($previousContext)

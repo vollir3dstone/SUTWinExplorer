@@ -3,6 +3,7 @@ if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne [Threading.Apartme
 $assembly = [Reflection.Assembly]::LoadFrom((Join-Path $PSScriptRoot '../bin/Debug/net10.0-windows/SUTWinExplorer.dll'))
 $operations = $assembly.GetType('SUTWinExplorer.ShellFileOperations', $true)
 $link = $operations.GetMethod('Link', [Reflection.BindingFlags]'Static,Public')
+$workflow = $assembly.GetType('SUTWinExplorer.LinkWorkflowState', $true).GetProperty('Shared').GetValue($null)
 $directory = Join-Path ([IO.Path]::GetTempPath()) ('SutLinkTest-' + [Guid]::NewGuid().ToString('N'))
 $source = Join-Path $directory 'source'
 $destination = Join-Path $directory 'destination'
@@ -13,6 +14,18 @@ try {
     $folder = Join-Path $source 'folder'
     [IO.File]::WriteAllText($file, 'original')
     [IO.Directory]::CreateDirectory($folder) | Out-Null
+    $rejectedEmpty = $false
+    try { $workflow.Prepare([string[]] @()) } catch { $rejectedEmpty = $true }
+    if (-not $rejectedEmpty -or $workflow.IsPrepared) { throw 'Link accepted an empty selection.' }
+    $workflow.Prepare([string[]] @($file, $file.ToUpperInvariant(), $folder))
+    $prepared = @($workflow.PreparedPaths)
+    if (-not $workflow.IsPrepared -or $prepared.Count -ne 2 -or $file -notin $prepared -or $folder -notin $prepared) { throw 'Link did not retain the distinct selected paths.' }
+    $rejectedDuplicate = $false
+    try { $workflow.Prepare([string[]] @($file)) } catch { $rejectedDuplicate = $true }
+    if (-not $rejectedDuplicate -or @($workflow.PreparedPaths).Count -ne 2) { throw 'Preparing Link again changed the active workflow.' }
+    $workflow.Abort()
+    if ($workflow.IsPrepared) { throw 'Link abort did not clear the workflow.' }
+    $workflow.Prepare([string[]] @($file, $folder))
     $existing = Join-Path $destination 'example.txt - Shortcut.lnk'
     [IO.File]::WriteAllText($existing, 'keep')
     $inserted = [Collections.Generic.List[string]]::new()
@@ -21,6 +34,8 @@ try {
     $arguments[1] = [string] $destination
     $arguments[2] = $inserted
     $null = $link.Invoke($null, $arguments)
+    $workflow.CompleteExecute()
+    if ($workflow.IsPrepared) { throw 'Link completion did not clear the workflow.' }
     if ($inserted.Count -ne 2 -or [IO.File]::ReadAllText($existing) -cne 'keep') { throw 'Link creation did not preserve the existing item.' }
     if ($inserted[0] -cne (Join-Path $destination 'example.txt - Shortcut (2).lnk') -or
         @(Get-ChildItem -LiteralPath $destination -Filter '*.tmp').Count -ne 0) { throw 'Link creation chose an incorrect name or left a temporary file.' }
@@ -68,5 +83,8 @@ try {
         @(Get-ChildItem -LiteralPath $partialDestination -Filter '*.tmp').Count -ne 0) {
         throw "A later link failure did not preserve completed shortcuts and clean up temporary files: failed=$failed, count=$($partial.Count), files=$(@(Get-ChildItem -LiteralPath $partialDestination | ForEach-Object Name) -join ',')."
     }
-    'Link operation tests passed.'
-} finally { Remove-Item -LiteralPath $directory -Recurse -Force }
+    'Link action tests passed.'
+} finally {
+    $workflow.Abort()
+    Remove-Item -LiteralPath $directory -Recurse -Force
+}

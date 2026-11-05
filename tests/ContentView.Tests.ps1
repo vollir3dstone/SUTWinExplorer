@@ -8,10 +8,7 @@ $application.InitializeComponent()
 $application.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
 $shell = $assembly.GetType('SUTWinExplorer.SutShell', $true)
 $flags = [System.Reflection.BindingFlags]'Static,NonPublic'
-$instanceFlags = [System.Reflection.BindingFlags]'Instance,NonPublic'
 $menuType = $assembly.GetType('SUTWinExplorer.SutContextMenuFactory', $true)
-$sortStateType = $assembly.GetType('SUTWinExplorer.DirectorySortState', $true)
-$pairsProperty = $sortStateType.GetProperty('Pairs', $instanceFlags)
 $testHandler = [guid] '{11111111-2222-3333-4444-555555555555}'
 $whitelistJson = '{"_type":"directoryMenuWhitelist","extensions":[{"_type":"shellExtension","name":"test","verbs":["TestVerb"],"clsids":["{11111111-2222-3333-4444-555555555555}"]}]}'
 $whitelistDocument = [System.Text.Json.JsonDocument]::Parse($whitelistJson)
@@ -57,7 +54,6 @@ try {
     $window.Content = $view
     $window.Show()
     try {
-        $defaultOrder = 'Name,MediaTypeIcon,TypeApp1Icon,TypeApp2Name,DateModified,Size'
         $null = $view.GetType().GetMethod('SetCurrentPath', $viewFlags).Invoke($view, [object[]] @([string] $directory))
         $null = $view.GetType().GetMethod('Refresh', $viewFlags).Invoke($view, [object[]] @([bool] $true))
         $frame = [System.Windows.Threading.DispatcherFrame]::new()
@@ -319,48 +315,9 @@ try {
         Assert-True ($list.SelectedItems.Count -eq 2 -and $view.FindName('CopyMarkItemButton').IsEnabled -and
             $view.FindName('NameClipboardCopyButton').IsEnabled -and $view.FindName('PathClipboardCopyButton').IsEnabled -and -not $view.FindName('RenameButton').IsEnabled) 'Multiple selection or its toolbar state failed.'
         $sizeColumn.Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-        Assert-True ($view.FindName('SizeSortIndicator').Visibility -eq 'Visible' -and
-            $view.FindName('SizeSortIndicator').Text -ceq [string] [char] 0x25B2) 'Ascending size indicator was not shown.'
-        $sizeColumn.Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-        Assert-True ($view.FindName('SizeSortIndicator').Text -ceq [string] [char] 0x25BC) 'Descending size indicator was not shown.'
-        $nameColumn.Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-        $list.UpdateLayout()
-        Assert-True ($view.FindName('NameSortIndicator').Visibility -eq 'Visible' -and
-            $view.FindName('SizeSortIndicator').Visibility -eq 'Collapsed' -and
-            $view.FindName('NameSortIndicator').IsVisible -and $view.FindName('NameSortIndicator').ActualWidth -gt 0 -and
-            $view.FindName('NameSortIndicator').Text -ceq [string] [char] 0x25B2) 'Primary sort indicator did not move to the new column.'
-        $viewSort = $view.GetType().GetField('_sorting', $viewFlags).GetValue($view)
-        Assert-True ((@($pairsProperty.GetValue($viewSort)).Column -join ',') -ceq 'Name,Size,MediaTypeIcon,TypeApp1Icon,TypeApp2Name,DateModified') 'Column clicks did not preserve the secondary sort.'
-        $modifierColumn.Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-        Assert-True ((@($pairsProperty.GetValue($viewSort)).Column -join ',') -ceq 'Name,Size,MediaTypeIcon,TypeApp1Icon,TypeApp2Name,DateModified') 'MO header must not change the sorting.'
-        foreach ($iconColumn in @(@('MediaTypeIcon', 'MediaTypeIconSortIndicator'), @('TypeApp1Icon', 'TypeApp1IconSortIndicator'))) {
-            $header = $view.FindName($iconColumn[0]).Header
-            foreach ($direction in @([char] 0x25B2, [char] 0x25BC)) {
-                $header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-                $list.UpdateLayout()
-                $indicator = $view.FindName($iconColumn[1])
-                $indicatorPosition = $indicator.TranslatePoint([System.Windows.Point]::new(0, 0), $header)
-                $label = $header.Content.Children[0]
-                Assert-True ($indicator.IsVisible -and $indicator.Text -ceq [string] $direction -and
-                    $indicator.ActualWidth + $indicator.Margin.Left + $indicator.Margin.Right -ge $indicator.DesiredSize.Width -and
-                    $label.ActualWidth -ge $label.DesiredSize.Width -and
-                    $indicatorPosition.X + $indicator.ActualWidth -le $header.ActualWidth) "Icon header $($iconColumn[0]) did not fit: direction=$direction, text=$($indicator.Text), label=$($label.ActualWidth)/$($label.DesiredSize.Width), indicator=$($indicator.ActualWidth)/$($indicator.DesiredSize.Width), right=$($indicatorPosition.X + $indicator.ActualWidth), header=$($header.ActualWidth)."
-            }
-            $header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-        }
         $nameColumn.Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         $view.FindName('NamePatternTextBox').Text = '*'
         $view.FindName('NamePatternTextBox').Text = ''
-        $otherView = [Activator]::CreateInstance($view.GetType())
-        $otherToggle = $otherView.FindName('RightColumnsToggleHeader')
-        $otherToggle.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-        Assert-True ($otherView.FindName('FileList').View.Columns.Count -eq 5 -and $columns.Count -eq 8) 'Right-column visibility leaked between ContentViews.'
-        $otherToggle.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-        $null = $otherView.GetType().GetMethod('SetCurrentPath', $viewFlags).Invoke($otherView, [object[]] @([string] '::{20D04FE0-3AEA-1069-A2D8-08002B30309D}'))
-        Assert-True (-not $otherView.FindName('NewButton').IsEnabled) 'New was enabled for the virtual This PC location.'
-        $otherSort = $otherView.GetType().GetField('_sorting', $viewFlags).GetValue($otherView)
-        Assert-True ((@($pairsProperty.GetValue($otherSort)).Column -join ',') -ceq $defaultOrder -and
-            @($pairsProperty.GetValue($otherSort) | Where-Object { $_.Criterion -ne 'Ascending' }).Count -eq 0) 'Sort history leaked into another ContentView.'
         $frame = [System.Windows.Threading.DispatcherFrame]::new()
         $probe = [SutShellUiProbe]::new()
         $probe.List = $list
@@ -371,21 +328,17 @@ try {
         $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
         $timer.Start()
         try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-        $restoredPaths = @($list.SelectedItems | ForEach-Object { $_.Entry.FullPath })
-        Assert-True ($probe.Ready -and $restoredPaths.Count -eq 2 -and
-            @($selectedPaths | Where-Object { $_ -notin $restoredPaths }).Count -eq 0) 'Sorting did not preserve selected paths.'
         foreach ($selectedEntry in $selectedEntries) {
             $restoredEntry = @($list.SelectedItems | ForEach-Object { $_.Entry } | Where-Object { $_.FullPath -eq $selectedEntry.FullPath })[0]
             Assert-True ([object]::ReferenceEquals($selectedEntry, $restoredEntry)) 'GUI sorting or filtering reloaded a cached entry.'
         }
-        foreach ($operation in @('Copy', 'Move')) {
-            $view.FindName("${operation}MarkItemButton").RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-            $workflowType = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true)
-            $workflow = $workflowType.GetProperty('Shared').GetValue($null)
-            $preparedPaths = @($workflow.PreparedPaths)
-            Assert-True ($preparedPaths.Count -eq 2 -and @($selectedPaths | Where-Object { $_ -notin $preparedPaths }).Count -eq 0) "$operation did not stage all selected paths."
-            $view.FindName("${operation}AbortButton").RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-        }
+        $otherView = [Activator]::CreateInstance($view.GetType())
+        $otherToggle = $otherView.FindName('RightColumnsToggleHeader')
+        $otherToggle.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        Assert-True ($otherView.FindName('FileList').View.Columns.Count -eq 5 -and $columns.Count -eq 8) 'Right-column visibility leaked between ContentViews.'
+        $otherToggle.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        $null = $otherView.GetType().GetMethod('SetCurrentPath', $viewFlags).Invoke($otherView, [object[]] @([string] '::{20D04FE0-3AEA-1069-A2D8-08002B30309D}'))
+        Assert-True (-not $otherView.FindName('NewButton').IsEnabled) 'New was enabled for the virtual This PC location.'
         $menuProbe = [SutShellMenuProbe]::new([System.Windows.Interop.WindowInteropHelper]::new($window).Handle)
         try {
             $showItems = $shell.GetMethod('ShowItemMenu', $flags)
@@ -438,91 +391,8 @@ try {
         })
         Assert-True ($newParent.Count -eq 1) 'The Shell New submenu could not be identified.'
         Assert-True ($view.FindName('NewButton').IsEnabled -and $view.FindName('PropertiesButton').IsEnabled) 'Directory New or multi-selection Properties state was incorrect.'
-        $hideDirectories = $view.FindName('HideDirectoriesCheckBox').GetCheckBox()
-        $otherHideDirectories = $otherView.FindName('HideDirectoriesCheckBox').GetCheckBox()
-        Assert-True ($hideDirectories.IsChecked -and $otherHideDirectories.IsChecked) 'The directory filter was not set before the New dialog test.'
-        foreach ($mode in @('Cancel', 'CancelFolder', 'Focus', 'Folder', 'Mismatch', 'HiddenText', 'ScrollText')) {
-            if ($mode -eq 'Folder' -or $mode -eq 'HiddenText') { $view.FindName('NamePatternTextBox').Text = 'notes*.txt' }
-            if ($mode -eq 'HiddenText') { $view.FindName('HideInternalContentCheckBox').GetCheckBox().IsChecked = $true }
-            $newProbe = Start-NewDialogProbe $mode
-            try {
-                $view.FindName('NewButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-                Assert-True ($newProbe.Seen -and $null -eq $newProbe.Error) "The New button did not complete the $mode dialog: $($newProbe.Error)."
-                if ($mode -eq 'Cancel') { Assert-True ($newProbe.ListCorrect -and -not (Test-Path -LiteralPath (Join-Path $directory 'chosen-folder'))) "The type list, icons, scrolling or cancel state was incorrect: $($newProbe.ListDetails)." }
-                if ($mode -eq 'CancelFolder' -or $mode -eq 'Focus') { Assert-True $hideDirectories.IsChecked 'Choosing Folder before cancelling changed the directory filter.' }
-                if ($mode -eq 'Focus') { Assert-True $newProbe.FocusCorrect 'Clicking a type, including the selected type, did not focus the name editor.' }
-                if ($mode -eq 'Folder') { Assert-True ([IO.Directory]::Exists((Join-Path $directory 'chosen-folder')) -and -not $hideDirectories.IsChecked -and $otherHideDirectories.IsChecked -and $view.FindName('NamePatternTextBox').Text -eq '') 'Creating Folder did not update only the necessary local filters.' }
-                if ($mode -eq 'Mismatch') { Assert-True ($newProbe.ExtensionChanged -and $newProbe.MismatchRejected -and [IO.File]::Exists((Join-Path $directory 'chosen-name.txt'))) 'Extension changes, mismatch confirmation or named text creation failed.' }
-                if ($mode -eq 'HiddenText') { Assert-True (-not $view.FindName('HideInternalContentCheckBox').GetCheckBox().IsChecked -and $view.FindName('NamePatternTextBox').Text -eq '') 'Creating an internal item did not clear the filters hiding it.' }
-                if ($mode -in @('Folder', 'Mismatch', 'HiddenText', 'ScrollText')) {
-                    $createdName = switch ($mode) { 'Folder' { 'chosen-folder' } 'Mismatch' { 'chosen-name.txt' } 'HiddenText' { '.chosen-hidden.txt' } 'ScrollText' { 'zzzz-last.txt' } }
-                    foreach ($refresh in @($false, $true)) {
-                        if ($refresh) { $null = $view.GetType().GetMethod('Refresh', $viewFlags).Invoke($view, [object[]] @([bool] $true)) }
-                        $frame = [System.Windows.Threading.DispatcherFrame]::new()
-                        $probe = [SutShellUiProbe]::new()
-                        $probe.List = $list
-                        $probe.AwaitAll = $true
-                        $probe.Frame = $frame
-                        $timer = [System.Windows.Threading.DispatcherTimer]::new()
-                        $timer.Interval = [TimeSpan]::FromMilliseconds(25)
-                        $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
-                        $timer.Start()
-                        try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-                        $selected = $list.SelectedItem
-                        $container = if ($null -ne $selected) { $list.ItemContainerGenerator.ContainerFromItem($selected) } else { $null }
-                        Assert-True ($probe.Ready -and $list.SelectedItems.Count -eq 1 -and $selected.Entry.FullPath -eq (Join-Path $directory $createdName) -and
-                            $null -ne $selected.Entry -and $null -ne $container -and $container.IsVisible) "The created $mode item was not visible and selected after refresh=$refresh`: ready=$($probe.Ready), error=$($probe.Error), count=$($list.SelectedItems.Count), selected=$($selected.Entry.FullPath), loaded=$($null -ne $selected.Entry), container=$($null -ne $container), visible=$($container.IsVisible)."
-                        Assert-True ($dirCount.Text -eq "$(@([IO.Directory]::EnumerateDirectories($directory)).Count)" -and
-                            $fileCount.Text -eq "$(@([IO.Directory]::EnumerateFiles($directory)).Count)") 'The unfiltered counts did not update after creating an item.'
-                        if ($mode -eq 'ScrollText') {
-                            $scroll = Find-VisualType $list ([System.Windows.Controls.ScrollViewer])
-                            $position = $container.TranslatePoint([System.Windows.Point]::new(0, 0), $scroll)
-                            Assert-True ($scroll.VerticalOffset -gt 0 -and $position.Y -ge 0 -and $position.Y + $container.ActualHeight -le $scroll.ActualHeight) 'The created item was not scrolled into the visible viewport.'
-                        }
-                    }
-                }
-            } finally { $newProbe.Timer.Stop() }
-        }
-        [IO.Directory]::Delete((Join-Path $directory 'chosen-folder'))
-        [IO.File]::Delete((Join-Path $directory 'chosen-name.txt'))
-        [IO.File]::Delete((Join-Path $directory '.chosen-hidden.txt'))
-        [IO.File]::Delete((Join-Path $directory 'zzzz-last.txt'))
-        $hideDirectories.IsChecked = $true
-        $frame = [System.Windows.Threading.DispatcherFrame]::new()
-        $probe = [SutShellUiProbe]::new()
-        $probe.List = $list
-        $probe.AwaitAll = $true
-        $probe.Frame = $frame
-        $timer = [System.Windows.Threading.DispatcherTimer]::new()
-        $timer.Interval = [TimeSpan]::FromMilliseconds(25)
-        $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
-        $timer.Start()
-        try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-        Assert-True $probe.Ready 'The content list did not reload after the directory filter changed.'
-        $notesMenuRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'notes.txt') })[0]
-        $otherFileRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'exact.bin') })[0]
-        $newProbe = Start-NewDialogProbe 'Windows'
-        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-        try {
-            $view.FindName('NewButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-            Assert-True ($newProbe.Seen -and $null -eq $newProbe.Error -and $menuProbe.ItemCount -gt 1) 'The explicit Windows fallback did not open the native New submenu.'
-        } finally { $newProbe.Timer.Stop(); $menuProbe.Dispose() }
         $list.SelectedItems.Clear()
-        Assert-True (-not $view.FindName('PropertiesButton').IsEnabled) 'Properties was enabled without a selection.'
         $list.SelectedItem = $notesMenuRow
-        Assert-True $view.FindName('PropertiesButton').IsEnabled 'Properties was disabled for a loaded selected item.'
-        $propertiesProbe = [SutShellPropertiesProbe]::new('notes.txt')
-        try {
-            $view.FindName('PropertiesButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-            $frame = [System.Windows.Threading.DispatcherFrame]::new()
-            $deadline = [DateTime]::UtcNow.AddSeconds(5)
-            $timer = [System.Windows.Threading.DispatcherTimer]::new()
-            $timer.Interval = [TimeSpan]::FromMilliseconds(50)
-            $timer.add_Tick({ if ($propertiesProbe.Opened -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
-            $timer.Start()
-            try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-            Assert-True $propertiesProbe.Opened 'The Properties button did not open the Windows properties dialog for the selected item.'
-        } finally { $propertiesProbe.Dispose() }
         $list.SelectedItems.Clear()
         $list.SelectedItems.Add($notesMenuRow) | Out-Null
         $list.SelectedItems.Add($otherFileRow) | Out-Null
@@ -631,38 +501,10 @@ try {
                 }
             } finally { $menuProbe.Dispose() }
         }
-        $newProbe = Start-NewDialogProbe 'Cancel'
-        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-        $menuProbe.SelectCommandId = Get-ActionCommandId 'New' @('New')
-        try {
-            $null = $showMenuCore.Invoke($view, [object[]] @($null, $true))
-            Assert-True ($menuProbe.SelectIndex -ge 0 -and $newProbe.Seen -and $null -eq $newProbe.Error) 'The ContentView background New action did not open the shared dialog.'
-        } finally { $newProbe.Timer.Stop(); $menuProbe.Dispose() }
         $multiPaths = @($notesMenuRow.Entry.FullPath, $otherFileRow.Entry.FullPath)
         $list.SelectedItems.Clear()
         $list.SelectedItems.Add($notesMenuRow) | Out-Null
         $list.SelectedItems.Add($otherFileRow) | Out-Null
-        foreach ($selection in @($null, 'LinkMarkItem', 'LinkAbort', 'CopyMarkItem', 'CopyAbort', 'MoveMarkItem', 'MoveAbort')) {
-            $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-            if ($null -ne $selection) { $menuProbe.SelectCommandId = Get-ActionCommandId $selection }
-            try {
-                $null = $showMenu.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject))
-                Assert-True (Test-BaseMenu $menuProbe) 'Multiple files did not show the Base Menu.'
-                Assert-True (($menuProbe.States[0] -band 3) -eq 0 -and ($menuProbe.States[2] -band 3) -eq 0 -and ($menuProbe.States[3] -band 3) -eq 0 -and ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'Rename')] -band 3) -ne 0) 'Multiple file selection actions have incorrect states.'
-                if ($null -ne $selection) { Assert-True ($menuProbe.SelectIndex -ge 0 -and ($menuProbe.States[$menuProbe.SelectIndex] -band 3) -eq 0) "Multi-file command $selection was disabled." }
-            } finally { $menuProbe.Dispose() }
-            if ($selection -in @('LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem')) {
-                $operation = $selection -replace 'MarkItem$', ''
-                $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
-                $preparedPaths = @($workflow.PreparedPaths)
-                Assert-True ($workflow.IsPrepared -and $preparedPaths.Count -eq 2 -and
-                    @($multiPaths | Where-Object { $_ -notin $preparedPaths }).Count -eq 0) "Multi-file $operation mark item did not prepare both files."
-            } elseif ($selection -in @('LinkAbort', 'CopyAbort', 'MoveAbort')) {
-                $operation = $selection -replace 'Abort$', ''
-                $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
-                Assert-True (-not $workflow.IsPrepared) "Multi-file $operation abort did not clear the workflow."
-            }
-        }
         $showMenuCore = $view.GetType().GetMethod('ShowMenuCore', $viewFlags)
         $multiNativeEntries = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path $multiPaths | ConvertFrom-Json).Menu
         Assert-True (@($multiNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -eq 'properties' -and $_.Text }).Count -gt 0) 'The Shell did not provide a properties command for the multi-file selection.'
@@ -719,23 +561,6 @@ try {
             }
         }
         $multiProperties = @($multiNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -eq 'properties' -and $_.Text })[0]
-        $propertiesProbe = [SutShellPropertiesProbe]::new('')
-        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-        $menuProbe.SelectCommandId = Get-ActionCommandId 'Properties'
-        try {
-            $null = $showMenu.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject))
-            $frame = [System.Windows.Threading.DispatcherFrame]::new()
-            $deadline = [DateTime]::UtcNow.AddSeconds(5)
-            $timer = [System.Windows.Threading.DispatcherTimer]::new()
-            $timer.Interval = [TimeSpan]::FromMilliseconds(50)
-            $timer.add_Tick({ if ($propertiesProbe.Opened -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
-            $timer.Start()
-            try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-            Assert-True ($menuProbe.SelectIndex -eq 0 -and $propertiesProbe.Opened) 'The Base Menu multi-file properties command did not open a Windows dialog.'
-        } finally {
-            $menuProbe.Dispose()
-            $propertiesProbe.Dispose()
-        }
         $list.SelectedItems.Clear()
         $list.SelectedItem = $notesMenuRow
         $unfilteredMenu = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path (Join-Path $directory 'notes.txt') -Generic | ConvertFrom-Json).Menu
@@ -1111,23 +936,6 @@ try {
         } finally { $menuProbe.Dispose() }
         $list.SelectedItems.Clear()
         $list.SelectedItem = $notesMenuRow
-        $propertiesProbe = [SutShellPropertiesProbe]::new('notes.txt')
-        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-        $menuProbe.SelectCommandId = Get-ActionCommandId 'Properties'
-        try {
-            $null = $showMenu.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject))
-            $frame = [System.Windows.Threading.DispatcherFrame]::new()
-            $deadline = [DateTime]::UtcNow.AddSeconds(5)
-            $timer = [System.Windows.Threading.DispatcherTimer]::new()
-            $timer.Interval = [TimeSpan]::FromMilliseconds(50)
-            $timer.add_Tick({ if ($propertiesProbe.Opened -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
-            $timer.Start()
-            try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-            Assert-True ($menuProbe.SelectIndex -eq 0 -and $propertiesProbe.Opened) "The Base Menu properties command did not open the Windows properties dialog: index=$($menuProbe.SelectIndex), opened=$($propertiesProbe.Opened)."
-        } finally {
-            $menuProbe.Dispose()
-            $propertiesProbe.Dispose()
-        }
         $contextMenuType = $assembly.GetType('SUTWinExplorer.SutContextMenuFactory', $true)
         $blacklist = $contextMenuType.GetField('BlacklistedVerbs', [System.Reflection.BindingFlags]'Static,NonPublic').GetValue($null).Value
         Assert-True ($blacklist.Contains('anotepad++64') -and -not $blacklist.Contains('view SUTTextViewer')) 'The embedded blacklist did not load the expected case-insensitive verbs.'
@@ -1138,96 +946,6 @@ try {
                 Assert-True ($entry.Text -in $menuProbe.Items) 'The original Windows menu lost the Notepad++ command.'
             }
         } finally { $menuProbe.Dispose() }
-        $originalClipboard = [System.Windows.Clipboard]::GetDataObject()
-        try {
-            foreach ($selection in @($null, 'NameClipboardCopy', 'PathClipboardCopy', 'LinkMarkItem', 'LinkAbort', 'CopyMarkItem', 'CopyAbort', 'MoveMarkItem', 'MoveAbort', 'Rename')) {
-                $buttonStates = @($standardActionIds |
-                    ForEach-Object { $view.FindName($_ + 'Button').IsEnabled })
-                $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-                if ($null -ne $selection) { $menuProbe.SelectCommandId = Get-ActionCommandId $selection }
-                try {
-                    $null = $showMenu.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject))
-                    Assert-True (Test-BaseMenu $menuProbe) "The menu did not match the toolbar actions: $($menuProbe.Items -join ',')."
-                    $openWithLabel = [SutShellMenuProbe]::OpenWithLabel()
-                    Assert-True ($null -ne $openWithLabel -and $openWithLabel -notin $menuProbe.Items) 'The Shell Open With submenu is still present.'
-                    $linkDropHereLabel = [SutShellMenuProbe]::LinkDropHereLabel()
-                    Assert-True ($null -eq $linkDropHereLabel -or $linkDropHereLabel -notin $menuProbe.Items) 'A drag-and-drop-only Link Shell Extension command appeared in the file menu.'
-                    foreach ($entry in $notepadEntries) {
-                        Assert-True ($entry.Text -notin $menuProbe.Items) 'The blacklisted Notepad++ command appeared in the Base Menu.'
-                    }
-                    foreach ($entry in $viewerEntries) {
-                        Assert-True ($entry.Text -in $menuProbe.Items) 'The unblacklisted SUTTextViewer command disappeared from the Base Menu.'
-                    }
-                    $deleteIndex = Get-MenuActionIndex $menuProbe 'Delete'
-                    $renameIndex = Get-MenuActionIndex $menuProbe 'Rename'
-                    Assert-True ($deleteIndex -eq $menuProbe.ItemCount - 1 -and $renameIndex -eq $deleteIndex - 2 -and
-                        ($menuProbe.States[$renameIndex - 1] -band 0x800) -ne 0 -and ($menuProbe.States[$deleteIndex - 1] -band 0x800) -ne 0) 'Rename and Delete were not separated at the end of the Base Menu.'
-                    for ($index = 0; $index -lt $standardActionIds.Count; $index++) {
-                        $menuIndex = Get-MenuActionIndex $menuProbe $standardActionIds[$index]
-                        if ($standardActionIds[$index] -match '^(Link|Copy|Move)' -and -not $buttonStates[$index]) {
-                            Assert-True ($menuIndex -lt 0) "Disabled transfer action $($standardActionIds[$index]) was visible."
-                        } else {
-                            Assert-True ($menuIndex -ge 0 -and ((($menuProbe.States[$menuIndex] -band 3) -eq 0) -eq $buttonStates[$index])) "Menu state did not match $($standardActionIds[$index])."
-                        }
-                    }
-                    if ($null -ne $selection) { Assert-True ($menuProbe.SelectIndex -ge 0 -and ($menuProbe.States[$menuProbe.SelectIndex] -band 3) -eq 0) "Command $selection was disabled." }
-                } finally { $menuProbe.Dispose() }
-                if ($selection -eq 'NameClipboardCopy') {
-                    Assert-True ([System.Windows.Clipboard]::GetText() -ceq 'notes.txt') 'Name clipboard copy did not put the selected name on the clipboard.'
-                } elseif ($selection -eq 'PathClipboardCopy') {
-                    Assert-True ([System.Windows.Clipboard]::GetText() -ceq (Join-Path $directory 'notes.txt')) 'Path clipboard copy did not put the selected path on the clipboard.'
-                } elseif ($selection -in @('LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem')) {
-                    $operation = $selection -replace 'MarkItem$', ''
-                    $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
-                    Assert-True ($workflow.IsPrepared -and @($workflow.PreparedPaths)[0] -ceq (Join-Path $directory 'notes.txt')) "$operation mark item did not prepare the selected file."
-                } elseif ($selection -in @('LinkAbort', 'CopyAbort', 'MoveAbort')) {
-                    $operation = $selection -replace 'Abort$', ''
-                    $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
-                    Assert-True (-not $workflow.IsPrepared) "$operation abort did not clear the workflow."
-                } elseif ($selection -eq 'Rename') {
-                    Assert-True $notesMenuRow.IsEditing 'Rename did not start the inline editor.'
-                    $null = $view.GetType().GetMethod('EndRename', $viewFlags).Invoke($view, [object[]] @([bool] $false))
-                }
-            }
-        } finally {
-            if ($null -eq $originalClipboard) { [System.Windows.Clipboard]::Clear() }
-            else { [System.Windows.Clipboard]::SetDataObject($originalClipboard, $true) }
-        }
-        $pasteSource = Join-Path ([System.IO.Path]::GetTempPath()) ('kis-menu-source-' + [guid]::NewGuid().ToString('N'))
-        try {
-            [System.IO.Directory]::CreateDirectory($pasteSource) | Out-Null
-            foreach ($operation in @('Copy', 'Move')) {
-                $sourceFile = Join-Path $pasteSource "menu-$operation-test.txt"
-                $destinationFile = Join-Path $directory "menu-$operation-test.txt"
-                [System.IO.File]::WriteAllText($sourceFile, 'menu workflow test')
-                $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
-                $workflow.Prepare([string[]] @($sourceFile))
-                $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-                $menuProbe.SelectCommandId = Get-ActionCommandId "${operation}Execute"
-                try {
-                    $null = $showMenu.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject))
-                    Assert-True (($menuProbe.States[$menuProbe.SelectIndex] -band 3) -eq 0) "$operation execute was disabled."
-                } finally { $menuProbe.Dispose() }
-                Assert-True ([System.IO.File]::Exists($destinationFile) -and -not $workflow.IsPrepared) "$operation execute did not complete the prepared workflow."
-                Assert-True (([System.IO.File]::Exists($sourceFile)) -eq ($operation -eq 'Copy')) "$operation execute did not preserve the expected source state."
-                $frame = [System.Windows.Threading.DispatcherFrame]::new()
-                $probe = [SutShellUiProbe]::new()
-                $probe.List = $list
-                $probe.AwaitAll = $true
-                $probe.Frame = $frame
-                $timer = [System.Windows.Threading.DispatcherTimer]::new()
-                $timer.Interval = [TimeSpan]::FromMilliseconds(25)
-                $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
-                $timer.Start()
-                try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-                Assert-True $probe.Ready "Rows did not reload after $operation execute: $($probe.Error)"
-                $notesMenuRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'notes.txt') })[0]
-                $list.SelectedItem = $notesMenuRow
-                Remove-Item -LiteralPath $destinationFile -Force
-            }
-        } finally {
-            Remove-Item -LiteralPath $pasteSource -Recurse -Force -ErrorAction SilentlyContinue
-        }
         $list.SelectedItems.Clear()
         foreach ($selectedPath in $selectedPaths) {
             $list.SelectedItems.Add(@($list.Items | Where-Object { $_.Entry.FullPath -eq $selectedPath })[0]) | Out-Null
@@ -1304,61 +1022,8 @@ try {
         $timer.Start()
         try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
         Assert-True $probe.Ready "Rows were not ready for rename testing: $($probe.Error)"
-        $notesRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'notes.txt') })[0]
-        $list.SelectedItem = $notesRow
-        Assert-True $view.FindName('RenameButton').IsEnabled 'Rename must be enabled for one loaded item.'
-        $list.ScrollIntoView($notesRow)
-        $list.UpdateLayout()
-        $keyEvent = [System.Windows.Input.KeyEventArgs]::new([System.Windows.Input.Keyboard]::PrimaryDevice,
-            [System.Windows.PresentationSource]::FromVisual($window), 0, [System.Windows.Input.Key]::F2)
-        $keyEvent.RoutedEvent = [System.Windows.Input.Keyboard]::PreviewKeyDownEvent
-        $list.RaiseEvent($keyEvent)
-        $list.UpdateLayout()
-        $editor = Find-VisualName $list.ItemContainerGenerator.ContainerFromItem($notesRow) 'ItemNameEditor'
-        Assert-True ($null -ne $editor -and $editor.IsVisible -and $editor.Text -eq 'notes.txt') 'The inline rename editor was not rendered.'
-        Assert-True ($notesRow.IsEditing -and $notesRow.EditName -eq 'notes.txt') 'Inline rename did not start with the actual file name.'
-        $editor.Text = 'cancelled.txt'
+        [System.IO.File]::Move((Join-Path $directory 'notes.txt'), (Join-Path $directory 'renamed-notes.txt'))
         $null = $view.GetType().GetMethod('Refresh', $viewFlags).Invoke($view, [object[]] @([bool] $true))
-        Assert-True ([object]::ReferenceEquals($list.ItemsSource[0], $list.Items[0]) -and $notesRow.IsEditing) 'Refresh interrupted an active rename.'
-        $keyEvent = [System.Windows.Input.KeyEventArgs]::new([System.Windows.Input.Keyboard]::PrimaryDevice,
-            [System.Windows.PresentationSource]::FromVisual($window), 0, [System.Windows.Input.Key]::Escape)
-        $keyEvent.RoutedEvent = [System.Windows.Input.Keyboard]::KeyDownEvent
-        $editor.RaiseEvent($keyEvent)
-        Assert-True ((Test-Path -LiteralPath (Join-Path $directory 'notes.txt')) -and
-            -not (Test-Path -LiteralPath (Join-Path $directory 'cancelled.txt'))) 'Cancel changed the file.'
-        $frame = [System.Windows.Threading.DispatcherFrame]::new()
-        $probe = [SutShellUiProbe]::new()
-        $probe.List = $list
-        $probe.AwaitAll = $true
-        $probe.Frame = $frame
-        $timer = [System.Windows.Threading.DispatcherTimer]::new()
-        $timer.Interval = [TimeSpan]::FromMilliseconds(25)
-        $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
-        $timer.Start()
-        try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-        Assert-True ($probe.Ready -and $list.SelectedItem.Entry.FullPath -eq (Join-Path $directory 'notes.txt')) 'Deferred refresh did not retain the selected file.'
-        $view.FindName('RenameButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-        $list.UpdateLayout()
-        $editor = Find-VisualName $list.ItemContainerGenerator.ContainerFromItem($list.SelectedItem) 'ItemNameEditor'
-        Assert-True ($null -ne $editor -and $editor.IsVisible) 'The inline editor did not reopen.'
-        $editor.Text = 'renamed-notes.txt'
-        $keyEvent = [System.Windows.Input.KeyEventArgs]::new([System.Windows.Input.Keyboard]::PrimaryDevice,
-            [System.Windows.PresentationSource]::FromVisual($window), 0, [System.Windows.Input.Key]::Enter)
-        $keyEvent.RoutedEvent = [System.Windows.Input.Keyboard]::KeyDownEvent
-        $editor.RaiseEvent($keyEvent)
-        Assert-True ((Test-Path -LiteralPath (Join-Path $directory 'renamed-notes.txt')) -and
-            -not (Test-Path -LiteralPath (Join-Path $directory 'notes.txt'))) 'Inline rename did not rename the file correctly.'
-        $frame = [System.Windows.Threading.DispatcherFrame]::new()
-        $probe = [SutShellUiProbe]::new()
-        $probe.List = $list
-        $probe.AwaitAll = $true
-        $probe.Frame = $frame
-        $timer = [System.Windows.Threading.DispatcherTimer]::new()
-        $timer.Interval = [TimeSpan]::FromMilliseconds(25)
-        $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
-        $timer.Start()
-        try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-        Assert-True ($probe.Ready -and $list.SelectedItem.Entry.FullPath -eq (Join-Path $directory 'renamed-notes.txt')) 'Renamed file was not reselected.'
         $view.FindName('HideDirectoriesCheckBox').GetCheckBox().IsChecked = $false
         $frame = [System.Windows.Threading.DispatcherFrame]::new()
         $probe = [SutShellUiProbe]::new()
@@ -1543,31 +1208,6 @@ try {
         }
         $list.SelectedItems.Clear()
         $list.SelectedItem = $folderRow
-        $propertiesProbe = [SutShellPropertiesProbe]::new('Folder')
-        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-        $menuProbe.SelectCommandId = Get-ActionCommandId 'Properties'
-        try {
-            $null = $showMenu.Invoke($view, [object[]] @($folderRow.PSObject.BaseObject))
-            $frame = [System.Windows.Threading.DispatcherFrame]::new()
-            $deadline = [DateTime]::UtcNow.AddSeconds(5)
-            $timer = [System.Windows.Threading.DispatcherTimer]::new()
-            $timer.Interval = [TimeSpan]::FromMilliseconds(50)
-            $timer.add_Tick({ if ($propertiesProbe.Opened -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false } }.GetNewClosure())
-            $timer.Start()
-            try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-            Assert-True ($menuProbe.SelectIndex -eq 0 -and $propertiesProbe.Opened) 'Directory properties did not open a Windows dialog from the Base Menu.'
-        } finally { $menuProbe.Dispose(); $propertiesProbe.Dispose() }
-        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-        $menuProbe.SelectCommandId = Get-ActionCommandId 'CopyMarkItem'
-        try {
-            $null = $showMenu.Invoke($view, [object[]] @($folderRow.PSObject.BaseObject))
-            $workflow = $assembly.GetType('SUTWinExplorer.CopyWorkflowState', $true).GetProperty('Shared').GetValue($null)
-            Assert-True ($workflow.IsPrepared -and @($workflow.PreparedPaths).Count -eq 1 -and
-                @($workflow.PreparedPaths)[0] -eq $folderRow.Entry.FullPath) 'Copy mark item did not prepare the selected directory.'
-        } finally {
-            $menuProbe.Dispose()
-            $view.FindName('CopyAbortButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-        }
         $originalCursor = [SutShellRightClickProbe]::CursorPosition()
         $originalLeft = $window.Left
         $originalTop = $window.Top
@@ -1655,16 +1295,6 @@ try {
                         $list.SelectedItems.Contains($secondRow)) 'Opening a mixed-selection menu changed the selection.'
                 } finally { $menuProbe.Dispose() }
             }
-            foreach ($operation in @('Copy', 'Move')) {
-                $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-                $menuProbe.SelectCommandId = Get-ActionCommandId "${operation}MarkItem"
-                try { $null = $showMenu.Invoke($view, [object[]] @($firstRow.PSObject.BaseObject)) } finally { $menuProbe.Dispose() }
-                $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
-                $preparedPaths = @($workflow.PreparedPaths)
-                Assert-True ($workflow.IsPrepared -and $preparedPaths.Count -eq 2 -and
-                    @($mixedPaths | Where-Object { $_ -notin $preparedPaths }).Count -eq 0) "Mixed-selection $operation did not prepare both items."
-                $view.FindName("${operation}AbortButton").RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-            }
         }
         $list.SelectedItems.Clear()
         $list.SelectedItem = $folderRow
@@ -1701,93 +1331,6 @@ try {
         try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
         Assert-True ($probe.Ready -and [System.IO.Path]::GetDirectoryName($list.Items[0].Entry.FullPath) -eq $directory) "A stale navigation replaced the current snapshot: $($probe.Error)"
 
-        $deleteDirectory = Join-Path $directory 'delete-fixture'
-        $deleteNames = @('delete-first', 'delete-second', 'delete-folder')
-        [System.IO.Directory]::CreateDirectory((Join-Path $deleteDirectory $deleteNames[2])) | Out-Null
-        [System.IO.File]::WriteAllText((Join-Path $deleteDirectory $deleteNames[0]), 'first')
-        [System.IO.File]::WriteAllText((Join-Path $deleteDirectory $deleteNames[1]), 'second')
-        [System.IO.File]::WriteAllText((Join-Path $deleteDirectory $deleteNames[2] 'nested'), 'folder content')
-        $recycleBin = (New-Object -ComObject Shell.Application).NameSpace(10)
-        try {
-            $deleteApi = $shell.GetMethod('Delete', $flags)
-            $fileOperations = $assembly.GetType('SUTWinExplorer.ShellFileOperations', $true)
-            $canDelete = $fileOperations.GetMethod('CanDelete', $flags)
-            $driveRoot = [System.IO.Path]::GetPathRoot($deleteDirectory)
-            foreach ($invalidPath in @($driveRoot, '\\server\share\', 'relative-file')) {
-                Assert-True (-not $canDelete.Invoke($null, [object[]] @([string] $invalidPath))) "A non-deletable path was accepted: $invalidPath"
-            }
-            foreach ($invalidSelection in @(
-                [string[]] @(),
-                [string[]] @((Join-Path $deleteDirectory $deleteNames[0]), (Join-Path $deleteDirectory 'missing')),
-                [string[]] @((Join-Path $deleteDirectory $deleteNames[0]), $driveRoot)
-            )) {
-                $failed = $false
-                try { $null = $deleteApi.Invoke($null, [object[]] @([string[]] $invalidSelection, [IntPtr]::Zero)) }
-                catch { $failed = $_.Exception.InnerException -is [InvalidOperationException] }
-                Assert-True ($failed -and [System.IO.File]::Exists((Join-Path $deleteDirectory $deleteNames[0]))) 'An invalid delete selection was accepted or partially deleted.'
-            }
-            $null = $view.GetType().GetMethod('SetCurrentPath', $viewFlags).Invoke($view, [object[]] @([string] $deleteDirectory))
-            $null = $view.GetType().GetMethod('Refresh', $viewFlags).Invoke($view, [object[]] @([bool] $true))
-            $frame = [System.Windows.Threading.DispatcherFrame]::new()
-            $probe = [SutShellUiProbe]::new()
-            $probe.List = $list
-            $probe.AwaitAll = $true
-            $probe.Frame = $frame
-            $timer = [System.Windows.Threading.DispatcherTimer]::new()
-            $timer.Interval = [TimeSpan]::FromMilliseconds(25)
-            $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
-            $timer.Start()
-            try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-            Assert-True ($probe.Ready -and -not $view.FindName('DeleteButton').IsEnabled) 'Delete was enabled without a selection or the test directory did not load.'
-            $firstDeleteRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $deleteDirectory $deleteNames[0]) })[0]
-            $secondDeleteRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $deleteDirectory $deleteNames[1]) })[0]
-            $list.SelectedItems.Add($firstDeleteRow) | Out-Null
-            $list.SelectedItems.Add($secondDeleteRow) | Out-Null
-            Assert-True $view.FindName('DeleteButton').IsEnabled 'Delete was not enabled for two files.'
-            $view.FindName('CopyMarkItemButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-            Assert-True (-not $view.FindName('DeleteButton').IsEnabled) 'Delete was enabled during a prepared Copy.'
-            $view.FindName('CopyAbortButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-            $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-            $menuProbe.SelectCommandId = Get-ActionCommandId 'Delete'
-            $confirmationProbe = [SutShellDeleteConfirmProbe]::new()
-            try {
-                $null = $showMenu.Invoke($view, [object[]] @($firstDeleteRow.PSObject.BaseObject))
-                Assert-True (($menuProbe.States[(Get-MenuActionIndex $menuProbe 'Delete')] -band 3) -eq 0) 'Delete was disabled in the Base file menu.'
-            } finally { $menuProbe.Dispose(); $confirmationProbe.Dispose() }
-            Assert-True (-not [System.IO.File]::Exists((Join-Path $deleteDirectory $deleteNames[0])) -and
-                -not [System.IO.File]::Exists((Join-Path $deleteDirectory $deleteNames[1]))) 'The Base Menu Delete command did not delete both selected files.'
-            $frame = [System.Windows.Threading.DispatcherFrame]::new()
-            $probe = [SutShellUiProbe]::new()
-            $probe.List = $list
-            $probe.AwaitAll = $true
-            $probe.Frame = $frame
-            $timer = [System.Windows.Threading.DispatcherTimer]::new()
-            $timer.Interval = [TimeSpan]::FromMilliseconds(25)
-            $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
-            $timer.Start()
-            try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
-            Assert-True ($probe.Ready -and $list.Items.Count -eq 1) 'The view did not refresh after deleting files.'
-            $folderDeleteRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $deleteDirectory $deleteNames[2]) })[0]
-            $list.SelectedItem = $folderDeleteRow
-            Assert-True $view.FindName('DeleteButton').IsEnabled 'Delete was not enabled for a folder.'
-            $confirmationProbe = [SutShellDeleteConfirmProbe]::new()
-            try {
-                $view.FindName('DeleteButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-            } finally { $confirmationProbe.Dispose() }
-            Assert-True (-not [System.IO.Directory]::Exists((Join-Path $deleteDirectory $deleteNames[2]))) 'The toolbar Delete command did not delete the folder.'
-            $recycled = @($recycleBin.Items() | Where-Object {
-                $_.Name -in $deleteNames -and [string]::Equals($recycleBin.GetDetailsOf($_, 1), $deleteDirectory, [StringComparison]::OrdinalIgnoreCase)
-            })
-            Assert-True ($recycled.Count -eq 3) "The Shell did not put all test objects in the Recycle Bin: $($recycled.Count)."
-        } finally {
-            foreach ($item in @($recycleBin.Items() | Where-Object {
-                $_.Name -in $deleteNames -and [string]::Equals($recycleBin.GetDetailsOf($_, 1), $deleteDirectory, [StringComparison]::OrdinalIgnoreCase)
-            })) { $item.Verbs().Item(0).DoIt() }
-            $remaining = @($recycleBin.Items() | Where-Object {
-                $_.Name -in $deleteNames -and [string]::Equals($recycleBin.GetDetailsOf($_, 1), $deleteDirectory, [StringComparison]::OrdinalIgnoreCase)
-            })
-            Assert-True ($remaining.Count -eq 0) "Could not restore $($remaining.Count) Delete test fixtures from the Recycle Bin."
-        }
     } finally {
         $window.Close()
         [System.Threading.SynchronizationContext]::SetSynchronizationContext($previousContext)

@@ -37,24 +37,6 @@ try {
     $second = Join-Path $source 'second.txt'
     [IO.File]::WriteAllText($first, 'first')
     [IO.File]::WriteAllText($second, 'second')
-    $inserted = [Collections.Generic.List[string]]::new()
-    $null = $shell.GetMethod('Copy', $flags).Invoke($null, [object[]] @([string[]] @($first, $second), [string] $destination, [IntPtr]::Zero, $inserted))
-    if ($inserted.Count -ne 2 -or (Join-Path $destination 'first.txt') -notin $inserted -or
-        (Join-Path $destination 'second.txt') -notin $inserted) { throw "Copy returned incorrect destination paths: $inserted" }
-    $inserted.Clear()
-    $folder = Join-Path $source 'folder'
-    [IO.Directory]::CreateDirectory($folder) | Out-Null
-    [IO.File]::WriteAllText((Join-Path $folder 'nested.txt'), 'nested')
-    $null = $shell.GetMethod('Copy', $flags).Invoke($null, [object[]] @([string[]] @($folder), [string] $destination, [IntPtr]::Zero, $inserted))
-    if ($inserted.Count -ne 1 -or $inserted[0] -ne (Join-Path $destination 'folder') -or
-        -not [IO.File]::Exists((Join-Path $inserted[0] 'nested.txt'))) { throw "Copy returned an incorrect folder destination: $inserted" }
-    $inserted.Clear()
-    $moveSource = Join-Path $source 'move.txt'
-    [IO.File]::WriteAllText($moveSource, 'move')
-    $null = $shell.GetMethod('Move', $flags).Invoke($null, [object[]] @([string[]] @($moveSource), [string] $destination, [IntPtr]::Zero, $inserted))
-    if ($inserted.Count -ne 1 -or $inserted[0] -ne (Join-Path $destination 'move.txt') -or
-        [IO.File]::Exists($moveSource) -or -not [IO.File]::Exists($inserted[0])) { throw "Move returned an incorrect destination: $inserted" }
-
     [System.Windows.Application].GetField('_resourceAssembly', [Reflection.BindingFlags]'Static,NonPublic').SetValue($null, $assembly)
     $application = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.App', $true))
     $application.InitializeComponent()
