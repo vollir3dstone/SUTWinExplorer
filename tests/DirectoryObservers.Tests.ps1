@@ -1,11 +1,17 @@
 param(
-    [string[]] $Modes = @('filesystem', 'shell'),
-    [string[]] $Scenarios = @('file-create', 'file-write', 'file-date', 'file-rename', 'file-delete',
-        'folder-create', 'folder-rename', 'folder-date', 'folder-delete', 'idle', 'nested-create',
-        'nested-write', 'nested-rename', 'nested-delete', 'deep-create', 'shell-parent-update',
-        'shell-child-update', 'shell-grandchild-update', 'shell-file-create', 'shell-nested-create',
-        'shell-folder-update', 'shell-file-rename')
+    [string[]] $Modes = @('filesystem'),
+    [string[]] $Scenarios
 )
+
+if (-not $PSBoundParameters.ContainsKey('Scenarios')) {
+    $Scenarios = @('file-create', 'file-write', 'file-date', 'file-rename', 'file-delete',
+        'folder-create', 'folder-rename', 'folder-date', 'folder-delete', 'idle', 'nested-create',
+        'nested-write', 'nested-rename', 'nested-delete', 'deep-create')
+    if ('shell' -in $Modes) {
+        $Scenarios += @('shell-parent-update', 'shell-child-update', 'shell-grandchild-update',
+            'shell-file-create', 'shell-nested-create', 'shell-folder-update', 'shell-file-rename')
+    }
+}
 
 $scenarioCount = $Modes.Count * $Scenarios.Count
 $minimumSeconds = $scenarioCount * 4

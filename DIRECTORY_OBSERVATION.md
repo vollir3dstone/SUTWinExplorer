@@ -152,12 +152,15 @@ Remove-Item Env:KIS_DIRECTORY_OBSERVER
 ```
 
 Close an existing application instance before changing the observer for a new
-instance. The comparison test intentionally reports failures when its strict
-isolation expectations are not met:
+instance. Run the production observer test and the separate experimental Shell
+observer test with:
 
 ```powershell
 pwsh -NoProfile -STA -File .\tests\DirectoryObservers.Tests.ps1
+pwsh -NoProfile -STA -File .\tests\experimental\ShellDirectoryObserver.Tests.ps1
 pwsh -NoProfile -STA -File .\tests\PathviewRefresh.Tests.ps1
 ```
 
-The Pathview test uses the observer selected by the environment variable.
+The experimental test intentionally reports failures when its strict isolation
+expectations are not met. It is not included in the standard test run. The
+Pathview test uses the observer selected by the environment variable.

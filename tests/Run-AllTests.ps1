@@ -13,15 +13,21 @@ if ($ListOnly) {
 }
 
 $failed = [Collections.Generic.List[string]]::new()
-foreach ($test in $tests) {
-    Write-Host "Running $($test.Name)..."
-    & pwsh -NoProfile -STA -File $test.FullName
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "PASS $($test.Name)"
-    } else {
-        Write-Host "FAIL $($test.Name) (exit $LASTEXITCODE)"
-        $failed.Add($test.Name)
+$previousObserver = [Environment]::GetEnvironmentVariable('KIS_DIRECTORY_OBSERVER')
+try {
+    [Environment]::SetEnvironmentVariable('KIS_DIRECTORY_OBSERVER', 'filesystem')
+    foreach ($test in $tests) {
+        Write-Host "Running $($test.Name)..."
+        & pwsh -NoProfile -STA -File $test.FullName
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "PASS $($test.Name)"
+        } else {
+            Write-Host "FAIL $($test.Name) (exit $LASTEXITCODE)"
+            $failed.Add($test.Name)
+        }
     }
+} finally {
+    [Environment]::SetEnvironmentVariable('KIS_DIRECTORY_OBSERVER', $previousObserver)
 }
 
 Write-Host "Tests: $($tests.Count), passed: $($tests.Count - $failed.Count), failed: $($failed.Count)."
