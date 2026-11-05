@@ -403,7 +403,7 @@ internal static class SutShell
         internal ShellDirectoryObserver(IEnumerable<string> paths, Action<DirectoryNotification> changed)
         {
             _changed = changed;
-            _window = new HwndSource(new HwndSourceParameters("KIS directory observer"));
+            _window = new HwndSource(new HwndSourceParameters("KIS directory observer") { WindowStyle = 0 });
             _window.AddHook(WindowProcedure);
             foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
             {

@@ -338,7 +338,7 @@ public partial class MainWindow : Window
         };
         close.Click += CloseTab_Click;
 
-        var headerContent = new Grid();
+        var headerContent = new Grid { Background = Brushes.Transparent };
         headerContent.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         headerContent.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         title.TextAlignment = TextAlignment.Center;
@@ -365,8 +365,9 @@ public partial class MainWindow : Window
                 new Point(left - targetOrigin.X, targetSize.Height + 2),
                 PopupPrimaryAxis.Vertical)];
         };
-        tab.ToolTip = pathToolTip;
-        tab.ToolTipOpening += (_, _) => ConfigurePathToolTip(pathToolTip, tooltipText);
+        headerContent.ToolTip = pathToolTip;
+        ToolTipService.SetInitialShowDelay(headerContent, 200);
+        headerContent.ToolTipOpening += (_, _) => ConfigurePathToolTip(pathToolTip, tooltipText);
         view.LocationChanged += (_, currentPath) =>
         {
             if (!_tabsByPathview.ContainsKey(view))

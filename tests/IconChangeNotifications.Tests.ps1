@@ -79,6 +79,8 @@ public sealed class IconNotificationProbe
     }
 
     [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr icon);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr window);
+    [DllImport("user32.dll")] public static extern IntPtr GetParent(IntPtr window);
     [DllImport("shell32.dll")] public static extern void SHChangeNotify(int eventId, uint flags, IntPtr item1, IntPtr item2);
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)] public static extern void SHChangeNotify(int eventId, uint flags, string item1, IntPtr item2);
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)] private static extern int SHParseDisplayName(string name, IntPtr context, out IntPtr pidl, uint attributesIn, out uint attributesOut);
@@ -179,6 +181,11 @@ try {
     $registrations = $observerType.GetField('_registrations', $instanceFlags)
     $observerConstructor = $observerType.GetConstructor($instanceFlags, $null, [type[]] @($cacheType, [Windows.Threading.Dispatcher]), $null)
     $observer = $observerConstructor.Invoke([object[]] @($cache, [Windows.Threading.Dispatcher]::CurrentDispatcher))
+    $observerWindow = $observerType.GetField('_window', $instanceFlags).GetValue($observer)
+    if ([IconNotificationProbe]::IsWindowVisible($observerWindow.Handle) -or
+        [IconNotificationProbe]::GetParent($observerWindow.Handle) -ne [IntPtr]::Zero) {
+        throw 'The icon observer must use an invisible top-level window for system broadcasts.'
+    }
     if ($registrations.GetValue($observer).Count -ne 0) { throw 'An empty cache unexpectedly registered a drive.' }
     $pixels = [byte[]] @(0, 0, 255, 255, 0, 255, 0, 255, 255, 0, 0, 255, 255, 255, 255, 255)
     $sentinelBitmap = [Windows.Media.Imaging.BitmapSource]::Create(2, 2, 96, 96, [Windows.Media.PixelFormats]::Bgra32, $null, $pixels, 8)
@@ -208,7 +215,9 @@ try {
         @{ Name = 'drive-combined'; Path = $driveRoot; Mask = 0x08002000 },
         @{ Name = 'directory-all'; Path = $directory; Mask = 0x7fffffff }
     )) {
-        $window = [Windows.Interop.HwndSource]::new([Windows.Interop.HwndSourceParameters]::new('KIS icon event test'))
+        $parameters = [Windows.Interop.HwndSourceParameters]::new('KIS icon event test')
+        $parameters.WindowStyle = 0
+        $window = [Windows.Interop.HwndSource]::new($parameters)
         $probe = [IconNotificationProbe]::new($directory)
         $hook = [Delegate]::CreateDelegate([Windows.Interop.HwndSourceHook], $probe, $probe.GetType().GetMethod('OnMessage'))
         $window.AddHook($hook)

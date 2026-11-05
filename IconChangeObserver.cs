@@ -29,7 +29,7 @@ internal sealed class IconChangeObserver : IDisposable
     {
         _cache = cache;
         _dispatcher = dispatcher;
-        _window = new HwndSource(new HwndSourceParameters("KIS icon change observer"));
+        _window = new HwndSource(new HwndSourceParameters("KIS icon change observer") { WindowStyle = 0 });
         _window.AddHook(WindowProcedure);
         _cache.FileSystemRootAdded += OnFileSystemRootAdded;
         foreach (var root in _cache.GetFileSystemRoots())

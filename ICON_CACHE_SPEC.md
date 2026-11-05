@@ -145,6 +145,15 @@ when the store came from a background thread. Registration failures are logged;
 device-change messages trigger another registration attempt for missing roots.
 Virtual Shell items are outside this observer's scope.
 
+The icon observer uses a native `HwndSource` window to receive Shell change
+notifications and `WM_DEVICECHANGE` messages. This is a hidden top-level window,
+not an application UI window: its `WindowStyle` is explicitly set to `0` so it
+does not acquire WPF's default visible window style and appear as a stray title
+bar. Keep it invisible when changing its creation or lifetime. Do not replace it
+with a message-only window without accounting for device-change broadcasts,
+which message-only windows do not receive. The observer unregisters its Shell
+notifications and disposes the window on shutdown.
+
 For `SHCNE_UPDATEITEM`, only the named item is refreshed if it is in the cache.
 The provider asks the Shell again for its small base icon, overlay state and
 index, and for every cached size variant. Failed or unavailable variants are

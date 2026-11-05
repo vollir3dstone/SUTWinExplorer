@@ -170,7 +170,9 @@ try {
     [void] $store.Invoke($cache, [object[]] @([string] $file, [string] 'sized', [int] 32, [int] 32, $sentinel, [bool] $false, $null))
     $observer = $observerType.GetConstructor($flags, $null, [type[]] @($cacheType, [Windows.Threading.Dispatcher]), $null).Invoke([object[]] @($cache, [Windows.Threading.Dispatcher]::CurrentDispatcher))
     foreach ($specification in @(@{ Name = 'drive'; Path = [IO.Path]::GetPathRoot($directory) }, @{ Name = 'directory'; Path = $directory })) {
-        $window = [Windows.Interop.HwndSource]::new([Windows.Interop.HwndSourceParameters]::new('KIS manual association test'))
+        $parameters = [Windows.Interop.HwndSourceParameters]::new('KIS manual association test')
+        $parameters.WindowStyle = 0
+        $window = [Windows.Interop.HwndSource]::new($parameters)
         $probe = [ManualAssociationProbe]::new($directory)
         $hook = [Delegate]::CreateDelegate([Windows.Interop.HwndSourceHook], $probe, $probe.GetType().GetMethod('OnMessage'))
         $window.AddHook($hook)

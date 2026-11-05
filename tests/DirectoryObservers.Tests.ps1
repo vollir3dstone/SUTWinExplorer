@@ -44,6 +44,9 @@ public sealed class DirectoryObserverProbe
 
     [DllImport("shell32.dll", EntryPoint = "SHChangeNotify", CharSet = CharSet.Unicode)]
     public static extern void SHChangeNotifyRename(int eventId, uint flags, string item1, string item2);
+
+    [DllImport("user32.dll")]
+    public static extern bool IsWindowVisible(IntPtr window);
 }
 '@
 
@@ -88,6 +91,10 @@ try {
             $arguments[2] = $callback
             $observer = $method.Invoke($null, $arguments)
             try {
+                if ($mode -eq 'shell') {
+                    $source = $observer.GetType().GetField('_window', [Reflection.BindingFlags]'Instance,NonPublic').GetValue($observer)
+                    if ([DirectoryObserverProbe]::IsWindowVisible($source.Handle)) { throw 'The Shell directory observer window is visible.' }
+                }
                 Pump 500
                 [void] $probe.Drain()
                 switch ($scenario) {

@@ -224,7 +224,15 @@
                             </Border>
                             </Grid>
                     </Grid>
-                    <Grid Grid.Column="2">
+                    <Grid x:Name="LocationDisplay" Grid.Column="2" Background="Transparent"
+                          ToolTipService.Placement="Bottom" ToolTipService.PlacementTarget="{Binding ElementName=LocationLabel}"
+                          ToolTipService.InitialShowDelay="200" ToolTipOpening="LocationLabel_ToolTipOpening"
+                          ToolTipClosing="LocationLabel_ToolTipClosing" MouseLeave="LocationLabel_MouseLeave">
+                        <Grid.ToolTip>
+                            <ToolTip>
+                                <TextBlock TextWrapping="Wrap" />
+                            </ToolTip>
+                        </Grid.ToolTip>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
@@ -236,7 +244,7 @@
                                    HorizontalAlignment="Right" VerticalAlignment="Bottom" />
                         </Grid>
                         <TextBlock x:Name="LocationLabel" Grid.Column="1" Style="{StaticResource PathHeaderDisplayStyle}"
-                                   Padding="2,2" TextWrapping="NoWrap"
+                                   Padding="2,2" Background="Transparent" TextWrapping="NoWrap"
                                    TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                     </Grid>
                 </Grid>

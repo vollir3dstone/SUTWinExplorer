@@ -73,6 +73,8 @@ public partial class Pathview : UserControl
         Color? tabColor, Action<Color>? tabColorChanged)
     {
         InitializeComponent();
+        if (LocationDisplay.ToolTip is ToolTip { Content: TextBlock tooltipText })
+            tooltipText.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding(nameof(TextBlock.Text)) { Source = LocationLabel });
         _treeContextMenu = CreateDirectoryMenuController(ActivePathAndSiblingsTree, true);
         _subdirectoryContextMenu = CreateDirectoryMenuController(ActivePathSubdirectoriesList, false);
         _ = new ListViewDropTarget(ActivePathSubdirectoriesList,
@@ -650,6 +652,29 @@ public partial class Pathview : UserControl
         PaneColorPopup.IsOpen = false;
     }
 
+    private void LocationLabel_ToolTipOpening(object sender, ToolTipEventArgs e) => UpdateLocationToolTipWidth();
+
+    private void LocationLabel_ToolTipClosing(object sender, ToolTipEventArgs e)
+    {
+        if (LocationDisplay.IsMouseOver)
+            e.Handled = true;
+    }
+
+    private void UpdateLocationToolTipWidth()
+    {
+        if (LocationDisplay.ToolTip is not ToolTip tooltip || Window.GetWindow(this) is not { } window)
+            return;
+
+        var labelInWindow = LocationLabel.TranslatePoint(new Point(), window);
+        tooltip.MaxWidth = Math.Max(1, window.ActualWidth - labelInWindow.X);
+    }
+
+    private void LocationLabel_MouseLeave(object sender, MouseEventArgs e)
+    {
+        if (LocationDisplay.ToolTip is ToolTip tooltip)
+            tooltip.IsOpen = false;
+    }
+
     private void LocationHeaderPanel_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         var prefixWidth = LocationHeaderPrefix.ActualWidth;
@@ -659,6 +684,8 @@ public partial class Pathview : UserControl
         var titlePadding = LocationLabel.Padding.Left + LocationLabel.Padding.Right;
         LocationLabel.MaxWidth = Math.Max(0,
             LocationHeaderPanel.ActualWidth - prefixWidth - LocationHeaderGap.ActualWidth - locationIconWidth - titlePadding);
+        if (LocationDisplay.ToolTip is ToolTip { IsOpen: true })
+            UpdateLocationToolTipWidth();
     }
 
     private void UpdateLocationIcon(string path)
