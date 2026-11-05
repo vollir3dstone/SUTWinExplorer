@@ -3086,9 +3086,10 @@ try {
         $treeEntry = Find-TreeEntry $siblingsTree.Items[0] (Join-Path $directory 'RenamedFolder')
         Assert-True ($null -ne $subdirectoryEntry -and $null -ne $treeEntry) 'Directory sidebar menu test entries were not found.'
         $showDirectoryMenu = $pathviewType.GetMethod('ShowDirectoryMenu', $viewFlags)
-        foreach ($menuKind in @('base', 'content', 'none', 'base')) {
-            foreach ($case in @(@{ View = $fixedPathview; Window = $fixedWindow; Entry = $subdirectoryEntry; Tree = $false },
-                                @{ View = $browsePathview; Window = $fixedWindow; Entry = $treeEntry; Tree = $true })) {
+        $sidebarCases = @(@{ View = $fixedPathview; Window = $fixedWindow; Entry = $subdirectoryEntry; Tree = $false },
+                          @{ View = $browsePathview; Window = $fixedWindow; Entry = $treeEntry; Tree = $true })
+        foreach ($case in $sidebarCases) {
+            foreach ($menuKind in @('base', 'content', 'none', 'base')) {
                 $sidebarOwner = [System.Windows.Interop.WindowInteropHelper]::new($case.Window).Handle
                 $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
                 try {
@@ -3098,13 +3099,21 @@ try {
                         continue
                     }
                     $isBase = (Test-BaseMenu $menuProbe)
-                    Assert-True ($isBase -eq ($menuKind -eq 'base')) "Sidebar menu did not alternate independently: tree=$($case.Tree), expected=$menuKind, count=$($menuProbe.ItemCount), path=$($case.Entry.Path), exists=$([IO.Directory]::Exists($case.Entry.Path)), items=$($menuProbe.Items -join '|')."
+                    Assert-True ($isBase -eq ($menuKind -eq 'base')) "Sidebar menu did not alternate: tree=$($case.Tree), expected=$menuKind, count=$($menuProbe.ItemCount), path=$($case.Entry.Path), exists=$([IO.Directory]::Exists($case.Entry.Path)), items=$($menuProbe.Items -join '|')."
                     if ($isBase) {
                         Assert-True (($menuProbe.States[0] -band 3) -eq 0 -and ($menuProbe.States[2] -band 3) -eq 0 -and ($menuProbe.States[3] -band 3) -eq 0 -and
                             ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'CopyMarkItem')] -band 3) -eq 0 -and ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'Delete')] -band 3) -eq 0) 'Sidebar directory action states were incorrect.'
                     }
                 } finally { $menuProbe.Dispose() }
             }
+        }
+        foreach ($case in @($sidebarCases[0], $sidebarCases[1], $sidebarCases[0])) {
+            $sidebarOwner = [System.Windows.Interop.WindowInteropHelper]::new($case.Window).Handle
+            $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
+            try {
+                $null = $showDirectoryMenu.Invoke($case.View, [object[]] @($case.Entry.PSObject.BaseObject, [bool] $case.Tree, [bool] $true))
+                Assert-True (Test-BaseMenu $menuProbe) "Switching sidebar widgets did not reset the menu sequence: tree=$($case.Tree)."
+            } finally { $menuProbe.Dispose() }
         }
         $sidebarController = $pathviewType.GetField('_subdirectoryContextMenu', $viewFlags).GetValue($fixedPathview)
         $sidebarOwner = [System.Windows.Interop.WindowInteropHelper]::new($fixedWindow).Handle
@@ -3231,7 +3240,7 @@ try {
             $event = [System.Windows.Input.MouseButtonEventArgs]::new([System.Windows.Input.Mouse]::PrimaryDevice, 0, [System.Windows.Input.MouseButton]::Right)
             $event.RoutedEvent = [System.Windows.Input.Mouse]::PreviewMouseDownEvent
             $treeItem.RaiseEvent($event)
-            Assert-True ($menuProbe.ItemCount -eq 0) 'The fixed Active path tree unexpectedly opened a menu.'
+            Assert-True ($menuProbe.ItemCount -eq -1) 'The fixed Active path tree unexpectedly opened a menu.'
         } finally { $menuProbe.Dispose() }
     } finally {
         $fixedWindow.Close()
