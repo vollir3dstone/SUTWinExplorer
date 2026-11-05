@@ -60,8 +60,8 @@ public sealed class SutShellMenuProbe : System.IDisposable
     [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern int GetClassName(System.IntPtr window, System.Text.StringBuilder name, int maximum);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern System.IntPtr SendMessage(System.IntPtr window, uint message, System.IntPtr wparam, System.IntPtr lparam);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool PostMessage(System.IntPtr window, uint message, System.IntPtr wparam, System.IntPtr lparam);
-    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int GetMenuItemCount(System.IntPtr menu);
-    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint GetMenuItemID(System.IntPtr menu, int position);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern int GetMenuItemCount(System.IntPtr menu);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern uint GetMenuItemID(System.IntPtr menu, int position);
     [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern int GetMenuString(System.IntPtr menu, uint position, System.Text.StringBuilder text, int length, uint flags);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint GetMenuState(System.IntPtr menu, uint position, uint flags);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern System.IntPtr GetSubMenu(System.IntPtr menu, int position);
@@ -649,13 +649,27 @@ function Test-BaseMenu($probe) {
     $probe.ItemCount -ge 5 -and $probe.CommandIds[0] -eq (Get-ActionCommandId 'Properties') -and $probe.CommandIds[2] -eq (Get-ActionCommandId 'NameClipboardCopy')
 }
 $standardActionIds = @('Properties', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', 'ItemClipboardPaste', 'LinkMarkItem', 'LinkAbort', 'LinkExecute', 'CopyMarkItem', 'CopyAbort', 'CopyExecute', 'MoveMarkItem', 'MoveAbort', 'MoveExecute', 'Rename', 'Delete')
-function Get-ActionCommandId([string] $id) {
-    $index = [Array]::IndexOf($menuActionOrder, $id)
+function Get-ActionCommandId([string] $id, [string[]] $actionOrder = $menuActionOrder) {
+    $index = [Array]::IndexOf($actionOrder, $id)
     if ($index -lt 0) { throw "Unknown menu action: $id" }
     [uint] (0x8000 + $index)
 }
 function Get-MenuActionIndex($probe, [string] $id) {
     [Array]::IndexOf($probe.CommandIds, (Get-ActionCommandId $id))
+}
+
+function Get-ShellMenuVerbs($instance) {
+    $instanceFlags = [System.Reflection.BindingFlags]'Instance,NonPublic'
+    $menu = $instance.GetType().GetField('_menu', $instanceFlags).GetValue($instance)
+    $context = $instance.GetType().GetField('_contextMenu', $instanceFlags).GetValue($instance)
+    $getVerb = $menuType.GetMethod('GetCommandVerb', [System.Reflection.BindingFlags]'Static,NonPublic')
+    for ($index = 0; $index -lt [SutShellMenuProbe]::GetMenuItemCount($menu); $index++) {
+        $command = [SutShellMenuProbe]::GetMenuItemID($menu, $index)
+        if ($command -ge 1 -and $command -le 0x7fff) {
+            $verb = $getVerb.Invoke($null, [object[]] @($context, [uint32] ($command - 1)))
+            if ($verb) { $verb }
+        }
+    }
 }
 
 function Find-VisualName($parent, [string] $name) {
@@ -1757,8 +1771,9 @@ try {
             $null = $showInstance.Invoke($backgroundInstance, [object[]] @($null))
             Assert-True ($menuProbe.ItemCount -gt 0) 'The filtered background menu was not displayed.'
             Assert-True ($newParent[0].Text -in $menuProbe.Items) 'The New submenu was removed from the background Content Menu.'
+            $backgroundVerbs = @(Get-ShellMenuVerbs $backgroundInstance)
             foreach ($entry in $excludedBackgroundEntries) {
-                Assert-True ($entry.Text -notin $menuProbe.Items) "An excluded command remained in the background Content Menu: $($entry.Text)."
+                Assert-True ($entry.Verb -notin $backgroundVerbs) "An excluded command remained in the background Content Menu: $($entry.Verb)."
             }
             foreach ($position in $viewParents) {
                 $parent = @($backgroundEntries | Where-Object { $_.Position -eq $position })[0]
@@ -1773,8 +1788,9 @@ try {
         try {
             $backgroundSnapshot = $showInstance.Invoke($backgroundBase, [object[]] @($null))
             Assert-True ($null -ne $backgroundSnapshot -and $newParent[0].Text -notin $menuProbe.Items) 'The background Base Menu included New or did not return a snapshot.'
+            $backgroundVerbs = @(Get-ShellMenuVerbs $backgroundBase)
             foreach ($entry in $excludedBackgroundEntries) {
-                Assert-True ($entry.Text -notin $menuProbe.Items) "An excluded command remained in the background Base Menu: $($entry.Text)."
+                Assert-True ($entry.Verb -notin $backgroundVerbs) "An excluded command remained in the background Base Menu: $($entry.Verb)."
             }
             foreach ($position in $viewParents) {
                 $parent = @($backgroundEntries | Where-Object { $_.Position -eq $position })[0]
@@ -1789,8 +1805,9 @@ try {
         try {
             $null = $showInstance.Invoke($backgroundInstance, [object[]] @($null))
             Assert-True ($newParent[0].Text -in $menuProbe.Items) 'New was lost after comparing the background menus.'
+            $backgroundVerbs = @(Get-ShellMenuVerbs $backgroundInstance)
             foreach ($entry in $excludedBackgroundEntries) {
-                Assert-True ($entry.Text -notin $menuProbe.Items) "An excluded command returned after comparing background menus: $($entry.Text)."
+                Assert-True ($entry.Verb -notin $backgroundVerbs) "An excluded command returned after comparing background menus: $($entry.Verb)."
             }
         } finally {
             $menuProbe.Dispose()
@@ -1818,13 +1835,15 @@ try {
             $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
             try {
                 $backgroundSnapshot = $showInstance.Invoke($backgroundBase, [object[]] @($null))
-                Assert-True ($sharedBackgroundLabel -in $menuProbe.Items -and $backgroundOnlyLabel -notin $menuProbe.Items) 'Shared and background-only registrations were classified incorrectly in the Base Menu.'
+                $backgroundVerbs = @(Get-ShellMenuVerbs $backgroundBase)
+                Assert-True ($sharedBackgroundVerb -in $backgroundVerbs -and $backgroundOnlyVerb -notin $backgroundVerbs) 'Shared and background-only registrations were classified incorrectly in the Base Menu.'
             } finally { $menuProbe.Dispose(); ([IDisposable] $backgroundBase).Dispose() }
             $backgroundInstance = $menuType.GetMethod('GetBackgroundContentMenu', $flags).Invoke($null, [object[]] @([string] $directory, $ownerHandle, $backgroundSnapshot, $null))
             $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
             try {
                 $null = $showInstance.Invoke($backgroundInstance, [object[]] @($null))
-                Assert-True ($sharedBackgroundLabel -notin $menuProbe.Items -and $backgroundOnlyLabel -in $menuProbe.Items) 'Shared and background-only registrations were classified incorrectly in the Content Menu.'
+                $backgroundVerbs = @(Get-ShellMenuVerbs $backgroundInstance)
+                Assert-True ($sharedBackgroundVerb -notin $backgroundVerbs -and $backgroundOnlyVerb -in $backgroundVerbs) 'Shared and background-only registrations were classified incorrectly in the Content Menu.'
             } finally { $menuProbe.Dispose(); ([IDisposable] $backgroundInstance).Dispose() }
         } finally {
             foreach ($registryPath in $backgroundRegistryPaths) { [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($registryPath, $false) }
@@ -1842,7 +1861,7 @@ try {
                         ($menuProbe.States[0] -band 3) -ne 0 -and ($menuProbe.States[2] -band 3) -ne 0 -and ($menuProbe.States[3] -band 3) -ne 0 -and
                         $newParent[0].Text -notin $menuProbe.Items) 'The background Base Menu or its disabled selection actions were incorrect.'
                 } else {
-                    Assert-True ($menuProbe.ItemCount -gt 0 -and $newParent[0].Text -in $menuProbe.Items) 'The background Content Menu did not include New.'
+                    Assert-True ($menuProbe.ItemCount -gt 0 -and (Get-ActionCommandId 'New' @('New')) -in $menuProbe.CommandIds) 'The background Content Menu did not include New.'
                 }
                 foreach ($position in $viewParents) {
                     $parent = @($backgroundEntries | Where-Object { $_.Position -eq $position })[0]
@@ -1852,7 +1871,7 @@ try {
         }
         $newProbe = Start-NewDialogProbe 'Cancel'
         $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-        $menuProbe.SelectLabel = $newParent[0].Text
+        $menuProbe.SelectCommandId = Get-ActionCommandId 'New' @('New')
         try {
             $null = $showMenuCore.Invoke($view, [object[]] @($null, $true))
             Assert-True ($menuProbe.SelectIndex -ge 0 -and $newProbe.Seen -and $null -eq $newProbe.Error) 'The ContentView background New action did not open the shared dialog.'
@@ -1871,7 +1890,7 @@ try {
                 if ($null -ne $selection) { Assert-True ($menuProbe.SelectIndex -ge 0 -and ($menuProbe.States[$menuProbe.SelectIndex] -band 3) -eq 0) "Multi-file command $selection was disabled." }
             } finally { $menuProbe.Dispose() }
             if ($selection -in @('LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem')) {
-                $operation = $selection -replace 'Get$', ''
+                $operation = $selection -replace 'MarkItem$', ''
                 $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
                 $preparedPaths = @($workflow.PreparedPaths)
                 Assert-True ($workflow.IsPrepared -and $preparedPaths.Count -eq 2 -and
@@ -2396,7 +2415,7 @@ try {
                 } elseif ($selection -eq 'PathClipboardCopy') {
                     Assert-True ([System.Windows.Clipboard]::GetText() -ceq (Join-Path $directory 'notes.txt')) 'Path clipboard copy did not put the selected path on the clipboard.'
                 } elseif ($selection -in @('LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem')) {
-                    $operation = $selection -replace 'Get$', ''
+                    $operation = $selection -replace 'MarkItem$', ''
                     $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
                     Assert-True ($workflow.IsPrepared -and @($workflow.PreparedPaths)[0] -ceq (Join-Path $directory 'notes.txt')) "$operation mark item did not prepare the selected file."
                 } elseif ($selection -in @('LinkAbort', 'CopyAbort', 'MoveAbort')) {
@@ -2707,22 +2726,32 @@ try {
                     }
                     if ($menuKind -eq 'base') {
                         $folderBaseLabels = @($menuProbe.Items)
+                        $actions = $view.GetType().GetMethod('CreateContextMenuActions', $viewFlags).Invoke($view, @())
+                        $baseInstance = $menuType.GetMethod('GetBaseMenuForContext', $flags).Invoke($null, [object[]] @([string[]] $folderPaths, $ownerHandle, $actions, $false))
+                        try {
+                            $folderBaseVerbs = @(Get-ShellMenuVerbs $baseInstance)
+                            $folderBaseSnapshot = $baseInstance.GetType().GetMethod('CaptureSnapshot', $viewFlags).Invoke($baseInstance, @())
+                        }
+                        finally { ([IDisposable] $baseInstance).Dispose() }
                         if (-not $multiple) {
                             if ($sevenZipShared) { Assert-True ('7-Zip' -in $folderBaseLabels) 'The shared 7-Zip handler was missing from the directory Base Menu.' }
                             if ($hgShared) { Assert-True ($hgWorkbench[0].Text -in $folderBaseLabels) 'The shared Hg Workbench command was missing from the directory Base Menu.' }
-                            foreach ($entry in $folderFilesystemEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -and $_.Verb -notin @('copy', 'cut', 'paste', 'copyaspath', 'delete', 'rename') -and $_.Text }) {
-                                Assert-True ($entry.Text -in $folderBaseLabels) "An AllFilesystemObjects command was missing from the directory Base Menu: $($entry.Text)."
+                            foreach ($entry in $folderFilesystemEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -and $_.Verb -notin @('copy', 'cut', 'paste', 'copyaspath', 'delete', 'rename', 'properties') }) {
+                                Assert-True ($entry.Verb -in $folderBaseVerbs) "An AllFilesystemObjects command was missing from the directory Base Menu: $($entry.Verb)."
                             }
                         }
                     }
                     if ($menuKind -eq 'content') {
                         if (-not $multiple -and $sevenZipShared) { Assert-True ('7-Zip' -notin $menuProbe.Items) 'The shared 7-Zip handler remained duplicated in the directory Content Menu.' }
                         if (-not $multiple -and $hgShared) { Assert-True ($hgWorkbench[0].Text -notin $menuProbe.Items) 'The shared Hg Workbench command remained duplicated in the directory Content Menu.' }
-                        foreach ($entry in $folderNativeEntries | Where-Object { $_.Verb -in @('copy', 'cut', 'paste', 'copyaspath', 'delete', 'rename') -and $_.Text }) {
-                            Assert-True ($entry.Text -notin $menuProbe.Items) "An excluded command remained in the directory Content Menu: $($entry.Text)."
+                        $contentInstance = $menuType.GetMethod('GetContentMenuForContext', $flags).Invoke($null, [object[]] @([string[]] $folderPaths, $ownerHandle, $folderBaseSnapshot, $false, $null, $null))
+                        try { $folderContentVerbs = @(Get-ShellMenuVerbs $contentInstance) }
+                        finally { ([IDisposable] $contentInstance).Dispose() }
+                        foreach ($entry in $folderNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -in @('copy', 'cut', 'paste', 'copyaspath', 'delete', 'rename') }) {
+                            Assert-True ($entry.Verb -notin $folderContentVerbs) "An excluded command remained in the directory Content Menu: $($entry.Verb)."
                         }
-                        foreach ($entry in $folderNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Text -and $_.Verb -and -not $_.HasSubmenu -and -not $_.Disabled -and -not $_.OwnerDrawn -and $_.Text -notin $folderBaseLabels -and $_.Verb -notin @('copy', 'cut', 'paste', 'copyaspath', 'delete', 'rename', 'properties') }) {
-                            Assert-True ($entry.Text -in $menuProbe.Items) "A directory command absent from the Base Menu was lost: $($entry.Text)."
+                        foreach ($entry in $folderNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -and -not $_.HasSubmenu -and -not $_.Disabled -and -not $_.OwnerDrawn -and $_.Verb -notin $folderBaseVerbs -and $_.Verb -notin @('copy', 'cut', 'paste', 'copyaspath', 'delete', 'rename', 'properties') }) {
+                            Assert-True ($entry.Verb -in $folderContentVerbs) "A directory command absent from the Base Menu was lost: $($entry.Verb)."
                         }
                     }
                     Assert-True ($list.SelectedItems.Count -eq $folderPaths.Count) 'Switching directory menus changed the selection.'
@@ -3088,7 +3117,7 @@ try {
         finally { $menuProbe.Dispose() }
         $newProbe = Start-NewDialogProbe 'CancelFolder'
         $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
-        $menuProbe.SelectLabel = $newParent[0].Text
+        $menuProbe.SelectCommandId = Get-ActionCommandId 'New' @('New')
         try {
             $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $true))
             Assert-True ($menuProbe.SelectIndex -ge 0 -and $newProbe.Seen -and $null -eq $newProbe.Error -and $sidebarHideDirectories.IsChecked) 'Cancelling the sidebar New dialog changed the directory filter.'
@@ -3099,7 +3128,7 @@ try {
         finally { $menuProbe.Dispose() }
         $newProbe = Start-NewDialogProbe 'Folder'
         $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
-        $menuProbe.SelectLabel = $newParent[0].Text
+        $menuProbe.SelectCommandId = Get-ActionCommandId 'New' @('New')
         try {
             $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $true))
             Assert-True ($menuProbe.SelectIndex -ge 0 -and $newProbe.Seen -and $null -eq $newProbe.Error -and -not $sidebarHideDirectories.IsChecked) 'Creating a sidebar folder did not clear the local directory filter.'

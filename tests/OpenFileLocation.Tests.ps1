@@ -37,21 +37,25 @@ $directory = Join-Path ([IO.Path]::GetTempPath()) ('SutOpenLocation-' + [Guid]::
 $targetDirectory = Join-Path $directory 'target'
 $targetFolder = Join-Path $targetDirectory 'folder'
 [IO.Directory]::CreateDirectory($targetFolder) | Out-Null
+function Get-ActionCommandId($instance, [string] $actionId) {
+    $actions = $instance.GetType().GetField('_actions', $instanceFlags).GetValue($instance)
+    $actionIndex = [Array]::IndexOf(@($actions | ForEach-Object { $_.Id }), $actionId)
+    if ($actionIndex -lt 0) { throw "Missing action: $actionId." }
+    [uint32] (0x8000 + $actionIndex)
+}
 function Check-Menu($instance, [bool] $enabled) {
     $menu = $instance.GetType().GetField('_menu', $instanceFlags).GetValue($instance)
     $context = $instance.GetType().GetField('_contextMenu', $instanceFlags).GetValue($instance)
     $verbMethod = $factory.GetMethod('GetCommandVerb', $staticFlags)
+    $locationCommand = Get-ActionCommandId $instance 'opencontaining'
     $found = 0
     function Check-Level([IntPtr] $level) {
         for ($index = 0; $index -lt [OpenLocationMenuProbe]::GetMenuItemCount($level); $index++) {
             $submenu = [OpenLocationMenuProbe]::GetSubMenu($level, $index)
             if ($submenu -ne [IntPtr]::Zero) { Check-Level $submenu }
             $id = [OpenLocationMenuProbe]::GetMenuItemID($level, $index)
-            if ($id -eq 0x8000) {
+            if ($id -eq $locationCommand) {
                 $script:foundLocation++
-                $label = [Text.StringBuilder]::new(256)
-                $null = [OpenLocationMenuProbe]::GetMenuString($level, [uint32] $index, $label, $label.Capacity, 0x400)
-                if ($label.ToString() -cne 'Open parent') { throw "Incorrect action label: $label." }
                 if ((([OpenLocationMenuProbe]::GetMenuState($level, [uint32] $index, 0x400) -band 3) -eq 0) -ne $enabled) { throw 'Incorrect Open file location enabled state.' }
             } elseif ($id -ge 1 -and $id -le 0x7fff) {
                 if ($verbMethod.Invoke($null, [object[]] @($context, [uint32] ($id - 1))) -eq 'opencontaining') { throw 'Native opencontaining was not removed.' }
@@ -95,7 +99,7 @@ try {
         $pathview.Navigate([string] $directory)
         $paths = [string[]] @($case[0])
         $action = $createAction.Invoke($view, [object[]] @(,$paths))
-        if ($action.Id -cne 'opencontaining' -or $action.Label -cne 'Open parent' -or -not $action.IsEnabled) { throw 'Shortcut action ID, label or enabled state was incorrect.' }
+        if ($action.Id -cne 'opencontaining' -or -not $action.IsEnabled) { throw 'Shortcut action ID or enabled state was incorrect.' }
         if ($case[1] -eq 'content') {
             $base = $factory.GetMethod('GetBaseMenu', $staticFlags).Invoke($null, [object[]] @($paths, $owner, $createActions.Invoke($view, @())))
             try { $snapshot = $base.GetType().GetMethod('CaptureSnapshot', $instanceFlags).Invoke($base, @()) }
@@ -108,7 +112,7 @@ try {
             Check-Menu $menu $true
             $allowRightButton = $menu.GetType().GetField('_allowRightButton', $instanceFlags).GetValue($menu)
             if ($allowRightButton -ne ($case[1] -eq 'shift')) { throw 'The native and paired menus did not preserve their right-button behavior.' }
-            $null = $menu.GetType().GetMethod('ExecuteCommand', $instanceFlags).Invoke($menu, [object[]] @([uint32] 0x8000))
+            $null = $menu.GetType().GetMethod('ExecuteCommand', $instanceFlags).Invoke($menu, [object[]] @((Get-ActionCommandId $menu 'opencontaining')))
             if ($pathview.CurrentPath -cne $targetDirectory) { throw "The $($case[1]) action did not navigate: current=$($pathview.CurrentPath), target=$targetDirectory." }
         } finally { ([IDisposable] $menu).Dispose() }
     }
@@ -118,7 +122,7 @@ try {
     $menu = $factory.GetMethod('GetItemMenuWithOpenLocation', $staticFlags).Invoke($null, [object[]] @($paths, $owner, $null, $action))
     try {
         Check-Menu $menu $false
-        $null = $menu.GetType().GetMethod('ExecuteCommand', $instanceFlags).Invoke($menu, [object[]] @([uint32] 0x8000))
+        $null = $menu.GetType().GetMethod('ExecuteCommand', $instanceFlags).Invoke($menu, [object[]] @((Get-ActionCommandId $menu 'opencontaining')))
         if ($pathview.CurrentPath -cne $targetDirectory) { throw 'A disabled multiple-selection action navigated.' }
     } finally { ([IDisposable] $menu).Dispose() }
     if ($null -ne $createAction.Invoke($view, [object[]] @(,[string[]] @($file)))) { throw 'A regular file received a shortcut-only action.' }

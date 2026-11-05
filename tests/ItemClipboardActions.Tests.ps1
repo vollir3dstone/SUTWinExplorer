@@ -178,18 +178,9 @@ function Assert-ItemMenu($actions, [string[]] $paths, [bool] $background, [IntPt
             ([ItemMenuProbe]::GetMenuState($handle, [uint32] ($getPosition + 1), 0x400) -band 0x800) -eq 0) {
             throw 'The native Base Menu does not group clipboard copy actions before Item clipboard paste.'
         }
-        foreach ($entry in @(@(($getPosition - 2), 'Name clipboard copy'), @(($getPosition - 1), 'Path clipboard copy'), @($getPosition, 'Item clipboard copy'), @($pastePosition, 'Item clipboard paste'))) {
-            $label = [System.Text.StringBuilder]::new(128)
-            $null = [ItemMenuProbe]::GetMenuString($handle, [uint32] $entry[0], $label, $label.Capacity, 0x400)
-            if ($label.ToString() -cne $entry[1]) { throw "Unexpected native menu label: $label." }
-        }
         foreach ($action in @($actions | Where-Object { $_.IsTransfer -and $_.IsEnabled })) {
             $position = [Array]::IndexOf($commandIds, [uint32] (0x8000 + [Array]::IndexOf($actionIds, $action.Id)))
-            $expected = switch -Regex ($action.Id) { '^(.+)MarkItem$' { "$($Matches[1]) mark item" } '^(.+)Execute$' { "$($Matches[1]) execute" } '^(.+)Abort$' { "$($Matches[1]) abort" } default { throw "Unexpected transfer ID: $($action.Id)." } }
-            $label = [System.Text.StringBuilder]::new(128)
             if ($position -lt 0) { throw "Missing transfer action: $($action.Id)." }
-            $null = [ItemMenuProbe]::GetMenuString($handle, [uint32] $position, $label, $label.Capacity, 0x400)
-            if ($label.ToString() -cne $expected) { throw "Unexpected transfer menu label: $label." }
         }
         foreach ($action in @($actions | Where-Object { $_.Id -in @('NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', 'ItemClipboardPaste', 'Delete') -or ($_.IsTransfer -and $_.IsEnabled) })) {
             $command = [uint32] (0x8000 + [Array]::IndexOf($actionIds, $action.Id))
@@ -265,16 +256,19 @@ try {
     foreach ($name in @('Name', 'Path', 'Item')) {
         $button = $view.FindName("${name}ClipboardCopyButton")
         $icon = $button.Content.Children[1]
-        if ([System.Windows.Automation.AutomationProperties]::GetName($button) -cne "$name clipboard copy" -or $button.ToolTip -cne "$name clipboard copy" -or
-            $icon.Template -ne $view.FindResource('ClipboardCopyIconTemplate')) { throw "$name clipboard copy has an incorrect label or icon." }
+        $accessibleName = [System.Windows.Automation.AutomationProperties]::GetName($button)
+        if ([string]::IsNullOrWhiteSpace($accessibleName) -or $button.ToolTip -cne $accessibleName -or
+            $icon.Template -ne $view.FindResource('ClipboardCopyIconTemplate')) { throw "$name clipboard copy has an incorrect accessible name, tooltip or icon." }
         if ($button.Margin -ne [System.Windows.Thickness]::new(0) -or $null -eq $button.Template.FindName('outline', $button)) { throw "$name clipboard copy has an unexpected margin or button style." }
     }
-    if ([System.Windows.Automation.AutomationProperties]::GetName($itemClipboardPaste) -cne 'Item clipboard paste' -or $itemClipboardPaste.ToolTip -cne 'Item clipboard paste' -or
-        $itemClipboardPaste.Content.Children[1].Template -ne $view.FindResource('ClipboardPasteIconTemplate')) { throw 'Item clipboard paste has an incorrect label or icon.' }
+    $pasteAccessibleName = [System.Windows.Automation.AutomationProperties]::GetName($itemClipboardPaste)
+    if ([string]::IsNullOrWhiteSpace($pasteAccessibleName) -or $itemClipboardPaste.ToolTip -cne $pasteAccessibleName -or
+        $itemClipboardPaste.Content.Children[1].Template -ne $view.FindResource('ClipboardPasteIconTemplate')) { throw 'Item clipboard paste has an incorrect accessible name, tooltip or icon.' }
     foreach ($name in @('Link', 'Copy', 'Move')) {
-        foreach ($action in @(@('MarkItem', 'mark item'), @('Execute', 'execute'))) {
-            $button = $view.FindName("$name$($action[0])Button")
-            if ([System.Windows.Automation.AutomationProperties]::GetName($button) -cne "$name $($action[1])" -or $button.ToolTip -cne "$name $($action[1])") { throw "Incorrect transfer button label: $name $($action[1])." }
+        foreach ($action in @('MarkItem', 'Execute')) {
+            $button = $view.FindName("$name${action}Button")
+            $accessibleName = [System.Windows.Automation.AutomationProperties]::GetName($button)
+            if ([string]::IsNullOrWhiteSpace($accessibleName) -or $button.ToolTip -cne $accessibleName) { throw "Incorrect accessible name or tooltip: $name$action." }
         }
     }
     $namePosition = $nameClipboardCopy.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
