@@ -1,5 +1,6 @@
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
+Add-Type -AssemblyName UIAutomationClient
 Add-Type @'
 using System;
 using System.Collections.Generic;
@@ -7,15 +8,23 @@ using System.Runtime.InteropServices;
 using System.Text;
 public static class StartupWindowProbe
 {
+    public sealed class WindowInfo
+    {
+        public IntPtr Handle;
+        public string ClassName;
+        public string Title;
+        public bool IsToolPopup;
+    }
     private delegate bool EnumCallback(IntPtr window, IntPtr state);
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumCallback callback, IntPtr state);
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
+    [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr window, int index);
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr window, StringBuilder text, int length);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr window, StringBuilder text, int length);
-    public static string[] VisibleWindows(uint processId)
+    public static WindowInfo[] VisibleWindows(uint processId)
     {
-        var windows = new List<string>();
+        var windows = new List<WindowInfo>();
         EnumWindows((window, state) => {
             uint owner;
             GetWindowThreadProcessId(window, out owner);
@@ -24,7 +33,11 @@ public static class StartupWindowProbe
                 var type = new StringBuilder(256);
                 GetWindowText(window, title, title.Capacity);
                 GetClassName(window, type, type.Capacity);
-                windows.Add(type + " | " + title);
+                windows.Add(new WindowInfo {
+                    Handle = window, ClassName = type.ToString(), Title = title.ToString(),
+                    IsToolPopup = (GetWindowLong(window, -16) & unchecked((int)0x80000000)) != 0 &&
+                        (GetWindowLong(window, -20) & 0x80) != 0
+                });
             }
             return true;
         }, IntPtr.Zero);
@@ -48,9 +61,25 @@ try {
     $process.Refresh()
     if ($process.HasExited) { throw "The application exited during startup with code $($process.ExitCode)." }
     $windows = @([StartupWindowProbe]::VisibleWindows([uint32] $process.Id))
-    $windows | ForEach-Object { "Visible window: $_" }
-    if ($windows.Count -ne 1 -or $windows[0] -notmatch 'KIS Explorer') {
-        throw "Expected one visible application window, found $($windows.Count)."
+    $toolTipCondition = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ToolTip)
+    $applicationWindows = @(foreach ($window in $windows) {
+        if ($window.IsToolPopup -and -not $window.Title) {
+            try {
+                $element = [System.Windows.Automation.AutomationElement]::FromHandle($window.Handle)
+                if ($null -ne $element -and $null -ne $element.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $toolTipCondition)) {
+                    Write-Host 'Ignoring visible tooltip popup.'
+                    continue
+                }
+            } catch [System.Windows.Automation.ElementNotAvailableException] {
+                continue
+            }
+        }
+        $window
+    })
+    $applicationWindows | ForEach-Object { "Visible window: $($_.ClassName) | $($_.Title)" }
+    if ($applicationWindows.Count -ne 1 -or $applicationWindows[0].Title -notmatch '^KIS Explorer') {
+        throw "Expected one visible application window, found $($applicationWindows.Count)."
     }
     'Startup window test passed.'
 } finally {
