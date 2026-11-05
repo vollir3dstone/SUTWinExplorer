@@ -209,13 +209,15 @@ test ordering, or the mutex itself causes the hang.
 
 Before the probe cleanup was changed, the drag-and-drop test forcibly
 terminated a still-running external PowerShell probe during normal cleanup.
-That may have been intended to avoid shutdown hangs, but its original purpose
-is not established. The observed hangs above affected other test processes,
-before the drag-and-drop test ran, so they do not demonstrate that the probe
-cleanup change caused them. The current probe cleanup still uses forced
-termination as a timeout fallback, but waits without a timeout after `Kill()`;
-whether that fallback can itself block during the observed Windows shutdown
-problem remains to be investigated.
+According to the author, this was intended to prevent a hung probe from leaving
+a test window behind, and applied only to PowerShell processes started by the
+test. The probe windows already close themselves after successful drag-and-drop,
+so immediate termination could interrupt a normal exit. The current cleanup
+waits for that exit and uses forced termination only as a timeout fallback.
+The observed hangs above affected other test processes, before the drag-and-drop
+test ran, so they do not demonstrate that the probe cleanup change caused them.
+The fallback waits without a timeout after `Kill()`; whether it can itself block
+during the observed Windows shutdown problem remains to be investigated.
 
 The root cause remains open. Further investigation should capture process and
 thread state when a test exceeds its timeout, distinguish a process exit code
