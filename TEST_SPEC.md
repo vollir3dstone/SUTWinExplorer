@@ -166,7 +166,8 @@ Test files are discovered automatically; the long-running directory observer
 test runs last and covers the production FileSystemWatcher observer. Tests in
 `tests/experimental` are excluded from the standard run. The runner selects the
 production observer for all its test processes, regardless of the caller's
-environment. It continues after failures and reports them at the end.
+environment. It continues after failures, pauses for ten seconds after each
+completed test, and reports failures at the end. `-ListOnly` does not pause.
 
 When invoking the runner or an individual test from a persistent interactive
 PowerShell session, let the `pwsh -File` child process return normally; do not
@@ -206,6 +207,12 @@ its success message before the process failed to finish exiting. Five isolated
 MultiPathview repetitions and a MoveActions-to-MultiPathview sequence exited
 normally. The observations do not establish that a particular preceding test,
 test ordering, or the mutex itself causes the hang.
+
+A subsequent diagnostic run used the standard test order with ten seconds
+between tests: all 39 tests passed, every process exited with code zero, and no
+Explorer mutex remained after any test. This single run does not establish
+whether the pauses prevented the hang. The standard runner now pauses after
+each completed test, but the underlying shutdown issue remains open.
 
 Before the probe cleanup was changed, the drag-and-drop test forcibly
 terminated a still-running external PowerShell probe during normal cleanup.

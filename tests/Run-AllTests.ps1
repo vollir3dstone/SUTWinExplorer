@@ -25,6 +25,7 @@ try {
             Write-Host "FAIL $($test.Name) (exit $LASTEXITCODE)"
             $failed.Add($test.Name)
         }
+        Start-Sleep -Seconds 10
     }
 } finally {
     [Environment]::SetEnvironmentVariable('KIS_DIRECTORY_OBSERVER', $previousObserver)
