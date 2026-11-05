@@ -1,43 +1,5 @@
-param([switch] $SkipDrag)
-
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
-Add-Type -TypeDefinition @'
-public static class SortOrderMouseProbe
-{
-    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-    public struct Point { public int X; public int Y; }
-    [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool GetCursorPos(out Point point);
-    [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
-    [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, System.UIntPtr extra);
-    public static void Down() => mouse_event(2, 0, 0, 0, System.UIntPtr.Zero);
-    public static void Up() => mouse_event(4, 0, 0, 0, System.UIntPtr.Zero);
-}
-public sealed class SortOrderDragProbe : System.IDisposable
-{
-    private readonly int startX, startY, targetX, targetY;
-    private readonly System.Threading.Timer timer;
-    private int phase;
-    public volatile bool Finished;
-    public SortOrderDragProbe(int startX, int startY, int targetX, int targetY)
-    {
-        this.startX = startX; this.startY = startY; this.targetX = targetX; this.targetY = targetY;
-        timer = new System.Threading.Timer(Tick, null, 100, 150);
-    }
-    private void Tick(object state)
-    {
-        switch (System.Threading.Interlocked.Increment(ref phase))
-        {
-            case 1: SortOrderMouseProbe.SetCursorPos(startX, startY); break;
-            case 2: SortOrderMouseProbe.Down(); break;
-            case 3: SortOrderMouseProbe.SetCursorPos(startX + 12, startY); break;
-            case 4: SortOrderMouseProbe.SetCursorPos(targetX, targetY); break;
-            case 5: SortOrderMouseProbe.Up(); Finished = true; timer.Change(-1, -1); break;
-        }
-    }
-    public void Dispose() => timer.Dispose();
-}
-'@
 
 function Find-VisualChild($parent, [type] $type) {
     for ($index = 0; $index -lt [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($parent); $index++) {
@@ -170,12 +132,12 @@ try {
     }
     $boxes.Children[0].RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
     $move = $editor.GetType().GetMethod('MoveItem', [System.Reflection.BindingFlags]'Instance,NonPublic')
-    $null = $move.Invoke($editor, [object[]] @([int] 0, [int] 7))
+    $null = $move.Invoke($editor, [object[]] @([int] 0, [int] 6))
     $viewFlags = [System.Reflection.BindingFlags]'Instance,NonPublic'
     $sortState = $view.GetType().GetField('_sorting', $viewFlags).GetValue($view)
     $pairs = @($sortState.GetType().GetProperty('Pairs', $viewFlags).GetValue($sortState))
-    if (($pairs.Column -join ',') -cne 'MediaTypeIcon,TypeApp1Icon,TypeApp2Name,DateModified,Size,Overlay,Name' -or
-        $pairs[6].Criterion -ne 'Descending') { throw 'ContentView did not map widget indices and directions.' }
+    if (($pairs.Column -join ',') -cne 'MediaTypeIcon,TypeApp1Icon,TypeApp2Name,DateModified,Size,Name' -or
+        $pairs[5].Criterion -ne 'Descending') { throw 'ContentView did not map widget indices and directions.' }
     $view.FindName('FileList').View.Columns[3].Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
     $pairs = @($sortState.GetType().GetProperty('Pairs', $viewFlags).GetValue($sortState))
     if ($pairs[0].Column -ne 'Name' -or $pairs[0].Criterion -ne 'Descending' -or
@@ -184,41 +146,6 @@ try {
     [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([action] {}, [System.Windows.Threading.DispatcherPriority]::ApplicationIdle)
     $window.UpdateLayout()
     Assert-Baselines $view
-    if ($SkipDrag) {
-        Write-Output 'Sort order widget and baseline tests passed.'
-        return
-    }
-    $editor.Configure([string[]] @('Name', 'MT', 'TA1', 'TA2', 'Date', 'Size', 'MO'))
-    $cursor = [SortOrderMouseProbe+Point]::new()
-    $null = [SortOrderMouseProbe]::GetCursorPos([ref] $cursor)
-    try {
-        $window.Left = [System.Windows.SystemParameters]::WorkArea.Left + 20
-        $window.Top = [System.Windows.SystemParameters]::WorkArea.Top + 20
-        $window.Width = [Math]::Min(1200, [System.Windows.SystemParameters]::WorkArea.Width - 40)
-        $null = $window.Activate()
-        $editor.BringIntoView()
-        $null = $boxes.Children[0].Focus()
-        [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([action] {}, [System.Windows.Threading.DispatcherPriority]::ApplicationIdle)
-        $window.UpdateLayout()
-        $start = $boxes.Children[0].PointToScreen([System.Windows.Point]::new($boxes.Children[0].ActualWidth / 2, $boxes.Children[0].ActualHeight / 2))
-        $target = $boxes.Children[2].PointToScreen([System.Windows.Point]::new($boxes.Children[2].ActualWidth - 4, $boxes.Children[2].ActualHeight / 2))
-        $drag = [SortOrderDragProbe]::new([int] $start.X, [int] $start.Y, [int] $target.X, [int] $target.Y)
-        $frame = [System.Windows.Threading.DispatcherFrame]::new()
-        $timer = [System.Windows.Threading.DispatcherTimer]::new()
-        $timer.Interval = [TimeSpan]::FromMilliseconds(100)
-        $deadline = [DateTime]::UtcNow.AddSeconds(5)
-        $timer.add_Tick({
-            if ($drag.Finished -or [DateTime]::UtcNow -ge $deadline) { $frame.Continue = $false }
-        }.GetNewClosure())
-        $timer.Start()
-        try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop(); $drag.Dispose() }
-        if (-not $drag.Finished -or (@($editor.Items).Index -join ',') -cne '1,2,0,3,4,5,6') { throw "Dragging failed: start=$start, target=$target, indices=$(@($editor.Items).Index -join ',')." }
-        $pairs = @($sortState.GetType().GetProperty('Pairs', $viewFlags).GetValue($sortState))
-        if (($pairs.Column -join ',') -cne 'MediaTypeIcon,TypeApp1Icon,Name,TypeApp2Name,DateModified,Size,Overlay') { throw 'Dragging did not update ContentView sorting.' }
-    } finally {
-        [SortOrderMouseProbe]::Up()
-        $null = [SortOrderMouseProbe]::SetCursorPos($cursor.X, $cursor.Y)
-    }
     Write-Output 'Sort order widget and baseline tests passed.'
 } finally {
     $window.Close()

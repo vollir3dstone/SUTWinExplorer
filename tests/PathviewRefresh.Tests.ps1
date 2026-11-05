@@ -218,6 +218,10 @@ try {
     Wait-Until { -not $displayDirty.GetValue($view) -and $null -ne $snapshot.GetValue($content) -and -not [object]::ReferenceEquals($visibleSnapshot, $snapshot.GetValue($content)) } 'The visible metadata change was not displayed after reactivation.'
     if ($generation.GetValue($cache) -ne $metadataGeneration) { throw 'Reactivating a display-dirty tab enumerated.' }
 
+    $overlayWait = $content.GetType().GetField('_overlayWaitCancellation', $flags)
+    $refreshWait = $content.GetType().GetField('_refreshCancellation', $flags)
+    Wait-Until { $null -ne $snapshot.GetValue($content) -and $null -eq $overlayWait.GetValue($content) -and
+        $null -eq $refreshWait.GetValue($content) } 'The overlay redisplay did not settle before the ancestor-change check.'
     $ancestorGeneration = $generation.GetValue($cache)
     $ancestorSnapshot = $snapshot.GetValue($content)
     $ancestorTree = $tree.ItemsSource

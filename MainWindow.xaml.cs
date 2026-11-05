@@ -23,6 +23,7 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, Pathview> _fixedPathviewsByPath = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<Pathview, string> _pathsByFixedPathview = new();
     private readonly Dictionary<Pathview, TabItem> _tabsByPathview = new();
+    private readonly HashSet<Pathview> _visitedOverlayTabs = [];
     private readonly Dictionary<Pathview, UseCasePathview> _useCaseEntriesByPathview = new();
     private UseCaseConfiguration _activeUseCase;
     private UseCaseStore _useCaseStore;
@@ -32,6 +33,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        SutShell.SetOverlayDirectories([], null);
         var version = typeof(MainWindow).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
         if (!string.IsNullOrEmpty(version))
             Title = $"{Title} v{version}";
@@ -48,8 +50,10 @@ public partial class MainWindow : Window
         ContentRendered += MainWindow_ContentRendered;
         Closed += (_, _) =>
         {
+            SutShell.SetOverlayDirectories([], null);
             foreach (var view in _tabsByPathview.Keys)
                 view.Close();
+            _visitedOverlayTabs.Clear();
         };
     }
 
@@ -153,6 +157,7 @@ public partial class MainWindow : Window
         {
             var tab = _tabsByPathview[view];
             _tabsByPathview.Remove(view);
+            _visitedOverlayTabs.Remove(view);
             _useCaseEntriesByPathview.Remove(view);
             RemoveFixedPathview(view);
             view.Close();
@@ -166,6 +171,7 @@ public partial class MainWindow : Window
         UseCaseNameLabel.Text = targetUseCase.UseCaseName;
         foreach (var entry in targetUseCase.Pathviews.ToArray())
             AddPaneview(entry.Path, isBrowsable: false, useCaseEntry: entry, select: false);
+        UpdateOverlayDirectories();
         RefreshPathChoices();
     }
 
@@ -365,6 +371,7 @@ public partial class MainWindow : Window
         {
             if (!_tabsByPathview.ContainsKey(view))
                 return;
+            UpdateOverlayDirectories();
             if (!view.IsBrowsable)
             {
                 RegisterFixedPathview(view, currentPath);
@@ -416,6 +423,7 @@ public partial class MainWindow : Window
             UpdateUseCasePathview(view, view.CurrentPath);
         if (select)
             ExplorerTabs.SelectedItem = tab;
+        UpdateOverlayDirectories();
         RefreshPathChoices();
     }
 
@@ -700,6 +708,8 @@ public partial class MainWindow : Window
             view.Close();
             ExplorerTabs.Items.Remove(tab);
             _tabsByPathview.Remove(view);
+            _visitedOverlayTabs.Remove(view);
+            UpdateOverlayDirectories();
             RemoveFixedPathview(view);
             if (_useCaseEntriesByPathview.Remove(view, out var entry))
             {
@@ -713,9 +723,21 @@ public partial class MainWindow : Window
 
     private void ExplorerTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (ReferenceEquals(e.Source, ExplorerTabs))
+            UpdateOverlayDirectories();
         if (!_selectingHistoryTab && ReferenceEquals(e.Source, ExplorerTabs) && CurrentPathview is { } view)
             _browsablePathview?.RecordVisitedLocation(view.CurrentPath);
         RefreshPathChoices();
+    }
+
+    private void UpdateOverlayDirectories()
+    {
+        var active = CurrentPathview;
+        if (active is not null)
+            _visitedOverlayTabs.Add(active);
+        var views = ExplorerTabs.Items.OfType<TabItem>().Select(tab => tab.Content).OfType<Pathview>();
+        SutShell.SetOverlayDirectories(views.OrderByDescending(view => _visitedOverlayTabs.Contains(view))
+            .Select(view => view.CurrentPath), active?.CurrentPath);
     }
 
     private void AddressBox_SelectionChanged(object sender, SelectionChangedEventArgs e)

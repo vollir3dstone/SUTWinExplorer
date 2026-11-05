@@ -49,6 +49,15 @@ try {
     $browse = $tabs.Items[0].Content
     $fixed = $tabs.Items[1].Content
     $otherFixed = $tabs.Items[2].Content
+    $tabs.SelectedItem = $tabs.Items[2]
+    $tabs.SelectedItem = $tabs.Items[0]
+    $shell = $assembly.GetType('SUTWinExplorer.SutShell', $true)
+    $staticFlags = [Reflection.BindingFlags]'Static,NonPublic'
+    $scheduledPaths = @($shell.GetField('_openOverlayDirectories', $staticFlags).GetValue($null))
+    $activePath = $shell.GetField('_activeOverlayDirectory', $staticFlags).GetValue($null)
+    if ($activePath -ne $root -or ($scheduledPaths -join '|') -ne (@($root, $childPath, $fixedPath) -join '|')) {
+        throw "Overlay tab priority did not follow actual selections: active=$activePath, order=$($scheduledPaths -join '|')."
+    }
     $source = $fixed.FindName('DirectoryContent')
     $destination = $browse.FindName('DirectoryContent')
     $fixed.FindName('HideInternalSubdirectoriesCheckBox').GetCheckBox().IsChecked = $false
@@ -79,6 +88,14 @@ try {
     if ($pairs[0].Column -ne 'Size' -or $pairs[0].Criterion -ne 'Descending') { throw 'The copied sort order was not applied to the content.' }
     $snapshot = $destination.GetType().GetField('_snapshot', $flags)
     Wait-Until { $null -ne $snapshot.GetValue($destination) } 'The copied view did not finish loading.'
+    $destination.GetType().GetMethod('CancelOverlayWait', $flags).Invoke($destination, @())
+    $beforeOverlayCompletion = $snapshot.GetValue($destination)
+    $overlayCompletion = [Threading.Tasks.TaskCompletionSource]::new([Threading.Tasks.TaskCreationOptions]::RunContinuationsAsynchronously)
+    $overlayCancellation = [Threading.CancellationTokenSource]::new()
+    $null = $destination.GetType().GetMethod('RefreshAfterOverlaysAsync', $flags).Invoke($destination,
+        [object[]] @($beforeOverlayCompletion, [string] $browse.CurrentPath, $overlayCompletion.Task, $overlayCancellation))
+    $overlayCompletion.SetResult()
+    Wait-Until { $null -ne $snapshot.GetValue($destination) -and -not [object]::ReferenceEquals($beforeOverlayCompletion, $snapshot.GetValue($destination)) } 'Overlay completion did not redisplay the current directory.'
     $actualNames = @($destination.FindName('FileList').Items | ForEach-Object { [IO.Path]::GetFileName($_.FullPath) }) -join ','
     if ($actualNames -cne 'large.txt,.middle.txt,small.txt') { throw "The copied filters or sort order produced unexpected rows: $actualNames" }
 
@@ -152,7 +169,7 @@ try {
         [object]::ReferenceEquals($probe.Ready, $readyField.GetValue($destination))) { throw 'Reset did not defer the refresh until all four controls changed.' }
     if ($hideDirectories.IsChecked -ne $true -or $hideInternal.IsChecked -ne $true -or $pattern.Text -cne '') { throw 'Reset did not restore the content filter defaults.' }
     $resetOrder = @($destinationSort.Items | ForEach-Object { "$($_.Index):$($_.Direction)" }) -join ','
-    if ($resetOrder -cne '0:Ascending,1:Ascending,2:Ascending,3:Ascending,4:Ascending,5:Ascending,6:Ascending' -or
+    if ($resetOrder -cne '0:Ascending,1:Ascending,2:Ascending,3:Ascending,4:Ascending,5:Ascending' -or
         $destination.FindName('NameSortIndicator').Visibility -ne 'Visible') { throw 'Reset did not restore the default sort order and indicator.' }
     if ($browse.FindName('HideInternalCheckBox').IsChecked -ne $false -or
         $source.FindName('HideDirectoriesCheckBox').GetCheckBox().IsChecked -ne $false) { throw 'Reset changed another view or the tree filter.' }

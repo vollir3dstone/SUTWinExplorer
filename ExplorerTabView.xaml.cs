@@ -888,6 +888,7 @@ public partial class Pathview : UserControl
     internal void Close()
     {
         _closed = true;
+        DirectoryContent.Close();
         LinkWorkflowState.Shared.Changed -= DirectoryWorkflowState_Changed;
         CopyWorkflowState.Shared.Changed -= DirectoryWorkflowState_Changed;
         MoveWorkflowState.Shared.Changed -= DirectoryWorkflowState_Changed;
@@ -2275,6 +2276,48 @@ internal static class ShellIconProvider
         { Debug.WriteLine($"Could not cache icon for '{path}': {exception.Message}"); }
     }
 
+    internal static ShellIconSet? RefreshSmallBaseIcon(string path)
+    {
+        var cachedItem = _cache?.GetFileSystemItem(path);
+        var cachedVariant = cachedItem?.Variants.FirstOrDefault(value => value.Name == "small" && value.Width == 16 && value.Height == 16);
+        var isTopPath = ShellLocations.IsTopPath(path);
+        IntPtr itemIdList = IntPtr.Zero;
+        if (isTopPath &&
+            (SHParseDisplayName(path, IntPtr.Zero, out itemIdList, 0, out _) < 0 || itemIdList == IntPtr.Zero))
+            return null;
+        try
+        {
+            var info = new ShellFileInfo();
+            var result = isTopPath
+                ? SHGetFileInfo(itemIdList, 0, ref info, (uint)Marshal.SizeOf<ShellFileInfo>(), SystemImageList | SmallIcon | Pidl)
+                : SHGetFileInfo(path, 0, ref info, (uint)Marshal.SizeOf<ShellFileInfo>(), SystemImageList | SmallIcon);
+            if (result == IntPtr.Zero)
+                return null;
+            var interfaceId = typeof(IImageList).GUID;
+            Marshal.ThrowExceptionForHR(SHGetImageList(SmallShellImageList, ref interfaceId, out var imageList));
+            try
+            {
+                var baseIcon = GetImage(imageList, info.IconIndex);
+                if (baseIcon is not BitmapSource bitmap)
+                    return null;
+                if (cachedItem is not null && cachedVariant is not null)
+                {
+                    if (_cache!.ReplaceCachedItem(cachedItem, [new IconCache.RefreshedVariant(cachedVariant, bitmap, false)], info.IconIndex) is null)
+                        return GetCachedSmallBase(path).Icons;
+                }
+                else
+                    StoreIcon(path, "small", 16, 16, bitmap, false, info.IconIndex);
+                return new ShellIconSet(bitmap, null, GetOpacity(path)) { BaseIconIndex = info.IconIndex };
+            }
+            finally { _ = Marshal.Release(imageList); }
+        }
+        finally
+        {
+            if (itemIdList != IntPtr.Zero)
+                Marshal.FreeCoTaskMem(itemIdList);
+        }
+    }
+
     private static (ImageSource? Icon, int Slot, bool Known) GetCurrentOverlay(string path)
     {
         var isTopPath = ShellLocations.IsTopPath(path);
@@ -2310,6 +2353,37 @@ internal static class ShellIconProvider
             if (itemIdList != IntPtr.Zero)
                 Marshal.FreeCoTaskMem(itemIdList);
         }
+    }
+
+    internal static (ShellIconSet? Icons, IconCache.IconVariant? Version) RefreshSmallOverlay(string path, ShellIconSet icons)
+    {
+        var item = _cache?.GetFileSystemItem(path);
+        var cached = _cache?.Find(path, "small", 16, 16);
+        var (overlay, slot, known) = GetCurrentOverlay(path);
+        IconCache.IconVariant? version = null;
+        if (known && cached is not null)
+        {
+            var variant = item?.Variants.FirstOrDefault(value => value.Name == "small" && value.Width == 16 && value.Height == 16);
+            if (item is not null && variant is not null)
+            {
+                if (!Equals(variant, cached.Variant))
+                    return (null, null);
+                version = _cache!.ReplaceCachedItem(item, [new IconCache.RefreshedVariant(variant, cached.Image, slot > 0)], cached.BaseIconIndex);
+                if (version is null)
+                    return (null, null);
+            }
+        }
+        return (icons with { BaseIcon = cached?.Image ?? icons.BaseIcon, BaseIconIndex = cached?.BaseIconIndex ?? icons.BaseIconIndex,
+            OverlayIcon = overlay, OverlaySlot = slot, OverlayKnown = known, MayHaveOverlay = slot > 0 }, version);
+    }
+
+    internal static (ShellIconSet? Icons, IconCache.IconVariant? Version) GetCachedSmallBase(string path)
+    {
+        var cached = _cache?.Find(path, "small", 16, 16);
+        return (cached is null ? null : new ShellIconSet(cached.Image, null, GetOpacity(path))
+        {
+            BaseIconIndex = cached.BaseIconIndex ?? 0
+        }, cached?.Variant);
     }
 
     internal static ShellIconSet? GetSmallIconsUncached(string path)

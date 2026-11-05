@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -9,6 +10,97 @@ namespace SUTWinExplorer;
 
 internal static class SutShell
 {
+    private static readonly ConcurrentDictionary<string, DirectoryIconSession> DirectoryIcons = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly object OverlayScheduleLock = new();
+    private static readonly AutoResetEvent OverlayScheduleChanged = new(false);
+    private static string[]? _openOverlayDirectories;
+    private static string? _activeOverlayDirectory;
+    private static readonly HashSet<string> FailedOverlayDirectories = new(StringComparer.OrdinalIgnoreCase);
+    private static bool _overlayWorkerStarted;
+    private static long _overlayScheduleVersion;
+
+    private static string DirectoryKey(string path) => ShellLocations.IsTopPath(path)
+        ? ShellLocations.TopPath : Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+
+    internal static void SetOverlayDirectories(IEnumerable<string> directories, string? activeDirectory)
+    {
+        var paths = directories.Where(path => !string.IsNullOrWhiteSpace(path)).Select(DirectoryKey)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var active = string.IsNullOrWhiteSpace(activeDirectory) ? null : DirectoryKey(activeDirectory);
+        lock (OverlayScheduleLock)
+        {
+            if (!string.Equals(_activeOverlayDirectory, active, StringComparison.OrdinalIgnoreCase))
+                FailedOverlayDirectories.Clear();
+            _openOverlayDirectories = paths;
+            _activeOverlayDirectory = active;
+            _overlayScheduleVersion++;
+        }
+        OverlayScheduleChanged.Set();
+    }
+
+    private static void ScheduleOverlays()
+    {
+        lock (OverlayScheduleLock)
+        {
+            if (!_overlayWorkerStarted)
+            {
+                _overlayWorkerStarted = true;
+                var thread = new Thread(ProcessOverlays) { IsBackground = true, Priority = ThreadPriority.Lowest, Name = "KIS overlay refresh" };
+                thread.SetApartmentState(ApartmentState.STA);
+                thread.Start();
+            }
+        }
+        OverlayScheduleChanged.Set();
+    }
+
+    private static void ProcessOverlays()
+    {
+        while (true)
+        {
+            string[]? paths;
+            string? active;
+            bool activeFailed;
+            long scheduleVersion;
+            lock (OverlayScheduleLock)
+            {
+                paths = _openOverlayDirectories;
+                active = _activeOverlayDirectory;
+                activeFailed = active is not null && FailedOverlayDirectories.Contains(active);
+                scheduleVersion = _overlayScheduleVersion;
+            }
+            DirectoryIconSession? selected = null;
+            if (paths is null)
+                selected = DirectoryIcons.Values.FirstOrDefault(session => session.HasPending);
+            else if (active is null)
+            {
+                OverlayScheduleChanged.WaitOne();
+                continue;
+            }
+            else if (active is not null && !activeFailed &&
+                     (!DirectoryIcons.TryGetValue(active, out var activeSession) || !activeSession.IsPrepared))
+            {
+                OverlayScheduleChanged.WaitOne();
+                continue;
+            }
+            else
+            {
+                if (active is not null && DirectoryIcons.TryGetValue(active, out var current) && current.HasPending)
+                    selected = current;
+                selected ??= paths.Select(path => DirectoryIcons.GetValueOrDefault(path))
+                    .FirstOrDefault(session => session is not null && session.HasPending);
+                selected ??= DirectoryIcons.Values.FirstOrDefault(session => session.HasPending);
+            }
+            if (selected is null)
+                OverlayScheduleChanged.WaitOne();
+            else
+            {
+                lock (OverlayScheduleLock)
+                    if (scheduleVersion != _overlayScheduleVersion)
+                        continue;
+                selected.ProcessNextOverlay();
+            }
+        }
+    }
     internal static void EnsureDirectoryAccessible(string path)
     {
         if (ShellLocations.IsTopPath(path))
@@ -35,13 +127,23 @@ internal static class SutShell
         return
         RunOnShellThread(token =>
         {
-            var source = cache.GetDirectory(path, token);
+            var key = DirectoryKey(path);
+            DirectoryItem[] source;
+            try { source = cache.GetDirectory(path, token); }
+            catch
+            {
+                lock (OverlayScheduleLock) FailedOverlayDirectories.Add(key);
+                OverlayScheduleChanged.Set();
+                throw;
+            }
+            lock (OverlayScheduleLock) FailedOverlayDirectories.Remove(key);
+            var overlayCompletion = DirectoryIcons.GetOrAdd(key, _ => new DirectoryIconSession()).Prepare(source);
+            ScheduleOverlays();
             var items = new List<DirectoryItem>();
             var directoryCount = 0;
             foreach (var item in source)
             {
                 token.ThrowIfCancellationRequested();
-                _ = item.Icons;
                 if (item.IsDirectory) directoryCount++;
                 try
                 {
@@ -60,13 +162,12 @@ internal static class SutShell
             foreach (var item in items)
             {
                 token.ThrowIfCancellationRequested();
-                var icons = sortColumns.Contains(DirectorySortColumn.TypeApp1Icon) || sortColumns.Contains(DirectorySortColumn.Overlay)
-                    ? item.Icons : null;
+                var icons = sortColumns.Contains(DirectorySortColumn.TypeApp1Icon) ? item.Icons : null;
                 values.Add(new DirectorySortValues(item,
                     sortColumns.Contains(DirectorySortColumn.Size) ? item.Size : null,
                     sortColumns.Contains(DirectorySortColumn.DateModified) ? item.Modified : null,
                     sortColumns.Contains(DirectorySortColumn.TypeApp2Name) ? item.Type : string.Empty,
-                    item.MediaType, icons?.BaseIconIndex, icons?.OverlaySlot));
+                    item.MediaType, icons?.BaseIconIndex));
             }
 
             IOrderedEnumerable<DirectorySortValues> ordered = values.OrderByDescending(value => value.Item.IsDirectory);
@@ -90,8 +191,6 @@ internal static class SutShell
                         ? ordered.ThenBy(value => value.Modified) : ordered.ThenByDescending(value => value.Modified),
                     DirectorySortColumn.TypeApp1Icon => ascending
                         ? ordered.ThenBy(value => value.BaseIconIndex) : ordered.ThenByDescending(value => value.BaseIconIndex),
-                    DirectorySortColumn.Overlay => ascending
-                        ? ordered.ThenBy(value => value.OverlaySlot) : ordered.ThenByDescending(value => value.OverlaySlot),
                     _ => throw new ArgumentOutOfRangeException(nameof(sorting))
                 };
             }
@@ -99,7 +198,7 @@ internal static class SutShell
                 .ThenBy(value => value.Item.FullPath, StringComparer.OrdinalIgnoreCase)
                 .Select(value => value.Item).ToArray();
             token.ThrowIfCancellationRequested();
-            return new DirectorySnapshot(result, directoryCount, source.Length - directoryCount);
+            return new DirectorySnapshot(result, directoryCount, source.Length - directoryCount, overlayCompletion);
         }, cancellationToken);
     }
 
@@ -535,6 +634,127 @@ internal static class SutShell
 
 internal sealed record DirectoryNotification(string DirectoryPath, FileSystemEventArgs? Change);
 
+internal sealed class DirectoryIconSession
+{
+    private readonly object _sync = new();
+    private readonly Dictionary<string, ShellIconSet?> _icons = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IconCache.IconVariant?> _versions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Queue<string> _pending = new();
+    private readonly HashSet<string> _queued = new(StringComparer.OrdinalIgnoreCase);
+    private TaskCompletionSource? _completion;
+    private bool _prepared;
+
+    internal bool HasPending { get { lock (_sync) return _pending.Count > 0; } }
+    internal bool IsPrepared { get { lock (_sync) return _prepared; } }
+
+    internal Task? Prepare(DirectoryItem[] items)
+    {
+        lock (_sync)
+        {
+            foreach (var item in items)
+            {
+                if (!_icons.TryGetValue(item.FullPath, out var icons))
+                {
+                    try { icons = ShellIconProvider.RefreshSmallBaseIcon(item.FullPath); }
+                    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ExternalException or InvalidOperationException or ArgumentException or NotSupportedException)
+                    { Debug.WriteLine($"Could not refresh base icon for '{item.FullPath}': {exception.Message}"); }
+                    if (icons is not null)
+                    {
+                        var (cached, version) = ShellIconProvider.GetCachedSmallBase(item.FullPath);
+                        icons = cached ?? icons;
+                        _icons[item.FullPath] = icons;
+                        _versions[item.FullPath] = version;
+                        _pending.Enqueue(item.FullPath);
+                        _queued.Add(item.FullPath);
+                    }
+                }
+                else
+                {
+                    var (cached, version) = ShellIconProvider.GetCachedSmallBase(item.FullPath);
+                    if (version is null && _versions.GetValueOrDefault(item.FullPath) is not null)
+                    {
+                        cached = ShellIconProvider.RefreshSmallBaseIcon(item.FullPath);
+                        (var current, version) = ShellIconProvider.GetCachedSmallBase(item.FullPath);
+                        cached = current ?? cached;
+                    }
+                    if (version is not null && !Equals(_versions.GetValueOrDefault(item.FullPath), version))
+                    {
+                        icons = cached;
+                        _icons[item.FullPath] = icons;
+                        _versions[item.FullPath] = version;
+                        if (_queued.Add(item.FullPath))
+                            _pending.Enqueue(item.FullPath);
+                    }
+                }
+                item.SetIcons(icons);
+            }
+            if (_pending.Count > 0 && _completion is null)
+                _completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _prepared = true;
+            return _completion?.Task;
+        }
+    }
+
+    internal void ProcessNextOverlay()
+    {
+        string path;
+        ShellIconSet icons;
+        lock (_sync)
+        {
+            if (!_pending.TryDequeue(out path!))
+                return;
+            icons = _icons[path]!;
+        }
+        try
+        {
+            var (refreshed, version) = ShellIconProvider.RefreshSmallOverlay(path, icons);
+            lock (_sync)
+            {
+                _queued.Remove(path);
+                if (ReferenceEquals(_icons[path], icons))
+                {
+                    if (refreshed is not null)
+                    {
+                        _icons[path] = refreshed;
+                        _versions[path] = version;
+                    }
+                    else
+                    {
+                        var (cached, currentVersion) = ShellIconProvider.GetCachedSmallBase(path);
+                        if (cached is not null)
+                        {
+                            _icons[path] = cached;
+                            _versions[path] = currentVersion;
+                            if (_queued.Add(path)) _pending.Enqueue(path);
+                        }
+                        else
+                        {
+                            _icons.Remove(path);
+                            _versions.Remove(path);
+                        }
+                    }
+                }
+                else if (_queued.Add(path))
+                    _pending.Enqueue(path);
+            }
+        }
+        catch (Exception exception)
+        {
+            lock (_sync) _queued.Remove(path);
+            Debug.WriteLine($"Could not refresh overlay for '{path}': {exception.Message}");
+        }
+        lock (_sync)
+        {
+            if (_pending.Count == 0)
+            {
+                var completion = _completion;
+                _completion = null;
+                completion?.TrySetResult();
+            }
+        }
+    }
+}
+
 internal sealed class DirectoryDataCache
 {
     private readonly object _sync = new();
@@ -656,6 +876,19 @@ internal sealed class DirectoryItem(string name, string fullPath, bool isDirecto
     internal bool IsDrive { get; } = isDrive;
     internal MediaType MediaType { get; } = MediaTypeMap.GetMediaType(fullPath, isDirectory);
 
+    internal void SetIcons(ShellIconSet? icons)
+    {
+        lock (_sync)
+        {
+            if (_iconsLoaded && ReferenceEquals(_icons, icons))
+                return;
+            _icons = icons;
+            _iconsLoaded = true;
+            if (_entry is not null)
+                _entry = _entry with { Icons = icons };
+        }
+    }
+
     internal void RemapPath(string oldPath, string newPath)
     {
         lock (_sync)
@@ -674,11 +907,9 @@ internal sealed class DirectoryItem(string name, string fullPath, bool isDirecto
             _sizeLoaded = false;
             _modifiedLoaded = false;
             _typeLoaded = false;
-            _iconsLoaded = false;
             _size = null;
             _modified = null;
             _type = null;
-            _icons = null;
             _entry = null;
             _ = IsInternal;
             _ = Entry;
@@ -770,20 +1001,6 @@ internal sealed class DirectoryItem(string name, string fullPath, bool isDirecto
                     return _entry = new FileEntry(Name, FullPath, IsDirectory, Type,
                         Size is { } size ? SutShell.FormatSize(size) : string.Empty, Modified, Icons,
                         MediaTypeIconMap.GetIcon(MediaType), MediaTypeMap.GetName(MediaType));
-                if (_icons is { MayHaveOverlay: true })
-                {
-                    try
-                    {
-                        var refreshed = ShellIconProvider.GetSmallIcons(FullPath);
-                        if (refreshed is not null)
-                        {
-                            _icons = refreshed;
-                            _entry = _entry with { Icons = refreshed };
-                        }
-                    }
-                    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ExternalException)
-                    { Debug.WriteLine($"Could not refresh overlay for '{FullPath}': {exception.Message}"); }
-                }
                 return _entry;
             }
         }
@@ -812,18 +1029,19 @@ internal sealed class DirectorySortState
 
     internal static void Validate(IReadOnlyList<DirectorySortPair> pairs)
     {
-        if (pairs.Any(pair => !Enum.IsDefined(pair.Column) || !Enum.IsDefined(pair.Criterion)) ||
+        if (pairs.Any(pair => !Enum.IsDefined(pair.Column) || pair.Column == DirectorySortColumn.Overlay || !Enum.IsDefined(pair.Criterion)) ||
             pairs.Select(pair => pair.Column).Distinct().Count() != pairs.Count)
             throw new ArgumentException("Sort columns and criteria must be valid, with no duplicate columns.", nameof(pairs));
     }
 }
 
 internal sealed record DirectorySortValues(DirectoryItem Item, long? Size, DateTime? Modified, string Type,
-    MediaType MediaType, int? BaseIconIndex, int? OverlaySlot);
+    MediaType MediaType, int? BaseIconIndex);
 
-internal sealed class DirectorySnapshot(DirectoryItem[] items, int directoryCount, int fileCount)
+internal sealed class DirectorySnapshot(DirectoryItem[] items, int directoryCount, int fileCount, Task? overlayCompletion)
 {
     internal IReadOnlyList<DirectoryItem> Items { get; } = items;
+    internal Task? OverlayCompletion { get; } = overlayCompletion;
     public int Count => Items.Count;
     public int DirectoryCount { get; } = directoryCount;
     public int FileCount { get; } = fileCount;

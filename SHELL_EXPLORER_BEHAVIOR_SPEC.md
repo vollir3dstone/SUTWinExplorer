@@ -381,7 +381,7 @@ may show its requested row in light gray without changing the active selection.
   provide a display name, matching falls back to the filesystem leaf name.
 - [x] **Reset** at the end of the **VIEW** row restores the content defaults:
   **Hide directories** and **Hide internal** on, an empty **Name pattern**,
-  and sort order Name, MT, TA1, TA2, Date, Size, MO, all ascending. It refreshes
+  and sort order Name, MT, TA1, TA2, Date, Size, all ascending. It refreshes
   the content once after applying the settings and does not change tree filters
   or other Pathviews.
 - [x] Directory junctions and other directory reparse points follow the same

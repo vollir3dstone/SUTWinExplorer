@@ -187,10 +187,12 @@ internal sealed class IconCache
         lock (_sync)
         {
             var node = GetNode(path, false);
-            if (node?.Images is null || !node.Images.TryGetValue(SizeKey(variant, width, height), out var id) ||
+            var key = SizeKey(variant, width, height);
+            if (node?.Images is null || !node.Images.TryGetValue(key, out var id) ||
                 !_document.Images.TryGetValue(id, out var image) || !_decoded.TryGetValue(id, out var bitmap))
                 return null;
-            return new CachedIcon(bitmap, image.HasOverlay, node.BaseIconIndex);
+            return new CachedIcon(bitmap, image.HasOverlay, node.BaseIconIndex,
+                new IconVariant(variant, width, height, id, node.VariantVersions.GetValueOrDefault(key)));
         }
     }
 
@@ -215,15 +217,16 @@ internal sealed class IconCache
             FileSystemRootAdded?.Invoke(root!);
     }
 
-    internal void ReplaceCachedItem(CachedItem item, IReadOnlyList<RefreshedVariant> variants, int? baseIconIndex)
+    internal IconVariant? ReplaceCachedItem(CachedItem item, IReadOnlyList<RefreshedVariant> variants, int? baseIconIndex)
     {
         var prepared = variants.Select(variant => (variant.Variant,
             Image: variant.Bitmap is null ? null : PrepareImage(variant.Bitmap, variant.HasOverlay))).ToArray();
+        IconVariant? updatedSmall = null;
         lock (_sync)
         {
             var node = GetNode(item.Path, false);
             if (node?.Images is null)
-                return;
+                return null;
             foreach (var (variant, image) in prepared)
             {
                 var key = SizeKey(variant.Name, variant.Width, variant.Height);
@@ -239,9 +242,14 @@ internal sealed class IconCache
                 }
                 node.VariantVersions[key] = ++node.NextVariantVersion;
                 if (variant.Name == "small" && variant.Width == 16 && variant.Height == 16)
+                {
                     node.BaseIconIndex = image is null ? null : baseIconIndex;
+                    if (image is not null)
+                        updatedSmall = variant with { ImageId = image.Id, Version = node.VariantVersions[key] };
+                }
             }
         }
+        return updatedSmall;
     }
 
     private static PreparedImage PrepareImage(BitmapSource bitmap, bool hasOverlay)
@@ -312,7 +320,7 @@ internal sealed class IconCache
 
     private static string SizeKey(string variant, int width, int height) => $"{variant}:{width}x{height}";
 
-    internal sealed record CachedIcon(BitmapSource Image, bool HasOverlay, int? BaseIconIndex);
+    internal sealed record CachedIcon(BitmapSource Image, bool HasOverlay, int? BaseIconIndex, IconVariant Variant);
     private sealed record PreparedImage(string Id, CacheImage Image, BitmapSource Bitmap);
     internal sealed record IconVariant(string Name, int Width, int Height, string ImageId, long Version);
     internal sealed record CachedItem(string Path, IconVariant[] Variants);

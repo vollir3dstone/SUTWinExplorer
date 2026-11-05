@@ -102,8 +102,8 @@ ContentView uses the system window text and editor background colors.
 
 Each ContentView has its own sort sequence, retained on refresh, filtering and
 navigation while that view exists. The **Sort order** editor follows the Name
-pattern control and always displays all seven columns, including hidden ones.
-Its initial order is Name, MT, TA1, TA2, Date, Size, MO, all ascending. Boxes
+pattern control and always displays all six sortable columns, including hidden ones.
+Its initial order is Name, MT, TA1, TA2, Date, Size, all ascending. MO is not sortable. Boxes
 run from highest to lowest priority; clicking a box reverses its direction
 without changing its priority. Dragging a box, or using Alt+Left/Right while it
 has keyboard focus, changes its priority without changing its direction.

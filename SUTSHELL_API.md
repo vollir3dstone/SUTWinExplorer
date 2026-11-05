@@ -51,22 +51,21 @@ snapshot; results from an older snapshot must not be applied to it. Filtering an
 sorting require Shell display names for all candidates before the count is known.
 
 `DirectorySortColumn` identifies Name, TypeApp2Name, Size, DateModified,
-MediaTypeIcon, TypeApp1Icon and Overlay;
+MediaTypeIcon and TypeApp1Icon; the retained Overlay enum value is rejected;
 `DirectorySortCriterion` currently offers Ascending and Descending. A
 `DirectorySortPair` combines them. Each view holds a `DirectorySortState`;
 `Update` prepends the supplied list in its given priority order and removes
-older pairs for those columns. Invalid enum values and duplicate columns in one
+older pairs for those columns. Invalid enum values, Overlay and duplicate columns in one
 update are rejected. The state itself starts empty; ContentView initializes it
-with all seven columns and retains it across refresh and navigation, but does not
+with six sortable columns and retains it across refresh and navigation, but does not
 persist it across sessions. The snapshot operation
 copies the current ordered pairs before starting its background work.
 
 TypeApp2Name uses the localized Shell type name, MediaTypeIcon the declared `MediaType` enum
 order with `None` after known types in both directions, Size the numeric byte
 count, and DateModified the local modification time. TypeApp1Icon uses the Windows
-system-image-list index; Overlay uses the classical overlay slot (zero means no
-overlay). These Windows icon keys are not
-stable identifiers across sessions. Text comparison is culture-aware and
+system-image-list index. This Windows icon key is not a stable identifier across
+sessions. Text comparison is culture-aware and
 case-insensitive. Directory sizes and drive sizes/dates have no value. Missing
 numeric/date/icon values sort before present values ascending and after them
 descending. Remaining ties use ascending display name and then path. An empty
@@ -167,7 +166,8 @@ Each record loads and retains the following on demand:
 | Size in bytes | Sorting by Size or requesting a complete row. Directories and drives have no size. |
 | Local modification time | Sorting by DateModified or requesting a complete row. Drives have no date. |
 | Localized Shell type name | Sorting by Type or requesting a complete row; the type helper has a fallback. |
-| Shell base icon, overlay, opacity and sort keys | Sorting by ShellIcon or Overlay, or requesting a complete row. Both icon sort keys are obtained with the same icon set. |
+| Shell base icon and opacity | Refreshed for all enumerated items on the first visit per directory and process. |
+| Shell overlay | Loaded on a shared low-priority background STA thread after base icons; selected, previously selected, and not-yet-selected tabs are processed in that order. Display updates after the directory's overlay work completes. |
 | Complete `FileEntry`, including MT image and formatted values | `GetDirectoryRangeAsync` requests the item. Subsequent ranges reuse the same entry object. |
 
 The requested sort keys are obtained for **all matching items before** the

@@ -82,14 +82,59 @@ from current file attributes when small icons are requested: hidden items use
 ContentView table displays the base and selected overlay in separate columns;
 other controls can layer the same images.
 
-An item recorded without an overlay is not queried for overlays on ordinary
-cache hits. The change observer described below can update its stored overlay
-flag. A previously recorded overlay is requeried on a hit, but that lookup alone
-does not change the stored presence flag. `DirectoryItem` also retains its first
-icon result in the current directory-data cache, including a failed result, until
-its metadata or directory cache is invalidated. When a previously materialized
-entry with a known overlay is requested again, the provider is called again and
-the current overlay is obtained.
+### Pathview first-visit refresh
+
+Pathview directory snapshots use a process-wide session shared by all tabs for
+the same normalized, case-insensitive directory path. On the first visit in a
+program run, the small icons of **all enumerated items**, including items hidden
+by the current filters, are refreshed in two separate stages:
+
+1. **Base icons:** Before filtering and sorting, each item's base icon and
+  system-image-list index are requested from the Shell, even if an older base
+  icon is already cached. This stage does not request an overlay. A successful
+  result replaces the cached small base icon and index; the returned icon set
+  has no overlay. Failed base lookups can be retried on a later visit. Newly
+  encountered items are handled in the same way.
+2. **Overlays:** Items whose base-icon lookup succeeded are queued for a
+  separate overlay lookup on one lowest-priority STA background thread. A
+  successful lookup updates the cache's overlay-presence flag and retains the
+  current overlay bitmap and slot in memory. The bitmap and slot are not
+  persisted. An unsuccessful lookup does not establish a reliable overlay
+  presence; completion means that the queued attempts finished, not that every
+  Shell lookup necessarily succeeded.
+
+The cache format has only a Boolean `HasOverlay`, not an unknown state. A fresh
+base-icon write temporarily records `HasOverlay: false` before the overlay
+lookup; this value is not proof that the item has no overlay. The background
+lookup replaces it when a result is available. If the application exits before
+that work finishes, the first visit in the next run performs the lookups again.
+
+The initial directory snapshot can be displayed as soon as its base icons and
+other required sort data are ready; it does not wait for overlay lookups. The
+MO cells therefore initially may be empty even when Windows has overlays for
+those items. Once the directory's queued overlay attempts finish, each view
+still displaying that snapshot rebuilds its display using the in-memory overlay
+results. A view that navigated away or was closed is not refreshed for the old
+directory. If another snapshot is requested while overlay work is in progress,
+it can already show the subset of overlays obtained so far; a partial result is
+not itself the directory-completion refresh.
+
+The worker processes the selected tab first, then tabs previously selected
+during this run, then open tabs not yet selected. Work already started for a
+directory that is no longer open continues after the open tabs. The worker does
+not scan unvisited cached directories. A tab switch changes priority after the
+current Shell call returns; an already-running Shell call is not interrupted.
+Completed sessions are reused on later visits without another first-visit
+lookup. Changes to cached icons observed during the run are detected on a
+subsequent snapshot; cache revisions prevent an older background result from
+replacing a newer cache entry.
+
+This separation applies to the Pathview first-visit refresh, not to all icon
+updates in the application. In particular, the general `GetSmallIcons` path
+above can query an overlay during a cache lookup or miss, and the change
+observer described below refreshes the base icon and overlay together on its
+own worker. Directory-tree and other consumers of that general provider do not
+necessarily follow the Pathview's delayed-display sequence.
 
 ## Icon change observation
 
@@ -146,15 +191,11 @@ handler.
 Observation works only while the application is running, the relevant root is
 successfully registered, and Windows delivers a supported notification. Shell
 notifications are not replayed for the period when the application was closed.
-At the next startup, the persisted cache is loaded without checking whether its
-icons, overlays, or associations changed in the meantime. An offline change can
-therefore leave stale icons in the cache, potentially across subsequent restarts,
-until a later observed event or another cache miss causes a fresh lookup.
-
-How to detect or reconcile changes that occurred while the application was
-closed is entirely undecided. There is currently no startup validation, offline
-change journal, association snapshot comparison, or other implemented recovery
-mechanism; no choice of future strategy is implied here.
+At the next startup, the persisted cache is loaded without a global scan. The
+first Pathview visit to each directory refreshes its small base icons and then
+its overlays as described above. Unvisited directories and other icon sizes are
+not globally revalidated by this mechanism. There is no offline change journal
+or association snapshot comparison.
 
 ## Sorting and the Windows index
 
@@ -166,15 +207,13 @@ icon. Equal cached images can have different per-path indices, because the index
 is stored on the path node rather than in the deduplicated image table.
 
 When a small icon is freshly resolved, the returned Windows index is recorded
-with the path. On a cache hit that index is reused without querying Windows again
-for the base icon. A cached entry lacking an index uses `0`; the provider does
-not query Windows solely to populate that missing key. Overlay sorting uses the
-current overlay slot from the small-icon request when the item was recorded as
-having an overlay, or `0` otherwise. A failed icon lookup has no icon sort value.
+with the path. The first Pathview visit refreshes that index; subsequent snapshots
+reuse it unless the cache changes. A failed icon lookup has no icon sort value.
+Sorting by overlay is not supported.
 
 SutShell first groups directories before files, then applies the configured sort
 criteria in order and finally uses name and full path as tie-breakers. The
-ContentView default criteria include icon and overlay columns as secondary keys,
+ContentView default criteria include the base icon as a secondary key,
 so these keys can be considered even when name is the primary criterion. The
 cache does not remove other work needed before a snapshot, such as Shell display
 names, filtering and the metadata required by the configured sort criteria.
@@ -250,8 +289,8 @@ behavior; cache entries are not authoritative filesystem data.
 - The observer only handles `SHCNE_UPDATEITEM` and `SHCNE_ASSOCCHANGED` received
   while the application is running. Windows can coalesce item events into other
   event types, and association changes require the changing application to send
-  the notification. Changes while the application is closed are not detected;
-  how to handle them remains an open decision. Renames, deletions and path reuse
+  the notification. Offline changes are refreshed on the first Pathview visit
+  to each directory, not by a global scan. Renames, deletions and path reuse
   are not comprehensively tracked. UNC and removable roots and reconnection
   behavior have not been comprehensively validated. Existing UI objects do not
   necessarily replace already materialized icons immediately when the cache
@@ -273,16 +312,61 @@ behavior; cache entries are not authoritative filesystem data.
   junctions, symbolic links, removable drives and changing network mappings can
   produce duplicate or stale entries.
 - No migration policy for future JSON versions is defined.
-- Requerying an overlay for each display preparation may still require an
-  expensive Shell call; the performance benefit needs measurement. Reusing an
-  already loaded ContentView item for a new range request refreshes known
-  overlays. Retained directory-tree icons are refreshed when their existing tree
-  refresh path requests icons, not on every WPF repaint.
+- Overlay queries can still be expensive even though Pathview performs them in
+  the background; the benchmark below is specific to one machine and workload.
+  Retained directory-tree icons are refreshed when their existing tree refresh
+  path requests icons, not on every WPF repaint.
 - Saving only at normal shutdown loses new entries after a crash or forced
   termination. Whether periodic checkpoints are needed remains open.
 - Loading and saving a potentially large JSON file may affect startup, shutdown
   time and memory use. Limits, incremental persistence and recovery of valid
   entries from a partially damaged file remain open for future evaluation.
+
+## Icon lookup benchmark
+
+`tests/IconPerformance.Benchmark.ps1` measures the real production small-icon
+lookup and in-memory cache operations using files and folders from a selected
+directory. It does not write to the directory or save or modify the application's
+real cache. Each pass uses a new in-memory application cache and randomizes the
+order; the script reports per-item mean, median, p90, p95, p99 and maximum, plus
+per-pass totals. Separate, subsequent `SHGetFileInfo` calls measure the base and
+overlay flags individually; these are repeated lookups on a warmer Shell cache,
+not instrumentation inside the production call, and must not be added to its
+time. The isolated PNG/hash measurement also repeats work already included in
+the measured `Store` time.
+
+One run on Windows 11 build 26200, PowerShell 7.6.9 / .NET 10.0.14 and an Intel
+Core i5-13500 used all 657 immediate Downloads entries (636 files, 21 directories,
+35 distinct file extensions), seven passes, and 4,599 successful item samples:
+
+| Measured operation | Mean ms/item | Median | p95 |
+| --- | ---: | ---: | ---: |
+| Production uncached lookup, including Shell and WPF conversion | 11.748 | 11.607 | 13.095 |
+| In-memory cache `Store`, including PNG and hashing | 0.230 | 0.217 | 0.270 |
+| PNG/hash preparation only, overlapping `Store` | 0.123 | 0.121 | 0.158 |
+| Production cache hit, including overlay requery when applicable | 0.046 | 0.036 | 0.051 |
+| Separate `SHGetFileInfo` base-index call | 0.899 | 0.877 | 1.079 |
+| Separate `SHGetFileInfo` overlay call | 10.258 | 10.238 | 11.350 |
+
+The paired production uncached lookup plus `Store` averaged 11.978 ms/item;
+its seven pass means ranged from 11.765 to 12.992 ms/item. Only 14 of the 4,599
+samples reported an overlay, so the pooled cache-hit result mostly describes
+items without one. There were no failed lookups. The first pass was not a cold
+Windows-cache measurement: other applications and earlier tests may already
+have warmed it. Repeated observations of the same files are not independent; the
+numbers describe this workload and machine, not a population-wide confidence
+interval or a guarantee for other file types, networks, or installed handlers.
+
+A separate three-pass run of all 657 entries compared `SHGetFileInfo` flags in
+rotated order after the production lookup. A plain icon call averaged 1.059
+ms/item; requesting the overlay index averaged 10.749 ms without
+`SHGFI_ADDOVERLAYS` and 10.747 ms with it. Combining the base-index and overlay
+request in one call averaged 10.779 ms. The latter two alternatives returned the
+same base/overlay indices where compared in all 1,971 samples, including six
+overlay-bearing samples. This is not sufficient to establish equivalence for all
+handlers or Windows versions. Multiple third-party overlay handlers were
+registered on the test machine; none were disabled, so the cause of the delay
+cannot be attributed to an individual handler from these measurements.
 
 ## Tests and validation
 

@@ -20,6 +20,7 @@ public partial class ContentView : UserControl
     private ClipboardChangeMonitor? _clipboardMonitor;
     private CancellationTokenSource? _refreshCancellation;
     private CancellationTokenSource? _rangeCancellation;
+    private CancellationTokenSource? _overlayWaitCancellation;
     private Task _snapshotReady = Task.CompletedTask;
     private readonly HashSet<Task> _metadataUpdates = [];
     private readonly List<(string OldPath, string NewPath)> _pathRemaps = [];
@@ -54,15 +55,14 @@ public partial class ContentView : UserControl
     private static readonly DirectorySortColumn[] SortColumns =
     [
         DirectorySortColumn.Name, DirectorySortColumn.MediaTypeIcon, DirectorySortColumn.TypeApp1Icon,
-        DirectorySortColumn.TypeApp2Name, DirectorySortColumn.DateModified, DirectorySortColumn.Size,
-        DirectorySortColumn.Overlay
+        DirectorySortColumn.TypeApp2Name, DirectorySortColumn.DateModified, DirectorySortColumn.Size
     ];
 
     public ContentView()
     {
         InitializeComponent();
         ResetViewButton.LayoutUpdated += ResetViewButton_LayoutUpdated;
-        SortOrderEditor.Configure(["Name", "MT", "TA1", "TA2", "Date", "Size", "MO"]);
+        SortOrderEditor.Configure(["Name", "MT", "TA1", "TA2", "Date", "Size"]);
         _sorting.Update(GetWidgetSortPairs());
         SortOrderEditor.Changed += SortOrderChanged;
         UpdateSortDisplay();
@@ -225,6 +225,7 @@ public partial class ContentView : UserControl
     internal void SetCurrentPath(string path)
     {
         EndRename(commit: false);
+        CancelOverlayWait();
         _directoryCache.Invalidate();
         _deferredRefresh = false;
         _refreshCancellation?.Cancel();
@@ -287,6 +288,7 @@ public partial class ContentView : UserControl
 
         _refreshCancellation?.Cancel();
         _rangeCancellation?.Cancel();
+        CancelOverlayWait();
         _snapshot = null;
         _rows = null;
         ClearRows();
@@ -331,6 +333,12 @@ public partial class ContentView : UserControl
             DirectoryCountLabel.Text = snapshot.DirectoryCount.ToString(CultureInfo.CurrentCulture);
             FileCountLabel.Text = snapshot.FileCount.ToString(CultureInfo.CurrentCulture);
             ScheduleRangeLoad();
+            if (snapshot.OverlayCompletion is { } overlayCompletion)
+            {
+                var overlayWait = new CancellationTokenSource();
+                _overlayWaitCancellation = overlayWait;
+                _ = RefreshAfterOverlaysAsync(snapshot, path, overlayCompletion, overlayWait);
+            }
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
@@ -402,6 +410,34 @@ public partial class ContentView : UserControl
     }
 
     internal void RefreshDisplay() => RefreshCore(invalidate: false);
+
+    internal void CancelOverlayWait() => _overlayWaitCancellation?.Cancel();
+
+    internal void Close()
+    {
+        _refreshCancellation?.Cancel();
+        _rangeCancellation?.Cancel();
+        CancelOverlayWait();
+    }
+
+    private async Task RefreshAfterOverlaysAsync(DirectorySnapshot snapshot, string path, Task overlayCompletion, CancellationTokenSource cancellation)
+    {
+        try
+        {
+            await Task.Yield();
+            await overlayCompletion.WaitAsync(cancellation.Token);
+            if (!cancellation.IsCancellationRequested && ReferenceEquals(_snapshot, snapshot) &&
+                string.Equals(CurrentPath, path, StringComparison.OrdinalIgnoreCase))
+                RefreshCore(invalidate: false);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+        finally
+        {
+            if (ReferenceEquals(_overlayWaitCancellation, cancellation))
+                _overlayWaitCancellation = null;
+            cancellation.Dispose();
+        }
+    }
 
     private void ClearRows()
     {
@@ -537,8 +573,7 @@ public partial class ContentView : UserControl
         {
             (NameSortIndicator, DirectorySortColumn.Name), (TypeApp2NameSortIndicator, DirectorySortColumn.TypeApp2Name),
             (SizeSortIndicator, DirectorySortColumn.Size), (DateSortIndicator, DirectorySortColumn.DateModified),
-            (MediaTypeIconSortIndicator, DirectorySortColumn.MediaTypeIcon), (TypeApp1IconSortIndicator, DirectorySortColumn.TypeApp1Icon),
-            (OverlaySortIndicator, DirectorySortColumn.Overlay)
+            (MediaTypeIconSortIndicator, DirectorySortColumn.MediaTypeIcon), (TypeApp1IconSortIndicator, DirectorySortColumn.TypeApp1Icon)
         })
         {
             indicator.Visibility = indicatorColumn == primary.Column ? Visibility.Visible : Visibility.Collapsed;

@@ -148,9 +148,93 @@ try {
         $entryProperty = $itemType.GetProperty('Entry', $flags)
         $firstEntry = $entryProperty.GetValue($item)
         $secondEntry = $entryProperty.GetValue($item)
-        Assert-True (-not [object]::ReferenceEquals($firstEntry, $secondEntry)) 'Reused entry did not refresh its known overlay.'
+        Assert-True ([object]::ReferenceEquals($firstEntry, $secondEntry)) 'Reused entry should not synchronously requery its overlay.'
         Store-Icon $providerCache $shellPath 'small' 16 16 $cached.Image $false
     }
+    $visitDirectory = Join-Path $directory 'first-visit'
+    [IO.Directory]::CreateDirectory($visitDirectory) | Out-Null
+    $visitPath = Join-Path $visitDirectory 'visit.txt'
+    [IO.File]::WriteAllText($visitPath, 'visit')
+    Store-Icon $providerCache $visitPath 'small' 16 16 $bitmap $true ([int] 999999)
+    $shell = $assembly.GetType('SUTWinExplorer.SutShell', $true)
+    $open = $shell.GetMethod('OpenCachedDirectoryAsync', $staticFlags)
+    $directoryCacheType = $assembly.GetType('SUTWinExplorer.DirectoryDataCache', $true)
+    $sortType = $assembly.GetType('SUTWinExplorer.DirectorySortState', $true)
+    $directoryCache = [Activator]::CreateInstance($directoryCacheType, $true)
+    $otherDirectoryCache = [Activator]::CreateInstance($directoryCacheType, $true)
+    $sorting = [Activator]::CreateInstance($sortType, $true)
+    $firstVisit = $open.Invoke($null, [object[]] @([string] $visitDirectory, [bool] $true, [bool] $false, [string] '', $sorting, $directoryCache, [Threading.CancellationToken]::None)).GetAwaiter().GetResult()
+    $completionProperty = $firstVisit.GetType().GetProperty('OverlayCompletion', $flags)
+    $completion = $completionProperty.GetValue($firstVisit)
+    Assert-True ($null -ne $completion -and (Find-Icon $providerCache $visitPath 'small' 16 16).BaseIconIndex -ne 999999) 'First visit did not replace the stale base icon and schedule overlays.'
+    $completion.GetAwaiter().GetResult()
+    $firstVersion = @($getItem.Invoke($providerCache, [object[]] @([string] $visitPath)).Variants | Where-Object Name -eq 'small')[0].Version
+    $secondVisit = $open.Invoke($null, [object[]] @([string] $visitDirectory.ToUpperInvariant(), [bool] $true, [bool] $false, [string] '', $sorting, $otherDirectoryCache, [Threading.CancellationToken]::None)).GetAwaiter().GetResult()
+    $secondVersion = @($getItem.Invoke($providerCache, [object[]] @([string] $visitPath)).Variants | Where-Object Name -eq 'small')[0].Version
+    Assert-True ($null -eq $completionProperty.GetValue($secondVisit) -and $firstVersion -eq $secondVersion) 'A second view refreshed an already visited directory.'
+    $getRange = $shell.GetMethod('GetDirectoryRangeAsync', $staticFlags)
+    $visitEntry = @($getRange.Invoke($null, [object[]] @($secondVisit, [int] 0, [int] 1, [Threading.CancellationToken]::None)).GetAwaiter().GetResult())[0]
+    $visitIcon = $visitEntry.Icons
+    $iconSetType = $assembly.GetType('SUTWinExplorer.ShellIconSet', $true)
+    $overlayKnown = $iconSetType.GetProperty('OverlayKnown', $flags).GetValue($visitIcon)
+    $overlaySlot = $iconSetType.GetProperty('OverlaySlot', $flags).GetValue($visitIcon)
+    Assert-True ($overlayKnown -and (Find-Icon $providerCache $visitPath 'small' 16 16).HasOverlay -eq ($overlaySlot -gt 0)) 'The completed overlay was not propagated to the cache and the second view.'
+    $view = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
+    $viewSort = $view.GetType().GetField('_sorting', $flags).GetValue($view)
+    $sortPairs = $viewSort.GetType().GetProperty('Pairs', $flags).GetValue($viewSort)
+    Assert-True (@($sortPairs | Where-Object { $_.Column.ToString() -eq 'Overlay' }).Count -eq 0 -and
+        $view.FindName('FileList').View.Columns[2].Header.Tag -eq $null) 'MO remains available in the sort widget or header.'
+    $setDirectories = $shell.GetMethod('SetOverlayDirectories', $staticFlags)
+    $null = $setDirectories.Invoke($null, [object[]] @([string[]] @(), $null))
+    $priorityPaths = @('active', 'visited', 'unvisited', 'left') | ForEach-Object {
+        $path = Join-Path $directory ("priority-" + $_)
+        [IO.Directory]::CreateDirectory($path) | Out-Null
+        foreach ($index in 1..30) { [IO.File]::WriteAllText((Join-Path $path "item-$index.txt"), 'test') }
+        [string] $path
+    }
+    $priorityTasks = @()
+    foreach ($path in $priorityPaths) {
+        $priorityCache = [Activator]::CreateInstance($directoryCacheType, $true)
+        $snapshot = $open.Invoke($null, [object[]] @([string] $path, [bool] $true, [bool] $false, [string] '', $sorting, $priorityCache, [Threading.CancellationToken]::None)).GetAwaiter().GetResult()
+        $priorityTasks += $completionProperty.GetValue($snapshot)
+    }
+    Assert-True (@($priorityTasks | Where-Object { $null -eq $_ -or $_.IsCompleted }).Count -eq 0) 'Overlay work started before an active directory was selected.'
+    $waitingPath = Join-Path $directory 'priority-not-yet-prepared'
+    $null = $setDirectories.Invoke($null, [object[]] @([string[]] @($waitingPath, $priorityPaths[1]), [string] $waitingPath))
+    [Threading.Tasks.Task]::Delay(200).GetAwaiter().GetResult()
+    Assert-True (@($priorityTasks | Where-Object IsCompleted).Count -eq 0) 'An inactive directory ran before the active directory was prepared.'
+    $null = $setDirectories.Invoke($null, [object[]] @([string[]] @($priorityPaths[0], $priorityPaths[1], $priorityPaths[2]), [string] $priorityPaths[0]))
+    $firstCompleted = [Threading.Tasks.Task]::WhenAny([Threading.Tasks.Task[]] $priorityTasks).GetAwaiter().GetResult()
+    Assert-True ([object]::ReferenceEquals($firstCompleted, $priorityTasks[0])) 'The active directory did not finish first.'
+    $secondCompleted = [Threading.Tasks.Task]::WhenAny([Threading.Tasks.Task[]] @($priorityTasks[1], $priorityTasks[2], $priorityTasks[3])).GetAwaiter().GetResult()
+    Assert-True ([object]::ReferenceEquals($secondCompleted, $priorityTasks[1])) 'A previously visited tab did not finish before unvisited and left tabs.'
+    $thirdCompleted = [Threading.Tasks.Task]::WhenAny([Threading.Tasks.Task[]] @($priorityTasks[2], $priorityTasks[3])).GetAwaiter().GetResult()
+    Assert-True ([object]::ReferenceEquals($thirdCompleted, $priorityTasks[2])) 'A left directory finished before an unvisited open tab.'
+    Assert-True ($priorityTasks[3].Wait([TimeSpan]::FromSeconds(30))) 'A left directory did not finish after open tabs.'
+    $null = $setDirectories.Invoke($null, [object[]] @([string[]] @(), $null))
+    $switchPaths = @('before-switch', 'after-switch') | ForEach-Object {
+        $path = Join-Path $directory ("priority-" + $_)
+        [IO.Directory]::CreateDirectory($path) | Out-Null
+        foreach ($index in 1..60) { [IO.File]::WriteAllText((Join-Path $path "item-$index.txt"), 'test') }
+        [string] $path
+    }
+    $switchTasks = @()
+    foreach ($path in $switchPaths) {
+        $priorityCache = [Activator]::CreateInstance($directoryCacheType, $true)
+        $snapshot = $open.Invoke($null, [object[]] @([string] $path, [bool] $true, [bool] $false, [string] '', $sorting, $priorityCache, [Threading.CancellationToken]::None)).GetAwaiter().GetResult()
+        $switchTasks += $completionProperty.GetValue($snapshot)
+    }
+    $sessions = $shell.GetField('DirectoryIcons', $staticFlags).GetValue($null)
+    $session = $sessions[[string] $switchPaths[0]]
+    $queue = $session.GetType().GetField('_pending', $flags).GetValue($session)
+    $null = $setDirectories.Invoke($null, [object[]] @([string[]] $switchPaths, [string] $switchPaths[0]))
+    $deadline = [DateTime]::UtcNow.AddSeconds(10)
+    while ($queue.Count -eq 60 -and [DateTime]::UtcNow -lt $deadline) { [Threading.Tasks.Task]::Delay(10).GetAwaiter().GetResult() }
+    Assert-True ($queue.Count -lt 60 -and -not $switchTasks[0].IsCompleted) 'Could not observe the original active tab processing.'
+    $null = $setDirectories.Invoke($null, [object[]] @([string[]] $switchPaths, [string] $switchPaths[1]))
+    $switchCompleted = [Threading.Tasks.Task]::WhenAny([Threading.Tasks.Task[]] $switchTasks).GetAwaiter().GetResult()
+    Assert-True ([object]::ReferenceEquals($switchCompleted, $switchTasks[1])) 'Tab switching did not prioritize the newly active directory.'
+    Assert-True ($switchTasks[0].Wait([TimeSpan]::FromSeconds(30))) 'The previously active directory did not resume.'
     $sized = $getSized.Invoke($null, [object[]] @([string] $shellPath, [int] 32, [int] 32))
     Assert-True ($null -ne $sized -and $null -ne (Find-Icon $providerCache $shellPath 'sized' 32 32)) 'Size-specific Shell icon was not cached.'
     $prepareRefresh = $provider.GetMethod('PrepareCachedItemRefresh', $staticFlags)
@@ -221,7 +305,7 @@ try {
         $path = Join-Path $sortDirectory $name
         Assert-True ($null -ne (Find-Icon $providerCache $path 'small' 16 16).BaseIconIndex) 'Windows icon index was not restored after saving.'
     }
-    foreach ($column in @('TypeApp1Icon', 'Overlay')) {
+    foreach ($column in @('TypeApp1Icon')) {
         foreach ($criterion in @('Ascending', 'Descending')) {
             $withCache = (Get-SortedPaths $column $criterion) -join '|'
             $provider.GetField('_cache', $staticFlags).SetValue($null, $null)

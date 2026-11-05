@@ -282,8 +282,8 @@
                         </GridViewColumn>
                         <GridViewColumn Width="32">
                             <GridViewColumn.Header>
-                                <GridViewColumnHeader Tag="Overlay" Padding="1,0" ToolTip="Sort by MO (modifier)" Loaded="FileList_HeaderLoaded">
-                                    <StackPanel Orientation="Horizontal"><TextBlock Text="MO" /><TextBlock x:Name="OverlaySortIndicator" Visibility="Collapsed" Margin="1,0,0,0" FontSize="9" /></StackPanel>
+                                <GridViewColumnHeader Padding="1,0" ToolTip="Modifier icon" Loaded="FileList_HeaderLoaded">
+                                    <TextBlock Text="MO" />
                                 </GridViewColumnHeader>
                             </GridViewColumn.Header>
                             <GridViewColumn.CellTemplate>
