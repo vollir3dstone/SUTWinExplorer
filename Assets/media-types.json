@@ -8,28 +8,28 @@
 		},
 		{
 			"type": "box",
-			"extensions": [".zip", ".7z", ".rar", ".tar", ".gz"]
+			"extensions": {"edit": [".zip", ".7z", ".rar", ".tar", ".gz"]}
 		},
 		{
 			"type": "lines-text",
 			"extensions": 
 				{
-					"text-based": [".txt", ".text"]
+					"text": [".txt", ".text"]
 				}
 		},
 		{
 			"type": "structured-data",
 			"extensions": 
 				{
-					"text-based": [".xml", ".json", ".csv", ".tsv", ".yaml", ".yml", ".ini", ".cfg"],
-					"app-specific": [".xlsx", ".xls", ".ods", ".mdb", ".accdb", ".sqlite", ".db", ".mdf", ".parquet"]
+					"text": [".xml", ".json", ".csv", ".tsv", ".yaml", ".yml", ".ini", ".cfg"],
+					"edit": [".xlsx", ".xls", ".ods", ".mdb", ".accdb", ".sqlite", ".db", ".mdf", ".parquet"]
 				}
 		},
 		{
 			"type": "command-data",
 			"extensions": 
 				{
-					"text-based": [
+					"text": [
 						".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx",
 						".cs", ".java", ".kt", ".kts", ".swift", ".go", ".rs",
 						".py", ".pyw", ".js", ".mjs", ".cjs", ".jsx", ".mts",
@@ -44,7 +44,8 @@
 			"type": "book",
 			"extensions": 
 				{
-					"render": [".pdf", ".ps", ".html", ".htm", ".mht", ".mhtm", ".mhtml", ".chm", ".msg", ".eps"],
+					"text": [".html", ".htm", ".md"],
+					"render": [".pdf", ".ps", ".mht", ".mhtm", ".mhtml", ".chm", ".msg", ".eps"],
 					"edit": [".doc", ".docx", ".odt", ".rtf", ".md", ".pptx", ".ppt", ".vsd", ".vsdx", ".odg"]
 				}
 		},
@@ -52,8 +53,9 @@
 			"type": "image",
 			"extensions": 
 				{
+					"text": [".svg"],
 					"render": [".jpg", ".jpeg", ".jpe", ".jp2", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".avif", ".heic", ".ico"],
-					"edit": [".svg", ".psd", ".xcf", ".wmf", ".emf", ".tga"]
+					"edit": [".psd", ".xcf", ".wmf", ".emf", ".tga"]
 				}
 		},
 		{
