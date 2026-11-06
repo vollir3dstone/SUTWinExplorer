@@ -11,6 +11,7 @@ public sealed record AppWindow(IntPtr Handle, string Title);
 public sealed record RunningApp(RegisteredApp App, IReadOnlyList<AppWindow> Windows);
 public sealed record PasteClipboardResult(bool Sent, string? Error);
 public sealed record DropToWindowResult(bool Dropped, string? Error);
+public sealed record OpenFileDialogResult(bool Submitted, string? Error);
 public sealed record ResourcefulOpenResult(PasteClipboardResult Paste, DropToWindowResult Drop);
 
 public static class RunningAppsAccessor
@@ -140,6 +141,93 @@ public static class RunningAppsAccessor
             return new(false, "Could not send the complete Ctrl+V keystroke.");
         }
         return new(true, null);
+    }
+
+    public static async Task<OpenFileDialogResult> LetOpenByDialog(AppWindow window, string filePath)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        string fullPath = Path.GetFullPath(filePath);
+        if (!File.Exists(fullPath))
+            return new(false, "The file does not exist.");
+        IntPtr handle = window.Handle;
+        if (handle == IntPtr.Zero || !IsWindow(handle) || !IsWindowVisible(handle) || GetAncestor(handle, 2) != handle || !IsWindowEnabled(handle))
+            return new(false, "The target window is unavailable or disabled.");
+        if (new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C, 0x4F }.Any(key => (GetAsyncKeyState(key) & 0x8000) != 0))
+            return new(false, "Release the modifier keys and O before opening the dialog.");
+        if (IsIconic(handle))
+            _ = ShowWindowAsync(handle, 9);
+        if (GetForegroundWindow() != handle && !SetForegroundWindow(handle))
+            return new(false, "Could not activate the target window.");
+        if (GetForegroundWindow() != handle)
+            return new(false, "The target window is not in the foreground.");
+
+        _ = GetWindowThreadProcessId(handle, out uint processId);
+        var existingWindows = new HashSet<IntPtr>();
+        if (!EnumWindows((candidate, _) =>
+        {
+            existingWindows.Add(candidate);
+            return true;
+        }, IntPtr.Zero))
+            return new(false, "Could not inspect existing windows before opening the dialog.");
+        if (GetForegroundWindow() != handle || !IsWindow(handle) || !IsWindowEnabled(handle))
+            return new(false, "The target window is no longer active and available.");
+        Input[] inputs = [KeyInput(0x11, false), KeyInput(0x4F, false), KeyInput(0x4F, true), KeyInput(0x11, true)];
+        uint sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<Input>());
+        if (sent != inputs.Length)
+        {
+            if (sent != 0)
+                _ = SendInput(2, [KeyInput(0x4F, true), KeyInput(0x11, true)], Marshal.SizeOf<Input>());
+            return new(false, "Could not send the complete Ctrl+O keystroke.");
+        }
+
+        var deadline = Stopwatch.StartNew();
+        while (deadline.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            await Task.Delay(100).ConfigureAwait(false);
+            IntPtr dialog = GetForegroundWindow();
+            if (dialog == handle || dialog == IntPtr.Zero || existingWindows.Contains(dialog))
+                continue;
+            _ = GetWindowThreadProcessId(dialog, out uint dialogProcessId);
+            if (dialogProcessId != processId || GetWindow(dialog, 4) != handle || !IsWindowVisible(dialog) || !IsWindowEnabled(dialog))
+                continue;
+            var className = new StringBuilder(64);
+            _ = GetClassName(dialog, className, className.Capacity);
+            if (className.ToString() != "#32770")
+                return new(false, "The target opened an unsupported dialog.");
+            var fileFields = new List<IntPtr>();
+            var openButtons = new List<IntPtr>();
+            if (!EnumChildWindows(dialog, (child, _) =>
+            {
+                var childClass = new StringBuilder(64);
+                _ = GetClassName(child, childClass, childClass.Capacity);
+                if (GetDlgCtrlID(child) == 1148 && childClass.ToString() == "Edit")
+                    fileFields.Add(child);
+                if (GetDlgCtrlID(child) == 1 && childClass.ToString() == "Button")
+                    openButtons.Add(child);
+                return true;
+            }, IntPtr.Zero))
+                return new(false, "Could not inspect the Open dialog controls.");
+            if (fileFields.Count != 1 || openButtons.Count != 1 || !IsWindowVisible(fileFields[0]) || !IsWindowVisible(openButtons[0]) ||
+                !IsWindowEnabled(fileFields[0]) || !IsWindowEnabled(openButtons[0]))
+                return new(false, "The dialog could not be identified as a supported Open dialog.");
+            var buttonName = new StringBuilder(256);
+            _ = GetWindowText(openButtons[0], buttonName, buttonName.Capacity);
+            if (buttonName.ToString().Replace("&", "", StringComparison.Ordinal).Trim() is not ("Open" or "Öffnen"))
+                return new(false, "The dialog's confirmation button is not a supported Open command.");
+            if (GetForegroundWindow() != dialog || !File.Exists(fullPath))
+                return new(false, "The Open dialog or file is no longer available.");
+            if (SendMessageTimeoutText(fileFields[0], 0x000C, UIntPtr.Zero, fullPath, 2, 1000, out var setResult) == IntPtr.Zero || setResult == UIntPtr.Zero)
+                return new(false, "Could not enter the file name in the Open dialog.");
+            var entered = new StringBuilder(fullPath.Length + 1);
+            if (SendMessageTimeoutBuffer(fileFields[0], 0x000D, (UIntPtr)(uint)entered.Capacity, entered, 2, 1000, out _) == IntPtr.Zero ||
+                GetForegroundWindow() != dialog || !File.Exists(fullPath) || !string.Equals(entered.ToString(), fullPath, StringComparison.OrdinalIgnoreCase))
+                return new(false, "The Open dialog did not retain the requested file name.");
+            if (!PostMessage(openButtons[0], 0x00F5, IntPtr.Zero, IntPtr.Zero))
+                return new(false, "Could not submit the Open dialog.");
+            return new(true, null);
+        }
+        return new(false, "No supported Open dialog appeared for the target window.");
     }
 
     public static ResourcefulOpenResult OpenInRunningAppResourcefully(AppWindow window, IReadOnlyList<string> paths)
@@ -406,6 +494,13 @@ public static class RunningAppsAccessor
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumChildWindows(IntPtr window, EnumWindowsProc callback, IntPtr parameter);
+
+    [DllImport("user32.dll")]
+    private static extern int GetDlgCtrlID(IntPtr window);
+
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsWindowVisible(IntPtr window);
@@ -435,6 +530,22 @@ public static class RunningAppsAccessor
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetWindow(IntPtr window, uint command);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr window, StringBuilder className, int maximumLength);
+
+    [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr SendMessageTimeoutText(IntPtr window, uint message, UIntPtr wParam, string text, uint flags, uint timeout, out UIntPtr result);
+
+    [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr SendMessageTimeoutBuffer(IntPtr window, uint message, UIntPtr wParam, StringBuilder text, uint flags, uint timeout, out UIntPtr result);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int key);

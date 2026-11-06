@@ -67,9 +67,26 @@ application supports opening files this way.
 
 ## Transfer methods
 
-The caller can choose clipboard paste, programmatic drag and drop, or the
-combined operation below. Neither method guarantees that the target will open
+The caller can choose clipboard paste, programmatic drag and drop, the Open
+dialog method, or the combined operation below. No method guarantees that the target will open
 the file as a separate document.
+
+### Open dialog
+
+- `LetOpenByDialog` accepts a target window and one existing file.
+  It activates the window and sends `Ctrl+O`, without changing the clipboard.
+- Only a newly created foreground standard Win32 dialog owned directly by the
+  selected window in the same process is considered. The method looks for the
+  standard file name edit control and an enabled Open button; the supported
+  button names are currently `Open` and `Öffnen`. It enters the full Unicode
+  path, verifies it, and posts the button click. Other dialogs are left alone.
+- Success means the click was posted, not that the file opened or that an
+  existing document was unaffected. Opening may replace existing content,
+  display additional prompts, or create another window. Unsupported dialogs,
+  shortcuts, languages and foreground restrictions cause failure. The caller
+  must handle any dialog left open on failure.
+- This method is separate from the current Content Menu action and the existing
+  combined paste/drop operation; neither invokes it automatically.
 
 ### Combined operation
 
@@ -148,6 +165,10 @@ the file as a separate document.
   observed tests, Audacity opened the generated WAV by either method; IrfanView
   opened the generated JPEG by drop but did not open a clipboard file list via
   paste. These observations are application-specific, not universal promises.
+- `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application
+  Audacity -Transfer OpenDialog` tests the Open dialog using a generated WAV
+  with a Unicode name. In the observed environment Audacity opened the file;
+  IrfanView did not present a supported dialog in response to `Ctrl+O`.
 - The combined mode is also exercised with IrfanView; it verifies that the
   paste was sent, the drop was accepted, and the JPEG appeared in the target.
 - Content-menu tests cover window discovery, submenu placement, disabled state,

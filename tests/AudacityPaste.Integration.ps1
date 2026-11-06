@@ -1,7 +1,7 @@
 param(
     [ValidateSet('Audacity', 'IrfanView')]
     [string] $Application = 'Audacity',
-    [ValidateSet('Paste', 'Drop', 'Both', 'Menu')]
+    [ValidateSet('Paste', 'Drop', 'Both', 'Menu', 'OpenDialog')]
     [string] $Transfer = 'Paste',
     [switch] $UseExisting
 )
@@ -21,9 +21,11 @@ public static class PasteWindowProbe
     [DllImport("user32.dll")]
     public static extern bool ScreenToClient(IntPtr window, ref Point point);
     [DllImport("user32.dll")]
-    private static extern IntPtr GetForegroundWindow();
+    public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")]
-    private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+    public static extern IntPtr GetWindow(IntPtr window, uint command);
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
     [DllImport("kernel32.dll")]
     private static extern uint GetCurrentThreadId();
     [DllImport("user32.dll")]
@@ -127,6 +129,9 @@ if ($UseExisting) {
     Assert-True ($existing.Count -eq 1) "UseExisting requires exactly one running $Application process."
     $process = $existing[0]
 } else {
+    if ($Transfer -eq 'OpenDialog' -and $existing.Count -gt 0) {
+        throw "$Application is already running. Close it yourself or explicitly use -UseExisting."
+    }
     foreach ($instance in $existing) {
         if (-not $instance.CloseMainWindow() -or -not $instance.WaitForExit(5000)) {
             throw "$Application did not close normally. Resolve any open dialogs or unsaved work and retry."
@@ -146,7 +151,7 @@ try {
 
     $directory = Join-Path ([IO.Path]::GetTempPath()) 'KIS-File-Paste-Test'
     [IO.Directory]::CreateDirectory($directory) | Out-Null
-    $trackName = 'KIS-Paste-' + [guid]::NewGuid().ToString('N')
+    $trackName = $(if ($Transfer -eq 'OpenDialog') { 'KIS Öffnen ' } else { 'KIS-Paste-' }) + [guid]::NewGuid().ToString('N')
     $filePath = Join-Path $directory ($trackName + $extension)
     if ($Application -eq 'Audacity') {
     $sampleRate = 44100
@@ -210,7 +215,22 @@ try {
 
     Wait-Until { [DateTime]::UtcNow -ge $pasteNotBefore } "The $Application startup wait did not complete."
     Assert-True ([PasteWindowProbe]::ActivateTestWindow($window.Handle)) "Could not activate the $Application test window."
-    if ($Transfer -eq 'Menu') {
+    if ($Transfer -eq 'OpenDialog') {
+        $result = $accessor.GetMethod('LetOpenByDialog').Invoke($null, [object[]] @($window, [string] $filePath)).GetAwaiter().GetResult()
+        if (-not $result.Submitted) {
+            Write-Host "Open dialog error: $($result.Error)"
+            $condition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $process.Id)
+            $topWindows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $condition)
+            foreach ($topWindow in $topWindows) {
+                Write-Host "Window: $($topWindow.Current.Name); class=$($topWindow.Current.ClassName); handle=$($topWindow.Current.NativeWindowHandle)"
+                $elements = $topWindow.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+                foreach ($element in $elements | Where-Object { $_.Current.ClassName -eq '#32770' }) {
+                    Write-Host "  Dialog: $($element.Current.Name); class=$($element.Current.ClassName)"
+                }
+            }
+        }
+        Assert-True ($result.Submitted) "The Open dialog was not submitted: $($result.Error)"
+    } elseif ($Transfer -eq 'Menu') {
         $previousClipboard = [System.Windows.Clipboard]::GetDataObject()
         $clipboardChanged = $true
         $view = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
@@ -280,7 +300,18 @@ try {
     } finally {
         $process.Refresh()
         try {
-            if (-not $process.HasExited) {
+            if (-not $process.HasExited -and (-not $UseExisting -or $Transfer -ne 'OpenDialog')) {
+                if (-not $UseExisting -and $Transfer -eq 'OpenDialog' -and -not $testContentLoaded) {
+                    $dialog = [PasteWindowProbe]::GetForegroundWindow()
+                    $dialogProcessId = [uint32] 0
+                    [void] [PasteWindowProbe]::GetWindowThreadProcessId($dialog, [ref] $dialogProcessId)
+                    if ($dialogProcessId -eq $process.Id -and [PasteWindowProbe]::GetWindow($dialog, 4) -eq $process.MainWindowHandle) {
+                        $dialogElement = [System.Windows.Automation.AutomationElement]::FromHandle($dialog)
+                        if ($null -ne $dialogElement -and $dialogElement.Current.ClassName -eq '#32770') {
+                            [void] [PasteWindowProbe]::PostMessage($dialog, 0x0111, [IntPtr] 2, [IntPtr]::Zero)
+                        }
+                    }
+                }
                 if (-not $process.CloseMainWindow()) {
                     throw "$Application did not close normally. Resolve any open dialogs or unsaved work."
                 }

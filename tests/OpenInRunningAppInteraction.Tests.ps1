@@ -108,6 +108,20 @@ try {
     $owner = [System.Windows.Interop.WindowInteropHelper]::new($window).Handle
     $createAction = $view.GetType().GetMethod('CreateOpenLocationAction', $instanceFlags)
     $createActions = $view.GetType().GetMethod('CreateContextMenuActions', $instanceFlags)
+    $accessor = $assembly.GetType('SUTWinExplorer.RunningAppsAccessor', $true)
+    $openByDialog = $accessor.GetMethod('LetOpenByDialog')
+    $appWindowType = $assembly.GetType('SUTWinExplorer.AppWindow', $true)
+    $testAppWindow = [Activator]::CreateInstance($appWindowType, [object[]] @($owner, 'test'))
+    $invalidAppWindow = [Activator]::CreateInstance($appWindowType, [object[]] @([IntPtr]::Zero, 'invalid'))
+    $missingResult = $openByDialog.Invoke($null, [object[]] @($testAppWindow, [string] (Join-Path $directory 'missing.txt'))).GetAwaiter().GetResult()
+    if ($missingResult.Submitted) { throw 'The Open dialog method accepted a missing file.' }
+    $invalidResult = $openByDialog.Invoke($null, [object[]] @($invalidAppWindow, [string] $file)).GetAwaiter().GetResult()
+    if ($invalidResult.Submitted) { throw 'The Open dialog method accepted an invalid window.' }
+    $window.IsEnabled = $false
+    try {
+        $disabledResult = $openByDialog.Invoke($null, [object[]] @($testAppWindow, [string] $file)).GetAwaiter().GetResult()
+        if ($disabledResult.Submitted) { throw 'The Open dialog method accepted a disabled window.' }
+    } finally { $window.IsEnabled = $true }
 
     $runningActionType = $assembly.GetType('SUTWinExplorer.ShellMenuAction', $true)
     $runningActions = [Array]::CreateInstance($runningActionType, 2)
