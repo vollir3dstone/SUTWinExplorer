@@ -8,6 +8,15 @@ needed. A machine-wide named mutex permits only one KIS Explorer instance at a
 time, including across Windows user sessions. A second launch reports that the
 application is already running and exits; its command-line path is not forwarded.
 
+## Opening in running applications
+
+The per-application opening methods are defined in
+[running-app-open-methods.json](Assets/running-app-open-methods.json). This JSON
+is embedded in the application at build time, not stored in the user
+configuration directory or reloaded at runtime. Changing it requires rebuilding
+the application. Matching, supported methods, fallback behavior, and limitations
+are described in [OPEN_WITH_RUNNING_APP_SPEC.md](OPEN_WITH_RUNNING_APP_SPEC.md).
+
 ## Use cases
 
 The application always has one active use case during normal operation. It

@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('Audacity', 'IrfanView', 'Word', 'VLC', 'AcrobatReader')]
+    [ValidateSet('Audacity', 'IrfanView', 'Word', 'VLC', 'AcrobatReader', 'LibreOffice', 'Excel', 'Calc', 'PowerPoint', 'Impress', 'Draw', 'Math', 'Access', 'Base')]
     [string] $Application = 'Audacity',
     [ValidateSet('Paste', 'Drop', 'Resourceful', 'Menu', 'OpenDialog', 'OpenDialogO', 'OpenDialogCtrlF12', 'ShellOpen')]
     [string] $Transfer = 'Paste',
@@ -93,6 +93,33 @@ function Find-ShellDocument([string] $name, [string[]] $names) {
     return $false
 }
 
+function Find-ProcessDocument([string] $name, [int] $processId, [string] $applicationName) {
+    $roots = [System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
+    foreach ($root in $roots) {
+        try {
+            if ($root.Current.ProcessId -eq $processId -and $root.Current.NativeWindowHandle -ne 0 -and
+                $root.Current.IsEnabled -and $root.Current.Name -like "*$name*$applicationName*") { return $true }
+        } catch [System.Windows.Automation.ElementNotAvailableException] { }
+    }
+    return $false
+}
+
+function Convert-WithLibreOffice([string] $sourcePath, [string] $format, [string] $directory, [string] $outputPath) {
+    $profile = Join-Path $directory ('LibreOffice-profile-' + [guid]::NewGuid().ToString('N'))
+    $converter = [Diagnostics.ProcessStartInfo]::new((Join-Path $env:ProgramFiles 'LibreOffice\program\soffice.exe'))
+    $converter.UseShellExecute = $false
+    $converter.RedirectStandardOutput = $true
+    $converter.RedirectStandardError = $true
+    foreach ($argument in @('--headless', "-env:UserInstallation=$([Uri]::new($profile).AbsoluteUri)", '--convert-to', $format, '--outdir', $directory, $sourcePath)) { $converter.ArgumentList.Add($argument) }
+    $conversion = [Diagnostics.Process]::Start($converter)
+    try {
+        $output = $conversion.StandardOutput.ReadToEnd()
+        $conversionError = $conversion.StandardError.ReadToEnd()
+        $conversion.WaitForExit()
+        Assert-True ($conversion.ExitCode -eq 0 -and [IO.File]::Exists($outputPath)) "Could not generate the $format fixture: $output $conversionError"
+    } finally { $conversion.Dispose() }
+}
+
 function Close-TestSavePrompt([int] $processId, [string] $testName) {
     $root = [System.Windows.Automation.AutomationElement]::RootElement
     $processCondition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $processId)
@@ -141,6 +168,18 @@ $extension, $executableNames, $processNames = switch ($Application) {
     'Word' { '.docx'; ,@('WINWORD.EXE'); ,@('WINWORD') }
     'VLC' { '.mp4'; ,@('vlc.exe'); ,@('vlc') }
     'AcrobatReader' { '.pdf'; ,@('AcroRd32.exe', 'Acrobat.exe'); ,@('AcroRd32', 'Acrobat') }
+    'LibreOffice' { '.docx'; ,@('swriter.exe'); ,@('soffice', 'soffice.bin') }
+    'Excel' { '.xlsx'; ,@('EXCEL.EXE'); ,@('EXCEL') }
+    'Calc' { '.xlsx'; ,@('scalc.exe'); ,@('soffice', 'soffice.bin') }
+    'PowerPoint' { '.pptx'; ,@('POWERPNT.EXE'); ,@('POWERPNT') }
+    'Impress' { '.pptx'; ,@('simpress.exe'); ,@('soffice', 'soffice.bin') }
+    'Draw' { '.odg'; ,@('soffice.exe'); ,@('soffice', 'soffice.bin') }
+    'Math' { '.odf'; ,@('soffice.exe'); ,@('soffice', 'soffice.bin') }
+    'Access' { '.accdb'; ,@('MSACCESS.EXE'); ,@('MSACCESS') }
+    'Base' { '.odb'; ,@('sbase.exe'); ,@('soffice', 'soffice.bin') }
+}
+if ($Application -in @('LibreOffice', 'Excel', 'Calc', 'PowerPoint', 'Impress', 'Draw', 'Math', 'Access', 'Base')) {
+    Assert-True ($Transfer -eq 'Resourceful' -and -not $UseExisting) "$Application integration requires Resourceful and a test-started instance."
 }
 if ($NonDefault) {
     Assert-True ($Application -eq 'Word' -and $Transfer -eq 'ShellOpen') 'NonDefault is supported for the Word ShellOpen test.'
@@ -172,14 +211,21 @@ if ($UseExisting) {
     if ($existing.Count -gt 0) {
         throw "$Application is already running. Close it yourself or explicitly use -UseExisting."
     }
-    $process = Start-Process -FilePath $applicationPath -PassThru
+    $startupPath = if ($Application -in @('Draw', 'Math')) { Join-Path (Split-Path $applicationPath) $(if ($Application -eq 'Draw') { 'sdraw.exe' } else { 'smath.exe' }) } else { $applicationPath }
+    if ($Application -eq 'Base') {
+        $startupFile = Join-Path ([IO.Path]::GetTempPath()) ('KIS-Base-Startup-' + [guid]::NewGuid().ToString('N') + '.odb')
+        [IO.File]::Copy((Join-Path $env:ProgramFiles 'LibreOffice\presets\database\biblio.odb'), $startupFile)
+    }
+    $process = if ($Application -eq 'Base') { Start-Process -FilePath $startupPath -ArgumentList "`"$startupFile`"" -PassThru }
+        elseif ($Application -in @('LibreOffice', 'Calc', 'Impress', 'Draw', 'Math')) { Start-Process -FilePath $startupPath -PassThru }
+        else { Start-Process -FilePath $applicationPath -PassThru }
 }
 $previousClipboard = $null
 $clipboardChanged = $false
 $trackName = $null
 $testContentLoaded = $false
 try {
-    if ($Application -eq 'AcrobatReader' -and -not $UseExisting) {
+    if ($Application -in @('AcrobatReader', 'LibreOffice', 'Calc', 'Impress', 'Draw', 'Math', 'Base') -and -not $UseExisting) {
         Wait-Until { @(Get-Process -Name $processNames -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero }).Count -eq 1 } "$Application did not open exactly one main window." 30
         $windowProcess = @(Get-Process -Name $processNames -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero })[0]
         $process.Dispose()
@@ -187,12 +233,10 @@ try {
     } else {
         Wait-Until { $process.Refresh(); -not $process.HasExited -and $process.MainWindowHandle -ne [IntPtr]::Zero } "$Application did not open a window."
     }
-    if ($Application -ne 'AcrobatReader') {
+    if ($Application -notin @('AcrobatReader', 'LibreOffice', 'Calc', 'Impress', 'Draw', 'Math', 'Base')) {
         Assert-True (@(Get-Process -Name $processNames -ErrorAction SilentlyContinue).Count -eq 1) "Expected exactly one $Application process."
     }
     Assert-True ([PasteWindowProbe]::IsWindowEnabled($process.MainWindowHandle)) "$Application has a blocking dialog. Resolve it before running the test."
-    $pasteNotBefore = [DateTime]::UtcNow.AddSeconds(5)
-
     $directory = Join-Path ([IO.Path]::GetTempPath()) 'KIS-File-Paste-Test'
     [IO.Directory]::CreateDirectory($directory) | Out-Null
     $trackName = $(if ($Transfer -in @('OpenDialog', 'OpenDialogO', 'OpenDialogCtrlF12')) { 'KIS Öffnen ' } else { 'KIS-Paste-' }) + [guid]::NewGuid().ToString('N')
@@ -229,7 +273,7 @@ try {
     } elseif ($Application -eq 'Word' -and $extension -eq '.html') {
         [IO.File]::WriteAllText($filePath, '<!doctype html><html><body><p>Integration test document</p></body></html>', [Text.UTF8Encoding]::new($false))
         Write-Host "HTML file: $filePath"
-    } elseif ($Application -eq 'Word') {
+    } elseif ($Application -in @('Word', 'LibreOffice')) {
         Add-Type -AssemblyName System.IO.Compression
         $archive = [System.IO.Compression.ZipFile]::Open($filePath, [System.IO.Compression.ZipArchiveMode]::Create)
         try {
@@ -245,6 +289,81 @@ try {
             }
         } finally { $archive.Dispose() }
         Write-Host "DOCX file: $filePath"
+        if ($Application -eq 'LibreOffice') {
+            $firstTrackName = 'KIS-First-' + [guid]::NewGuid().ToString('N')
+            $firstFilePath = Join-Path $directory ($firstTrackName + $extension)
+            [IO.File]::Copy($filePath, $firstFilePath)
+            Write-Host "Second DOCX file: $firstFilePath"
+        }
+    } elseif ($Application -in @('Excel', 'Calc')) {
+        Add-Type -AssemblyName System.IO.Compression
+        $archive = [System.IO.Compression.ZipFile]::Open($filePath, [System.IO.Compression.ZipArchiveMode]::Create)
+        try {
+            $parts = @{
+                '[Content_Types].xml' = '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>'
+                '_rels/.rels' = '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'
+                'xl/workbook.xml' = '<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Integration test" sheetId="1" r:id="rId1"/></sheets></workbook>'
+                'xl/_rels/workbook.xml.rels' = '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>'
+                'xl/worksheets/sheet1.xml' = '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Integration test</t></is></c></row></sheetData></worksheet>'
+            }
+            foreach ($part in $parts.GetEnumerator()) {
+                $entry = $archive.CreateEntry($part.Key)
+                $writer = [IO.StreamWriter]::new($entry.Open(), [Text.UTF8Encoding]::new($false))
+                try { $writer.Write($part.Value) } finally { $writer.Dispose() }
+            }
+        } finally { $archive.Dispose() }
+        $firstTrackName = 'KIS-First-' + [guid]::NewGuid().ToString('N')
+        $firstFilePath = Join-Path $directory ($firstTrackName + $extension)
+        [IO.File]::Copy($filePath, $firstFilePath)
+        Write-Host "XLSX files: $firstFilePath; $filePath"
+    } elseif ($Application -eq 'Base') {
+        [IO.File]::Copy((Join-Path $env:ProgramFiles 'LibreOffice\presets\database\biblio.odb'), $filePath)
+        Write-Host "Base file: $filePath"
+    } elseif ($Application -eq 'Access') {
+        $engine = New-Object -ComObject DAO.DBEngine.120
+        try {
+            $database = $engine.CreateDatabase($filePath, ';LANGID=0x0409;CP=1252;COUNTRY=0', 128)
+            try { $database.Close() } finally { [void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($database) }
+        } finally { [void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($engine) }
+        Write-Host "Access file: $filePath"
+    } elseif ($Application -eq 'Math') {
+        $sourcePath = [IO.Path]::ChangeExtension($filePath, '.mml')
+        [IO.File]::WriteAllText($sourcePath, '<?xml version="1.0" encoding="UTF-8"?><math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mi>x</mi><mo>+</mo><mn>1</mn></mrow></math>', [Text.UTF8Encoding]::new($false))
+        Convert-WithLibreOffice $sourcePath 'odf' $directory $filePath
+        $firstTrackName = 'KIS-First-' + [guid]::NewGuid().ToString('N')
+        $firstFilePath = Join-Path $directory ($firstTrackName + $extension)
+        [IO.File]::Copy($filePath, $firstFilePath)
+        Write-Host "Math files: $firstFilePath; $filePath"
+    } elseif ($Application -eq 'Draw') {
+        Add-Type -AssemblyName System.IO.Compression
+        $mediaType = 'application/vnd.oasis.opendocument.graphics'
+        $body = '<office:drawing><draw:page draw:name="Page 1"/></office:drawing>'
+        $archive = [System.IO.Compression.ZipFile]::Open($filePath, [System.IO.Compression.ZipArchiveMode]::Create)
+        try {
+            $parts = [ordered] @{
+                'mimetype' = $mediaType
+                'content.xml' = "<?xml version=`"1.0`" encoding=`"UTF-8`"?><office:document-content xmlns:office=`"urn:oasis:names:tc:opendocument:xmlns:office:1.0`" xmlns:draw=`"urn:oasis:names:tc:opendocument:xmlns:drawing:1.0`" xmlns:math=`"http://www.w3.org/1998/Math/MathML`" office:version=`"1.2`"><office:body>$body</office:body></office:document-content>"
+                'META-INF/manifest.xml' = "<?xml version=`"1.0`" encoding=`"UTF-8`"?><manifest:manifest xmlns:manifest=`"urn:oasis:names:tc:opendocument:xmlns:manifest:1.0`" manifest:version=`"1.2`"><manifest:file-entry manifest:full-path=`"/`" manifest:media-type=`"$mediaType`"/><manifest:file-entry manifest:full-path=`"content.xml`" manifest:media-type=`"text/xml`"/></manifest:manifest>"
+            }
+            foreach ($part in $parts.GetEnumerator()) {
+                $entry = $archive.CreateEntry($part.Key, [System.IO.Compression.CompressionLevel]::NoCompression)
+                $writer = [IO.StreamWriter]::new($entry.Open(), [Text.UTF8Encoding]::new($false))
+                try { $writer.Write($part.Value) } finally { $writer.Dispose() }
+            }
+        } finally { $archive.Dispose() }
+        $firstTrackName = 'KIS-First-' + [guid]::NewGuid().ToString('N')
+        $firstFilePath = Join-Path $directory ($firstTrackName + $extension)
+        [IO.File]::Copy($filePath, $firstFilePath)
+        Write-Host "$Application files: $firstFilePath; $filePath"
+    } elseif ($Application -in @('PowerPoint', 'Impress')) {
+        $sourcePath = [IO.Path]::ChangeExtension($filePath, '.fodp')
+        $flatPresentation = '<?xml version="1.0" encoding="UTF-8"?><office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" office:version="1.2" office:mimetype="application/vnd.oasis.opendocument.presentation"><office:body><office:presentation><draw:page draw:name="Slide 1"><draw:frame svg:x="2cm" svg:y="2cm" svg:width="10cm" svg:height="3cm"><draw:text-box><text:p>Integration test presentation</text:p></draw:text-box></draw:frame></draw:page></office:presentation></office:body></office:document>'
+        [IO.File]::WriteAllText($sourcePath, $flatPresentation, [Text.UTF8Encoding]::new($false))
+        Convert-WithLibreOffice $sourcePath 'pptx' $directory $filePath
+        $firstTrackName = 'KIS-First-' + [guid]::NewGuid().ToString('N')
+        $firstFilePath = Join-Path $directory ($firstTrackName + $extension)
+        [IO.File]::Copy($filePath, $firstFilePath)
+        Write-Host "PPTX files: $firstFilePath; $filePath"
     } elseif ($Application -eq 'VLC') {
         [IO.File]::Copy((Join-Path $PSScriptRoot 'RunningAppTest.mp4'), $filePath)
         Write-Host "MP4 file: $filePath"
@@ -305,7 +424,19 @@ try {
         Assert-True ($emptyImageStatus.Count -eq 1) 'IrfanView must start without a loaded image for this test.'
     }
 
+    if ($Application -eq 'Impress' -and -not $UseExisting) {
+        $root = [System.Windows.Automation.AutomationElement]::FromHandle($window.Handle)
+        $condition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ClassNameProperty, 'SALSUBFRAME')
+        foreach ($dialog in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)) {
+            if ($dialog.Current.Name -in @('Dokumentvorlage auswählen', 'Select a Template') -and $dialog.Current.ProcessId -eq $process.Id -and $dialog.Current.NativeWindowHandle -ne 0) {
+                Assert-True ([PasteWindowProbe]::PostMessage([IntPtr] $dialog.Current.NativeWindowHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)) 'Could not close the test Impress template selector.'
+            }
+        }
+    }
+    $pasteNotBefore = [DateTime]::UtcNow.AddSeconds(5)
     Wait-Until { [DateTime]::UtcNow -ge $pasteNotBefore } "The $Application startup wait did not complete."
+    $process.Refresh()
+    Assert-True (-not $process.HasExited -and [PasteWindowProbe]::IsWindowEnabled($window.Handle)) "The $Application test window is no longer ready."
     if ($Transfer -ne 'ShellOpen') {
         Assert-True ([PasteWindowProbe]::ActivateTestWindow($window.Handle)) "Could not activate the $Application test window."
     }
@@ -367,7 +498,8 @@ try {
             Assert-True (-not $errorProbe.Opened) 'The running-app menu action reported a transfer error.'
         } finally { $errorProbe.Dispose() }
     } elseif ($Transfer -eq 'Resourceful') {
-        $task = $accessor.GetMethod('OpenInRunningAppResourcefully').Invoke($null, [object[]] @($window, [string[]] @([string] $filePath), $selectedApp))
+        $resourcefulFiles = if ($Application -in @('LibreOffice', 'Excel', 'Calc', 'PowerPoint', 'Impress', 'Draw', 'Math')) { [string[]] @($firstFilePath, $filePath) } else { [string[]] @($filePath) }
+        $task = $accessor.GetMethod('OpenInRunningAppResourcefully').Invoke($null, [object[]] @($window, [string[]] $resourcefulFiles, $selectedApp))
         Wait-Until { $task.IsCompleted } 'The resourceful operation did not complete.' 15
         $result = $task.GetAwaiter().GetResult()
         Assert-True (-not $result.Error) "The resourceful operation failed: $($result.Error)"
@@ -375,8 +507,8 @@ try {
             Assert-True ($result.Dialogs.Count -eq 1 -and $result.Dialogs[0].Submitted -and $null -eq $result.Drop) 'The Open dialog did not replace the drop.'
         } elseif ($Application -eq 'IrfanView') {
             Assert-True ($result.Dialogs.Count -eq 1 -and -not $result.Dialogs[0].Submitted -and $result.Drop.Dropped) "The fallback drop failed: $($result.Drop.Error)"
-        } elseif ($Application -in @('Word', 'AcrobatReader')) {
-            Assert-True ($result.ShellOpens.Count -eq 1 -and $result.ShellOpens[0].Dispatched -and $null -eq $result.Drop -and $result.Dialogs.Count -eq 0) 'The selected Shell Open handler was not used.'
+        } elseif ($Application -in @('Word', 'AcrobatReader', 'LibreOffice', 'Excel', 'Calc', 'PowerPoint', 'Impress', 'Draw', 'Math', 'Access', 'Base')) {
+            Assert-True ($result.ShellOpens.Count -eq $resourcefulFiles.Count -and @($result.ShellOpens | Where-Object { -not $_.Dispatched }).Count -eq 0 -and $null -eq $result.Drop -and $result.Dialogs.Count -eq 0) 'The selected Shell Open handler was not used for every file.'
         } else {
             Assert-True ($result.Dialogs.Count -eq 1 -and ($result.Dialogs[0].Submitted -or ($null -ne $result.Drop -and $result.Drop.Dropped))) 'Neither the Open dialog nor the fallback drop succeeded.'
             Write-Host "Dialog submitted: $($result.Dialogs[0].Submitted); drop accepted: $($null -ne $result.Drop -and $result.Drop.Dropped)"
@@ -408,6 +540,21 @@ try {
     }
     if ($Transfer -eq 'ShellOpen' -and $NonDefault) {
         Write-Host 'Shell Open dispatch completed; the application handles the dialog.'
+    } elseif ($Application -in @('Access', 'Base')) {
+        $expectedPath = if ($Application -eq 'Base') { Join-Path (Split-Path $applicationPath) 'soffice.bin' } else { $applicationPath }
+        Wait-Until {
+            @((Get-Process -Name $processNames -ErrorAction SilentlyContinue) | Where-Object {
+                $_.Path -ieq $expectedPath -and $_.MainWindowTitle -like "*$trackName*" -and
+                $_.MainWindowHandle -ne [IntPtr]::Zero -and [PasteWindowProbe]::IsWindowEnabled($_.MainWindowHandle)
+            }).Count -gt 0
+        } "$Application did not show the Resourceful test document in an enabled window." 25
+        $testContentLoaded = $true
+        Write-Host "$Application opened the Resourceful test document: $trackName"
+    } elseif ($Application -in @('LibreOffice', 'Excel', 'Calc', 'PowerPoint', 'Impress', 'Draw', 'Math')) {
+        $windowApplicationName = switch ($Application) { 'LibreOffice' { 'LibreOffice Writer' } { $_ -in @('Calc', 'Impress', 'Draw', 'Math') } { "LibreOffice $Application" } default { $Application } }
+        Wait-Until { (Find-ProcessDocument $firstTrackName $process.Id $windowApplicationName) -and (Find-ProcessDocument $trackName $process.Id $windowApplicationName) } "$Application did not show both Resourceful test documents in enabled windows." 25
+        $testContentLoaded = $true
+        Write-Host "$Application opened both Resourceful test documents: $firstTrackName; $trackName"
     } elseif ($Application -eq 'IrfanView' -and $Transfer -eq 'Paste') {
         $observationEnds = [DateTime]::UtcNow.AddSeconds(10)
         Wait-Until { [DateTime]::UtcNow -ge $observationEnds } 'The IrfanView observation period did not complete.'
@@ -486,6 +633,40 @@ try {
         $process.Refresh()
         try {
             if (-not $process.HasExited -and -not $UseExisting) {
+                if ($Application -eq 'Access') {
+                    foreach ($instance in @(Get-Process -Name $processNames -ErrorAction SilentlyContinue)) {
+                        if ($instance.Id -ne $process.Id -and $instance.Path -ieq $expectedPath -and $instance.MainWindowTitle -like "*$trackName*") {
+                            Assert-True ($instance.CloseMainWindow()) "The test $Application document did not close normally."
+                        }
+                    }
+                }
+                if ($Application -eq 'Base') {
+                    $startupName = [IO.Path]::GetFileNameWithoutExtension($startupFile)
+                    $roots = [System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
+                    foreach ($root in $roots) {
+                        try {
+                            if ($root.Current.ProcessId -eq $process.Id -and $root.Current.NativeWindowHandle -ne 0 -and
+                                ($root.Current.Name -like "*$trackName*" -or $root.Current.Name -like "*$startupName*")) {
+                                [void] [PasteWindowProbe]::PostMessage([IntPtr] $root.Current.NativeWindowHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
+                            }
+                        } catch [System.Windows.Automation.ElementNotAvailableException] { }
+                    }
+                    Wait-Until { $process.Refresh(); $process.HasExited -or (-not (Find-ShellDocument $trackName $processNames) -and -not (Find-ShellDocument $startupName $processNames)) } 'The test Base documents did not close.' 10
+                    $process.Refresh()
+                }
+                if ($Application -in @('LibreOffice', 'Excel', 'Calc', 'PowerPoint', 'Impress', 'Draw', 'Math')) {
+                    $roots = [System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
+                    foreach ($root in $roots) {
+                        try {
+                            if ($root.Current.ProcessId -eq $process.Id -and $root.Current.NativeWindowHandle -ne 0 -and
+                                ($root.Current.Name -like "*$trackName*" -or $root.Current.Name -like "*$firstTrackName*")) {
+                                [void] [PasteWindowProbe]::PostMessage([IntPtr] $root.Current.NativeWindowHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
+                            }
+                        } catch [System.Windows.Automation.ElementNotAvailableException] { }
+                    }
+                    Wait-Until { $process.Refresh(); $process.HasExited -or (-not (Find-ShellDocument $trackName $processNames) -and -not (Find-ShellDocument $firstTrackName $processNames)) } "The test $Application documents did not close." 10
+                    $process.Refresh()
+                }
                 if ($Transfer -eq 'ShellOpen' -and $Application -eq 'AcrobatReader' -and $testContentLoaded) {
                     $process.Refresh()
                     if ($process.MainWindowTitle -like "*$trackName*" -and [PasteWindowProbe]::ActivateTestWindow($process.MainWindowHandle)) {
@@ -547,7 +728,7 @@ try {
                         }
                     }
                 }
-                if (-not $process.HasExited -and -not $process.CloseMainWindow()) {
+                if (-not $process.HasExited -and ($Application -notin @('LibreOffice', 'Excel', 'Calc', 'PowerPoint', 'Impress', 'Draw', 'Math', 'Access', 'Base') -or $process.MainWindowHandle -ne [IntPtr]::Zero) -and -not $process.CloseMainWindow()) {
                     throw "$Application did not close normally. Resolve any open dialogs or unsaved work."
                 }
                 $promptHandled = $false

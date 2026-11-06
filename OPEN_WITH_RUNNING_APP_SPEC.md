@@ -209,7 +209,28 @@ the file as a separate document.
   In the observed environment IrfanView opened the file.
 - Resourceful integration tests check dialog submission without a drop in
   Audacity and a fallback drop in IrfanView. `ResourcefulOpen.Tests.ps1` checks
-  multi-file fallback and suppression when an unsupported dialog remains open.
+  multi-file fallback, suppression when an unsupported dialog remains open,
+  configured application identities and Shell Open failure handling.
+- `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application LibreOffice -Transfer Resourceful`
+  starts a test-owned Writer instance and passes two generated DOCX files in
+  one resourceful operation. In the observed environment, both selected
+  LibreOffice Shell handler requests were dispatched without dialog or drop
+  fallback, and both documents appeared in Writer windows. The test does not
+  alter the Windows default application.
+- The same script supports `Excel`, `PowerPoint`, `Access`, `Calc`, `Impress`,
+  `Draw`, `Math` and `Base` with `-Transfer Resourceful`. In the observed
+  environment each opened its test document; Excel, PowerPoint, Calc, Impress,
+  Draw and Math each opened two. Base uses temporary copies of LibreOffice's
+  bundled example database. Access can open a document in another process.
+  The tests cover these particular files and handlers, not every file format.
+- Integration tests start or explicitly select the target application first,
+  wait at least five seconds after window discovery, and check that the process
+  and window are still ready immediately before transferring files. They do not
+  require Shell Open to reuse the selected process or window.
+- Visio could not be tested because its first-start privacy dialog blocked the
+  test; no privacy choice was made. Outlook and OneNote were not tested because
+  isolated test profiles were not available. Publisher, Project and InfoPath
+  were not installed in the observed environment.
 - The same integration script supports `Word` (DOCX), `VLC` (MP4), and
   `AcrobatReader` (PDF), for example:
   `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application VLC -Transfer Resourceful`.
@@ -254,6 +275,7 @@ the file as a separate document.
 - [RunningAppsAccessor.cs](RunningAppsAccessor.cs)
 - [RunningAppsAccessor.Tests.ps1](tests/RunningAppsAccessor.Tests.ps1)
 - [RunningAppsAssociations.Tests.ps1](tests/RunningAppsAssociations.Tests.ps1)
+- [ResourcefulOpen.Tests.ps1](tests/ResourcefulOpen.Tests.ps1)
 - [CompareOpenWithApps.ps1](tests/CompareOpenWithApps.ps1)
 - [OpenInRunningAppInteraction.Tests.ps1](tests/OpenInRunningAppInteraction.Tests.ps1)
 - [AudacityPaste.Integration.ps1](tests/AudacityPaste.Integration.ps1)
