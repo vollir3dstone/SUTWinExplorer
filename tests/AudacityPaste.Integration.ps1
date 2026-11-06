@@ -117,7 +117,7 @@ if ($Transfer -eq 'Menu') {
 $extension = if ($Application -eq 'Audacity') { '.wav' } else { '.jpg' }
 $executableNames = if ($Application -eq 'Audacity') { @('Audacity.exe') } else { @('i_view64.exe', 'i_view32.exe') }
 $processNames = if ($Application -eq 'Audacity') { @('audacity') } else { @('i_view64', 'i_view32') }
-$registered = @($accessor.GetMethod('GetRegisteredApps').Invoke($null, @([string] "test$extension")) |
+$registered = @($accessor.GetMethod('GetAppsToChooseFrom').Invoke($null, @([string] "test$extension")) |
     Where-Object { [IO.Path]::GetFileName($_.Id) -in $executableNames -and [IO.File]::Exists($_.Id) })
 Assert-True ($registered.Count -eq 1) "Expected exactly one registered $Application executable for $extension files."
 $applicationPath = [string] $registered[0].Id

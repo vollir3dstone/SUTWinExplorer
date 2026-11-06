@@ -130,7 +130,7 @@ public partial class ContentView : UserControl
             var apps = RunningAppsAccessor.GetRunningApps(paths[0]);
             foreach (var path in paths.Skip(1).DistinctBy(Path.GetExtension, StringComparer.OrdinalIgnoreCase))
             {
-                var registered = RunningAppsAccessor.GetRegisteredApps(path).Select(app => app.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var registered = RunningAppsAccessor.GetAppsToChooseFrom(path).Select(app => app.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
                 apps = apps.Where(app => registered.Contains(app.App.Id)).ToArray();
             }
             var selectedPaths = paths.ToArray();

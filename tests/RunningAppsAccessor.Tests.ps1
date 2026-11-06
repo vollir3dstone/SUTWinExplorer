@@ -100,7 +100,7 @@ try {
     Assert-True (@($accessor.GetMethod('GetUserWindows').Invoke($null, @($otherApp))).Count -eq 0) 'Windows from an unrelated app were returned.'
 
     $filePath = "C:\example\document$extension"
-    $apps = @($accessor.GetMethod('GetRegisteredApps').Invoke($null, @($filePath)))
+    $apps = @($accessor.GetMethod('GetAppsToChooseFrom').Invoke($null, @($filePath)))
     $registered = @($apps | Where-Object { $_.Id -ieq $processPath })
     Assert-True ($registered.Count -eq 1) "The registered application was not found: $($apps.Id -join ', ')."
     Assert-True (-not [string]::IsNullOrWhiteSpace($registered[0].Name)) 'The registered application has no display name.'
@@ -108,10 +108,10 @@ try {
     $match = @($running | Where-Object { $_.App.Id -ieq $processPath })
     Assert-True ($match.Count -eq 1) 'The registered running application was not found.'
     Assert-True (@($match[0].Windows | Where-Object Handle -eq $firstHandle).Count -eq 1) 'The combined result did not contain the visible window.'
-    Assert-True (@($accessor.GetMethod('GetRegisteredApps').Invoke($null, @('C:\example\no-extension'))).Count -eq 0) 'An extensionless path returned registered applications.'
+    Assert-True (@($accessor.GetMethod('GetAppsToChooseFrom').Invoke($null, @('C:\example\no-extension'))).Count -eq 0) 'An extensionless path returned registered applications.'
 
-    $wavApps = @($accessor.GetMethod('GetRegisteredApps').Invoke($null, @('C:\example\audio.wav')))
-    $wavExtensionApps = @($accessor.GetMethod('GetRegisteredApps').Invoke($null, @('.WAV')))
+    $wavApps = @($accessor.GetMethod('GetAppsToChooseFrom').Invoke($null, @('C:\example\audio.wav')))
+    $wavExtensionApps = @($accessor.GetMethod('GetAppsToChooseFrom').Invoke($null, @('.WAV')))
     $wavIds = @($wavApps | ForEach-Object { $_.Id } | Sort-Object)
     $wavExtensionIds = @($wavExtensionApps | ForEach-Object { $_.Id } | Sort-Object)
     Assert-True ($wavIds.Count -eq $wavExtensionIds.Count -and @($wavIds | Where-Object { $_ -notin $wavExtensionIds }).Count -eq 0) 'The WAV path and extension returned different registered applications.'

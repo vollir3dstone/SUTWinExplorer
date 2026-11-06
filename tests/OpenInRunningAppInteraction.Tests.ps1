@@ -169,6 +169,13 @@ try {
         $discovered = @($actualActions)
         if (@($discovered | Where-Object { $_.Label -like "*Running && Window $suffix" }).Count -ne 1) { throw 'The registered application window was not listed with an escaped title.' }
         if (@($discovered | Where-Object { $_.Label -like "*Running Second Window $suffix" }).Count -ne 1) { throw 'The second registered application window was not listed.' }
+        $otherFile = Join-Path $directory "other.kisother$suffix"
+        [IO.File]::WriteAllText($otherFile, 'test')
+        $accessor = $assembly.GetType('SUTWinExplorer.RunningAppsAccessor', $true)
+        $otherApps = @($accessor.GetMethod('GetAppsToChooseFrom').Invoke($null, @([string] $otherFile)))
+        $expectedMatches = [int] (@($otherApps | Where-Object { $_.Id -ieq (Get-Process -Id $PID).Path }).Count -gt 0)
+        $multiActions = @($createRunning.Invoke($view, [object[]] @(,[string[]] @($runningFile, $otherFile))))
+        if (@($multiActions | Where-Object { $_.Label -like "*Running && Window $suffix" }).Count -ne $expectedMatches) { throw 'The selected file types did not use the generic application intersection.' }
         $matchingAction = @($discovered | Where-Object { $_.Label -like "*Running && Window $suffix" })[0]
         if ($null -eq $matchingAction.MenuImage) { throw 'The registered application icon was not loaded.' }
         $windowHandle = [System.Windows.Interop.WindowInteropHelper]::new($testWindow).Handle

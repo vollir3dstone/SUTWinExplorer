@@ -33,6 +33,27 @@ application supports opening files this way.
 
 - Discover registered applications from the Windows Shell associations for the
   file's extension. A path without an extension has no matching applications.
+- `GetRegisteredApps` uses `SHAssocEnumHandlers` with `ASSOC_FILTER_NONE` and
+  returns all handlers. `GetRecommendedApps` uses the same Shell API
+  with `ASSOC_FILTER_RECOMMENDED`, returning the handlers Windows marks as
+  recommended for the type. `GetAppsToChooseFrom` currently delegates to
+  `GetRecommendedApps`; the GUI and running-app lookup use this wrapper for
+  every selected file type, allowing the selection strategy to be changed.
+- The Shell's Open With registration sources include `OpenWithProgids` and
+  application `SupportedTypes`; recommendations may also change after user
+  choices. The Shell can show additional non-recommended applications. The
+  recommended filter is a comparison candidate, not a guarantee of matching
+  every entry or the ordering of a particular Windows Open With menu or dialog.
+  The Shell's owner-drawn Open With submenu is populated dynamically. On the
+  development machine, the initialized `.txt` submenu contained the same six
+  distinct app names as the recommended query, plus a duplicate LibreOffice
+  entry. This observation does not establish equivalence for other file types.
+- Compare the methods without changing the GUI using
+  `pwsh -NoProfile -STA -File tests/CompareOpenWithApps.ps1 -Path .wav`.
+- Microsoft documents [handler enumeration and filters](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-shassocenumhandlers),
+  [recommendation status](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-iassochandler-isrecommended),
+  [OpenWithProgids](https://learn.microsoft.com/en-us/windows/win32/shell/how-to-include-an-application-on-the-open-with-dialog-box),
+  and [SupportedTypes](https://learn.microsoft.com/en-us/windows/win32/shell/app-registration#using-the-applications-subkey).
 - Return an application identifier and display name for each association. An
   identifier is used for matching and is not necessarily an executable path.
 - For each registered application, identify its visible, uncloaked top-level
@@ -140,5 +161,7 @@ the file as a separate document.
 
 - [RunningAppsAccessor.cs](RunningAppsAccessor.cs)
 - [RunningAppsAccessor.Tests.ps1](tests/RunningAppsAccessor.Tests.ps1)
+- [RunningAppsAssociations.Tests.ps1](tests/RunningAppsAssociations.Tests.ps1)
+- [CompareOpenWithApps.ps1](tests/CompareOpenWithApps.ps1)
 - [OpenInRunningAppInteraction.Tests.ps1](tests/OpenInRunningAppInteraction.Tests.ps1)
 - [AudacityPaste.Integration.ps1](tests/AudacityPaste.Integration.ps1)

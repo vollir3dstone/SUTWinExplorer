@@ -15,14 +15,26 @@ public sealed record ResourcefulOpenResult(PasteClipboardResult Paste, DropToWin
 
 public static class RunningAppsAccessor
 {
+    private const uint AllAssociationHandlers = 0;
+    private const uint RecommendedAssociationHandlers = 1;
+
     public static IReadOnlyList<RegisteredApp> GetRegisteredApps(string filePath)
+        => GetRegisteredApps(filePath, AllAssociationHandlers);
+
+    public static IReadOnlyList<RegisteredApp> GetRecommendedApps(string filePath)
+        => GetRegisteredApps(filePath, RecommendedAssociationHandlers);
+
+    public static IReadOnlyList<RegisteredApp> GetAppsToChooseFrom(string filePath)
+        => GetRecommendedApps(filePath);
+
+    private static IReadOnlyList<RegisteredApp> GetRegisteredApps(string filePath, uint filter)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         string extension = Path.GetExtension(filePath);
         if (string.IsNullOrEmpty(extension) || extension == ".")
             return Array.Empty<RegisteredApp>();
 
-        Marshal.ThrowExceptionForHR(SHAssocEnumHandlers(extension, 0, out var enumerator));
+        Marshal.ThrowExceptionForHR(SHAssocEnumHandlers(extension, filter, out var enumerator));
         var apps = new Dictionary<string, RegisteredApp>(StringComparer.OrdinalIgnoreCase);
         try
         {
@@ -76,7 +88,7 @@ public static class RunningAppsAccessor
 
     public static IReadOnlyList<RunningApp> GetRunningApps(string filePath)
     {
-        return GetRegisteredApps(filePath)
+        return GetAppsToChooseFrom(filePath)
             .Select(app => new RunningApp(app, GetUserWindows(app)))
             .Where(app => app.Windows.Count != 0)
             .ToArray();
