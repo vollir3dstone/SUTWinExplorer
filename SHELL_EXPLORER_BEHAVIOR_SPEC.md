@@ -393,14 +393,21 @@ may show its requested row in light gray without changing the active selection.
   Directories precede files; both groups use the same tab-scoped sort history.
   Clicking any column makes it the primary criterion, and a triangle
   indicates its direction. Earlier columns remain as secondary criteria.
-- [x] The adjacent private column is headed `MT`, is 16 DIP wide with 8 DIP
-  of space to its left, and displays a 16-by-16 DIP media type icon for each
-  filesystem item, in Shell view order.
+- [x] The `MT` column displays a 16-by-16 DIP media type icon for each
+  filesystem item.
   Directories use the standard folder icon, `.lnk` files use the Shell-link
-  icon asset, and conflicting media type assignments use a warning triangle. Other
+  icon asset, and ambiguous media types use a warning triangle. Other
   extensions are matched case-insensitively against `Assets/media-types.json`;
   unknown extensions are blank. The manually maintained JSON is embedded at
   build time; media type names remain available to accessibility tools.
+- [x] The fixed 30-DIP `ST` column immediately follows `MT` and displays the
+  media type sub type as `TE` for `TEXT`, `ED` for `EDIT`, or `RE` for
+  `RENDER`. `WITHOUT_SUBTYPE` is displayed as an empty cell. The column is not
+  sortable or resizable and remains visible when the right columns are hidden.
+  JSON subtype groups `text`, `edit`, and `render` apply independently of the
+  media type; an extension array without groups means `WITHOUT_SUBTYPE`.
+  The build rejects invalid JSON and conflicting extension assignments,
+  including assignments to different subtypes of the same media type.
 - [x] The WPF application chrome keeps the app's custom tabs, address field,
   directory trees, and item-count status area.
 - [x] Below the two visibility checkboxes, the content pane provides the

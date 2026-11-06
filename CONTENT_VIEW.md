@@ -484,13 +484,21 @@ Directories are classified first, followed by `.lnk` and `.url` files. For all o
 files, the extension is matched case-insensitively against the manually
 maintained [media-types.json](./Assets/media-types.json), which is the source
 of the media type names and extension mapping. No match or no extension
-displays an empty cell. Repeating an extension for the same type does not make
-it ambiguous. The media type name remains available as the row's accessibility
-name.
+displays an empty cell. The media type name remains available as the row's
+accessibility name.
 
-The fixed-width `ST` column follows `MT` and displays the media type sub type
-as `TE` (text), `ED` (edit), or `RE` (render).
-Items without a media type sub type have an empty cell.
+The non-sortable, fixed 30-DIP `ST` column follows `MT` and stays visible when
+the right columns are hidden. It displays the media type sub type as `TE`
+(`TEXT`), `ED` (`EDIT`), or `RE` (`RENDER`); `WITHOUT_SUBTYPE` displays an
+empty cell. These enum values are shared across media types. JSON extensions
+may be an array without a sub type or an object whose `text`, `edit`, and
+`render` properties contain extension arrays. For example, `.md` and `.svg`
+are `TEXT`, `.zip` is `EDIT`, and `.pdf` is `RENDER`; `.exe` has no sub type.
+
+Build validation rejects invalid JSON and conflicting assignments of an
+extension to different media types or media type sub types. Extension matching
+is case-insensitive; repeated assignments to the same type and sub type are
+allowed.
 
 The supported media types are fixed by the internal `MediaType` enum. Their
 names below are the exact identifiers used in the JSON; the second mapping
@@ -528,7 +536,8 @@ manually and must never be modified autonomously by the application, tooling,
 or an AI assistant. An AI assistant may edit it only when the user explicitly
 requests that change; adding types, resolving conflicts, or formatting it are
 not implicit permission to edit the file. A missing or malformed embedded
-mapping or an unsupported JSON media type is an error, not an empty mapping.
+mapping or an unsupported JSON media type or media type sub type is an error,
+not an empty mapping.
 Introducing a new media type requires updating the enum and icon mapping as
 well as the JSON.
 

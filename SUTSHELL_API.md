@@ -141,7 +141,8 @@ finish and are no longer reachable. Memory is reclaimed by the runtime.
 On a cache miss, SutShell enumerates every immediate filesystem child, or drive
 roots for This PC. For each accessible candidate it reads attributes, resolves
 the Shell display name with a filesystem-name fallback, and creates a
-`DirectoryItem` containing path, name, directory/drive flags and media type.
+`DirectoryItem` containing path, name, directory/drive flags, media type and
+media type sub type.
 This happens before applying the view filters, so currently hidden records are
 also available for later filter changes. Per-item I/O or access failures during
 enumeration skip that item; a directory-level enumeration failure is reported
@@ -262,8 +263,9 @@ background loading policy, publication checks, and lifecycle are specified in
 [ContentView](CONTENT_VIEW.md#range-scheduling).
 
 An entry carries its display name, filesystem path, directory flag, type,
-formatted size and date, Shell icon/overlay, and media-type icon and accessible
-name. In the Windows implementation, the entry contains at most one classical
+formatted size and date, Shell icon/overlay, media-type icon and accessible
+name, and formatted media type sub type (`TE`, `ED`, `RE`, or empty). In the
+Windows implementation, the entry contains at most one classical
 Shell overlay: it is the overlay selected by Windows, not a list of all applicable
 overlay handlers. Explorer status-column icons are not necessarily overlays.
 The asynchronous APIs check cancellation between items; an in-progress OS
