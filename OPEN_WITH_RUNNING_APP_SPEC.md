@@ -80,9 +80,15 @@ the file as a separate document.
   change existing content; callers must select this method with care.
 - `LetOpenByDialogUsingCtrlF12` uses the same dialog handling with `Ctrl+F12`.
   This is an alternative for Word, noted in its configuration entry.
-- Only a newly created foreground standard Win32 dialog owned directly by the
-  selected window in the same process is considered. The method looks for the
-  standard file name edit control and an enabled Open button; the supported
+- Only a newly created foreground standard Win32 dialog in the selected
+  window's process is considered. Normally it must be owned directly by the
+  selected window. A different existing owner is also accepted when it and the
+  target were the only visible process windows before the shortcut, were both
+  enabled then and remain visible but disabled while the dialog is open. Tool
+  windows owned by the target are excluded from this count. Other independent
+  windows appearing later make the match ambiguous. The owner and window state
+  are checked again before entering the path and submitting the dialog. The method
+  looks for the standard file name edit control and an enabled Open button; the supported
   button names are currently `Open` and `Öffnen`. It enters the full Unicode
   path, verifies it, and posts the button click. Other dialogs are left alone.
 - Success means the click was posted, not that the file opened or that an
@@ -193,6 +199,23 @@ the file as a separate document.
 
 ## Verification
 
+The minimum regression gate for changes to opening files in running
+applications consists of all five resourceful integration tests, run
+sequentially:
+
+```powershell
+pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application Audacity -Transfer Resourceful
+pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application IrfanView -Transfer Resourceful
+pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application VLC -Transfer Resourceful
+pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application Resonic -Transfer Resourceful
+pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application Word -Transfer Resourceful
+```
+
+All five must pass; do not skip a test because its target application is
+already running. Close the blocking application before the test, normally if
+possible and forcibly if necessary. Forced termination can discard unsaved work.
+A blocked or skipped test leaves the minimum gate incomplete.
+
 - The accessor tests cover association and window discovery, clipboard
   validation and key delivery, and drops to a test window, including explicit
   and invalid positions.
@@ -210,7 +233,11 @@ the file as a separate document.
 - Resourceful integration tests check dialog submission without a drop in
   Audacity and a fallback drop in IrfanView. `ResourcefulOpen.Tests.ps1` checks
   multi-file fallback, suppression when an unsupported dialog remains open,
+  direct and shared dialog owners, ambiguous or changed window states,
   configured application identities and Shell Open failure handling.
+- The `Resonic` integration test checks both `OpenDialog` and `Resourceful`
+  with a generated WAV file. In the observed environment, Resonic opened the
+  file through its application-owned standard dialog without a fallback drop.
 - `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application LibreOffice -Transfer Resourceful`
   starts a test-owned Writer instance and passes two generated DOCX files in
   one resourceful operation. In the observed environment, both selected

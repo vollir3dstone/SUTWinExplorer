@@ -11,6 +11,7 @@ public static class ResourcefulTestNative
     [DllImport("user32.dll")] private static extern bool AttachThreadInput(uint thread, uint other, bool attach);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr window);
     [DllImport("user32.dll")] private static extern bool BringWindowToTop(IntPtr window);
+    [DllImport("user32.dll")] public static extern bool EnableWindow(IntPtr window, bool enabled);
     public static bool Activate(IntPtr window)
     {
         uint foreground = GetWindowThreadProcessId(GetForegroundWindow(), out _);
@@ -138,8 +139,55 @@ try {
     $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile), $null))
     $result = Wait-ResourcefulTask $task
     if ($null -eq $script:resourcefulDialog -or $null -ne $result.Drop -or -not $result.Error -or $script:resourcefulFiles.Count -ne 0) { throw 'An open unsupported dialog did not prevent the fallback drop.' }
+    $dialogHandle = [System.Windows.Interop.WindowInteropHelper]::new($script:resourcefulDialog).Handle
+    $existingHandles = [Collections.Generic.HashSet[IntPtr]]::new()
+    [void] $existingHandles.Add($targetHandle)
+    $matchDialogOwner = $accessor.GetMethod('IsExpectedOpenDialogOwner', $privateStatic)
+    if (-not $matchDialogOwner.Invoke($null, [object[]] @($dialogHandle, $targetHandle, [uint32] $PID, $existingHandles, $existingHandles))) { throw 'A directly owned dialog was not recognized.' }
+    if ($matchDialogOwner.Invoke($null, [object[]] @($dialogHandle, $dialogHandle, [uint32] $PID, $existingHandles, $existingHandles))) { throw 'An unrelated same-process dialog owner was accepted.' }
     $script:resourcefulDialog.Close()
     $script:resourcefulDialog = $null
+    $sharedOwner = [System.Windows.Window]::new()
+    $sharedOwner.Title = 'Shared application window'
+    $sharedDialog = [System.Windows.Window]::new()
+    $sharedDialog.Title = 'Shared owner test dialog'
+    try {
+        $sharedOwner.Show()
+        $sharedDialog.Owner = $sharedOwner
+        $sharedDialog.Show()
+        $sharedOwnerHandle = [System.Windows.Interop.WindowInteropHelper]::new($sharedOwner).Handle
+        $sharedDialogHandle = [System.Windows.Interop.WindowInteropHelper]::new($sharedDialog).Handle
+        $visibleBefore = [Collections.Generic.HashSet[IntPtr]]::new()
+        [void] $visibleBefore.Add($targetHandle)
+        [void] $visibleBefore.Add($sharedOwnerHandle)
+        $enabledBefore = [Collections.Generic.HashSet[IntPtr]]::new($visibleBefore)
+        [void] [ResourcefulTestNative]::EnableWindow($targetHandle, $false)
+        [void] [ResourcefulTestNative]::EnableWindow($sharedOwnerHandle, $false)
+        if (-not $matchDialogOwner.Invoke($null, [object[]] @($sharedDialogHandle, $targetHandle, [uint32] $PID, $visibleBefore, $enabledBefore))) { throw 'A uniquely identified shared application owner was rejected.' }
+        $extraWindow = [System.Windows.Window]::new()
+        try {
+            $extraWindow.Title = 'Additional application window'
+            $extraWindow.Show()
+            if ($matchDialogOwner.Invoke($null, [object[]] @($sharedDialogHandle, $targetHandle, [uint32] $PID, $visibleBefore, $enabledBefore))) { throw 'A newly visible unrelated window was accepted.' }
+        } finally { $extraWindow.Close() }
+        if ($matchDialogOwner.Invoke($null, [object[]] @($sharedDialogHandle, $targetHandle, [uint32] 0, $visibleBefore, $enabledBefore))) { throw 'A shared owner from a different process was accepted.' }
+        [void] $visibleBefore.Add($sharedDialogHandle)
+        if ($matchDialogOwner.Invoke($null, [object[]] @($sharedDialogHandle, $targetHandle, [uint32] $PID, $visibleBefore, $enabledBefore))) { throw 'An ambiguous shared owner was accepted.' }
+        [void] $visibleBefore.Remove($sharedDialogHandle)
+        [void] $enabledBefore.Remove($sharedOwnerHandle)
+        if ($matchDialogOwner.Invoke($null, [object[]] @($sharedDialogHandle, $targetHandle, [uint32] $PID, $visibleBefore, $enabledBefore))) { throw 'A previously disabled shared owner was accepted.' }
+        [void] $enabledBefore.Add($sharedOwnerHandle)
+        [void] [ResourcefulTestNative]::EnableWindow($targetHandle, $true)
+        if ($matchDialogOwner.Invoke($null, [object[]] @($sharedDialogHandle, $targetHandle, [uint32] $PID, $visibleBefore, $enabledBefore))) { throw 'A shared owner was accepted while the target remained enabled.' }
+        [void] [ResourcefulTestNative]::EnableWindow($targetHandle, $false)
+        [void] [ResourcefulTestNative]::EnableWindow($sharedOwnerHandle, $true)
+        if ($matchDialogOwner.Invoke($null, [object[]] @($sharedDialogHandle, $targetHandle, [uint32] $PID, $visibleBefore, $enabledBefore))) { throw 'An enabled shared owner was accepted.' }
+    } finally {
+        [void] [ResourcefulTestNative]::EnableWindow($targetHandle, $true)
+        if ($sharedOwnerHandle -ne [IntPtr]::Zero) { [void] [ResourcefulTestNative]::EnableWindow($sharedOwnerHandle, $true) }
+        $sharedDialog.Close()
+        $sharedOwner.Close()
+    }
     $script:keepDialogInBackground = $true
     if (-not [ResourcefulTestNative]::Activate($targetHandle)) { throw 'Could not reactivate the test window.' }
     $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile), $null))

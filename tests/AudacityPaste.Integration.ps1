@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('Audacity', 'IrfanView', 'Word', 'VLC', 'AcrobatReader', 'LibreOffice', 'Excel', 'Calc', 'PowerPoint', 'Impress', 'Draw', 'Math', 'Access', 'Base')]
+    [ValidateSet('Audacity', 'IrfanView', 'Word', 'VLC', 'AcrobatReader', 'LibreOffice', 'Excel', 'Calc', 'PowerPoint', 'Impress', 'Draw', 'Math', 'Access', 'Base', 'Resonic')]
     [string] $Application = 'Audacity',
     [ValidateSet('Paste', 'Drop', 'Resourceful', 'Menu', 'OpenDialog', 'OpenDialogO', 'OpenDialogCtrlF12', 'ShellOpen')]
     [string] $Transfer = 'Paste',
@@ -177,6 +177,7 @@ $extension, $executableNames, $processNames = switch ($Application) {
     'Math' { '.odf'; ,@('soffice.exe'); ,@('soffice', 'soffice.bin') }
     'Access' { '.accdb'; ,@('MSACCESS.EXE'); ,@('MSACCESS') }
     'Base' { '.odb'; ,@('sbase.exe'); ,@('soffice', 'soffice.bin') }
+    'Resonic' { '.wav'; ,@('Resonic.exe'); ,@('Resonic') }
 }
 if ($Application -in @('LibreOffice', 'Excel', 'Calc', 'PowerPoint', 'Impress', 'Draw', 'Math', 'Access', 'Base')) {
     Assert-True ($Transfer -eq 'Resourceful' -and -not $UseExisting) "$Application integration requires Resourceful and a test-started instance."
@@ -241,7 +242,7 @@ try {
     [IO.Directory]::CreateDirectory($directory) | Out-Null
     $trackName = $(if ($Transfer -in @('OpenDialog', 'OpenDialogO', 'OpenDialogCtrlF12')) { 'KIS Öffnen ' } else { 'KIS-Paste-' }) + [guid]::NewGuid().ToString('N')
     $filePath = Join-Path $directory ($trackName + $extension)
-    if ($Application -eq 'Audacity') {
+    if ($Application -in @('Audacity', 'Resonic')) {
     $sampleRate = 44100
     $sampleCount = $sampleRate
     $writer = [IO.BinaryWriter]::new([IO.File]::Create($filePath))
@@ -407,15 +408,25 @@ try {
         Write-Host "JPEG file: $filePath (160 x 100 pixels)"
     }
 
+    if ($Application -eq 'Resonic') {
+        Wait-Until {
+            $apps = @($accessor.GetMethod('GetRunningApps').Invoke($null, @([string] $filePath)) | Where-Object { $_.App.Id -ieq $applicationPath })
+            $script:resonicWindows = @($apps.Windows | Where-Object { $_.Title -match '(?i)resonic player' })
+            $script:resonicWindows.Count -eq 1
+        } 'The Resonic player window was not found.' 20
+        $targetHandle = $script:resonicWindows[0].Handle
+    }
     Wait-Until {
         $process.Refresh()
         $apps = @($accessor.GetMethod('GetRunningApps').Invoke($null, @([string] $filePath)) | Where-Object { $_.App.Id -ieq $applicationPath })
-        return $apps.Count -eq 1 -and @($apps[0].Windows | Where-Object { $_.Handle -eq $process.MainWindowHandle }).Count -eq 1
+        $expectedHandle = if ($Application -eq 'Resonic') { $targetHandle } else { $process.MainWindowHandle }
+        return $apps.Count -eq 1 -and @($apps[0].Windows | Where-Object { $_.Handle -eq $expectedHandle }).Count -eq 1
     } "The $Application main window was not found among the running apps." 20
     $running = @($accessor.GetMethod('GetRunningApps').Invoke($null, @([string] $filePath)))
     $matchingApps = @($running | Where-Object { $_.App.Id -ieq $applicationPath })
     Assert-True ($matchingApps.Count -eq 1) "Expected exactly one $Application application."
-    $mainWindows = @($matchingApps[0].Windows | Where-Object { $_.Handle -eq $process.MainWindowHandle })
+    $expectedHandle = if ($Application -eq 'Resonic') { $targetHandle } else { $process.MainWindowHandle }
+    $mainWindows = @($matchingApps[0].Windows | Where-Object { $_.Handle -eq $expectedHandle })
     Assert-True ($mainWindows.Count -eq 1) "The started $Application main window was not found exactly once."
     $window = $mainWindows[0].PSObject.BaseObject
     Assert-True (@(Get-WindowNames $window.Handle | Where-Object { $_ -like "*$trackName*" }).Count -eq 0) 'The test track was already present before paste.'
@@ -503,7 +514,7 @@ try {
         Wait-Until { $task.IsCompleted } 'The resourceful operation did not complete.' 15
         $result = $task.GetAwaiter().GetResult()
         Assert-True (-not $result.Error) "The resourceful operation failed: $($result.Error)"
-        if ($Application -eq 'Audacity') {
+        if ($Application -in @('Audacity', 'Resonic')) {
             Assert-True ($result.Dialogs.Count -eq 1 -and $result.Dialogs[0].Submitted -and $null -eq $result.Drop) 'The Open dialog did not replace the drop.'
         } elseif ($Application -eq 'IrfanView') {
             Assert-True ($result.Dialogs.Count -eq 1 -and -not $result.Dialogs[0].Submitted -and $result.Drop.Dropped) "The fallback drop failed: $($result.Drop.Error)"
@@ -569,6 +580,8 @@ try {
                 $currentProcessIds = @($currentProcesses | Select-Object -ExpandProperty Id)
                 $roots = [System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
                 $handles = @($roots | Where-Object { $_.Current.ProcessId -in $currentProcessIds -and $_.Current.NativeWindowHandle -ne 0 } | ForEach-Object { [IntPtr] $_.Current.NativeWindowHandle })
+            } elseif ($Application -eq 'Resonic') {
+                $handles = @($window.Handle)
             } else {
                 $process.Refresh()
                 $handles = @($process.MainWindowHandle)
