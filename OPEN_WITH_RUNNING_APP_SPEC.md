@@ -200,7 +200,7 @@ the file as a separate document.
 ## Verification
 
 The minimum regression gate for changes to opening files in running
-applications consists of all five resourceful integration tests, run
+applications consists of all seven resourceful integration tests, run
 sequentially:
 
 ```powershell
@@ -209,9 +209,11 @@ pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application Irfa
 pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application VLC -Transfer Resourceful
 pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application Resonic -Transfer Resourceful
 pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application Word -Transfer Resourceful
+pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application WindowsMediaPlayerLegacy -Transfer Resourceful
+pwsh -NoProfile -STA -File tests/WindowsMediaPlayer.Integration.ps1
 ```
 
-All five must pass; do not skip a test because its target application is
+All seven must pass; do not skip a test because its target application is
 already running. Close the blocking application before the test, normally if
 possible and forcibly if necessary. Forced termination can discard unsaved work.
 A blocked or skipped test leaves the minimum gate incomplete.
@@ -238,6 +240,13 @@ A blocked or skipped test leaves the minimum gate incomplete.
 - The `Resonic` integration test checks both `OpenDialog` and `Resourceful`
   with a generated WAV file. In the observed environment, Resonic opened the
   file through its application-owned standard dialog without a fallback drop.
+- The Legacy player test submits a generated silent WAV through the Open
+  dialog and observes its process transition to an active audio session. It
+  does not independently inspect the current track's filename.
+- The modern Windows Media Player test checks discovery of its packaged,
+  hosted window before transferring a WAV and checking the displayed track.
+  In the observed environment discovery fails, so the seven-test gate is not
+  yet complete; the Resourceful transfer itself has not been verified there.
 - `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application LibreOffice -Transfer Resourceful`
   starts a test-owned Writer instance and passes two generated DOCX files in
   one resourceful operation. In the observed environment, both selected

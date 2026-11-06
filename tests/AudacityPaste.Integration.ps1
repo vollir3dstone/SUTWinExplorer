@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('Audacity', 'IrfanView', 'Word', 'VLC', 'AcrobatReader', 'LibreOffice', 'Excel', 'Calc', 'PowerPoint', 'Impress', 'Draw', 'Math', 'Access', 'Base', 'Resonic')]
+    [ValidateSet('Audacity', 'IrfanView', 'Word', 'VLC', 'AcrobatReader', 'LibreOffice', 'Excel', 'Calc', 'PowerPoint', 'Impress', 'Draw', 'Math', 'Access', 'Base', 'Resonic', 'WindowsMediaPlayerLegacy')]
     [string] $Application = 'Audacity',
     [ValidateSet('Paste', 'Drop', 'Resourceful', 'Menu', 'OpenDialog', 'OpenDialogO', 'OpenDialogCtrlF12', 'ShellOpen')]
     [string] $Transfer = 'Paste',
@@ -46,6 +46,103 @@ public static class PasteWindowProbe
         bool attached = foreground != 0 && foreground != current && AttachThreadInput(current, foreground, true);
         try { BringWindowToTop(window); return SetForegroundWindow(window); }
         finally { if (attached) AttachThreadInput(current, foreground, false); }
+    }
+}
+
+[ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
+public class AudioDeviceEnumerator { }
+
+[ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface ITestAudioDeviceEnumerator
+{
+    void EnumAudioEndpoints();
+    void GetDefaultAudioEndpoint(int flow, int role, out ITestAudioDevice device);
+}
+
+[ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface ITestAudioDevice
+{
+    void Activate(ref Guid iid, int context, IntPtr parameters, [MarshalAs(UnmanagedType.IUnknown)] out object result);
+}
+
+[ComImport, Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface ITestAudioSessionManager
+{
+    void GetAudioSessionControl();
+    void GetSimpleAudioVolume();
+    void GetSessionEnumerator(out ITestAudioSessionEnumerator sessions);
+}
+
+[ComImport, Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface ITestAudioSessionEnumerator
+{
+    void GetCount(out int count);
+    void GetSession(int index, out ITestAudioSessionControl session);
+}
+
+[ComImport, Guid("F4B1A599-7266-4319-A8CA-E70ACB11E8CD"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface ITestAudioSessionControl
+{
+    void GetState(out int state);
+}
+
+[ComImport, Guid("BFB7FF88-7239-4FC9-8FA2-07C950BE9C6D"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface ITestAudioSessionControl2
+{
+    void GetState(out int state);
+    void GetDisplayName();
+    void SetDisplayName();
+    void GetIconPath();
+    void SetIconPath();
+    void GetGroupingParam();
+    void SetGroupingParam();
+    void RegisterAudioSessionNotification();
+    void UnregisterAudioSessionNotification();
+    void GetSessionIdentifier();
+    void GetSessionInstanceIdentifier();
+    void GetProcessId(out uint processId);
+}
+
+public static class PlaybackSessionProbe
+{
+    public static bool IsActive(uint processId)
+    {
+        var enumerator = (ITestAudioDeviceEnumerator)new AudioDeviceEnumerator();
+        try
+        {
+            enumerator.GetDefaultAudioEndpoint(0, 1, out var device);
+            try
+            {
+                Guid iid = typeof(ITestAudioSessionManager).GUID;
+                device.Activate(ref iid, 23, IntPtr.Zero, out object managerObject);
+                try
+                {
+                    var manager = (ITestAudioSessionManager)managerObject;
+                    manager.GetSessionEnumerator(out var sessions);
+                    try
+                    {
+                        sessions.GetCount(out int count);
+                        for (int index = 0; index < count; index++)
+                        {
+                            sessions.GetSession(index, out var session);
+                            try
+                            {
+                                var extended = (ITestAudioSessionControl2)session;
+                                extended.GetProcessId(out uint sessionProcessId);
+                                session.GetState(out int state);
+                                if (sessionProcessId == processId && state == 1) return true;
+                            }
+                            finally { Marshal.ReleaseComObject(session); }
+                        }
+                        return false;
+                    }
+                    finally { Marshal.ReleaseComObject(sessions); }
+                }
+                finally { Marshal.ReleaseComObject(managerObject); }
+            }
+            finally { Marshal.ReleaseComObject(device); }
+        }
+        finally { Marshal.ReleaseComObject(enumerator); }
     }
 }
 '@
@@ -178,8 +275,12 @@ $extension, $executableNames, $processNames = switch ($Application) {
     'Access' { '.accdb'; ,@('MSACCESS.EXE'); ,@('MSACCESS') }
     'Base' { '.odb'; ,@('sbase.exe'); ,@('soffice', 'soffice.bin') }
     'Resonic' { '.wav'; ,@('Resonic.exe'); ,@('Resonic') }
+    'WindowsMediaPlayerLegacy' { '.wav'; ,@('wmplayer.exe'); ,@('wmplayer') }
 }
 if ($Application -in @('LibreOffice', 'Excel', 'Calc', 'PowerPoint', 'Impress', 'Draw', 'Math', 'Access', 'Base')) {
+    Assert-True ($Transfer -eq 'Resourceful' -and -not $UseExisting) "$Application integration requires Resourceful and a test-started instance."
+}
+if ($Application -eq 'WindowsMediaPlayerLegacy') {
     Assert-True ($Transfer -eq 'Resourceful' -and -not $UseExisting) "$Application integration requires Resourceful and a test-started instance."
 }
 if ($NonDefault) {
@@ -219,6 +320,7 @@ if ($UseExisting) {
     }
     $process = if ($Application -eq 'Base') { Start-Process -FilePath $startupPath -ArgumentList "`"$startupFile`"" -PassThru }
         elseif ($Application -in @('LibreOffice', 'Calc', 'Impress', 'Draw', 'Math')) { Start-Process -FilePath $startupPath -PassThru }
+        elseif ($Application -eq 'WindowsMediaPlayerLegacy') { Start-Process -FilePath $applicationPath -ArgumentList '/Task','NowPlaying' -PassThru }
         else { Start-Process -FilePath $applicationPath -PassThru }
 }
 $previousClipboard = $null
@@ -242,9 +344,9 @@ try {
     [IO.Directory]::CreateDirectory($directory) | Out-Null
     $trackName = $(if ($Transfer -in @('OpenDialog', 'OpenDialogO', 'OpenDialogCtrlF12')) { 'KIS Öffnen ' } else { 'KIS-Paste-' }) + [guid]::NewGuid().ToString('N')
     $filePath = Join-Path $directory ($trackName + $extension)
-    if ($Application -in @('Audacity', 'Resonic')) {
+    if ($Application -in @('Audacity', 'Resonic', 'WindowsMediaPlayerLegacy')) {
     $sampleRate = 44100
-    $sampleCount = $sampleRate
+    $sampleCount = if ($Application -eq 'WindowsMediaPlayerLegacy') { $sampleRate * 10 } else { $sampleRate }
     $writer = [IO.BinaryWriter]::new([IO.File]::Create($filePath))
     try {
         $writer.Write([Text.Encoding]::ASCII.GetBytes('RIFF'))
@@ -260,7 +362,7 @@ try {
         $writer.Write([Text.Encoding]::ASCII.GetBytes('data'))
         $writer.Write([uint32] ($sampleCount * 2))
         for ($sample = 0; $sample -lt $sampleCount; $sample++) {
-            $writer.Write([int16] (10000 * [Math]::Sin(2 * [Math]::PI * 440 * $sample / $sampleRate)))
+            $writer.Write([int16] $(if ($Application -eq 'WindowsMediaPlayerLegacy') { 0 } else { 10000 * [Math]::Sin(2 * [Math]::PI * 440 * $sample / $sampleRate) }))
         }
     } finally { $writer.Dispose() }
     Write-Host "WAV file: $filePath"
@@ -268,8 +370,9 @@ try {
     try {
         $player.Open([Uri]::new($filePath))
         Wait-Until { $player.NaturalDuration.HasTimeSpan } 'Windows could not decode the test WAV file.'
-        Assert-True ([Math]::Abs($player.NaturalDuration.TimeSpan.TotalSeconds - 1) -lt 0.01) 'The test WAV file does not have the expected duration.'
-        Write-Host 'Windows decoded the WAV file: one second of 440 Hz PCM audio.'
+        $expectedDuration = $sampleCount / $sampleRate
+        Assert-True ([Math]::Abs($player.NaturalDuration.TimeSpan.TotalSeconds - $expectedDuration) -lt 0.01) 'The test WAV file does not have the expected duration.'
+        Write-Host "Windows decoded the WAV file: $expectedDuration seconds of PCM audio."
     } finally { $player.Close() }
     } elseif ($Application -eq 'Word' -and $extension -eq '.html') {
         [IO.File]::WriteAllText($filePath, '<!doctype html><html><body><p>Integration test document</p></body></html>', [Text.UTF8Encoding]::new($false))
@@ -448,6 +551,9 @@ try {
     Wait-Until { [DateTime]::UtcNow -ge $pasteNotBefore } "The $Application startup wait did not complete."
     $process.Refresh()
     Assert-True (-not $process.HasExited -and [PasteWindowProbe]::IsWindowEnabled($window.Handle)) "The $Application test window is no longer ready."
+    if ($Application -eq 'WindowsMediaPlayerLegacy') {
+        Assert-True (-not [PlaybackSessionProbe]::IsActive([uint32] $process.Id)) 'The test player was already playing before the transfer.'
+    }
     if ($Transfer -ne 'ShellOpen') {
         Assert-True ([PasteWindowProbe]::ActivateTestWindow($window.Handle)) "Could not activate the $Application test window."
     }
@@ -514,7 +620,7 @@ try {
         Wait-Until { $task.IsCompleted } 'The resourceful operation did not complete.' 15
         $result = $task.GetAwaiter().GetResult()
         Assert-True (-not $result.Error) "The resourceful operation failed: $($result.Error)"
-        if ($Application -in @('Audacity', 'Resonic')) {
+        if ($Application -in @('Audacity', 'Resonic', 'WindowsMediaPlayerLegacy')) {
             Assert-True ($result.Dialogs.Count -eq 1 -and $result.Dialogs[0].Submitted -and $null -eq $result.Drop) 'The Open dialog did not replace the drop.'
         } elseif ($Application -eq 'IrfanView') {
             Assert-True ($result.Dialogs.Count -eq 1 -and -not $result.Dialogs[0].Submitted -and $result.Drop.Dropped) "The fallback drop failed: $($result.Drop.Error)"
@@ -551,6 +657,10 @@ try {
     }
     if ($Transfer -eq 'ShellOpen' -and $NonDefault) {
         Write-Host 'Shell Open dispatch completed; the application handles the dialog.'
+    } elseif ($Application -eq 'WindowsMediaPlayerLegacy') {
+        Wait-Until { [PlaybackSessionProbe]::IsActive([uint32] $process.Id) } 'The Legacy player did not start an audio session after the transfer.' 15
+        $testContentLoaded = $true
+        Write-Host 'Windows Media Player Legacy started playing the test WAV.'
     } elseif ($Application -in @('Access', 'Base')) {
         $expectedPath = if ($Application -eq 'Base') { Join-Path (Split-Path $applicationPath) 'soffice.bin' } else { $applicationPath }
         Wait-Until {
