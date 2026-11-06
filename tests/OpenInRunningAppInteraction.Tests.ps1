@@ -1,5 +1,10 @@
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
+$parseErrors = $null
+$suiteAst = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'SutShell.TestHelpers.ps1'), [ref]$null, [ref]$parseErrors)
+if ($parseErrors.Count) { throw $parseErrors[0] }
+$suiteHelpers = $suiteAst.Find({ param($node) $node -is [System.Management.Automation.Language.StringConstantExpressionAst] -and $node.Value.StartsWith('public sealed class SutShellTestSignal') }, $true)
+Add-Type -TypeDefinition $suiteHelpers.Value
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
@@ -12,6 +17,21 @@ public static class RunningAppMenuProbe
     [DllImport("user32.dll")] public static extern uint GetMenuState(IntPtr menu, uint index, uint flags);
     [DllImport("user32.dll")] public static extern IntPtr GetSubMenu(IntPtr menu, int index);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetMenuString(IntPtr menu, uint index, StringBuilder text, int length, uint flags);
+    [StructLayout(LayoutKind.Sequential)] public struct MenuItemInfo
+    {
+        public uint Size, Mask, Type, State, Id;
+        public IntPtr SubMenu, CheckedBitmap, UncheckedBitmap, ItemData, Text;
+        public uint TextLength;
+        public IntPtr Bitmap;
+    }
+    [StructLayout(LayoutKind.Sequential)] public struct BitmapInfo
+    {
+        public int Type, Width, Height, WidthBytes;
+        public ushort Planes, BitsPixel;
+        public IntPtr Bits;
+    }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern bool GetMenuItemInfo(IntPtr menu, uint item, bool byPosition, ref MenuItemInfo info);
+    [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] public static extern int GetObject(IntPtr handle, int size, out BitmapInfo info);
 }
 '@
 $assembly = [Reflection.Assembly]::LoadFrom((Join-Path $PSScriptRoot '../bin/Debug/net10.0-windows/SUTWinExplorer.dll'))
@@ -67,6 +87,13 @@ try {
     $pathview = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.Pathview', $true),
         [object[]] @([string] $directory, [bool] $true, $null, $null, $null, $null))
     $view = $pathview.FindName('DirectoryContent')
+    $errorProbe = [SutShellPropertiesProbe]::new('Open in running app')
+    try {
+        $invalidWindow = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.AppWindow', $true), [object[]] @([IntPtr]::Zero, 'invalid'))
+        $open = $view.GetType().GetMethod('OpenInRunningApp', $instanceFlags)
+        $null = $open.Invoke($view, [object[]] @($invalidWindow, $null))
+        if ($errorProbe.Opened) { throw 'A running-app exception displayed a result dialog.' }
+    } finally { $errorProbe.Dispose() }
     $window = [System.Windows.Window]::new()
     $window.ShowInTaskbar = $false
     $window.Left = 100
@@ -131,15 +158,46 @@ try {
         try { $key.SetValue('', 'KIS Running App Test') } finally { $key.Dispose() }
         [RunningAppMenuProbe]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)
         $testWindow.Title = "Running & Window $suffix"
+        $testWindow.Icon = [System.Windows.Media.Imaging.BitmapFrame]::Create([Uri]::new((Join-Path $PSScriptRoot '../Assets/app.ico'), [UriKind]::Absolute))
         $testWindow.Show()
         $secondTestWindow.Title = "Running Second Window $suffix"
         $secondTestWindow.Show()
         $runningFile = Join-Path $directory "sample$extension"
         [IO.File]::WriteAllText($runningFile, 'test')
         $createRunning = $view.GetType().GetMethod('CreateRunningAppActions', $instanceFlags)
-        $discovered = @($createRunning.Invoke($view, [object[]] @(,[string[]] @($runningFile))))
+        $actualActions = $createRunning.Invoke($view, [object[]] @(,[string[]] @($runningFile)))
+        $discovered = @($actualActions)
         if (@($discovered | Where-Object { $_.Label -like "*Running && Window $suffix" }).Count -ne 1) { throw 'The registered application window was not listed with an escaped title.' }
         if (@($discovered | Where-Object { $_.Label -like "*Running Second Window $suffix" }).Count -ne 1) { throw 'The second registered application window was not listed.' }
+        $matchingAction = @($discovered | Where-Object { $_.Label -like "*Running && Window $suffix" })[0]
+        if ($null -eq $matchingAction.MenuImage) { throw 'The registered application icon was not loaded.' }
+        $windowHandle = [System.Windows.Interop.WindowInteropHelper]::new($testWindow).Handle
+        $windowIcon = $assembly.GetType('SUTWinExplorer.ShellMenuIcons', $true).GetMethod('GetWindowIcon', $staticFlags).Invoke($null, @($windowHandle))
+        if ($null -eq $windowIcon) { throw 'The fallback window icon was not loaded.' }
+        $runningPaths = [string[]] @($runningFile)
+        $base = $factory.GetMethod('GetBaseMenu', $staticFlags).Invoke($null, [object[]] @($runningPaths, $owner, $createActions.Invoke($view, @())))
+        try { $runningSnapshot = $base.GetType().GetMethod('CaptureSnapshot', $instanceFlags).Invoke($base, @()) }
+        finally { ([IDisposable] $base).Dispose() }
+        $runningMenu = $factory.GetMethod('GetContentMenuForContextWithRunningApps', $staticFlags).Invoke($null, [object[]] @($runningPaths, $owner, $runningSnapshot, $false, $null, $null, $actualActions))
+        try {
+            $nativeMenu = $runningMenu.GetType().GetField('_menu', $instanceFlags).GetValue($runningMenu)
+            $submenu = [RunningAppMenuProbe]::GetSubMenu($nativeMenu, 0)
+            $actionIndex = [Array]::IndexOf($actualActions, $matchingAction)
+            $info = [RunningAppMenuProbe+MenuItemInfo]::new()
+            $info.Size = [Runtime.InteropServices.Marshal]::SizeOf([type] [RunningAppMenuProbe+MenuItemInfo])
+            $info.Mask = 0x80
+            if (-not [RunningAppMenuProbe]::GetMenuItemInfo($submenu, [uint32] (0x8000 + $actionIndex), $false, [ref] $info) -or $info.Bitmap -eq [IntPtr]::Zero) { throw 'The running-app menu item has no native icon.' }
+            $iconHandle = $info.Bitmap
+            $bitmap = [RunningAppMenuProbe+BitmapInfo]::new()
+            if ([RunningAppMenuProbe]::GetObject($iconHandle, [Runtime.InteropServices.Marshal]::SizeOf([type] [RunningAppMenuProbe+BitmapInfo]), [ref] $bitmap) -eq 0 -or $bitmap.Bits -eq [IntPtr]::Zero -or $bitmap.BitsPixel -ne 32) { throw 'The running-app menu icon is not a valid 32-bit bitmap.' }
+            $pixels = [byte[]]::new($bitmap.WidthBytes * $bitmap.Height)
+            [Runtime.InteropServices.Marshal]::Copy($bitmap.Bits, $pixels, 0, $pixels.Length)
+            $hasVisiblePixel = $false
+            for ($offset = 3; $offset -lt $pixels.Length; $offset += 4) { if ($pixels[$offset] -ne 0) { $hasVisiblePixel = $true; break } }
+            if (-not $hasVisiblePixel) { throw 'The running-app menu icon is fully transparent.' }
+        } finally { ([IDisposable] $runningMenu).Dispose() }
+        $bitmap = [RunningAppMenuProbe+BitmapInfo]::new()
+        if ([RunningAppMenuProbe]::GetObject($iconHandle, [Runtime.InteropServices.Marshal]::SizeOf([type] [RunningAppMenuProbe+BitmapInfo]), [ref] $bitmap) -ne 0) { throw 'The running-app menu icon bitmap was not released.' }
         $unassociated = Join-Path $directory "sample.kisunknown$suffix"
         [IO.File]::WriteAllText($unassociated, 'test')
         $mixedActions = $createRunning.Invoke($view, [object[]] @(,[string[]] @($runningFile, $unassociated)))

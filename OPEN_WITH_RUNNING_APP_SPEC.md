@@ -13,7 +13,8 @@ application supports opening files this way.
 
 - The content menu places **Open in running app...** first for item selections.
   Its submenu lists each discovered window as `App name - Window title`, sorted
-  by application and then window title. Untitled windows use `Untitled window`.
+  by application and then window title. Each entry shows the app icon when
+  available, falling back to the window icon. Untitled windows use `Untitled window`.
 - For a multiple-file selection, show applications registered for every selected
   file type. Windows may include generic handlers in its association results.
   Selections containing a directory and selections with no matching running
@@ -23,9 +24,10 @@ application supports opening files this way.
   replacing its previous contents, and invokes the combined operation for that
   window. The clipboard is not restored because the target may read it after the
   keystroke has been sent. If clipboard preparation fails, still attempt the
-  combined operation so the drop can proceed, and report any failure.
-- Show individual paste and drop errors when either operation fails. A sent
-  paste or accepted drop is not a guarantee that the target opened the files.
+  combined operation so the drop can proceed.
+- Do not show a transfer result dialog, including on failure. Technical errors
+  can be written to the diagnostic trace. A sent paste or accepted drop is not
+  a guarantee that the target opened the files.
 
 ## Applications and windows
 

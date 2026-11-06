@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -8,14 +9,14 @@ namespace SUTWinExplorer;
 
 internal static class ShellMenuIcons
 {
-    internal static void Apply(IntPtr menu, IReadOnlyList<ShellMenuAction> actions, uint firstCommand, List<IntPtr> bitmaps)
+    internal static void Apply(IntPtr menu, IReadOnlyList<ShellMenuAction> actions, uint firstCommand, List<IntPtr> bitmaps, Visual? dpiSource = null)
     {
         for (var index = 0; index < actions.Count; index++)
         {
             var command = firstCommand + (uint)index;
-            if (GetMenuState(menu, command, 0) == uint.MaxValue || actions[index].IconSource is not { } button)
+            if (GetMenuState(menu, command, 0) == uint.MaxValue)
                 continue;
-            var bitmap = CreateBitmap(actions[index], button);
+            var bitmap = CreateBitmap(actions[index], dpiSource);
             if (bitmap == IntPtr.Zero)
                 continue;
             bitmaps.Add(bitmap);
@@ -27,12 +28,42 @@ internal static class ShellMenuIcons
 
     internal static void Release(IntPtr bitmap) => _ = DeleteObject(bitmap);
 
-    private static IntPtr CreateBitmap(ShellMenuAction action, Button button)
+    internal static ImageSource? GetWindowIcon(IntPtr window)
+    {
+        if (window == IntPtr.Zero)
+            return null;
+        var response = SendMessageTimeout(window, 0x007F, new IntPtr(2), IntPtr.Zero, 0x0002, 100, out var icon);
+        if (response != IntPtr.Zero && icon == IntPtr.Zero)
+            response = SendMessageTimeout(window, 0x007F, IntPtr.Zero, IntPtr.Zero, 0x0002, 100, out icon);
+        if (response != IntPtr.Zero && icon == IntPtr.Zero)
+            _ = SendMessageTimeout(window, 0x007F, new IntPtr(1), IntPtr.Zero, 0x0002, 100, out icon);
+        if (icon == IntPtr.Zero)
+            icon = IntPtr.Size == 8 ? GetClassLongPtr(window, -34) : new IntPtr(unchecked((int)GetClassLong(window, -34)));
+        if (icon == IntPtr.Zero)
+            icon = IntPtr.Size == 8 ? GetClassLongPtr(window, -14) : new IntPtr(unchecked((int)GetClassLong(window, -14)));
+        if (icon == IntPtr.Zero)
+            return null;
+        try
+        {
+            var image = Imaging.CreateBitmapSourceFromHIcon(icon, Int32Rect.Empty, BitmapSizeOptions.FromWidthAndHeight(16, 16));
+            image.Freeze();
+            return image;
+        }
+        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException or ArgumentException or ExternalException)
+        {
+            return null;
+        }
+    }
+
+    private static IntPtr CreateBitmap(ShellMenuAction action, Visual? dpiSource)
     {
         FrameworkElement icon;
-        if (button.Content is StackPanel panel && panel.Children.OfType<Control>().FirstOrDefault() is { Template: not null } source)
+        var button = action.IconSource;
+        if (action.MenuImage is { } imageSource)
+            icon = new Image { Source = imageSource, Width = 16, Height = 16, Stretch = Stretch.Uniform };
+        else if (button?.Content is StackPanel panel && panel.Children.OfType<Control>().FirstOrDefault() is { Template: not null } source)
             icon = new Control { Template = source.Template, Width = 14, Height = 14, Foreground = SystemColors.MenuTextBrush };
-        else if ((action.IsTransfer || action.Id == "Delete") && button.Content is string text)
+        else if ((action.IsTransfer || action.Id == "Delete") && button?.Content is string text)
         {
             var prefixLength = action.Id == "Delete" ? 3 : action.Id.StartsWith("Link", StringComparison.Ordinal) || action.Id.StartsWith("Copy", StringComparison.Ordinal) || action.Id.StartsWith("Move", StringComparison.Ordinal) ? 4 : text.Length;
             if (text.Length <= prefixLength)
@@ -49,7 +80,7 @@ internal static class ShellMenuIcons
         container.Measure(new Size(16, 16));
         container.Arrange(new Rect(0, 0, 16, 16));
         container.UpdateLayout();
-        var dpi = VisualTreeHelper.GetDpi(button);
+        var dpi = VisualTreeHelper.GetDpi(dpiSource ?? (Visual?)button ?? icon);
         var width = (int)Math.Ceiling(16 * dpi.DpiScaleX);
         var height = (int)Math.Ceiling(16 * dpi.DpiScaleY);
         var image = new RenderTargetBitmap(width, height, dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
@@ -91,6 +122,15 @@ internal static class ShellMenuIcons
 
     [DllImport("user32.dll")]
     private static extern uint GetMenuState(IntPtr menu, uint item, uint flags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SendMessageTimeout(IntPtr window, uint message, IntPtr wParam, IntPtr lParam, uint flags, uint timeout, out IntPtr result);
+
+    [DllImport("user32.dll", EntryPoint = "GetClassLongPtrW")]
+    private static extern IntPtr GetClassLongPtr(IntPtr window, int index);
+
+    [DllImport("user32.dll", EntryPoint = "GetClassLongW")]
+    private static extern uint GetClassLong(IntPtr window, int index);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

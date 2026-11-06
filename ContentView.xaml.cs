@@ -136,10 +136,16 @@ public partial class ContentView : UserControl
             var selectedPaths = paths.ToArray();
             return apps.OrderBy(app => app.App.Name, StringComparer.CurrentCultureIgnoreCase)
                 .ThenBy(app => app.App.Id, StringComparer.OrdinalIgnoreCase)
-                .SelectMany(app => app.Windows.OrderBy(window => window.Title, StringComparer.CurrentCultureIgnoreCase)
-                    .ThenBy(window => window.Handle.ToInt64())
-                    .Select(window => new ShellMenuAction("open-running-app", $"{app.App.Name} - {(string.IsNullOrWhiteSpace(window.Title) ? "Untitled window" : window.Title)}".Replace("&", "&&"), true,
-                        () => OpenInRunningApp(window, selectedPaths))))
+                .SelectMany(app =>
+                {
+                    ImageSource? icon = null;
+                    try { icon = ShellIconProvider.GetIconAtSize(app.App.Id, 16, 16); }
+                    catch (Exception exception) { Trace.TraceError("Could not load application icon: {0}", exception); }
+                    return app.Windows.OrderBy(window => window.Title, StringComparer.CurrentCultureIgnoreCase)
+                        .ThenBy(window => window.Handle.ToInt64())
+                        .Select(window => new ShellMenuAction("open-running-app", $"{app.App.Name} - {(string.IsNullOrWhiteSpace(window.Title) ? "Untitled window" : window.Title)}".Replace("&", "&&"), true,
+                            () => OpenInRunningApp(window, selectedPaths)) { MenuImage = icon ?? ShellMenuIcons.GetWindowIcon(window.Handle) });
+                })
                 .ToArray();
         }
         catch (Exception exception)
@@ -153,7 +159,6 @@ public partial class ContentView : UserControl
     {
         try
         {
-            string? clipboardError = null;
             try
             {
                 var files = new StringCollection();
@@ -162,16 +167,15 @@ public partial class ContentView : UserControl
             }
             catch (System.Runtime.InteropServices.ExternalException exception)
             {
-                clipboardError = exception.Message;
+                Trace.TraceError("Could not prepare the clipboard for a running application: {0}", exception);
             }
             var result = RunningAppsAccessor.OpenInRunningAppResourcefully(window, paths);
-            if (clipboardError is not null || !result.Paste.Sent || !result.Drop.Dropped)
-                MessageBox.Show(Window.GetWindow(this), $"{(clipboardError is null ? "" : $"Clipboard: {clipboardError}\n")}Paste: {result.Paste.Error ?? "sent (not confirmed)"}\nDrop: {result.Drop.Error ?? "accepted"}",
-                    "Open in running app", MessageBoxButton.OK, MessageBoxImage.Warning);
+            if (!result.Paste.Sent) Trace.TraceError("Paste to running application failed: {0}", result.Paste.Error);
+            if (!result.Drop.Dropped) Trace.TraceError("Drop to running application failed: {0}", result.Drop.Error);
         }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Open in running app", MessageBoxButton.OK, MessageBoxImage.Warning);
+            Trace.TraceError("Could not open files in a running application: {0}", exception);
         }
     }
 

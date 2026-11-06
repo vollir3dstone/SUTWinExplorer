@@ -254,6 +254,8 @@ internal static class SutContextMenuFactory
                             throw new InvalidOperationException("Could not insert a running application.");
                         existingActions.Add(action);
                     }
+                    ShellMenuIcons.Apply(runningAppsSubmenu, existingActions, BaseMenuCommandFirst, menuBitmaps,
+                        System.Windows.Interop.HwndSource.FromHwnd(owner)?.RootVisual);
                     if (!InsertMenu(menu, 0, MenuByPosition | MenuPopup | (runningApps.Count == 0 ? MenuDisabled : 0u),
                             (UIntPtr)(nuint)runningAppsSubmenu, "Open in running app..."))
                         throw new InvalidOperationException("Could not insert the running applications submenu.");
@@ -1036,6 +1038,7 @@ internal static class SutContextMenuFactory
 internal sealed record ShellMenuAction(string Id, string Label, bool IsEnabled, Action Invoke, bool IsTransfer = false, bool SeparatorBefore = false)
 {
     public System.Windows.Controls.Button? IconSource { get; init; }
+    public System.Windows.Media.ImageSource? MenuImage { get; init; }
 }
 
 [StructLayout(LayoutKind.Sequential)]
