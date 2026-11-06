@@ -1061,7 +1061,10 @@ internal sealed class DirectoryItem(string name, string fullPath, bool isDirecto
                 if (_entry is null)
                     return _entry = new FileEntry(Name, FullPath, IsDirectory, Type,
                         Size is { } size ? SutShell.FormatSize(size) : string.Empty, Modified, Icons,
-                        MediaTypeIconMap.GetIcon(MediaType), MediaTypeMap.GetName(MediaType));
+                        MediaTypeIconMap.GetIcon(MediaType), MediaTypeMap.GetName(MediaType))
+                    {
+                        MediaTypeSubTypeText = MediaTypeMap.FormatMediaTypeSubType(MediaTypeSubType)
+                    };
                 return _entry;
             }
         }
@@ -1121,5 +1124,6 @@ internal sealed record FileEntry(
     string MediaTypeName)
 {
     internal const string DateFormat = "yyyy-MM-dd HH:mm";
+    public string MediaTypeSubTypeText { get; init; } = string.Empty;
     public string ModifiedText => Modified?.ToString(DateFormat, CultureInfo.InvariantCulture) ?? string.Empty;
 }

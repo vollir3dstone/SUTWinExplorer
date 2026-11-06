@@ -11,12 +11,13 @@ for directory data, filesystem observation, and operating-system operations;
 it does not embed a Shell view. The Windows-specific implementation is described
 in [SutShell Windows implementation](SUTSHELL_WINDOWS.md).
 
-The table has one row per item and columns for MT, TA1, MO, Name, an unlabeled
+The table has one row per item and columns for MT, ST, MO, Name, TA1, an unlabeled
 toggle, TA2, Size, and Date modified. The names describe the columns as follows:
 
 | Header | Name | Content |
 | --- | --- | --- |
 | MT | Media type | Application-defined media category, displayed as an icon. |
+| ST | Media type sub type | `TB`, `AS`, `RE` or `ED`; empty without a sub type. |
 | TA1 | Type and/or default app, coarse | Windows Shell base icon. |
 | MO | Modifier | Windows Shell overlay icon. |
 | TA2 | TypeApp2: Type and/or default app, fine | Windows Shell type description. |
@@ -486,6 +487,10 @@ of the media type names and extension mapping. No match or no extension
 displays an empty cell. Repeating an extension for the same type does not make
 it ambiguous. The media type name remains available as the row's accessibility
 name.
+
+The fixed-width `ST` column follows `MT` and displays the media type sub type
+as `TB` (text-based), `AS` (app-specific), `RE` (render), or `ED` (edit).
+Items without a media type sub type have an empty cell.
 
 The supported media types are fixed by the internal `MediaType` enum. Their
 names below are the exact identifiers used in the JSON; the second mapping

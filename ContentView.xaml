@@ -267,6 +267,18 @@
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
                         </GridViewColumn>
+                        <GridViewColumn x:Name="MediaTypeSubTypeColumn" Width="30">
+                            <GridViewColumn.Header>
+                                <GridViewColumnHeader Padding="1,0" ToolTip="Media type sub type" Loaded="FileList_HeaderLoaded">
+                                    <TextBlock Text="ST" />
+                                </GridViewColumnHeader>
+                            </GridViewColumn.Header>
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Entry.MediaTypeSubTypeText}" HorizontalAlignment="Center" />
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
                         <GridViewColumn x:Name="ModifierIconColumn" Width="32">
                             <GridViewColumn.Header>
                                 <GridViewColumnHeader Padding="1,0" ToolTip="Modifier icon" Loaded="FileList_HeaderLoaded">

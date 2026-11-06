@@ -124,10 +124,13 @@ try {
         $nameColumn = $view.FindName('NameColumn')
         $typeColumn = $view.FindName('TypeApp2Name')
         $modifierColumn = $view.FindName('ModifierIconColumn')
+        $mediaTypeSubTypeColumn = $view.FindName('MediaTypeSubTypeColumn')
         $sizeColumn = $view.FindName('SizeColumn')
-        Assert-True ($columns.Count -eq 8 -and $nameColumn.Header.Tag -eq 'Name' -and
+        Assert-True ($columns.Count -eq 9 -and $nameColumn.Header.Tag -eq 'Name' -and
+            $columns.IndexOf($mediaTypeSubTypeColumn) -eq $columns.IndexOf($view.FindName('MediaTypeIcon')) + 1 -and
+            $mediaTypeSubTypeColumn.Width -eq 30 -and
             $nameColumn.Width -gt 80 -and $typeColumn.Width -eq 130) 'Shell column order or name-column sizing is incorrect.'
-        foreach ($headerCase in @(@('MediaTypeIcon', 'MT'), @('ModifierIconColumn', 'MO'), @('TypeApp1Icon', 'TA1'), @('TypeApp2Name', 'TA2'))) {
+        foreach ($headerCase in @(@('MediaTypeIcon', 'MT'), @('MediaTypeSubTypeColumn', 'ST'), @('ModifierIconColumn', 'MO'), @('TypeApp1Icon', 'TA1'), @('TypeApp2Name', 'TA2'))) {
             $headerContent = $view.FindName($headerCase[0]).Header.Content
             $headerText = if ($headerContent -is [System.Windows.Controls.TextBlock]) { $headerContent.Text } else { $headerContent.Children[0].Text }
             Assert-True ($headerText -ceq $headerCase[1]) "Column $($headerCase[0]) has an incorrect header."
@@ -175,28 +178,28 @@ try {
         $thresholdViewport = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum - $nameColumn.Width + 80
         $window.Width = $originalWindowWidth - ($scroll.ViewportWidth - $thresholdViewport) + 2
         $window.UpdateLayout()
-        Assert-True ($columns.Count -eq 8 -and $nameColumn.Width -ge 80) 'Right columns disappeared above the minimum Name width.'
+        Assert-True ($columns.Count -eq 9 -and $nameColumn.Width -ge 80) 'Right columns disappeared above the minimum Name width.'
         $window.Width -= 4
         $window.UpdateLayout()
-        Assert-True ($columns.Count -eq 5) 'Right columns did not disappear below the minimum Name width.'
+        Assert-True ($columns.Count -eq 6) 'Right columns did not disappear below the minimum Name width.'
         $window.Width += 4
         $window.UpdateLayout()
-        Assert-True ($columns.Count -eq 8 -and [Math]::Abs($typeColumn.Width - $originalTypeWidth) -lt 1) 'Right columns did not automatically reappear above the minimum Name width.'
+        Assert-True ($columns.Count -eq 9 -and [Math]::Abs($typeColumn.Width - $originalTypeWidth) -lt 1) 'Right columns did not automatically reappear above the minimum Name width.'
         $window.Width = 500
         $window.UpdateLayout()
         $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
-        Assert-True ($columns.Count -eq 5 -and
+        Assert-True ($columns.Count -eq 6 -and $columns.Contains($mediaTypeSubTypeColumn) -and
             [Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and $scroll.ScrollableWidth -lt 1 -and
             [object]::ReferenceEquals($itemsBeforeResize, $list.ItemsSource) -and [object]::ReferenceEquals($selectedBeforeResize, $list.SelectedItem)) 'The right columns did not hide automatically in a narrow viewport.'
         $rightColumnsToggle.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-        Assert-True ($columns.Count -eq 8) 'The toggle did not override automatic hiding in a narrow viewport.'
+        Assert-True ($columns.Count -eq 9) 'The toggle did not override automatic hiding in a narrow viewport.'
         $rightColumnsToggle.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         $window.Width = $originalWindowWidth
         $window.UpdateLayout()
-        Assert-True ($columns.Count -eq 5) 'Manually hidden columns reappeared after widening.'
+        Assert-True ($columns.Count -eq 6) 'Manually hidden columns reappeared after widening.'
         $rightColumnsToggle.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         $window.UpdateLayout()
-        Assert-True ($columns.Count -eq 8 -and [Math]::Abs($typeColumn.Width - $originalTypeWidth) -lt 1) 'Columns or the chosen Type width were not restored after widening.'
+        Assert-True ($columns.Count -eq 9 -and [Math]::Abs($typeColumn.Width - $originalTypeWidth) -lt 1) 'Columns or the chosen Type width were not restored after widening.'
         $list.SelectedItems.Clear()
         $originalCursor = [SutShellRightClickProbe]::CursorPosition()
         $originalLeft = $window.Left
@@ -246,7 +249,7 @@ try {
         $window.UpdateLayout()
         $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
         $nameGripper = $nameColumn.Header.Template.FindName('PART_HeaderGripper', $nameColumn.Header)
-        Assert-True ($columns.Count -eq 5 -and $columns.Contains($nameColumn) -and -not $nameGripper.IsEnabled -and
+        Assert-True ($columns.Count -eq 6 -and $columns.Contains($nameColumn) -and -not $nameGripper.IsEnabled -and
             [Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and $scroll.ScrollableWidth -lt 1 -and
             $nameColumn.Width -gt $originalNameWidth -and [object]::ReferenceEquals($itemsBeforeToggle, $list.ItemsSource) -and
             [object]::ReferenceEquals($selectedBeforeToggle, $list.SelectedItem)) 'Hiding right columns did not expand Name or preserved rows and selection.'
@@ -268,7 +271,7 @@ try {
         $window.UpdateLayout()
         $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
         $toggleIndex = $columns.IndexOf($view.FindName('RightColumnsToggleColumn'))
-        Assert-True ($columns.Count -eq 8 -and $columns.IndexOf($typeColumn) -eq $toggleIndex + 1 -and
+        Assert-True ($columns.Count -eq 9 -and $columns.IndexOf($typeColumn) -eq $toggleIndex + 1 -and
             $columns.IndexOf($sizeColumn) -eq $toggleIndex + 2 -and $columns.IndexOf($view.FindName('DateColumn')) -eq $toggleIndex + 3 -and $nameGripper.IsEnabled -and
             [Math]::Abs($typeColumn.Width - $originalTypeWidth) -lt 1 -and [Math]::Abs($widthSum - $scroll.ViewportWidth) -lt 1 -and
             [object]::ReferenceEquals($selectedBeforeToggle, $list.SelectedItem)) 'Restoring right columns did not preserve their order, splitter and selection.'
@@ -282,6 +285,17 @@ try {
             $notes.Modified, $iconSet, $notes.MediaTypeIcon, $notes.MediaTypeName))
         $rowType = $assembly.GetType('SUTWinExplorer.DirectoryRow', $true)
         $testRow = [Activator]::CreateInstance($rowType, $true)
+        $subTypePresenter = [System.Windows.Controls.ContentPresenter]::new()
+        $subTypePresenter.Content = $testRow
+        $subTypePresenter.ContentTemplate = $mediaTypeSubTypeColumn.CellTemplate
+        foreach ($subTypeCase in @(@($notes, 'TB'), @(@($entries | Where-Object { $_.FullPath -eq (Join-Path $directory 'unknown.zzzunknown') })[0], ''))) {
+            $rowType.GetProperty('Entry').SetValue($testRow, $subTypeCase[0])
+            $subTypePresenter.Measure([System.Windows.Size]::new(30, 22))
+            $subTypePresenter.Arrange([System.Windows.Rect]::new(0, 0, 30, 22))
+            $subTypePresenter.UpdateLayout()
+            $subTypeCell = [System.Windows.Media.VisualTreeHelper]::GetChild($subTypePresenter, 0)
+            Assert-True ($subTypeCell.Text -ceq $subTypeCase[1]) 'Media type sub type cell binding is incorrect.'
+        }
         $rowType.GetProperty('Entry').SetValue($testRow, $testEntry)
         $cells = foreach ($column in @($view.FindName('TypeApp1Icon'), $modifierColumn)) {
             $presenter = [System.Windows.Controls.ContentPresenter]::new()
@@ -335,7 +349,7 @@ try {
         $otherView = [Activator]::CreateInstance($view.GetType())
         $otherToggle = $otherView.FindName('RightColumnsToggleHeader')
         $otherToggle.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-        Assert-True ($otherView.FindName('FileList').View.Columns.Count -eq 5 -and $columns.Count -eq 8) 'Right-column visibility leaked between ContentViews.'
+        Assert-True ($otherView.FindName('FileList').View.Columns.Count -eq 6 -and $columns.Count -eq 9) 'Right-column visibility leaked between ContentViews.'
         $otherToggle.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         $null = $otherView.GetType().GetMethod('SetCurrentPath', $viewFlags).Invoke($otherView, [object[]] @([string] '::{20D04FE0-3AEA-1069-A2D8-08002B30309D}'))
         Assert-True (-not $otherView.FindName('NewButton').IsEnabled) 'New was enabled for the virtual This PC location.'
