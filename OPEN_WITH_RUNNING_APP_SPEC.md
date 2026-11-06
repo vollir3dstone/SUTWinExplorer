@@ -249,12 +249,12 @@ applications consists of all eight resourceful integration tests, run
 sequentially:
 
 ```powershell
-pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application Audacity -Transfer Resourceful
-pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application IrfanView -Transfer Resourceful
-pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application VLC -Transfer Resourceful
-pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application Resonic -Transfer Resourceful
-pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application Word -Transfer Resourceful
-pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application WindowsMediaPlayerLegacy -Transfer Resourceful
+pwsh -NoProfile -STA -File tests/OpenInRunningApp.Integration.ps1 -Application Audacity -Transfer Resourceful
+pwsh -NoProfile -STA -File tests/OpenInRunningApp.Integration.ps1 -Application IrfanView -Transfer Resourceful
+pwsh -NoProfile -STA -File tests/OpenInRunningApp.Integration.ps1 -Application VLC -Transfer Resourceful
+pwsh -NoProfile -STA -File tests/OpenInRunningApp.Integration.ps1 -Application Resonic -Transfer Resourceful
+pwsh -NoProfile -STA -File tests/OpenInRunningApp.Integration.ps1 -Application Word -Transfer Resourceful
+pwsh -NoProfile -STA -File tests/OpenInRunningApp.Integration.ps1 -Application WindowsMediaPlayerLegacy -Transfer Resourceful
 pwsh -NoProfile -STA -File tests/WindowsMediaPlayer.Integration.ps1
 pwsh -NoProfile -STA -File tests/WindowsPhotos.Integration.ps1
 ```
@@ -271,11 +271,11 @@ A blocked or skipped test leaves the minimum gate incomplete.
   observed tests, Audacity opened the test WAV by either method; IrfanView
   opened the test JPEG by drop but did not open a clipboard file list via
   paste. These observations are application-specific, not universal promises.
-- `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application
+- `pwsh -NoProfile -STA -File tests/OpenInRunningApp.Integration.ps1 -Application
   Audacity -Transfer OpenDialog` tests the Open dialog using a copy of the test WAV
   with a Unicode name. In the observed environment Audacity opened the file;
   IrfanView did not present a supported dialog in response to `Ctrl+O`.
-- `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application
+- `pwsh -NoProfile -STA -File tests/OpenInRunningApp.Integration.ps1 -Application
   IrfanView -Transfer OpenDialogO` tests the `O` variant with a copy of the test JPEG.
   In the observed environment IrfanView opened the file.
 - Resourceful integration tests check dialog submission without a drop in
@@ -283,7 +283,7 @@ A blocked or skipped test leaves the minimum gate incomplete.
   multi-file fallback, suppression when an unsupported dialog remains open,
   direct and shared dialog owners, ambiguous or changed window states,
   configured application identities and Shell Open failure handling.
-- `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application IrfanView -Transfer Menu -StartWithImage`
+- `pwsh -NoProfile -STA -File tests/OpenInRunningApp.Integration.ps1 -Application IrfanView -Transfer Menu -StartWithImage`
   starts IrfanView with the first JPEG and selects the running-app native
   submenu entry for a visually distinct second JPEG from another foreground
   window. It checks both the second filename and the red marker in the visible
@@ -308,7 +308,7 @@ A blocked or skipped test leaves the minimum gate incomplete.
   copies the fixture to a temporary path with a unique filename before use
   and removes its copy during cleanup, including when the test fails. A file
   still locked by an application can cause cleanup to fail.
-- `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application LibreOffice -Transfer Resourceful`
+- `pwsh -NoProfile -STA -File tests/OpenInRunningApp.Integration.ps1 -Application LibreOffice -Transfer Resourceful`
   starts a test-owned Writer instance and passes two generated DOCX files in
   one resourceful operation. In the observed environment, both selected
   LibreOffice Shell handler requests were dispatched without dialog or drop
@@ -330,11 +330,11 @@ A blocked or skipped test leaves the minimum gate incomplete.
   were not installed in the observed environment.
 - The same integration script supports `Word` (DOCX), `VLC` (MP4), and
   `AcrobatReader` (PDF), for example:
-  `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application VLC -Transfer Resourceful`.
+  `pwsh -NoProfile -STA -File tests/OpenInRunningApp.Integration.ps1 -Application VLC -Transfer Resourceful`.
   It generates the DOCX and PDF and copies the bundled MP4 test video. The
   applications must be installed and recommended for the corresponding file
   type. Word's test also checks the document text and rejects blocking dialogs.
-- `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application Word -Transfer OpenDialogCtrlF12`
+- `pwsh -NoProfile -STA -File tests/OpenInRunningApp.Integration.ps1 -Application Word -Transfer OpenDialogCtrlF12`
   tests `LetOpenByDialogUsingCtrlF12` with a Unicode DOCX filename. In the
   observed Word version, the document opened with the expected content. The
   resourceful Word and Acrobat Reader tests also opened their documents using
@@ -375,4 +375,4 @@ A blocked or skipped test leaves the minimum gate incomplete.
 - [ResourcefulOpen.Tests.ps1](tests/ResourcefulOpen.Tests.ps1)
 - [CompareOpenWithApps.ps1](tests/CompareOpenWithApps.ps1)
 - [OpenInRunningAppInteraction.Tests.ps1](tests/OpenInRunningAppInteraction.Tests.ps1)
-- [AudacityPaste.Integration.ps1](tests/AudacityPaste.Integration.ps1)
+- [OpenInRunningApp.Integration.ps1](tests/OpenInRunningApp.Integration.ps1)
