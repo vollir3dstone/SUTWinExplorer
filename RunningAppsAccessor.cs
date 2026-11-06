@@ -598,6 +598,8 @@ public static class RunningAppsAccessor
             string? executable = process.MainModule?.FileName;
             if (string.Equals(appId, executable, StringComparison.OrdinalIgnoreCase))
                 return true;
+            if (MatchesLibreOfficeLauncher(appId, executable, process.MainModule?.FileVersionInfo.CompanyName))
+                return true;
             uint length = 0;
             if (GetApplicationUserModelId(process.Handle, ref length, null) != 122 || length == 0)
                 return false;
@@ -609,6 +611,15 @@ public static class RunningAppsAccessor
         {
             return false;
         }
+    }
+
+    private static bool MatchesLibreOfficeLauncher(string appId, string? executable, string? company)
+    {
+        return string.Equals(company, "The Document Foundation", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(Path.GetFileName(executable), "soffice.bin", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(Path.GetDirectoryName(appId), Path.GetDirectoryName(executable), StringComparison.OrdinalIgnoreCase) &&
+            new[] { "soffice.exe", "swriter.exe", "scalc.exe", "simpress.exe", "sdraw.exe", "sbase.exe", "smath.exe" }
+                .Contains(Path.GetFileName(appId), StringComparer.OrdinalIgnoreCase);
     }
 
     private delegate bool EnumWindowsProc(IntPtr window, IntPtr parameter);

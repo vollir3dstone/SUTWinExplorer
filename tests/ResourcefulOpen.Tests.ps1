@@ -49,6 +49,20 @@ if ($resolveMethod.Invoke($null, @('winword.exe', 'microsoft corporation')) -ne 
     $resolveMethod.Invoke($null, @('Acrobat.exe', 'Adobe Systems Incorporated')) -ne 'OpenByShellOpen' -or
     $null -ne $resolveMethod.Invoke($null, @('WINWORD.EXE', 'Another company')) -or
     $null -ne $resolveMethod.Invoke($null, @('unknown.exe', 'Microsoft Corporation'))) { throw 'Application identity matching failed.' }
+foreach ($executable in @('EXCEL.EXE', 'POWERPNT.EXE', 'OUTLOOK.EXE', 'ONENOTE.EXE', 'MSACCESS.EXE', 'MSPUB.EXE', 'VISIO.EXE', 'WINPROJ.EXE', 'INFOPATH.EXE')) {
+    if ($resolveMethod.Invoke($null, @($executable, 'Microsoft Corporation')) -ne 'OpenByShellOpen') { throw "Office application $executable is not configured for Shell Open." }
+}
+foreach ($executable in @('soffice.bin', 'soffice.exe', 'swriter.exe', 'scalc.exe', 'simpress.exe', 'sdraw.exe', 'sbase.exe', 'smath.exe')) {
+    if ($resolveMethod.Invoke($null, @($executable, 'The Document Foundation')) -ne 'OpenByShellOpen') { throw "LibreOffice application $executable is not configured for Shell Open." }
+    if ($null -ne $resolveMethod.Invoke($null, @($executable, 'Another company'))) { throw "LibreOffice application $executable matched the wrong company." }
+}
+$matchLibreOffice = $accessor.GetMethod('MatchesLibreOfficeLauncher', $privateStatic)
+foreach ($launcher in @('soffice.exe', 'swriter.exe', 'scalc.exe', 'simpress.exe', 'sdraw.exe', 'sbase.exe', 'smath.exe')) {
+    if (-not $matchLibreOffice.Invoke($null, @("C:\LibreOffice\$launcher", 'C:\LibreOffice\soffice.bin', 'The Document Foundation'))) { throw "LibreOffice launcher $launcher did not match its window process." }
+}
+if ($matchLibreOffice.Invoke($null, @('C:\Other\soffice.exe', 'C:\LibreOffice\soffice.bin', 'The Document Foundation')) -or
+    $matchLibreOffice.Invoke($null, @('C:\LibreOffice\soffice.exe', 'C:\LibreOffice\soffice.bin', 'Another company')) -or
+    $matchLibreOffice.Invoke($null, @('C:\LibreOffice\other.exe', 'C:\LibreOffice\soffice.bin', 'The Document Foundation'))) { throw 'LibreOffice launcher matched an unrelated application.' }
 $configuredMethods = $accessor.GetField('ConfiguredOpenMethods', $privateStatic).GetValue($null).Value
 $testProcess = [Diagnostics.Process]::GetCurrentProcess()
 $testKey = [ValueTuple[string, string]]::new([IO.Path]::GetFileName($testProcess.MainModule.FileName).ToUpperInvariant(), $testProcess.MainModule.FileVersionInfo.CompanyName.ToUpperInvariant())

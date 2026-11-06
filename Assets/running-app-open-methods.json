@@ -8,6 +8,18 @@
       "comment": "LetOpenByDialogUsingCtrlF12 is another option for Word."
     },
     {
+      "name": "Microsoft Office",
+      "executables": ["EXCEL.EXE", "POWERPNT.EXE", "OUTLOOK.EXE", "ONENOTE.EXE", "MSACCESS.EXE", "MSPUB.EXE", "VISIO.EXE", "WINPROJ.EXE", "INFOPATH.EXE"],
+      "companies": ["Microsoft Corporation"],
+      "method": "OpenByShellOpen"
+    },
+    {
+      "name": "LibreOffice",
+      "executables": ["soffice.bin", "soffice.exe", "swriter.exe", "scalc.exe", "simpress.exe", "sdraw.exe", "sbase.exe", "smath.exe"],
+      "companies": ["The Document Foundation"],
+      "method": "OpenByShellOpen"
+    },
+    {
       "name": "Adobe Acrobat Reader",
       "executables": ["AcroRd32.exe", "Acrobat.exe"],
       "companies": ["Adobe Systems Incorporated"],

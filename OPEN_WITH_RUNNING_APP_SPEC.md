@@ -54,6 +54,8 @@ application supports opening files this way.
   and [SupportedTypes](https://learn.microsoft.com/en-us/windows/win32/shell/app-registration#using-the-applications-subkey).
 - Return an application identifier and display name for each association. An
   identifier is used for matching and is not necessarily an executable path.
+- LibreOffice launcher executables are matched to `soffice.bin` in the same
+  installation directory when its company is The Document Foundation.
 - For each registered application, identify its visible, uncloaked top-level
   windows, excluding tool windows. Return each window's handle and title.
 - Return running applications only when at least one such window is found.
@@ -115,7 +117,8 @@ the file as a separate document.
   names do not match. Supported names are `LetOpenByDialog`,
   `LetOpenByDialogUsingO`, `LetOpenByDialogUsingCtrlF12`, `DropToAppWindow`,
   and `OpenByShellOpen`. An invalid method or duplicate executable/company pair
-  is an error. Word and Acrobat Reader currently use `OpenByShellOpen`.
+  is an error. Microsoft Office, LibreOffice and Acrobat Reader currently use
+  `OpenByShellOpen` for their configured executables.
 - Configured Shell Open requires a registered application matching the selected
   window's process. It invokes that application's handler on the original STA
   for each file, stops at the first failure, and does not attempt another method.
