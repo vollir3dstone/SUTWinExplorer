@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('Audacity', 'IrfanView')]
+    [ValidateSet('Audacity', 'IrfanView', 'Word', 'VLC', 'AcrobatReader')]
     [string] $Application = 'Audacity',
     [ValidateSet('Paste', 'Drop', 'Resourceful', 'Menu', 'OpenDialog', 'OpenDialogO')]
     [string] $Transfer = 'Paste',
@@ -116,9 +116,13 @@ if ($Transfer -eq 'Menu') {
     $suiteHelpers = $suiteAst.Find({ param($node) $node -is [System.Management.Automation.Language.StringConstantExpressionAst] -and $node.Value.StartsWith('public sealed class SutShellTestSignal') }, $true)
     Add-Type -TypeDefinition $suiteHelpers.Value
 }
-$extension = if ($Application -eq 'Audacity') { '.wav' } else { '.jpg' }
-$executableNames = if ($Application -eq 'Audacity') { @('Audacity.exe') } else { @('i_view64.exe', 'i_view32.exe') }
-$processNames = if ($Application -eq 'Audacity') { @('audacity') } else { @('i_view64', 'i_view32') }
+$extension, $executableNames, $processNames = switch ($Application) {
+    'Audacity' { '.wav'; ,@('Audacity.exe'); ,@('audacity') }
+    'IrfanView' { '.jpg'; ,@('i_view64.exe', 'i_view32.exe'); ,@('i_view64', 'i_view32') }
+    'Word' { '.docx'; ,@('WINWORD.EXE'); ,@('WINWORD') }
+    'VLC' { '.mp4'; ,@('vlc.exe'); ,@('vlc') }
+    'AcrobatReader' { '.pdf'; ,@('AcroRd32.exe', 'Acrobat.exe'); ,@('AcroRd32', 'Acrobat') }
+}
 $registered = @($accessor.GetMethod('GetAppsToChooseFrom').Invoke($null, @([string] "test$extension")) |
     Where-Object { [IO.Path]::GetFileName($_.Id) -in $executableNames -and [IO.File]::Exists($_.Id) })
 Assert-True ($registered.Count -eq 1) "Expected exactly one registered $Application executable for $extension files."
@@ -126,16 +130,12 @@ $applicationPath = [string] $registered[0].Id
 
 $existing = @(Get-Process -Name $processNames -ErrorAction SilentlyContinue)
 if ($UseExisting) {
-    Assert-True ($existing.Count -eq 1) "UseExisting requires exactly one running $Application process."
-    $process = $existing[0]
+    $existingWindows = @($existing | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero })
+    Assert-True ($existingWindows.Count -eq 1) "UseExisting requires exactly one running $Application main window."
+    $process = $existingWindows[0]
 } else {
-    if ($Transfer -in @('OpenDialog', 'OpenDialogO', 'Resourceful', 'Menu') -and $existing.Count -gt 0) {
+    if ($existing.Count -gt 0) {
         throw "$Application is already running. Close it yourself or explicitly use -UseExisting."
-    }
-    foreach ($instance in $existing) {
-        if (-not $instance.CloseMainWindow() -or -not $instance.WaitForExit(5000)) {
-            throw "$Application did not close normally. Resolve any open dialogs or unsaved work and retry."
-        }
     }
     $process = Start-Process -FilePath $applicationPath -PassThru
 }
@@ -144,8 +144,17 @@ $clipboardChanged = $false
 $trackName = $null
 $testContentLoaded = $false
 try {
-    Wait-Until { $process.Refresh(); -not $process.HasExited -and $process.MainWindowHandle -ne [IntPtr]::Zero } "$Application did not open a window."
-    Assert-True (@(Get-Process -Name $processNames -ErrorAction SilentlyContinue).Count -eq 1) "Expected exactly one $Application process."
+    if ($Application -eq 'AcrobatReader' -and -not $UseExisting) {
+        Wait-Until { @(Get-Process -Name $processNames -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero }).Count -eq 1 } "$Application did not open exactly one main window." 30
+        $windowProcess = @(Get-Process -Name $processNames -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero })[0]
+        $process.Dispose()
+        $process = $windowProcess
+    } else {
+        Wait-Until { $process.Refresh(); -not $process.HasExited -and $process.MainWindowHandle -ne [IntPtr]::Zero } "$Application did not open a window."
+    }
+    if ($Application -ne 'AcrobatReader') {
+        Assert-True (@(Get-Process -Name $processNames -ErrorAction SilentlyContinue).Count -eq 1) "Expected exactly one $Application process."
+    }
     Assert-True ([PasteWindowProbe]::IsWindowEnabled($process.MainWindowHandle)) "$Application has a blocking dialog. Resolve it before running the test."
     $pasteNotBefore = [DateTime]::UtcNow.AddSeconds(5)
 
@@ -182,6 +191,46 @@ try {
         Assert-True ([Math]::Abs($player.NaturalDuration.TimeSpan.TotalSeconds - 1) -lt 0.01) 'The test WAV file does not have the expected duration.'
         Write-Host 'Windows decoded the WAV file: one second of 440 Hz PCM audio.'
     } finally { $player.Close() }
+    } elseif ($Application -eq 'Word') {
+        Add-Type -AssemblyName System.IO.Compression
+        $archive = [System.IO.Compression.ZipFile]::Open($filePath, [System.IO.Compression.ZipArchiveMode]::Create)
+        try {
+            $parts = @{
+                '[Content_Types].xml' = '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'
+                '_rels/.rels' = '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'
+                'word/document.xml' = '<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Integration test document</w:t></w:r></w:p></w:body></w:document>'
+            }
+            foreach ($part in $parts.GetEnumerator()) {
+                $entry = $archive.CreateEntry($part.Key)
+                $writer = [IO.StreamWriter]::new($entry.Open(), [Text.UTF8Encoding]::new($false))
+                try { $writer.Write($part.Value) } finally { $writer.Dispose() }
+            }
+        } finally { $archive.Dispose() }
+        Write-Host "DOCX file: $filePath"
+    } elseif ($Application -eq 'VLC') {
+        [IO.File]::Copy((Join-Path $PSScriptRoot 'RunningAppTest.mp4'), $filePath)
+        Write-Host "MP4 file: $filePath"
+    } elseif ($Application -eq 'AcrobatReader') {
+        $content = "BT /F1 18 Tf 72 720 Td (Integration test document) Tj ET`n"
+        $objects = @(
+            '<< /Type /Catalog /Pages 2 0 R >>',
+            '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+            '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+            '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+            "<< /Length $($content.Length) >>`nstream`n${content}endstream"
+        )
+        $pdf = [Text.StringBuilder]::new("%PDF-1.4`n")
+        $offsets = [Collections.Generic.List[int]]::new()
+        foreach ($object in $objects) {
+            $offsets.Add($pdf.Length)
+            [void] $pdf.Append("$($offsets.Count) 0 obj`n$object`nendobj`n")
+        }
+        $xref = $pdf.Length
+        [void] $pdf.Append("xref`n0 6`n0000000000 65535 f `n")
+        foreach ($offset in $offsets) { [void] $pdf.Append(('{0:D10} 00000 n ' -f $offset) + "`n") }
+        [void] $pdf.Append("trailer`n<< /Size 6 /Root 1 0 R >>`nstartxref`n$xref`n%%EOF`n")
+        [IO.File]::WriteAllText($filePath, $pdf.ToString(), [Text.Encoding]::ASCII)
+        Write-Host "PDF file: $filePath"
     } else {
         $visual = [System.Windows.Media.DrawingVisual]::new()
         $drawing = $visual.RenderOpen()
@@ -201,6 +250,11 @@ try {
         Write-Host "JPEG file: $filePath (160 x 100 pixels)"
     }
 
+    Wait-Until {
+        $process.Refresh()
+        $apps = @($accessor.GetMethod('GetRunningApps').Invoke($null, @([string] $filePath)) | Where-Object { $_.App.Id -ieq $applicationPath })
+        return $apps.Count -eq 1 -and @($apps[0].Windows | Where-Object { $_.Handle -eq $process.MainWindowHandle }).Count -eq 1
+    } "The $Application main window was not found among the running apps." 20
     $running = @($accessor.GetMethod('GetRunningApps').Invoke($null, @([string] $filePath)))
     $matchingApps = @($running | Where-Object { $_.App.Id -ieq $applicationPath })
     Assert-True ($matchingApps.Count -eq 1) "Expected exactly one $Application application."
@@ -251,8 +305,11 @@ try {
         Assert-True (-not $result.Error) "The resourceful operation failed: $($result.Error)"
         if ($Application -eq 'Audacity') {
             Assert-True ($result.Dialogs.Count -eq 1 -and $result.Dialogs[0].Submitted -and $null -eq $result.Drop) 'The Open dialog did not replace the drop.'
-        } else {
+        } elseif ($Application -eq 'IrfanView') {
             Assert-True ($result.Dialogs.Count -eq 1 -and -not $result.Dialogs[0].Submitted -and $result.Drop.Dropped) "The fallback drop failed: $($result.Drop.Error)"
+        } else {
+            Assert-True ($result.Dialogs.Count -eq 1 -and ($result.Dialogs[0].Submitted -or ($null -ne $result.Drop -and $result.Drop.Dropped))) 'Neither the Open dialog nor the fallback drop succeeded.'
+            Write-Host "Dialog submitted: $($result.Dialogs[0].Submitted); drop accepted: $($null -ne $result.Drop -and $result.Drop.Dropped)"
         }
     } elseif ($Transfer -eq 'Drop') {
         if ($Application -eq 'IrfanView') {
@@ -287,10 +344,28 @@ try {
         Write-Host 'IrfanView did not load the JPEG from a clipboard file list, as expected.'
     } else {
         Write-Host "$Transfer was sent; checking $Application for the opened file."
-        Wait-Until { @(Get-WindowNames $window.Handle | Where-Object { $_ -like "*$trackName*" }).Count -gt 0 } "$Application did not show the file after $Transfer." 10
+        Wait-Until {
+            $process.Refresh()
+            $currentHandle = $process.MainWindowHandle
+            if ($currentHandle -eq [IntPtr]::Zero -or -not [PasteWindowProbe]::IsWindowEnabled($currentHandle)) { return $false }
+            if (@(Get-WindowNames $currentHandle | Where-Object { $_ -like "*$trackName*" }).Count -eq 0) { return $false }
+            if ($Application -eq 'Word') {
+                $root = [System.Windows.Automation.AutomationElement]::FromHandle($currentHandle)
+                $condition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Document)
+                foreach ($document in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)) {
+                    $pattern = $null
+                    if ($document.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref] $pattern) -and $pattern.DocumentRange.GetText(-1) -like '*Integration test document*') { return $true }
+                }
+                return $false
+            }
+            return $true
+        } "$Application did not show the opened file after $Transfer, or a dialog is blocking it." 15
         $testContentLoaded = $true
         Write-Host "$Application opened the file: $trackName"
     }
+} catch {
+    Write-Host "Test error: $_"
+    throw
 } finally {
     try {
         if ($clipboardChanged) {
@@ -300,7 +375,29 @@ try {
     } finally {
         $process.Refresh()
         try {
-            if (-not $process.HasExited -and (-not $UseExisting -or $Transfer -notin @('OpenDialog', 'OpenDialogO', 'Resourceful', 'Menu'))) {
+            if (-not $process.HasExited -and -not $UseExisting) {
+                if ($Application -eq 'AcrobatReader' -and -not $testContentLoaded) {
+                    $root = [System.Windows.Automation.AutomationElement]::FromHandle($process.MainWindowHandle)
+                    $condition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ClassNameProperty, '#32770')
+                    foreach ($dialog in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)) {
+                        $dialogHandle = [IntPtr] $dialog.Current.NativeWindowHandle
+                        if ($dialog.Current.Name -in @('Open', 'Öffnen') -and $dialogHandle -ne [IntPtr]::Zero -and
+                            [PasteWindowProbe]::GetWindow($dialogHandle, 4) -eq $process.MainWindowHandle) {
+                            [void] [PasteWindowProbe]::PostMessage($dialogHandle, 0x0111, [IntPtr] 2, [IntPtr]::Zero)
+                            Wait-Until { [PasteWindowProbe]::IsWindowEnabled($process.MainWindowHandle) } 'The test Open dialog did not close.' 5
+                        }
+                    }
+                }
+                if ($Application -eq 'Word' -and $process.MainWindowTitle -like "*$trackName*") {
+                    $root = [System.Windows.Automation.AutomationElement]::FromHandle($process.MainWindowHandle)
+                    $condition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ClassNameProperty, 'bosa_sdm_msword')
+                    foreach ($dialog in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)) {
+                        if ($dialog.Current.Name -in @('Datei konvertieren', 'Convert File') -and $dialog.Current.NativeWindowHandle -ne 0) {
+                            [void] [PasteWindowProbe]::PostMessage([IntPtr] $dialog.Current.NativeWindowHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
+                            Wait-Until { [PasteWindowProbe]::IsWindowEnabled($process.MainWindowHandle) } 'The test document dialog did not close.' 5
+                        }
+                    }
+                }
                 if (-not $UseExisting -and $Transfer -in @('OpenDialog', 'OpenDialogO', 'Resourceful', 'Menu') -and -not $testContentLoaded) {
                     $dialog = [PasteWindowProbe]::GetForegroundWindow()
                     $dialogProcessId = [uint32] 0
@@ -316,9 +413,13 @@ try {
                     throw "$Application did not close normally. Resolve any open dialogs or unsaved work."
                 }
                 $promptHandled = $false
+                $script:wordStartClosed = $false
                 Wait-Until {
                     $process.Refresh()
                     if ($process.HasExited) { return $true }
+                    if ($Application -eq 'Word' -and -not $script:wordStartClosed -and $process.MainWindowTitle -eq 'Word') {
+                        $script:wordStartClosed = $process.CloseMainWindow()
+                    }
                     if ($Application -eq 'Audacity' -and -not $UseExisting -and $testContentLoaded -and -not $promptHandled) {
                         $promptHandled = Close-TestSavePrompt $process.Id $trackName
                     }

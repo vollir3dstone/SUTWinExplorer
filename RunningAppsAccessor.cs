@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
 
 namespace SUTWinExplorer;
 
@@ -18,6 +19,7 @@ public static class RunningAppsAccessor
 {
     private const uint AllAssociationHandlers = 0;
     private const uint RecommendedAssociationHandlers = 1;
+    private static readonly Lazy<IReadOnlyDictionary<(string Executable, string Company), string>> ConfiguredOpenMethods = new(LoadConfiguredOpenMethods);
 
     public static IReadOnlyList<RegisteredApp> GetRegisteredApps(string filePath)
         => GetRegisteredApps(filePath, AllAssociationHandlers);
@@ -253,6 +255,12 @@ public static class RunningAppsAccessor
         _ = GetWindowThreadProcessId(window.Handle, out uint targetProcessId);
         if (targetProcessId == 0)
             return new([], null, "The target window is unavailable.");
+        string? configuredMethod = GetConfiguredOpenMethod(targetProcessId);
+        if (configuredMethod == "DropToAppWindow")
+        {
+            var drop = DropToAppWindow(window, files);
+            return new([], drop, drop.Error);
+        }
         var dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
         var dialogs = new List<OpenFileDialogResult>();
         for (int index = 0; index < files.Length; index++)
@@ -260,10 +268,14 @@ public static class RunningAppsAccessor
             var knownWindows = CaptureOwnedWindows(window.Handle);
             if (knownWindows is null)
                 return new(dialogs, null, "Could not inspect the target's windows.");
-            var dialog = await LetOpenByDialog(window, files[index]).ConfigureAwait(false);
+            var dialog = await (configuredMethod == "LetOpenByDialogUsingO"
+                ? LetOpenByDialogUsingO(window, files[index])
+                : LetOpenByDialog(window, files[index])).ConfigureAwait(false);
             dialogs.Add(dialog);
             if (!dialog.Submitted)
             {
+                if (configuredMethod is not null)
+                    return new(dialogs, null, dialog.Error ?? "The configured Open dialog method failed.");
                 if (!IsTargetReadyForFallback(window.Handle, targetProcessId, knownWindows))
                     return new(dialogs, null, "Drop was skipped because the target or an open dialog needs attention.");
                 var remaining = files[index..];
@@ -282,6 +294,53 @@ public static class RunningAppsAccessor
             }
         }
         return new(dialogs, null, null);
+    }
+
+    private static string? GetConfiguredOpenMethod(uint processId)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(checked((int)processId));
+            var module = process.MainModule;
+            return module is null ? null : ResolveConfiguredOpenMethod(Path.GetFileName(module.FileName), module.FileVersionInfo.CompanyName);
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or Win32Exception or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    private static string? ResolveConfiguredOpenMethod(string? executable, string? company)
+    {
+        if (string.IsNullOrWhiteSpace(executable) || string.IsNullOrWhiteSpace(company))
+            return null;
+        return ConfiguredOpenMethods.Value.TryGetValue((executable.ToUpperInvariant(), company.ToUpperInvariant()), out var method) ? method : null;
+    }
+
+    private static IReadOnlyDictionary<(string Executable, string Company), string> LoadConfiguredOpenMethods()
+    {
+        using var stream = typeof(RunningAppsAccessor).Assembly.GetManifestResourceStream("SUTWinExplorer.RunningAppOpenMethods.json")
+            ?? throw new InvalidOperationException("The running application open method mapping is missing.");
+        using var document = JsonDocument.Parse(stream);
+        var methods = new Dictionary<(string Executable, string Company), string>();
+        foreach (var application in document.RootElement.GetProperty("applications").EnumerateArray())
+        {
+            string? method = application.GetProperty("method").GetString();
+            if (method is not ("LetOpenByDialog" or "LetOpenByDialogUsingO" or "DropToAppWindow"))
+                throw new InvalidDataException($"Unsupported running application open method '{method}'.");
+            foreach (var executable in application.GetProperty("executables").EnumerateArray())
+            foreach (var company in application.GetProperty("companies").EnumerateArray())
+            {
+                string? executableName = executable.GetString();
+                string? companyName = company.GetString();
+                if (string.IsNullOrWhiteSpace(executableName) || string.IsNullOrWhiteSpace(companyName) ||
+                    !string.Equals(Path.GetFileName(executableName), executableName, StringComparison.Ordinal))
+                    throw new InvalidDataException("Invalid running application identity.");
+                if (!methods.TryAdd((executableName.ToUpperInvariant(), companyName.ToUpperInvariant()), method))
+                    throw new InvalidDataException($"Duplicate running application identity '{executableName}' / '{companyName}'.");
+            }
+        }
+        return methods;
     }
 
     private static HashSet<IntPtr>? CaptureOwnedWindows(IntPtr handle)

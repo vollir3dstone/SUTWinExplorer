@@ -45,6 +45,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Assets\media-types.json" LogicalName="SUTWinExplorer.MediaTypes.json" />
+    <EmbeddedResource Include="Assets\running-app-open-methods.json" LogicalName="SUTWinExplorer.RunningAppOpenMethods.json" />
     <EmbeddedResource Include="Assets\shell-extension-blacklist.json" LogicalName="SUTWinExplorer.ShellExtensionBlacklist.json" />
     <EmbeddedResource Include="Assets\directory-menu-whitelist.json" LogicalName="SUTWinExplorer.DirectoryMenuWhitelist.json" />
     <Resource Include="Assets\app.ico" />

@@ -86,22 +86,33 @@ the file as a separate document.
   display additional prompts, or create another window. Unsupported dialogs,
   shortcuts, languages and foreground restrictions cause failure. The caller
   must handle any dialog left open on failure.
-- The Content Menu's resourceful operation uses the `Ctrl+O` method, but never
-  uses the bare `O` variant automatically.
+- The Content Menu's resourceful operation uses `Ctrl+O` by default. It uses
+  the bare `O` variant only when explicitly configured for the application.
 
 ### Combined operation
 
-- `OpenInRunningAppResourcefully` asynchronously attempts `Ctrl+O` for each
-  file. After a dialog click is posted, that file is not sent by drop, even
-  though submission does not prove that the file opened. Before the next file,
-  it waits for the selected window to become ready again; otherwise it stops.
-- If a dialog attempt fails, drop only that file and the remaining files, and
+- The embedded [running-app-open-methods.json](Assets/running-app-open-methods.json)
+  selects a single method for known applications. The selected window's process
+  is matched case-insensitively by executable filename and Windows file-version
+  company name, independently of installation path and version. These metadata
+  are not a security identity; renamed executables or changed/missing company
+  names do not match. Supported names are `LetOpenByDialog`,
+  `LetOpenByDialogUsingO`, and `DropToAppWindow`. An invalid method or duplicate
+  executable/company pair is an error. Word and Acrobat Reader currently use
+  `LetOpenByDialog` as an unverified placeholder, not a proven working method.
+- For a configured application only the configured method is attempted; a
+  failed dialog attempt is reported without a fallback drop. For an unknown
+  application the default asynchronously attempts `Ctrl+O` for each file.
+  After a dialog click is posted, that file is not sent by drop, even though
+  submission does not prove that the file opened. Before the next file, it
+  waits for the selected window to become ready again; otherwise it stops.
+- If a default dialog attempt fails, drop only that file and the remaining files, and
   only if the original target is still foreground, visible, enabled and owned
   by the same process, with no blocking owned dialog or new owned window.
   The state is checked again on the original STA thread before dropping.
   Otherwise leave the dialog alone and report that the drop was skipped.
 - The result reports each attempted dialog, the optional drop, and any error.
-  It does not change the clipboard or use paste or the bare `O` shortcut. A
+  It does not change the clipboard or use paste. A
   delayed dialog can still appear after the timeout, and neither a posted click
   nor an accepted drop proves the file was opened. The fallback uses the center
   of the client area and can import or insert into an existing document.
@@ -175,13 +186,28 @@ the file as a separate document.
 - Resourceful integration tests check dialog submission without a drop in
   Audacity and a fallback drop in IrfanView. `ResourcefulOpen.Tests.ps1` checks
   multi-file fallback and suppression when an unsupported dialog remains open.
+- The same integration script supports `Word` (DOCX), `VLC` (MP4), and
+  `AcrobatReader` (PDF), for example:
+  `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application VLC -Transfer Resourceful`.
+  It generates the DOCX and PDF and copies the bundled MP4 test video. The
+  applications must be installed and recommended for the corresponding file
+  type. Word's test also checks the document text and rejects blocking dialogs.
+- In the observed environment VLC opened the MP4 through the resourceful
+  action. Direct drops opened the DOCX in Word and the PDF in Acrobat Reader.
+  Before application-specific routing was added, Word's Ctrl+O attempt was
+  followed by a drop that apparently clicked a recent document and opened a
+  conversion dialog. Reader's Open dialog belongs to a helper process and was
+  not recognized; its fallback was suppressed while the dialog remained open.
+  The current Word and Reader entries are placeholders and do not fall back to
+  drop when their configured method fails.
 - Content-menu tests cover window discovery, submenu placement, disabled state,
   and command routing. An IrfanView integration test invokes the content-menu
   action and verifies that the generated JPEG appears in the target window.
-- Integration tests close their target applications normally. They must not
-  force-close an application or automatically discard existing user work;
-  only a confirmed test-generated project in a test-started Audacity instance
-  may be dismissed without saving.
+- Integration tests refuse to close existing instances; `-UseExisting` must be
+  explicitly requested and leaves the application open. Test-started instances
+  are closed normally. Only a confirmed test-generated project in a test-started
+  Audacity instance may be dismissed without saving. A test-started Word
+  conversion dialog or Reader Open dialog may be closed during cleanup.
 
 ## References
 
