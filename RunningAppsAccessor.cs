@@ -7,7 +7,10 @@ using System.Text.Json;
 
 namespace SUTWinExplorer;
 
-public sealed record RegisteredApp(string Id, string Name);
+public sealed record RegisteredApp(string Id, string Name)
+{
+    public string? AppUserModelId { get; init; }
+}
 public sealed record AppWindow(IntPtr Handle, string Title);
 public sealed record RunningApp(RegisteredApp App, IReadOnlyList<AppWindow> Windows);
 public sealed record PasteClipboardResult(bool Sent, string? Error);
@@ -53,7 +56,10 @@ public static class RunningAppsAccessor
                     if (handler.GetName(out string? id) < 0 || string.IsNullOrWhiteSpace(id))
                         continue;
                     _ = handler.GetUIName(out string? name);
-                    apps.TryAdd(id, new RegisteredApp(id, string.IsNullOrWhiteSpace(name) ? id : name));
+                    string? appUserModelId = null;
+                    if (handler is IObjectWithAppUserModelId appIdentity && appIdentity.GetAppID(out string? identity) >= 0)
+                        appUserModelId = identity;
+                    apps.TryAdd(id, new RegisteredApp(id, string.IsNullOrWhiteSpace(name) ? id : name) { AppUserModelId = appUserModelId });
                 }
                 finally
                 {
@@ -82,7 +88,9 @@ public static class RunningAppsAccessor
             var title = new StringBuilder(length + 1);
             _ = GetWindowText(window, title, title.Capacity);
             _ = GetWindowThreadProcessId(window, out uint processId);
-            if (MatchesApp(app.Id, processId))
+            if (MatchesApp(app.Id, processId) ||
+                (!string.IsNullOrWhiteSpace(app.AppUserModelId) &&
+                 (MatchesApp(app.AppUserModelId, processId) || MatchesHostedAppWindow(window, app.AppUserModelId))))
                 windows.Add(new AppWindow(window, title.ToString()));
             return true;
         }, IntPtr.Zero))
@@ -627,6 +635,31 @@ public static class RunningAppsAccessor
         Data = new InputData { Mouse = new MouseInput { X = x, Y = y, Flags = flags } }
     };
 
+    private static bool MatchesHostedAppWindow(IntPtr window, string appUserModelId)
+    {
+        var className = new StringBuilder(256);
+        _ = GetClassName(window, className, className.Capacity);
+        if (!string.Equals(className.ToString(), "ApplicationFrameWindow", StringComparison.Ordinal))
+            return false;
+        bool matches = false;
+        _ = EnumChildWindows(window, (child, parameter) =>
+        {
+            var childClass = new StringBuilder(256);
+            _ = GetClassName(child, childClass, childClass.Capacity);
+            if (IsWindowVisible(child) && string.Equals(childClass.ToString(), "Windows.UI.Core.CoreWindow", StringComparison.Ordinal))
+            {
+                _ = GetWindowThreadProcessId(child, out uint childProcessId);
+                if (MatchesApp(appUserModelId, childProcessId))
+                {
+                    matches = true;
+                    return false;
+                }
+            }
+            return true;
+        }, IntPtr.Zero);
+        return matches;
+    }
+
     private static bool MatchesApp(string appId, uint processId)
     {
         try
@@ -869,5 +902,14 @@ public static class RunningAppsAccessor
         int MakeDefault([MarshalAs(UnmanagedType.LPWStr)] string description);
         [PreserveSig]
         int Invoke([MarshalAs(UnmanagedType.Interface)] System.Runtime.InteropServices.ComTypes.IDataObject data);
+    }
+
+    [ComImport, Guid("36db0196-9665-46d1-9ba7-d3709eecf9ed"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IObjectWithAppUserModelId
+    {
+        [PreserveSig]
+        int SetAppID([MarshalAs(UnmanagedType.LPWStr)] string appUserModelId);
+        [PreserveSig]
+        int GetAppID([MarshalAs(UnmanagedType.LPWStr)] out string? appUserModelId);
     }
 }

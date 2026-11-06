@@ -10,6 +10,17 @@ public static class ModernPlayerTestWindow
     public static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll")]
     public static extern bool IsWindowEnabled(IntPtr window);
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetApplicationUserModelId(IntPtr process, ref uint length, System.Text.StringBuilder id);
+    public static string GetProcessAppId(IntPtr process)
+    {
+        uint length = 0;
+        if (GetApplicationUserModelId(process, ref length, null) != 122 || length == 0) return "<none>";
+        var id = new System.Text.StringBuilder((int)length);
+        return GetApplicationUserModelId(process, ref length, id) == 0 ? id.ToString() : "<unavailable>";
+    }
 }
 '@
 
@@ -41,6 +52,7 @@ $accessor = $assembly.GetType('SUTWinExplorer.RunningAppsAccessor', $true)
 $handlers = @($accessor.GetMethod('GetAppsToChooseFrom').Invoke($null, @('test.wav')) | Where-Object { $_.Name -eq $startApps[0].Name })
 if ($handlers.Count -ne 1) { throw 'Expected exactly one registered Windows Media Player WAV handler.' }
 $selectedApp = $handlers[0].PSObject.BaseObject
+if ($selectedApp.AppUserModelId -ne $appId) { throw 'The registered player handler did not provide the expected AppUserModelID.' }
 $process = $null
 $windowHandle = [IntPtr]::Zero
 try {
@@ -84,12 +96,27 @@ try {
     Wait-Until { [DateTime]::UtcNow -ge $readyAt } 'The player startup wait did not complete.'
     $process.Refresh()
     if ($process.HasExited -or -not [ModernPlayerTestWindow]::IsWindowEnabled($windowHandle)) { throw 'The test player is no longer ready.' }
+    $frameProcessId = [uint32] 0
+    [void] [ModernPlayerTestWindow]::GetWindowThreadProcessId($windowHandle, [ref] $frameProcessId)
+    $frameProcess = Get-Process -Id $frameProcessId
+    try {
+        Write-Host "Registered handler: $($selectedApp.Id); display name: $($selectedApp.Name)"
+        Write-Host "Frame process: $($frameProcess.Path); app ID: $([ModernPlayerTestWindow]::GetProcessAppId($frameProcess.Handle))"
+        Write-Host "Player process: $($process.Path); app ID: $([ModernPlayerTestWindow]::GetProcessAppId($process.Handle))"
+    } finally { $frameProcess.Dispose() }
     Wait-Until {
         $apps = @($accessor.GetMethod('GetRunningApps').Invoke($null, @([string] $filePath)) | Where-Object { $_.App.Id -eq $selectedApp.Id })
         $script:matchingWindows = @($apps.Windows | Where-Object { $_.Handle -eq $script:windowHandle })
         return $script:matchingWindows.Count -eq 1
     } 'The running Windows Media Player window was not found among the WAV applications.'
     $window = $script:matchingWindows[0].PSObject.BaseObject
+    $appType = $assembly.GetType('SUTWinExplorer.RegisteredApp', $true)
+    $unrelated = [Activator]::CreateInstance($appType, [object[]] @('not-a-handler', 'Unrelated app'))
+    $appType.GetProperty('AppUserModelId').SetValue($unrelated, 'Unrelated.Package_1234567890123!App')
+    if (@($accessor.GetMethod('GetUserWindows').Invoke($null, @($unrelated)) | Where-Object { $_.Handle -eq $windowHandle }).Count -ne 0) {
+        throw 'The hosted player window was incorrectly matched to an unrelated AppUserModelID.'
+    }
+    Write-Host 'The registered player was matched to its hosted window; an unrelated app ID did not match.'
     if (-not [ModernPlayerTestWindow]::IsWindowEnabled($window.Handle)) { throw 'The player window is no longer ready.' }
     $task = $accessor.GetMethod('OpenInRunningAppResourcefully').Invoke($null, [object[]] @($window, [string[]] @($filePath), $selectedApp))
     Wait-Until { $task.IsCompleted } 'The Resourceful operation did not complete.'

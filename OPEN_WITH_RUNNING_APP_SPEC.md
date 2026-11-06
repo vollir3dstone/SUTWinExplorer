@@ -54,6 +54,11 @@ application supports opening files this way.
   and [SupportedTypes](https://learn.microsoft.com/en-us/windows/win32/shell/app-registration#using-the-applications-subkey).
 - Return an application identifier and display name for each association. An
   identifier is used for matching and is not necessarily an executable path.
+- When the association handler exposes `IObjectWithAppUserModelID`, retain its
+  AppUserModelID separately from the handler identifier. For an
+  `ApplicationFrameWindow`, match a visible `Windows.UI.Core.CoreWindow`
+  descendant by its process AppUserModelID; do not identify it by window title
+  or by the shared host process alone.
 - LibreOffice launcher executables are matched to `soffice.bin` in the same
   installation directory when its company is The Document Foundation.
 - For each registered application, identify its visible, uncloaked top-level
@@ -245,8 +250,9 @@ A blocked or skipped test leaves the minimum gate incomplete.
   does not independently inspect the current track's filename.
 - The modern Windows Media Player test checks discovery of its packaged,
   hosted window before transferring a WAV and checking the displayed track.
-  In the observed environment discovery fails, so the seven-test gate is not
-  yet complete; the Resourceful transfer itself has not been verified there.
+  In the observed environment the window is now discovered by its handler's
+  AppUserModelID, but the Resourceful transfer fails because the target or its
+  Open dialog needs attention. The seven-test gate is therefore not complete.
 - `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application LibreOffice -Transfer Resourceful`
   starts a test-owned Writer instance and passes two generated DOCX files in
   one resourceful operation. In the observed environment, both selected
