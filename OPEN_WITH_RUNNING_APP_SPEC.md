@@ -85,9 +85,12 @@ the file as a separate document.
   change existing content; callers must select this method with care.
 - `LetOpenByDialogUsingCtrlF12` uses the same dialog handling with `Ctrl+F12`.
   This is an alternative for Word, noted in its configuration entry.
-- Only a newly created foreground standard Win32 dialog in the selected
-  window's process is considered. Normally it must be owned directly by the
-  selected window. A different existing owner is also accepted when it and the
+- Only a newly created foreground standard Win32 dialog is considered. It may
+  belong to another process when it is directly owned by the selected window,
+  which was visible and enabled before the shortcut and remains visible but
+  disabled while the dialog is open. The dialog process identity is checked
+  again before entering the path and submitting it. Within the selected
+  window's process, a different existing owner is also accepted when it and the
   target were the only visible process windows before the shortcut, were both
   enabled then and remain visible but disabled while the dialog is open. Tool
   windows owned by the target are excluded from this count. Other independent
@@ -250,9 +253,9 @@ A blocked or skipped test leaves the minimum gate incomplete.
   does not independently inspect the current track's filename.
 - The modern Windows Media Player test checks discovery of its packaged,
   hosted window before transferring a WAV and checking the displayed track.
-  In the observed environment the window is now discovered by its handler's
-  AppUserModelID, but the Resourceful transfer fails because the target or its
-  Open dialog needs attention. The seven-test gate is therefore not complete.
+  In the observed environment the window is discovered by its handler's
+  AppUserModelID, and the WAV is opened through its cross-process standard
+  Open dialog without a fallback drop.
 - `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application LibreOffice -Transfer Resourceful`
   starts a test-owned Writer instance and passes two generated DOCX files in
   one resourceful operation. In the observed environment, both selected

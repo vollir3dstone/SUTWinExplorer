@@ -122,6 +122,7 @@ try {
     Wait-Until { $task.IsCompleted } 'The Resourceful operation did not complete.'
     $result = $task.GetAwaiter().GetResult()
     if ($result.Error) { throw "The Resourceful operation failed: $($result.Error)" }
+    if ($result.Dialogs.Count -ne 1 -or -not $result.Dialogs[0].Submitted -or $null -ne $result.Drop) { throw 'The player Open dialog was not submitted without a fallback drop.' }
     Wait-Until {
         $root = [System.Windows.Automation.AutomationElement]::FromHandle($window.Handle)
         $elements = $root.FindAll([System.Windows.Automation.TreeScope]::Subtree, [System.Windows.Automation.Condition]::TrueCondition)

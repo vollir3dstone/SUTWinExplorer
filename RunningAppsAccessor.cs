@@ -267,7 +267,7 @@ public static class RunningAppsAccessor
             if (dialog == handle || dialog == IntPtr.Zero || existingWindows.Contains(dialog))
                 continue;
             _ = GetWindowThreadProcessId(dialog, out uint dialogProcessId);
-            if (dialogProcessId != processId || !IsExpectedOpenDialogOwner(dialog, handle, processId, visibleProcessWindows, enabledProcessWindows) || !IsWindowVisible(dialog) || !IsWindowEnabled(dialog))
+            if (!IsExpectedOpenDialogOwner(dialog, handle, processId, visibleProcessWindows, enabledProcessWindows) || !IsWindowVisible(dialog) || !IsWindowEnabled(dialog))
                 continue;
             var className = new StringBuilder(64);
             _ = GetClassName(dialog, className, className.Capacity);
@@ -293,13 +293,13 @@ public static class RunningAppsAccessor
             _ = GetWindowText(openButtons[0], buttonName, buttonName.Capacity);
             if (buttonName.ToString().Replace("&", "", StringComparison.Ordinal).Trim() is not ("Open" or "Öffnen"))
                 return new(false, "The dialog's confirmation button is not a supported Open command.");
-            if (GetForegroundWindow() != dialog || !IsExpectedOpenDialogOwner(dialog, handle, processId, visibleProcessWindows, enabledProcessWindows) || !File.Exists(fullPath))
+            if (GetForegroundWindow() != dialog || !IsDialogProcess(dialog, dialogProcessId) || !IsExpectedOpenDialogOwner(dialog, handle, processId, visibleProcessWindows, enabledProcessWindows) || !File.Exists(fullPath))
                 return new(false, "The Open dialog or file is no longer available.");
             if (SendMessageTimeoutText(fileFields[0], 0x000C, UIntPtr.Zero, fullPath, 2, 1000, out var setResult) == IntPtr.Zero || setResult == UIntPtr.Zero)
                 return new(false, "Could not enter the file name in the Open dialog.");
             var entered = new StringBuilder(fullPath.Length + 1);
             if (SendMessageTimeoutBuffer(fileFields[0], 0x000D, (UIntPtr)(uint)entered.Capacity, entered, 2, 1000, out _) == IntPtr.Zero ||
-                GetForegroundWindow() != dialog || !IsExpectedOpenDialogOwner(dialog, handle, processId, visibleProcessWindows, enabledProcessWindows) || !File.Exists(fullPath) || !string.Equals(entered.ToString(), fullPath, StringComparison.OrdinalIgnoreCase))
+                GetForegroundWindow() != dialog || !IsDialogProcess(dialog, dialogProcessId) || !IsExpectedOpenDialogOwner(dialog, handle, processId, visibleProcessWindows, enabledProcessWindows) || !File.Exists(fullPath) || !string.Equals(entered.ToString(), fullPath, StringComparison.OrdinalIgnoreCase))
                 return new(false, "The Open dialog did not retain the requested file name.");
             if (!PostMessage(openButtons[0], 0x00F5, IntPtr.Zero, IntPtr.Zero))
                 return new(false, "Could not submit the Open dialog.");
@@ -308,9 +308,24 @@ public static class RunningAppsAccessor
         return new(false, "No supported Open dialog appeared for the target window.");
     }
 
+    private static bool IsDialogProcess(IntPtr dialog, uint expectedProcessId)
+    {
+        _ = GetWindowThreadProcessId(dialog, out uint processId);
+        return processId != 0 && processId == expectedProcessId;
+    }
+
     private static bool IsExpectedOpenDialogOwner(IntPtr dialog, IntPtr target, uint processId, HashSet<IntPtr> visibleProcessWindows, HashSet<IntPtr> enabledProcessWindows)
     {
         IntPtr owner = GetWindow(dialog, 4);
+        _ = GetWindowThreadProcessId(dialog, out uint dialogProcessId);
+        _ = GetWindowThreadProcessId(target, out uint targetProcessId);
+        if (dialogProcessId == 0 || targetProcessId == 0 || targetProcessId != processId)
+            return false;
+        if (dialogProcessId != processId)
+        {
+            return owner == target && visibleProcessWindows.Contains(target) && enabledProcessWindows.Contains(target) &&
+                IsWindow(target) && IsWindowVisible(target) && !IsWindowEnabled(target);
+        }
         if (owner == target)
             return true;
         if (owner == IntPtr.Zero || visibleProcessWindows.Count != 2 || !visibleProcessWindows.Contains(owner) ||
@@ -319,7 +334,6 @@ public static class RunningAppsAccessor
             IsWindowEnabled(owner) || IsWindowEnabled(target))
             return false;
         _ = GetWindowThreadProcessId(owner, out uint ownerProcessId);
-        _ = GetWindowThreadProcessId(target, out uint targetProcessId);
         if (ownerProcessId != processId || targetProcessId != processId)
             return false;
         bool unambiguous = true;

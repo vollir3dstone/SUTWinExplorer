@@ -12,6 +12,7 @@ public static class ResourcefulTestNative
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr window);
     [DllImport("user32.dll")] private static extern bool BringWindowToTop(IntPtr window);
     [DllImport("user32.dll")] public static extern bool EnableWindow(IntPtr window, bool enabled);
+    [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
     public static bool Activate(IntPtr window)
     {
         uint foreground = GetWindowThreadProcessId(GetForegroundWindow(), out _);
@@ -147,6 +148,44 @@ try {
     if ($matchDialogOwner.Invoke($null, [object[]] @($dialogHandle, $dialogHandle, [uint32] $PID, $existingHandles, $existingHandles))) { throw 'An unrelated same-process dialog owner was accepted.' }
     $script:resourcefulDialog.Close()
     $script:resourcefulDialog = $null
+    $probeScript = @'
+Add-Type -AssemblyName PresentationFramework
+$window = [System.Windows.Window]::new()
+$window.Title = 'Cross-process dialog test'
+[System.Windows.Interop.WindowInteropHelper]::new($window).Owner = [IntPtr] TARGET_HANDLE
+$window.add_Closed({ [System.Windows.Threading.Dispatcher]::CurrentDispatcher.InvokeShutdown() })
+$window.Show()
+[Console]::WriteLine([System.Windows.Interop.WindowInteropHelper]::new($window).Handle.ToInt64())
+[Console]::Out.Flush()
+[System.Windows.Threading.Dispatcher]::Run()
+'@.Replace('TARGET_HANDLE', $targetHandle.ToInt64().ToString())
+    $startInfo = [Diagnostics.ProcessStartInfo]::new((Get-Process -Id $PID).Path)
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    foreach ($argument in @('-NoProfile', '-STA', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($probeScript)))) { $startInfo.ArgumentList.Add($argument) }
+    $dialogProcess = [Diagnostics.Process]::Start($startInfo)
+    $foreignHandle = [IntPtr]::Zero
+    try {
+        $foreignHandle = [IntPtr] [long] (Wait-ResourcefulTask $dialogProcess.StandardOutput.ReadLineAsync())
+        if ($foreignHandle -eq [IntPtr]::Zero) { throw 'The cross-process test dialog did not open.' }
+        if ($matchDialogOwner.Invoke($null, [object[]] @($foreignHandle, $targetHandle, [uint32] $PID, $existingHandles, $existingHandles))) { throw 'A cross-process dialog was accepted while the target was enabled.' }
+        [void] [ResourcefulTestNative]::EnableWindow($targetHandle, $false)
+        if (-not $matchDialogOwner.Invoke($null, [object[]] @($foreignHandle, $targetHandle, [uint32] $PID, $existingHandles, $existingHandles))) { throw 'The directly owned cross-process dialog was rejected.' }
+        $emptyHandles = [Collections.Generic.HashSet[IntPtr]]::new()
+        if ($matchDialogOwner.Invoke($null, [object[]] @($foreignHandle, $targetHandle, [uint32] $PID, $existingHandles, $emptyHandles)) -or
+            $matchDialogOwner.Invoke($null, [object[]] @($foreignHandle, $targetHandle, [uint32] $PID, $emptyHandles, $existingHandles)) -or
+            $matchDialogOwner.Invoke($null, [object[]] @($foreignHandle, $targetHandle, [uint32] $dialogProcess.Id, $existingHandles, $existingHandles)) -or
+            $matchDialogOwner.Invoke($null, [object[]] @($foreignHandle, $foreignHandle, [uint32] $dialogProcess.Id, $existingHandles, $existingHandles))) { throw 'An unrelated or previously unavailable cross-process target was accepted.' }
+        $matchDialogProcess = $accessor.GetMethod('IsDialogProcess', $privateStatic)
+        if (-not $matchDialogProcess.Invoke($null, [object[]] @($foreignHandle, [uint32] $dialogProcess.Id)) -or
+            $matchDialogProcess.Invoke($null, [object[]] @($foreignHandle, [uint32] $PID))) { throw 'The dialog process identity was not checked correctly.' }
+    } finally {
+        [void] [ResourcefulTestNative]::EnableWindow($targetHandle, $true)
+        if ($foreignHandle -ne [IntPtr]::Zero) { [void] [ResourcefulTestNative]::PostMessage($foreignHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) }
+        try { [void] (Wait-ResourcefulTask $dialogProcess.WaitForExitAsync()) }
+        catch { if (-not $dialogProcess.HasExited) { $dialogProcess.Kill(); $dialogProcess.WaitForExit() } }
+        $dialogProcess.Dispose()
+    }
     $sharedOwner = [System.Windows.Window]::new()
     $sharedOwner.Title = 'Shared application window'
     $sharedDialog = [System.Windows.Window]::new()
