@@ -21,13 +21,10 @@ application supports opening files this way.
   Selections containing a directory and selections with no matching running
   windows have a disabled submenu. The action is not added to the background,
   sidebar or Shift menus.
-- Selecting a window copies the selected file paths to the Windows clipboard,
-  replacing its previous contents, and invokes the combined operation for that
-  window. The clipboard is not restored because the target may read it after the
-  keystroke has been sent. If clipboard preparation fails, still attempt the
-  combined operation so the drop can proceed.
+- Selecting a window invokes the resourceful Open dialog and drop fallback
+  operation for that window. It does not change the clipboard.
 - Do not show a transfer result dialog, including on failure. Technical errors
-  can be written to the diagnostic trace. A sent paste or accepted drop is not
+  can be written to the diagnostic trace. A submitted dialog or accepted drop is not
   a guarantee that the target opened the files.
 
 ## Applications and windows
@@ -89,26 +86,25 @@ the file as a separate document.
   display additional prompts, or create another window. Unsupported dialogs,
   shortcuts, languages and foreground restrictions cause failure. The caller
   must handle any dialog left open on failure.
-- This method is separate from the current Content Menu action and the existing
-  combined paste/drop operation; neither invokes it automatically.
+- The Content Menu's resourceful operation uses the `Ctrl+O` method, but never
+  uses the bare `O` variant automatically.
 
 ### Combined operation
 
-- `OpenInRunningAppResourcefully` attempts paste first and then attempts drop,
-  regardless of whether paste reports success or failure. This is not a
-  fallback based on detecting whether a file was opened.
-- The caller supplies the target window and file paths. Paste is attempted only
-  when the clipboard contains the same existing file paths in the same order
-  (case-insensitive comparison). A mismatch or clipboard read failure skips
-  paste but does not prevent the drop attempt. The operation does not change or
-  restore the clipboard.
-- The result reports the paste and drop outcomes separately. Paste success
-  means the keystroke was sent; drop success means the drop was accepted.
-  Neither result proves that a file was opened. Sending the keystroke before
-  starting the drop does not guarantee when the target processes it.
-- Both transfers may be acted on. The target can open or import the same file
-  twice, or insert it into an existing document. The drop uses the center of
-  the target window's client area and can affect a different control than paste.
+- `OpenInRunningAppResourcefully` asynchronously attempts `Ctrl+O` for each
+  file. After a dialog click is posted, that file is not sent by drop, even
+  though submission does not prove that the file opened. Before the next file,
+  it waits for the selected window to become ready again; otherwise it stops.
+- If a dialog attempt fails, drop only that file and the remaining files, and
+  only if the original target is still foreground, visible, enabled and owned
+  by the same process, with no blocking owned dialog or new owned window.
+  The state is checked again on the original STA thread before dropping.
+  Otherwise leave the dialog alone and report that the drop was skipped.
+- The result reports each attempted dialog, the optional drop, and any error.
+  It does not change the clipboard or use paste or the bare `O` shortcut. A
+  delayed dialog can still appear after the timeout, and neither a posted click
+  nor an accepted drop proves the file was opened. The fallback uses the center
+  of the client area and can import or insert into an existing document.
 
 ### Paste by interaction
 
@@ -176,8 +172,9 @@ the file as a separate document.
 - `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application
   IrfanView -Transfer OpenDialogO` tests the `O` variant with a generated JPEG.
   In the observed environment IrfanView opened the file.
-- The combined mode is also exercised with IrfanView; it verifies that the
-  paste was sent, the drop was accepted, and the JPEG appeared in the target.
+- Resourceful integration tests check dialog submission without a drop in
+  Audacity and a fallback drop in IrfanView. `ResourcefulOpen.Tests.ps1` checks
+  multi-file fallback and suppression when an unsupported dialog remains open.
 - Content-menu tests cover window discovery, submenu placement, disabled state,
   and command routing. An IrfanView integration test invokes the content-menu
   action and verifies that the generated JPEG appears in the target window.

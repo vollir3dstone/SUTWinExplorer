@@ -216,23 +216,6 @@ try {
         $dropSurface.Add_DragOver($dragHandler)
         $dropSurface.Add_Drop($dropHandler)
         try {
-            $resourcefulMethod = $accessor.GetMethod('OpenInRunningAppResourcefully')
-            [System.Windows.Clipboard]::SetFileDropList($fileList)
-            $null = $dropSurface.Focus()
-            $script:transferEvents.Clear()
-            $result = $resourcefulMethod.Invoke($null, [object[]] @($target, [string[]] @($fileOne, $fileTwo)))
-            Assert-True ($result.Paste.Sent -and $result.Drop.Dropped) "The combined transfer failed: $($result.Paste.Error); $($result.Drop.Error)."
-            Assert-True ($script:droppedFiles.Count -eq 2 -and $fileOne -in $script:droppedFiles -and $fileTwo -in $script:droppedFiles) 'The combined drop did not receive both files.'
-
-            $differentFileList = [Collections.Specialized.StringCollection]::new()
-            $null = $differentFileList.Add($fileTwo)
-            [System.Windows.Clipboard]::SetFileDropList($differentFileList)
-            $script:transferEvents.Clear()
-            $script:droppedFiles = @()
-            $result = $resourcefulMethod.Invoke($null, [object[]] @($target, [string[]] @($fileOne)))
-            Assert-True (-not $result.Paste.Sent -and $result.Paste.Error -and $result.Drop.Dropped) 'A clipboard mismatch did not skip paste and attempt drop.'
-            Assert-True (($script:transferEvents -join ',') -eq 'Drop' -and $script:droppedFiles.Count -eq 1 -and $script:droppedFiles[0] -eq $fileOne) 'The clipboard mismatch changed the transfer sequence or files.'
-
             $result = $dropMethod.Invoke($null, [object[]] @($target, [string[]] @($fileOne, $fileTwo)))
             Assert-True ($result.Dropped -and -not $result.Error) "The OLE file drag failed: $($result.Error); drag events: $script:dragEvents."
             Assert-True ($script:droppedFiles.Count -eq 2 -and $fileOne -in $script:droppedFiles -and $fileTwo -in $script:droppedFiles) 'The drop target did not receive both files.'

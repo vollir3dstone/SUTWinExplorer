@@ -565,11 +565,11 @@ windows, has a disabled submenu. This action is not added to the background,
 sidebar or Shift menus. Its command IDs belong to the application, not the Shell,
 and coexist with the application-owned **Open parent** action.
 
-Selecting a window replaces the clipboard with the selected files and attempts
-paste by `Ctrl+V` followed by a drop. Paste makes no target click; existing focus
-and the drop position can still cause insertion into an existing document, and
-the target may process both transfers. No transfer result dialog is shown, and
-sent or accepted input does not establish that the target opened the files.
+Selecting a window attempts `Ctrl+O` and a guarded Open dialog first. On failure,
+it may drop the remaining files at the center, unless an open dialog or changed
+focus makes the target unsafe. The clipboard is not changed. A drop can modify
+an existing document; a submitted dialog or accepted drop does not establish
+that the target opened the files. No transfer result dialog is shown.
 Details are in [Open with Running App](OPEN_WITH_RUNNING_APP_SPEC.md).
 
 An individual top-level Shell command is comparable only if it is enabled, not

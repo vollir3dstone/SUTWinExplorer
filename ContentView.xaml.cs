@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Collections.ObjectModel;
-using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
@@ -155,23 +154,13 @@ public partial class ContentView : UserControl
         }
     }
 
-    private void OpenInRunningApp(AppWindow window, IReadOnlyList<string> paths)
+    private async void OpenInRunningApp(AppWindow window, IReadOnlyList<string> paths)
     {
         try
         {
-            try
-            {
-                var files = new StringCollection();
-                files.AddRange(paths.ToArray());
-                Clipboard.SetFileDropList(files);
-            }
-            catch (System.Runtime.InteropServices.ExternalException exception)
-            {
-                Trace.TraceError("Could not prepare the clipboard for a running application: {0}", exception);
-            }
-            var result = RunningAppsAccessor.OpenInRunningAppResourcefully(window, paths);
-            if (!result.Paste.Sent) Trace.TraceError("Paste to running application failed: {0}", result.Paste.Error);
-            if (!result.Drop.Dropped) Trace.TraceError("Drop to running application failed: {0}", result.Drop.Error);
+            var result = await RunningAppsAccessor.OpenInRunningAppResourcefully(window, paths);
+            if (result.Error is not null) Trace.TraceError("Open in running application failed: {0}", result.Error);
+            if (result.Drop is { Dropped: false } drop) Trace.TraceError("Drop to running application failed: {0}", drop.Error);
         }
         catch (Exception exception)
         {

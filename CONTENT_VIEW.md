@@ -213,12 +213,12 @@ each visible matching app window as `App name - Window title`, ordered by app
 and window title, with an app or window icon when available. For several selected files, an app must be registered for every
 selected type. The submenu is disabled when the selection contains a directory
 or no matching window is available; it is not added to background or Shift menus.
-Choosing a window puts the selected files on the Windows clipboard, replacing
-its previous contents, then attempts `Ctrl+V` followed by a drop. Paste does not
-click the target or explicitly set a focused control, but the focused control
-can already be an existing document. Either operation can open, import or insert the files,
-and both can be processed. No transfer result dialog is shown; neither a sent
-paste nor an accepted drop confirms that a file was opened. See [Open with Running App](OPEN_WITH_RUNNING_APP_SPEC.md).
+Choosing a window first attempts `Ctrl+O` and the Open dialog for each file.
+If the dialog attempt fails, remaining files can be dropped at the window's
+center, but not when an open dialog or a focus change makes the target unsafe.
+The clipboard is not changed. A submitted dialog or accepted drop does not
+confirm that a file was opened; a drop can change an existing document. No
+transfer result dialog is shown. See [Open with Running App](OPEN_WITH_RUNNING_APP_SPEC.md).
 
 ### Drag and drop
 

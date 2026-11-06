@@ -1,7 +1,7 @@
 param(
     [ValidateSet('Audacity', 'IrfanView')]
     [string] $Application = 'Audacity',
-    [ValidateSet('Paste', 'Drop', 'Both', 'Menu', 'OpenDialog', 'OpenDialogO')]
+    [ValidateSet('Paste', 'Drop', 'Resourceful', 'Menu', 'OpenDialog', 'OpenDialogO')]
     [string] $Transfer = 'Paste',
     [switch] $UseExisting
 )
@@ -129,7 +129,7 @@ if ($UseExisting) {
     Assert-True ($existing.Count -eq 1) "UseExisting requires exactly one running $Application process."
     $process = $existing[0]
 } else {
-    if ($Transfer -in @('OpenDialog', 'OpenDialogO') -and $existing.Count -gt 0) {
+    if ($Transfer -in @('OpenDialog', 'OpenDialogO', 'Resourceful', 'Menu') -and $existing.Count -gt 0) {
         throw "$Application is already running. Close it yourself or explicitly use -UseExisting."
     }
     foreach ($instance in $existing) {
@@ -232,8 +232,6 @@ try {
         }
         Assert-True ($result.Submitted) "The Open dialog was not submitted: $($result.Error)"
     } elseif ($Transfer -eq 'Menu') {
-        $previousClipboard = [System.Windows.Clipboard]::GetDataObject()
-        $clipboardChanged = $true
         $view = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
         $createActions = $view.GetType().GetMethod('CreateRunningAppActions', [Reflection.BindingFlags]'Instance,NonPublic')
         $actions = $createActions.Invoke($view, [object[]] @(,[string[]] @($filePath)))
@@ -246,15 +244,16 @@ try {
             $action[0].Invoke.Invoke()
             Assert-True (-not $errorProbe.Opened) 'The running-app menu action reported a transfer error.'
         } finally { $errorProbe.Dispose() }
-    } elseif ($Transfer -eq 'Both') {
-        $previousClipboard = [System.Windows.Clipboard]::GetDataObject()
-        $files = [Collections.Specialized.StringCollection]::new()
-        $null = $files.Add($filePath)
-        [System.Windows.Clipboard]::SetFileDropList($files)
-        $clipboardChanged = $true
-        $result = $accessor.GetMethod('OpenInRunningAppResourcefully').Invoke($null, [object[]] @($window, [string[]] @([string] $filePath)))
-        Assert-True ($result.Paste.Sent) "Ctrl+V could not be sent: $($result.Paste.Error)"
-        Assert-True ($result.Drop.Dropped) "The file drop failed: $($result.Drop.Error)"
+    } elseif ($Transfer -eq 'Resourceful') {
+        $task = $accessor.GetMethod('OpenInRunningAppResourcefully').Invoke($null, [object[]] @($window, [string[]] @([string] $filePath)))
+        Wait-Until { $task.IsCompleted } 'The resourceful operation did not complete.' 15
+        $result = $task.GetAwaiter().GetResult()
+        Assert-True (-not $result.Error) "The resourceful operation failed: $($result.Error)"
+        if ($Application -eq 'Audacity') {
+            Assert-True ($result.Dialogs.Count -eq 1 -and $result.Dialogs[0].Submitted -and $null -eq $result.Drop) 'The Open dialog did not replace the drop.'
+        } else {
+            Assert-True ($result.Dialogs.Count -eq 1 -and -not $result.Dialogs[0].Submitted -and $result.Drop.Dropped) "The fallback drop failed: $($result.Drop.Error)"
+        }
     } elseif ($Transfer -eq 'Drop') {
         if ($Application -eq 'IrfanView') {
             $root = [System.Windows.Automation.AutomationElement]::FromHandle($window.Handle)
@@ -301,8 +300,8 @@ try {
     } finally {
         $process.Refresh()
         try {
-            if (-not $process.HasExited -and (-not $UseExisting -or $Transfer -notin @('OpenDialog', 'OpenDialogO'))) {
-                if (-not $UseExisting -and $Transfer -in @('OpenDialog', 'OpenDialogO') -and -not $testContentLoaded) {
+            if (-not $process.HasExited -and (-not $UseExisting -or $Transfer -notin @('OpenDialog', 'OpenDialogO', 'Resourceful', 'Menu'))) {
+                if (-not $UseExisting -and $Transfer -in @('OpenDialog', 'OpenDialogO', 'Resourceful', 'Menu') -and -not $testContentLoaded) {
                     $dialog = [PasteWindowProbe]::GetForegroundWindow()
                     $dialogProcessId = [uint32] 0
                     [void] [PasteWindowProbe]::GetWindowThreadProcessId($dialog, [ref] $dialogProcessId)

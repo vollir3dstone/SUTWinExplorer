@@ -549,13 +549,11 @@ selection and scrolling behavior, such as selecting and revealing new items.
   for every selected type. The submenu is disabled for selections containing a
   directory or when no matching window is available. It is not added to the
   background, sidebar or Shift menus.
-- [x] Choosing a window replaces the Windows clipboard with the selected files
-  and sends `Ctrl+V`, then attempts a drop into that window. Both actions may be
-  processed: the target can open or import a file twice or insert it into an
-  existing document. Paste does not click the target, but its existing keyboard
-  focus can still direct the paste into a document. No transfer result dialog is
-  shown; sending paste or accepting a drop does not confirm that a file was
-  opened. See [Open with Running App](OPEN_WITH_RUNNING_APP_SPEC.md).
+- [x] Choosing a window first attempts `Ctrl+O` and the Open dialog; if that
+  fails, remaining files may be dropped at the window center when the target is
+  still safe. The clipboard is unchanged. A drop can modify an existing document;
+  a submitted dialog or accepted drop does not confirm that a file was opened.
+  No transfer result dialog is shown. See [Open with Running App](OPEN_WITH_RUNNING_APP_SPEC.md).
 - [x] ContentView and the Sub directories list support left-button filesystem
   drag-and-drop between each other and compatible external applications. The
   table drags its selection; the list drags only the clicked folder. Directory

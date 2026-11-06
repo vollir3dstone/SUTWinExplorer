@@ -12,7 +12,7 @@ public sealed record RunningApp(RegisteredApp App, IReadOnlyList<AppWindow> Wind
 public sealed record PasteClipboardResult(bool Sent, string? Error);
 public sealed record DropToWindowResult(bool Dropped, string? Error);
 public sealed record OpenFileDialogResult(bool Submitted, string? Error);
-public sealed record ResourcefulOpenResult(PasteClipboardResult Paste, DropToWindowResult Drop);
+public sealed record ResourcefulOpenResult(IReadOnlyList<OpenFileDialogResult> Dialogs, DropToWindowResult? Drop, string? Error);
 
 public static class RunningAppsAccessor
 {
@@ -241,33 +241,88 @@ public static class RunningAppsAccessor
         return new(false, "No supported Open dialog appeared for the target window.");
     }
 
-    public static ResourcefulOpenResult OpenInRunningAppResourcefully(AppWindow window, IReadOnlyList<string> paths)
+    public static async Task<ResourcefulOpenResult> OpenInRunningAppResourcefully(AppWindow window, IReadOnlyList<string> paths)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentNullException.ThrowIfNull(paths);
         string[] files = paths.ToArray();
-        PasteClipboardResult paste;
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
-            paste = new(false, "Clipboard access requires an STA thread.");
-        else
+            return new([], null, "The operation requires an STA thread.");
+        if (files.Length == 0 || files.Any(path => string.IsNullOrWhiteSpace(path) || !File.Exists(path)))
+            return new([], null, "One or more existing files are required.");
+        _ = GetWindowThreadProcessId(window.Handle, out uint targetProcessId);
+        if (targetProcessId == 0)
+            return new([], null, "The target window is unavailable.");
+        var dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+        var dialogs = new List<OpenFileDialogResult>();
+        for (int index = 0; index < files.Length; index++)
         {
-            try
+            var knownWindows = CaptureOwnedWindows(window.Handle);
+            if (knownWindows is null)
+                return new(dialogs, null, "Could not inspect the target's windows.");
+            var dialog = await LetOpenByDialog(window, files[index]).ConfigureAwait(false);
+            dialogs.Add(dialog);
+            if (!dialog.Submitted)
             {
-                var clipboard = System.Windows.Clipboard.GetDataObject();
-                if (clipboard is null || !clipboard.GetDataPresent(System.Windows.DataFormats.FileDrop, false) ||
-                    clipboard.GetData(System.Windows.DataFormats.FileDrop, false) is not string[] clipboardFiles ||
-                    files.Length == 0 || files.Any(path => string.IsNullOrWhiteSpace(path) || !File.Exists(path)) ||
-                    !clipboardFiles.SequenceEqual(files, StringComparer.OrdinalIgnoreCase))
-                    paste = new(false, "The clipboard file list does not match the requested files.");
-                else
-                    paste = SendPasteByInteractionToAppWindow(window);
+                if (!IsTargetReadyForFallback(window.Handle, targetProcessId, knownWindows))
+                    return new(dialogs, null, "Drop was skipped because the target or an open dialog needs attention.");
+                var remaining = files[index..];
+                var drop = await dispatcher.InvokeAsync(() => IsTargetReadyForFallback(window.Handle, targetProcessId, knownWindows)
+                    ? DropToAppWindowCore(window, remaining, null, requireForeground: true)
+                    : new DropToWindowResult(false, "Drop was skipped because the target or an open dialog needs attention."));
+                return new(dialogs, drop, null);
             }
-            catch (ExternalException exception)
+            if (index + 1 < files.Length)
             {
-                paste = new(false, $"Could not read the clipboard: {exception.Message}");
+                var deadline = Stopwatch.StartNew();
+                while (!IsTargetReadyForFallback(window.Handle, targetProcessId, knownWindows) && deadline.Elapsed < TimeSpan.FromSeconds(5))
+                    await Task.Delay(100).ConfigureAwait(false);
+                if (!IsTargetReadyForFallback(window.Handle, targetProcessId, knownWindows))
+                    return new(dialogs, null, "The target did not become ready for the next file.");
             }
         }
-        return new(paste, DropToAppWindow(window, files));
+        return new(dialogs, null, null);
+    }
+
+    private static HashSet<IntPtr>? CaptureOwnedWindows(IntPtr handle)
+    {
+        var windows = new HashSet<IntPtr>();
+        return EnumWindows((candidate, _) =>
+        {
+            if (candidate != handle && IsWindowVisible(candidate))
+            {
+                for (IntPtr owner = GetWindow(candidate, 4); owner != IntPtr.Zero; owner = GetWindow(owner, 4))
+                {
+                    if (owner == handle)
+                    {
+                        windows.Add(candidate);
+                        break;
+                    }
+                }
+            }
+            return true;
+        }, IntPtr.Zero) ? windows : null;
+    }
+
+    private static bool IsTargetReadyForFallback(IntPtr handle, uint targetProcessId, HashSet<IntPtr> knownWindows)
+    {
+        if (handle == IntPtr.Zero || !IsWindow(handle) || !IsWindowVisible(handle) || !IsWindowEnabled(handle) ||
+            GetForegroundWindow() != handle || GetAncestor(handle, 2) != handle)
+            return false;
+        _ = GetWindowThreadProcessId(handle, out uint currentProcessId);
+        if (currentProcessId != targetProcessId)
+            return false;
+        var owned = CaptureOwnedWindows(handle);
+        if (owned is null)
+            return false;
+        foreach (var candidate in owned)
+        {
+            var className = new StringBuilder(64);
+            _ = GetClassName(candidate, className, className.Capacity);
+            if (className.ToString() == "#32770" || (!knownWindows.Contains(candidate) && (GetWindowLong(candidate, -20) & 0x80) == 0))
+                return false;
+        }
+        return true;
     }
 
     public static DropToWindowResult DropToAppWindow(AppWindow window, IReadOnlyList<string> paths)
@@ -276,7 +331,7 @@ public static class RunningAppsAccessor
     public static DropToWindowResult DropToAppWindowAt(AppWindow window, IReadOnlyList<string> paths, int clientX, int clientY)
         => DropToAppWindowCore(window, paths, new NativePoint { X = clientX, Y = clientY });
 
-    private static DropToWindowResult DropToAppWindowCore(AppWindow window, IReadOnlyList<string> paths, NativePoint? clientPoint)
+    private static DropToWindowResult DropToAppWindowCore(AppWindow window, IReadOnlyList<string> paths, NativePoint? clientPoint, bool requireForeground = false)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentNullException.ThrowIfNull(paths);
@@ -290,6 +345,8 @@ public static class RunningAppsAccessor
             return new(false, "The target window is unavailable or disabled.");
         if (new[] { 0x01, 0x02, 0x04, 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(key => (GetAsyncKeyState(key) & 0x8000) != 0))
             return new(false, "Release the mouse buttons and modifier keys before dragging.");
+        if (requireForeground && GetForegroundWindow() != handle)
+            return new(false, "The target window is no longer in the foreground.");
         if (IsIconic(handle))
             _ = ShowWindowAsync(handle, 9);
         if (GetForegroundWindow() != handle && !SetForegroundWindow(handle))
@@ -301,6 +358,8 @@ public static class RunningAppsAccessor
         var point = clientPoint ?? new NativePoint { X = (rect.Left + rect.Right) / 2, Y = (rect.Top + rect.Bottom) / 2 };
         if (point.X < rect.Left || point.X >= rect.Right || point.Y < rect.Top || point.Y >= rect.Bottom)
             return new(false, "The drop point is outside the target window's client area.");
+        if (requireForeground && GetForegroundWindow() != handle)
+            return new(false, "The target window is no longer in the foreground.");
         if (!ClientToScreen(handle, ref point) || !SetCursorPos(point.X, point.Y) || GetAncestor(WindowFromPoint(point), 2) != handle)
             return new(false, "The target window's center is not accessible for dropping.");
 
