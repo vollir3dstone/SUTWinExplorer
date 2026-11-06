@@ -5,46 +5,61 @@
 			"extensions": [".exe", ".dll", ".msi"]
 		},
 		{
-			"type": "lines-text",
-			"extensions": [".txt", ".text"]
-		},
-		{
-			"type": "book",
-			"extensions": [".doc", ".docx", ".odt", ".rtf", ".pdf", ".ps", ".html", ".htm", ".mht", ".mhtm", ".mhtml", ".chm", ".msg", ".md", ".pptx", ".ppt", 
-				".eps", ".vsd", ".vsdx", ".odg"]
-		},
-		{
-			"type": "structured-data",
-			"extensions": [".xml", ".json", ".csv", ".tsv", ".xlsx", ".xls", ".ods", ".yaml", ".yml", ".ini", ".cfg", 
-				".mdb", ".accdb", ".sqlite", ".db", ".mdf", ".parquet"]
-		},
-		{
-			"type": "image",
-			"extensions": [".jpg", ".jpeg", ".jpe", ".jp2", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".avif", ".heic", ".ico", 
-				".svg", ".psd", ".xcf", ".wmf", ".emf", ".tga"]
-		},
-		{
-			"type": "audio",
-			"extensions": [".wav", ".mp3", ".aac", ".flac", ".aiff", ".aif", ".m4a", ".m4b", ".weba", ".opus", ".wma", ".ogg", ".mid", ".midi"]
-		},
-		{
-			"type": "video",
-			"extensions": [".mp4", ".m4v", ".mov", ".avi", ".wmv", ".mpg", ".mpeg", ".mkv", ".webm", ".ogv", ".ts", ".m2ts", ".3gp", ".flv"]
-		},
-		{
 			"type": "box",
 			"extensions": [".zip", ".7z", ".rar", ".tar", ".gz"]
 		},
 		{
+			"type": "lines-text",
+			"extensions": 
+				{
+					"text-based": [".txt", ".text"]
+				}
+		},
+		{
+			"type": "structured-data",
+			"extensions": 
+				{
+					"text-based": [".xml", ".json", ".csv", ".tsv", ".yaml", ".yml", ".ini", ".cfg"],
+					"app-specific": [".xlsx", ".xls", ".ods", ".mdb", ".accdb", ".sqlite", ".db", ".mdf", ".parquet"]
+				}
+		},
+		{
 			"type": "command-data",
-			"extensions": [
-				".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx",
-				".cs", ".java", ".kt", ".kts", ".swift", ".go", ".rs",
-				".py", ".pyw", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts",
-				".cts", ".tsx", ".php", ".phtml", ".rb", ".pl", ".pm", ".r",
-				".R", ".dart", ".scala", ".sc", ".lua", ".sh", ".bash", ".zsh",
-				".bat", ".cmd", ".ps1", ".psm1", ".psd1", ".sql"
-				]
+			"extensions": 
+				{
+					"text-based": [
+						".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx",
+						".cs", ".java", ".kt", ".kts", ".swift", ".go", ".rs",
+						".py", ".pyw", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts",
+						".cts", ".tsx", ".php", ".phtml", ".rb", ".pl", ".pm", ".r",
+						".R", ".dart", ".scala", ".sc", ".lua", ".sh", ".bash", ".zsh",
+						".bat", ".cmd", ".ps1", ".psm1", ".psd1", ".sql"
+					]
+				}
+		},
+		{
+			"type": "book",
+			"extensions": 
+				{
+					"render": [".pdf", ".ps", ".html", ".htm", ".mht", ".mhtm", ".mhtml", ".chm", ".msg", ".eps"],
+					"design": [".doc", ".docx", ".odt", ".rtf", ".md", ".pptx", ".ppt", ".vsd", ".vsdx", ".odg"]
+				}
+		},
+		{
+			"type": "image",
+			"extensions": 
+				{
+					"render": [".jpg", ".jpeg", ".jpe", ".jp2", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".avif", ".heic"],
+					"design": [".ico", ".svg", ".psd", ".xcf", ".wmf", ".emf", ".tga"]
+				}
+		},
+		{
+			"type": "audio",
+			"extensions": {"render": [".wav", ".mp3", ".aac", ".flac", ".aiff", ".aif", ".m4a", ".m4b", ".weba", ".opus", ".wma", ".ogg", ".mid", ".midi"]}
+		},
+		{
+			"type": "video",
+			"extensions": {"render": [".mp4", ".m4v", ".mov", ".avi", ".wmv", ".mpg", ".mpeg", ".mkv", ".webm", ".ogv", ".ts", ".m2ts", ".3gp", ".flv"]}
 		}
 	]
 }
