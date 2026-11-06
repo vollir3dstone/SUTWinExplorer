@@ -21,7 +21,7 @@ Editing this file does not publish a release. Application builds and installer b
 ## Publish a Release
 
 1. Set the version and comment in [ReleaseDescription.txt](ReleaseDescription.txt).
-2. Build the application and, if needed, installers as described in [BUILD_AND_RELEASE.md](BUILD_AND_RELEASE.md). Commit the description and the intended build changes.
+2. Build the application and, if needed, installers as described in [BUILD_AND_RELEASE.md](BUILD_AND_RELEASE.md). The installer script builds and publishes each selected Release profile before creating its installer, so no separate Release build or publish is needed first. The Debug build is a separate check and is not used as installer input. Commit the description and the intended build changes.
 3. Publish the release list by running `./release.ps1` in PowerShell. The script takes no arguments and reads the current description file.
 4. Commit [RELEASES.html](RELEASES.html).
 5. Run `./release.ps1` again with the same description. The new list commit is added to the same version.

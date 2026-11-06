@@ -61,7 +61,7 @@ Both profiles enable native-library self-extraction. The publish output includes
 2. Publish the `Included` profile for machines that should not require a preinstalled .NET runtime, or publish the `Dependent` profile when the .NET 10 Desktop Runtime is a deployment prerequisite.
 3. Distribute the contents of the selected output directory. Keep the `.pdb` file for diagnostics if desired; it is not required to run the application.
 
-Running `dotnet publish` directly creates application builds only. It does not create an installer or upload artifacts to a release service.
+Running `dotnet publish` directly creates application builds only. It does not create an installer or upload artifacts to a release service. If you are creating installers, you can skip the separate publish commands: the installer script below builds and publishes each selected Release profile before creating its installer.
 
 ## Build Installers
 
@@ -114,7 +114,7 @@ Example:
 
 ### Build and Outputs
 
-The installer script is not automatically run by `dotnet build` or `dotnet publish`. Run it explicitly from the repository root. With no filter it processes every entry in the JSON profile list:
+The installer script is not automatically run by `dotnet build` or `dotnet publish`. Run it explicitly from the repository root. It runs `dotnet publish` for each selected profile, building the Release application and publishing it before compiling the installer. You do not need to run a separate Release build or publish first; a Debug build is a separate check and is not used as installer input. With no filter the script processes every entry in the JSON profile list:
 
 ```powershell
 .\installer-config\build-installer.ps1

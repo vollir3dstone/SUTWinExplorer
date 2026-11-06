@@ -1,6 +1,5 @@
-1.01
-Explorer replacement with features:
-- Tabs that represent a fixed path
-- Profiles that collect several fixed paths
+2.01
+Explorer now uses a custom table to display a directory content, no longer the Windows shell.
+Many new features.
 
-Mostly produced with Github Copilot GPT-6.1 Terra and 6 Luna.
+Mostly produced with Github Copilot GPT-6.1 Terra.
