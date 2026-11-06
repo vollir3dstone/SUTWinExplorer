@@ -42,15 +42,15 @@
 			"extensions": 
 				{
 					"render": [".pdf", ".ps", ".html", ".htm", ".mht", ".mhtm", ".mhtml", ".chm", ".msg", ".eps"],
-					"design": [".doc", ".docx", ".odt", ".rtf", ".md", ".pptx", ".ppt", ".vsd", ".vsdx", ".odg"]
+					"edit": [".doc", ".docx", ".odt", ".rtf", ".md", ".pptx", ".ppt", ".vsd", ".vsdx", ".odg"]
 				}
 		},
 		{
 			"type": "image",
 			"extensions": 
 				{
-					"render": [".jpg", ".jpeg", ".jpe", ".jp2", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".avif", ".heic"],
-					"design": [".ico", ".svg", ".psd", ".xcf", ".wmf", ".emf", ".tga"]
+					"render": [".jpg", ".jpeg", ".jpe", ".jp2", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".avif", ".heic", ".ico"],
+					"edit": [".svg", ".psd", ".xcf", ".wmf", ".emf", ".tga"]
 				}
 		},
 		{
