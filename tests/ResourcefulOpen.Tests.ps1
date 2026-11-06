@@ -37,7 +37,7 @@ $accessor = $assembly.GetType('SUTWinExplorer.RunningAppsAccessor', $true)
 $appWindowType = $assembly.GetType('SUTWinExplorer.AppWindow', $true)
 $privateStatic = [Reflection.BindingFlags]'Static,NonPublic'
 $resolveMethod = $accessor.GetMethod('ResolveConfiguredOpenMethod', $privateStatic)
-if ($resolveMethod.Invoke($null, @('winword.exe', 'microsoft corporation')) -ne 'LetOpenByDialog' -or
+if ($resolveMethod.Invoke($null, @('winword.exe', 'microsoft corporation')) -ne 'LetOpenByDialogUsingCtrlF12' -or
     $resolveMethod.Invoke($null, @('Acrobat.exe', 'Adobe Systems Incorporated')) -ne 'LetOpenByDialog' -or
     $null -ne $resolveMethod.Invoke($null, @('WINWORD.EXE', 'Another company')) -or
     $null -ne $resolveMethod.Invoke($null, @('unknown.exe', 'Microsoft Corporation'))) { throw 'Application identity matching failed.' }
@@ -63,6 +63,7 @@ $script:resourcefulFiles = @()
 $script:blockResourceful = $false
 $script:keepDialogInBackground = $false
 $script:plainOReceived = $false
+$script:ctrlF12Received = $false
 $script:resourcefulDialog = $null
 $dragHandler = [System.Windows.DragEventHandler] {
     param($sender, $eventArgs)
@@ -79,6 +80,8 @@ $keyHandler = [System.Windows.Input.KeyEventHandler] {
     param($sender, $eventArgs)
     if ($eventArgs.Key -eq [System.Windows.Input.Key]::O -and
         -not ([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Control)) { $script:plainOReceived = $true }
+    if ($eventArgs.Key -eq [System.Windows.Input.Key]::F12 -and
+        ([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Control)) { $script:ctrlF12Received = $true }
     if ($script:blockResourceful -and $eventArgs.Key -eq [System.Windows.Input.Key]::O -and
         ([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Control)) {
         $script:resourcefulDialog = [System.Windows.Window]::new()
@@ -131,6 +134,11 @@ try {
     $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile)))
     $result = Wait-ResourcefulTask $task
     if (-not $script:plainOReceived -or -not $result.Error -or $null -ne $result.Drop) { throw 'The configured plain-O dialog method was not used.' }
+    $configuredMethods[$testKey] = 'LetOpenByDialogUsingCtrlF12'
+    if (-not [ResourcefulTestNative]::Activate($targetHandle)) { throw 'Could not reactivate the test window.' }
+    $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile)))
+    $result = Wait-ResourcefulTask $task
+    if (-not $script:ctrlF12Received -or -not $result.Error -or $null -ne $result.Drop) { throw 'The configured Ctrl+F12 dialog method was not used.' }
     $configuredMethods[$testKey] = 'DropToAppWindow'
     if (-not [ResourcefulTestNative]::Activate($targetHandle)) { throw 'Could not reactivate the test window.' }
     $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile)))

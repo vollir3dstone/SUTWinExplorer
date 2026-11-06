@@ -146,12 +146,15 @@ public static class RunningAppsAccessor
     }
 
     public static Task<OpenFileDialogResult> LetOpenByDialog(AppWindow window, string filePath)
-        => LetOpenByDialogCore(window, filePath, controlKey: true);
+        => LetOpenByDialogCore(window, filePath, key: 0x4F, controlKey: true, shortcut: "Ctrl+O");
 
     public static Task<OpenFileDialogResult> LetOpenByDialogUsingO(AppWindow window, string filePath)
-        => LetOpenByDialogCore(window, filePath, controlKey: false);
+        => LetOpenByDialogCore(window, filePath, key: 0x4F, controlKey: false, shortcut: "O");
 
-    private static async Task<OpenFileDialogResult> LetOpenByDialogCore(AppWindow window, string filePath, bool controlKey)
+    public static Task<OpenFileDialogResult> LetOpenByDialogUsingCtrlF12(AppWindow window, string filePath)
+        => LetOpenByDialogCore(window, filePath, key: 0x7B, controlKey: true, shortcut: "Ctrl+F12");
+
+    private static async Task<OpenFileDialogResult> LetOpenByDialogCore(AppWindow window, string filePath, ushort key, bool controlKey, string shortcut)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
@@ -161,8 +164,8 @@ public static class RunningAppsAccessor
         IntPtr handle = window.Handle;
         if (handle == IntPtr.Zero || !IsWindow(handle) || !IsWindowVisible(handle) || GetAncestor(handle, 2) != handle || !IsWindowEnabled(handle))
             return new(false, "The target window is unavailable or disabled.");
-        if (new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C, 0x4F }.Any(key => (GetAsyncKeyState(key) & 0x8000) != 0))
-            return new(false, "Release the modifier keys and O before opening the dialog.");
+        if (new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C, (int)key }.Any(virtualKey => (GetAsyncKeyState(virtualKey) & 0x8000) != 0))
+            return new(false, $"Release the modifier keys and {shortcut} before opening the dialog.");
         if (IsIconic(handle))
             _ = ShowWindowAsync(handle, 9);
         if (GetForegroundWindow() != handle && !SetForegroundWindow(handle))
@@ -181,17 +184,17 @@ public static class RunningAppsAccessor
         if (GetForegroundWindow() != handle || !IsWindow(handle) || !IsWindowEnabled(handle))
             return new(false, "The target window is no longer active and available.");
         Input[] inputs = controlKey
-            ? [KeyInput(0x11, false), KeyInput(0x4F, false), KeyInput(0x4F, true), KeyInput(0x11, true)]
-            : [KeyInput(0x4F, false), KeyInput(0x4F, true)];
+            ? [KeyInput(0x11, false), KeyInput(key, false), KeyInput(key, true), KeyInput(0x11, true)]
+            : [KeyInput(key, false), KeyInput(key, true)];
         uint sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<Input>());
         if (sent != inputs.Length)
         {
             if (sent != 0)
             {
-                Input[] releases = controlKey ? [KeyInput(0x4F, true), KeyInput(0x11, true)] : [KeyInput(0x4F, true)];
+                Input[] releases = controlKey ? [KeyInput(key, true), KeyInput(0x11, true)] : [KeyInput(key, true)];
                 _ = SendInput((uint)releases.Length, releases, Marshal.SizeOf<Input>());
             }
-            return new(false, $"Could not send the complete {(controlKey ? "Ctrl+O" : "O")} keystroke.");
+            return new(false, $"Could not send the complete {shortcut} keystroke.");
         }
 
         var deadline = Stopwatch.StartNew();
@@ -268,9 +271,12 @@ public static class RunningAppsAccessor
             var knownWindows = CaptureOwnedWindows(window.Handle);
             if (knownWindows is null)
                 return new(dialogs, null, "Could not inspect the target's windows.");
-            var dialog = await (configuredMethod == "LetOpenByDialogUsingO"
-                ? LetOpenByDialogUsingO(window, files[index])
-                : LetOpenByDialog(window, files[index])).ConfigureAwait(false);
+            var dialog = await (configuredMethod switch
+            {
+                "LetOpenByDialogUsingO" => LetOpenByDialogUsingO(window, files[index]),
+                "LetOpenByDialogUsingCtrlF12" => LetOpenByDialogUsingCtrlF12(window, files[index]),
+                _ => LetOpenByDialog(window, files[index])
+            }).ConfigureAwait(false);
             dialogs.Add(dialog);
             if (!dialog.Submitted)
             {
@@ -326,7 +332,7 @@ public static class RunningAppsAccessor
         foreach (var application in document.RootElement.GetProperty("applications").EnumerateArray())
         {
             string? method = application.GetProperty("method").GetString();
-            if (method is not ("LetOpenByDialog" or "LetOpenByDialogUsingO" or "DropToAppWindow"))
+            if (method is not ("LetOpenByDialog" or "LetOpenByDialogUsingO" or "LetOpenByDialogUsingCtrlF12" or "DropToAppWindow"))
                 throw new InvalidDataException($"Unsupported running application open method '{method}'.");
             foreach (var executable in application.GetProperty("executables").EnumerateArray())
             foreach (var company in application.GetProperty("companies").EnumerateArray())

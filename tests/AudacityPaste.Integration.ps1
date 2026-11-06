@@ -1,7 +1,7 @@
 param(
     [ValidateSet('Audacity', 'IrfanView', 'Word', 'VLC', 'AcrobatReader')]
     [string] $Application = 'Audacity',
-    [ValidateSet('Paste', 'Drop', 'Resourceful', 'Menu', 'OpenDialog', 'OpenDialogO')]
+    [ValidateSet('Paste', 'Drop', 'Resourceful', 'Menu', 'OpenDialog', 'OpenDialogO', 'OpenDialogCtrlF12')]
     [string] $Transfer = 'Paste',
     [switch] $UseExisting
 )
@@ -160,7 +160,7 @@ try {
 
     $directory = Join-Path ([IO.Path]::GetTempPath()) 'KIS-File-Paste-Test'
     [IO.Directory]::CreateDirectory($directory) | Out-Null
-    $trackName = $(if ($Transfer -in @('OpenDialog', 'OpenDialogO')) { 'KIS Öffnen ' } else { 'KIS-Paste-' }) + [guid]::NewGuid().ToString('N')
+    $trackName = $(if ($Transfer -in @('OpenDialog', 'OpenDialogO', 'OpenDialogCtrlF12')) { 'KIS Öffnen ' } else { 'KIS-Paste-' }) + [guid]::NewGuid().ToString('N')
     $filePath = Join-Path $directory ($trackName + $extension)
     if ($Application -eq 'Audacity') {
     $sampleRate = 44100
@@ -269,8 +269,12 @@ try {
 
     Wait-Until { [DateTime]::UtcNow -ge $pasteNotBefore } "The $Application startup wait did not complete."
     Assert-True ([PasteWindowProbe]::ActivateTestWindow($window.Handle)) "Could not activate the $Application test window."
-    if ($Transfer -in @('OpenDialog', 'OpenDialogO')) {
-        $method = if ($Transfer -eq 'OpenDialogO') { 'LetOpenByDialogUsingO' } else { 'LetOpenByDialog' }
+    if ($Transfer -in @('OpenDialog', 'OpenDialogO', 'OpenDialogCtrlF12')) {
+        $method = switch ($Transfer) {
+            'OpenDialogO' { 'LetOpenByDialogUsingO' }
+            'OpenDialogCtrlF12' { 'LetOpenByDialogUsingCtrlF12' }
+            default { 'LetOpenByDialog' }
+        }
         $result = $accessor.GetMethod($method).Invoke($null, [object[]] @($window, [string] $filePath)).GetAwaiter().GetResult()
         if (-not $result.Submitted) {
             Write-Host "Open dialog error: $($result.Error)"
@@ -398,14 +402,16 @@ try {
                         }
                     }
                 }
-                if (-not $UseExisting -and $Transfer -in @('OpenDialog', 'OpenDialogO', 'Resourceful', 'Menu') -and -not $testContentLoaded) {
+                if (-not $UseExisting -and $Transfer -in @('OpenDialog', 'OpenDialogO', 'Resourceful', 'Menu', 'OpenDialogCtrlF12') -and -not $testContentLoaded) {
                     $dialog = [PasteWindowProbe]::GetForegroundWindow()
                     $dialogProcessId = [uint32] 0
                     [void] [PasteWindowProbe]::GetWindowThreadProcessId($dialog, [ref] $dialogProcessId)
                     if ($dialogProcessId -eq $process.Id -and [PasteWindowProbe]::GetWindow($dialog, 4) -eq $process.MainWindowHandle) {
                         $dialogElement = [System.Windows.Automation.AutomationElement]::FromHandle($dialog)
                         if ($null -ne $dialogElement -and $dialogElement.Current.ClassName -eq '#32770') {
-                            [void] [PasteWindowProbe]::PostMessage($dialog, 0x0111, [IntPtr] 2, [IntPtr]::Zero)
+                            if ([PasteWindowProbe]::PostMessage($dialog, 0x0111, [IntPtr] 2, [IntPtr]::Zero)) {
+                                Wait-Until { [PasteWindowProbe]::IsWindowEnabled($process.MainWindowHandle) } 'The test Open dialog did not close.' 5
+                            }
                         }
                     }
                 }

@@ -76,6 +76,8 @@ the file as a separate document.
   modifiers. It is intended for applications whose Open shortcut is `O`.
   In an application with an editable focused control, the key can instead
   change existing content; callers must select this method with care.
+- `LetOpenByDialogUsingCtrlF12` uses the same dialog handling with `Ctrl+F12`.
+  The configured Word entry uses this method.
 - Only a newly created foreground standard Win32 dialog owned directly by the
   selected window in the same process is considered. The method looks for the
   standard file name edit control and an enabled Open button; the supported
@@ -97,9 +99,9 @@ the file as a separate document.
   company name, independently of installation path and version. These metadata
   are not a security identity; renamed executables or changed/missing company
   names do not match. Supported names are `LetOpenByDialog`,
-  `LetOpenByDialogUsingO`, and `DropToAppWindow`. An invalid method or duplicate
-  executable/company pair is an error. Word and Acrobat Reader currently use
-  `LetOpenByDialog` as an unverified placeholder, not a proven working method.
+  `LetOpenByDialogUsingO`, `LetOpenByDialogUsingCtrlF12`, and `DropToAppWindow`.
+  An invalid method or duplicate executable/company pair is an error. Acrobat
+  Reader still uses `LetOpenByDialog` as an unverified placeholder.
 - For a configured application only the configured method is attempted; a
   failed dialog attempt is reported without a fallback drop. For an unknown
   application the default asynchronously attempts `Ctrl+O` for each file.
@@ -192,14 +194,18 @@ the file as a separate document.
   It generates the DOCX and PDF and copies the bundled MP4 test video. The
   applications must be installed and recommended for the corresponding file
   type. Word's test also checks the document text and rejects blocking dialogs.
+- `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application Word -Transfer OpenDialogCtrlF12`
+  tests `LetOpenByDialogUsingCtrlF12` with a Unicode DOCX filename. In the
+  observed Word version, the document opened with the expected content. The
+  resourceful Word test also opened the document using the configured method
+  without a drop.
 - In the observed environment VLC opened the MP4 through the resourceful
   action. Direct drops opened the DOCX in Word and the PDF in Acrobat Reader.
   Before application-specific routing was added, Word's Ctrl+O attempt was
   followed by a drop that apparently clicked a recent document and opened a
   conversion dialog. Reader's Open dialog belongs to a helper process and was
   not recognized; its fallback was suppressed while the dialog remained open.
-  The current Word and Reader entries are placeholders and do not fall back to
-  drop when their configured method fails.
+  Configured methods do not fall back to drop when they fail.
 - Content-menu tests cover window discovery, submenu placement, disabled state,
   and command routing. An IrfanView integration test invokes the content-menu
   action and verifies that the generated JPEG appears in the target window.

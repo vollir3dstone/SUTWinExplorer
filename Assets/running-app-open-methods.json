@@ -4,7 +4,7 @@
       "name": "Microsoft Word",
       "executables": ["WINWORD.EXE"],
       "companies": ["Microsoft Corporation"],
-      "method": "LetOpenByDialog"
+      "method": "LetOpenByDialogUsingCtrlF12"
     },
     {
       "name": "Adobe Acrobat Reader",
