@@ -21,10 +21,25 @@ internal enum MediaType
     Ambiguous
 }
 
+internal enum MediaTypeSubType
+{
+    WITHOUT_SUBTYPE,
+    LINES_TEXT_TEXT_BASED,
+    STRUCTURED_DATA_TEXT_BASED,
+    STRUCTURED_DATA_APP_SPECIFIC,
+    COMMAND_DATA_TEXT_BASED,
+    BOOK_RENDER,
+    BOOK_EDIT,
+    IMAGE_RENDER,
+    IMAGE_EDIT,
+    AUDIO_RENDER,
+    VIDEO_RENDER
+}
+
 internal static class MediaTypeMap
 {
     private const string ResourceName = "SUTWinExplorer.MediaTypes.json";
-    private static readonly IReadOnlyDictionary<string, MediaType> TypesByExtension = Load();
+    private static readonly IReadOnlyDictionary<string, (MediaType Type, MediaTypeSubType MediaTypeSubType)> TypesByExtension = Load();
 
     public static MediaType GetMediaType(string path, bool isDirectory)
     {
@@ -37,7 +52,20 @@ internal static class MediaTypeMap
         else if (string.Equals(extension, ".url", StringComparison.OrdinalIgnoreCase))
             return MediaType.Url;
 
-        return TypesByExtension.TryGetValue(extension, out var type) ? type : MediaType.None;
+        return TypesByExtension.TryGetValue(extension, out var type) ? type.Type : MediaType.None;
+    }
+
+    public static MediaTypeSubType GetMediaTypeSubType(string path, bool isDirectory)
+    {
+        if (isDirectory)
+            return MediaTypeSubType.WITHOUT_SUBTYPE;
+
+        var extension = Path.GetExtension(path);
+        if (string.Equals(extension, ".lnk", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(extension, ".url", StringComparison.OrdinalIgnoreCase))
+            return MediaTypeSubType.WITHOUT_SUBTYPE;
+
+        return TypesByExtension.TryGetValue(extension, out var type) ? type.MediaTypeSubType : MediaTypeSubType.WITHOUT_SUBTYPE;
     }
 
     public static string GetName(MediaType type) => type switch
@@ -59,12 +87,24 @@ internal static class MediaTypeMap
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unsupported media type.")
     };
 
-    private static Dictionary<string, MediaType> Load()
+    public static string FormatMediaTypeSubType(MediaTypeSubType mediaTypeSubType) => mediaTypeSubType switch
+    {
+        MediaTypeSubType.WITHOUT_SUBTYPE => string.Empty,
+        MediaTypeSubType.LINES_TEXT_TEXT_BASED or MediaTypeSubType.STRUCTURED_DATA_TEXT_BASED or
+            MediaTypeSubType.COMMAND_DATA_TEXT_BASED => "TB",
+        MediaTypeSubType.STRUCTURED_DATA_APP_SPECIFIC => "AS",
+        MediaTypeSubType.BOOK_RENDER or MediaTypeSubType.IMAGE_RENDER or MediaTypeSubType.AUDIO_RENDER or
+            MediaTypeSubType.VIDEO_RENDER => "RE",
+        MediaTypeSubType.BOOK_EDIT or MediaTypeSubType.IMAGE_EDIT => "ED",
+        _ => throw new ArgumentOutOfRangeException(nameof(mediaTypeSubType), mediaTypeSubType, "Unsupported media type sub type.")
+    };
+
+    private static Dictionary<string, (MediaType Type, MediaTypeSubType MediaTypeSubType)> Load()
     {
         using var stream = typeof(MediaTypeMap).Assembly.GetManifestResourceStream(ResourceName)
             ?? throw new InvalidOperationException($"Embedded media type mapping '{ResourceName}' is missing.");
         using var document = JsonDocument.Parse(stream);
-        var types = new Dictionary<string, MediaType>(StringComparer.OrdinalIgnoreCase);
+        var types = new Dictionary<string, (MediaType Type, MediaTypeSubType MediaTypeSubType)>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in document.RootElement.GetProperty("types").EnumerateArray())
         {
             var typeName = entry.GetProperty("type").GetString();
@@ -85,24 +125,56 @@ internal static class MediaTypeMap
                 _ => throw new InvalidDataException($"Unsupported media type '{typeName}'.")
             };
 
-            foreach (var extensionElement in entry.GetProperty("extensions").EnumerateArray())
+            var extensions = entry.GetProperty("extensions");
+            if (extensions.ValueKind == JsonValueKind.Array)
             {
-                var extension = extensionElement.GetString();
-                if (string.IsNullOrWhiteSpace(extension) || extension[0] != '.' || extension.Length == 1)
-                    throw new InvalidDataException($"Invalid extension in media type '{typeName}'.");
+                AddExtensions(types, extensions, type, MediaTypeSubType.WITHOUT_SUBTYPE, typeName);
+                continue;
+            }
 
-                if (types.TryGetValue(extension, out var existing))
+            foreach (var group in extensions.EnumerateObject())
+            {
+                var mediaTypeSubType = (type, group.Name) switch
                 {
-                    if (existing != type)
-                        types[extension] = MediaType.Ambiguous;
-                }
-                else
-                {
-                    types.Add(extension, type);
-                }
+                    (MediaType.LinesText, "text-based") => MediaTypeSubType.LINES_TEXT_TEXT_BASED,
+                    (MediaType.StructuredData, "text-based") => MediaTypeSubType.STRUCTURED_DATA_TEXT_BASED,
+                    (MediaType.StructuredData, "app-specific") => MediaTypeSubType.STRUCTURED_DATA_APP_SPECIFIC,
+                    (MediaType.CommandData, "text-based") => MediaTypeSubType.COMMAND_DATA_TEXT_BASED,
+                    (MediaType.Book, "render") => MediaTypeSubType.BOOK_RENDER,
+                    (MediaType.Book, "edit") => MediaTypeSubType.BOOK_EDIT,
+                    (MediaType.Image, "render") => MediaTypeSubType.IMAGE_RENDER,
+                    (MediaType.Image, "edit") => MediaTypeSubType.IMAGE_EDIT,
+                    (MediaType.Audio, "render") => MediaTypeSubType.AUDIO_RENDER,
+                    (MediaType.Video, "render") => MediaTypeSubType.VIDEO_RENDER,
+                    _ => throw new InvalidDataException($"Unsupported media type sub type '{typeName}/{group.Name}'.")
+                };
+                AddExtensions(types, group.Value, type, mediaTypeSubType, typeName);
             }
         }
 
         return types;
+    }
+
+    private static void AddExtensions(Dictionary<string, (MediaType Type, MediaTypeSubType MediaTypeSubType)> types,
+        JsonElement extensions, MediaType type, MediaTypeSubType mediaTypeSubType, string typeName)
+    {
+        foreach (var extensionElement in extensions.EnumerateArray())
+        {
+            var extension = extensionElement.GetString();
+            if (string.IsNullOrWhiteSpace(extension) || extension[0] != '.' || extension.Length == 1)
+                throw new InvalidDataException($"Invalid extension in media type '{typeName}'.");
+
+            if (types.TryGetValue(extension, out var existing))
+            {
+                if (existing.Type != type)
+                    types[extension] = (MediaType.Ambiguous, MediaTypeSubType.WITHOUT_SUBTYPE);
+                else if (existing.MediaTypeSubType != mediaTypeSubType)
+                    types[extension] = (type, MediaTypeSubType.WITHOUT_SUBTYPE);
+            }
+            else
+            {
+                types.Add(extension, (type, mediaTypeSubType));
+            }
+        }
     }
 }

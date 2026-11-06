@@ -935,6 +935,7 @@ internal sealed class DirectoryItem(string name, string fullPath, bool isDirecto
     internal bool IsDirectory { get; } = isDirectory;
     internal bool IsDrive { get; } = isDrive;
     internal MediaType MediaType { get; } = MediaTypeMap.GetMediaType(fullPath, isDirectory);
+    internal MediaTypeSubType MediaTypeSubType { get; } = MediaTypeMap.GetMediaTypeSubType(fullPath, isDirectory);
 
     internal void SetIcons(ShellIconSet? icons)
     {

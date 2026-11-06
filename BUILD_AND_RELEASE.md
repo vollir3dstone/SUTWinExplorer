@@ -20,6 +20,8 @@ dotnet build .\SUTWinExplorer.csproj -c Debug
 
 The Debug application is `bin\Debug\net10.0-windows\KIS Explorer.exe`.
 
+Builds validate [media-types.json](Assets/media-types.json) and fail on invalid JSON or conflicting extension assignments, including conflicts between subtypes. Extension matching is case-insensitive; repeated assignments to the same type and subtype are allowed.
+
 Do not run a standard Release build with `dotnet build -c Release`. The only Release builds are the `Included` and `Dependent` publish profiles below.
 
 ## Publish Profiles

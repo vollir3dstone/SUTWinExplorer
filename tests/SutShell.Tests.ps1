@@ -23,6 +23,39 @@ $rename = $shell.GetMethod('Rename', $flags)
 $directory = Join-Path ([System.IO.Path]::GetTempPath()) ('kis-shell-test-' + [guid]::NewGuid().ToString('N'))
 
 try {
+    $mediaMap = $assembly.GetType('SUTWinExplorer.MediaTypeMap', $true)
+    $getMediaType = $mediaMap.GetMethod('GetMediaType')
+    $getMediaTypeSubType = $mediaMap.GetMethod('GetMediaTypeSubType')
+    $formatMediaTypeSubType = $mediaMap.GetMethod('FormatMediaTypeSubType')
+    $mediaCases = @(
+        @('notes.txt', $false, 'LinesText', 'LINES_TEXT_TEXT_BASED', 'TB'),
+        @('data.JSON', $false, 'StructuredData', 'STRUCTURED_DATA_TEXT_BASED', 'TB'),
+        @('data.xlsx', $false, 'StructuredData', 'STRUCTURED_DATA_APP_SPECIFIC', 'AS'),
+        @('code.cs', $false, 'CommandData', 'COMMAND_DATA_TEXT_BASED', 'TB'),
+        @('book.pdf', $false, 'Book', 'BOOK_RENDER', 'RE'),
+        @('book.docx', $false, 'Book', 'BOOK_EDIT', 'ED'),
+        @('image.png', $false, 'Image', 'IMAGE_RENDER', 'RE'),
+        @('image.svg', $false, 'Image', 'IMAGE_EDIT', 'ED'),
+        @('audio.mp3', $false, 'Audio', 'AUDIO_RENDER', 'RE'),
+        @('video.ts', $false, 'Video', 'VIDEO_RENDER', 'RE'),
+        @('archive.zip', $false, 'Box', 'WITHOUT_SUBTYPE', ''),
+        @('unknown.xyz', $false, 'None', 'WITHOUT_SUBTYPE', ''),
+        @('folder.pdf', $true, 'Directory', 'WITHOUT_SUBTYPE', ''),
+        @('shortcut.lnk', $false, 'ShellLink', 'WITHOUT_SUBTYPE', ''),
+        @('shortcut.url', $false, 'Url', 'WITHOUT_SUBTYPE', '')
+    )
+    foreach ($case in $mediaCases) {
+        $arguments = [object[]] @([string] $case[0], [bool] $case[1])
+        $type = $getMediaType.Invoke($null, $arguments)
+        $mediaTypeSubType = $getMediaTypeSubType.Invoke($null, $arguments)
+        $text = $formatMediaTypeSubType.Invoke($null, [object[]] @($mediaTypeSubType))
+        Assert-True ($type.ToString() -ceq $case[2] -and $mediaTypeSubType.ToString() -ceq $case[3] -and $text -ceq $case[4]) "Media type or media type sub type mismatch for $($case[0])."
+    }
+    $directoryItemType = $assembly.GetType('SUTWinExplorer.DirectoryItem', $true)
+    $directoryItem = [Activator]::CreateInstance($directoryItemType, [object[]] @('book.pdf', 'book.pdf', $false, $false))
+    $itemMediaTypeSubType = $directoryItemType.GetProperty('MediaTypeSubType', [System.Reflection.BindingFlags]'Instance,NonPublic').GetValue($directoryItem)
+    Assert-True ($itemMediaTypeSubType.ToString() -ceq 'BOOK_RENDER') 'Directory item did not retain its media type sub type.'
+
     [System.IO.Directory]::CreateDirectory($directory) | Out-Null
     [System.IO.Directory]::CreateDirectory((Join-Path $directory 'Folder')) | Out-Null
     [System.IO.File]::WriteAllText((Join-Path $directory 'notes.txt'), 'hello')
