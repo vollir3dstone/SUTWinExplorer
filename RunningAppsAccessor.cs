@@ -143,7 +143,13 @@ public static class RunningAppsAccessor
         return new(true, null);
     }
 
-    public static async Task<OpenFileDialogResult> LetOpenByDialog(AppWindow window, string filePath)
+    public static Task<OpenFileDialogResult> LetOpenByDialog(AppWindow window, string filePath)
+        => LetOpenByDialogCore(window, filePath, controlKey: true);
+
+    public static Task<OpenFileDialogResult> LetOpenByDialogUsingO(AppWindow window, string filePath)
+        => LetOpenByDialogCore(window, filePath, controlKey: false);
+
+    private static async Task<OpenFileDialogResult> LetOpenByDialogCore(AppWindow window, string filePath, bool controlKey)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
@@ -172,13 +178,18 @@ public static class RunningAppsAccessor
             return new(false, "Could not inspect existing windows before opening the dialog.");
         if (GetForegroundWindow() != handle || !IsWindow(handle) || !IsWindowEnabled(handle))
             return new(false, "The target window is no longer active and available.");
-        Input[] inputs = [KeyInput(0x11, false), KeyInput(0x4F, false), KeyInput(0x4F, true), KeyInput(0x11, true)];
+        Input[] inputs = controlKey
+            ? [KeyInput(0x11, false), KeyInput(0x4F, false), KeyInput(0x4F, true), KeyInput(0x11, true)]
+            : [KeyInput(0x4F, false), KeyInput(0x4F, true)];
         uint sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<Input>());
         if (sent != inputs.Length)
         {
             if (sent != 0)
-                _ = SendInput(2, [KeyInput(0x4F, true), KeyInput(0x11, true)], Marshal.SizeOf<Input>());
-            return new(false, "Could not send the complete Ctrl+O keystroke.");
+            {
+                Input[] releases = controlKey ? [KeyInput(0x4F, true), KeyInput(0x11, true)] : [KeyInput(0x4F, true)];
+                _ = SendInput((uint)releases.Length, releases, Marshal.SizeOf<Input>());
+            }
+            return new(false, $"Could not send the complete {(controlKey ? "Ctrl+O" : "O")} keystroke.");
         }
 
         var deadline = Stopwatch.StartNew();

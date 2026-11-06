@@ -75,6 +75,10 @@ the file as a separate document.
 
 - `LetOpenByDialog` accepts a target window and one existing file.
   It activates the window and sends `Ctrl+O`, without changing the clipboard.
+- `LetOpenByDialogUsingO` uses the same dialog handling but sends `O` without
+  modifiers. It is intended for applications whose Open shortcut is `O`.
+  In an application with an editable focused control, the key can instead
+  change existing content; callers must select this method with care.
 - Only a newly created foreground standard Win32 dialog owned directly by the
   selected window in the same process is considered. The method looks for the
   standard file name edit control and an enabled Open button; the supported
@@ -169,6 +173,9 @@ the file as a separate document.
   Audacity -Transfer OpenDialog` tests the Open dialog using a generated WAV
   with a Unicode name. In the observed environment Audacity opened the file;
   IrfanView did not present a supported dialog in response to `Ctrl+O`.
+- `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application
+  IrfanView -Transfer OpenDialogO` tests the `O` variant with a generated JPEG.
+  In the observed environment IrfanView opened the file.
 - The combined mode is also exercised with IrfanView; it verifies that the
   paste was sent, the drop was accepted, and the JPEG appeared in the target.
 - Content-menu tests cover window discovery, submenu placement, disabled state,

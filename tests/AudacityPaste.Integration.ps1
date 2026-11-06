@@ -1,7 +1,7 @@
 param(
     [ValidateSet('Audacity', 'IrfanView')]
     [string] $Application = 'Audacity',
-    [ValidateSet('Paste', 'Drop', 'Both', 'Menu', 'OpenDialog')]
+    [ValidateSet('Paste', 'Drop', 'Both', 'Menu', 'OpenDialog', 'OpenDialogO')]
     [string] $Transfer = 'Paste',
     [switch] $UseExisting
 )
@@ -129,7 +129,7 @@ if ($UseExisting) {
     Assert-True ($existing.Count -eq 1) "UseExisting requires exactly one running $Application process."
     $process = $existing[0]
 } else {
-    if ($Transfer -eq 'OpenDialog' -and $existing.Count -gt 0) {
+    if ($Transfer -in @('OpenDialog', 'OpenDialogO') -and $existing.Count -gt 0) {
         throw "$Application is already running. Close it yourself or explicitly use -UseExisting."
     }
     foreach ($instance in $existing) {
@@ -151,7 +151,7 @@ try {
 
     $directory = Join-Path ([IO.Path]::GetTempPath()) 'KIS-File-Paste-Test'
     [IO.Directory]::CreateDirectory($directory) | Out-Null
-    $trackName = $(if ($Transfer -eq 'OpenDialog') { 'KIS Öffnen ' } else { 'KIS-Paste-' }) + [guid]::NewGuid().ToString('N')
+    $trackName = $(if ($Transfer -in @('OpenDialog', 'OpenDialogO')) { 'KIS Öffnen ' } else { 'KIS-Paste-' }) + [guid]::NewGuid().ToString('N')
     $filePath = Join-Path $directory ($trackName + $extension)
     if ($Application -eq 'Audacity') {
     $sampleRate = 44100
@@ -215,8 +215,9 @@ try {
 
     Wait-Until { [DateTime]::UtcNow -ge $pasteNotBefore } "The $Application startup wait did not complete."
     Assert-True ([PasteWindowProbe]::ActivateTestWindow($window.Handle)) "Could not activate the $Application test window."
-    if ($Transfer -eq 'OpenDialog') {
-        $result = $accessor.GetMethod('LetOpenByDialog').Invoke($null, [object[]] @($window, [string] $filePath)).GetAwaiter().GetResult()
+    if ($Transfer -in @('OpenDialog', 'OpenDialogO')) {
+        $method = if ($Transfer -eq 'OpenDialogO') { 'LetOpenByDialogUsingO' } else { 'LetOpenByDialog' }
+        $result = $accessor.GetMethod($method).Invoke($null, [object[]] @($window, [string] $filePath)).GetAwaiter().GetResult()
         if (-not $result.Submitted) {
             Write-Host "Open dialog error: $($result.Error)"
             $condition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $process.Id)
@@ -300,8 +301,8 @@ try {
     } finally {
         $process.Refresh()
         try {
-            if (-not $process.HasExited -and (-not $UseExisting -or $Transfer -ne 'OpenDialog')) {
-                if (-not $UseExisting -and $Transfer -eq 'OpenDialog' -and -not $testContentLoaded) {
+            if (-not $process.HasExited -and (-not $UseExisting -or $Transfer -notin @('OpenDialog', 'OpenDialogO'))) {
+                if (-not $UseExisting -and $Transfer -in @('OpenDialog', 'OpenDialogO') -and -not $testContentLoaded) {
                     $dialog = [PasteWindowProbe]::GetForegroundWindow()
                     $dialogProcessId = [uint32] 0
                     [void] [PasteWindowProbe]::GetWindowThreadProcessId($dialog, [ref] $dialogProcessId)
