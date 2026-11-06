@@ -16,6 +16,8 @@ public static class RunningAppMenuProbe
     [DllImport("user32.dll")] public static extern uint GetMenuItemID(IntPtr menu, int index);
     [DllImport("user32.dll")] public static extern uint GetMenuState(IntPtr menu, uint index, uint flags);
     [DllImport("user32.dll")] public static extern IntPtr GetSubMenu(IntPtr menu, int index);
+    [DllImport("user32.dll")] public static extern IntPtr CreatePopupMenu();
+    [DllImport("user32.dll")] public static extern bool DestroyMenu(IntPtr menu);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetMenuString(IntPtr menu, uint index, StringBuilder text, int length, uint flags);
     [StructLayout(LayoutKind.Sequential)] public struct MenuItemInfo
     {
@@ -121,9 +123,9 @@ try {
     try {
         $nativeMenu = $menu.GetType().GetField('_menu', $instanceFlags).GetValue($menu)
         $label = [Text.StringBuilder]::new(256)
-        [void] [RunningAppMenuProbe]::GetMenuString($nativeMenu, 0, $label, $label.Capacity, 0x400)
-        if ($label.ToString() -cne 'Open in running app...') { throw 'The running-app submenu is not the first menu item.' }
-        $submenu = [RunningAppMenuProbe]::GetSubMenu($nativeMenu, 0)
+        [void] [RunningAppMenuProbe]::GetMenuString($nativeMenu, 1, $label, $label.Capacity, 0x400)
+        if ($label.ToString() -cne 'Open in running app...') { throw 'The running-app submenu is not the second menu item.' }
+        $submenu = [RunningAppMenuProbe]::GetSubMenu($nativeMenu, 1)
         if ($submenu -eq [IntPtr]::Zero -or [RunningAppMenuProbe]::GetMenuItemCount($submenu) -ne 2) { throw 'The running-app submenu does not contain both windows.' }
         for ($index = 0; $index -lt 2; $index++) {
             $label.Clear() | Out-Null
@@ -139,7 +141,52 @@ try {
     $menu = $factory.GetMethod('GetContentMenuForContextWithRunningApps', $staticFlags).Invoke($null, [object[]] @($paths, $owner, $snapshot, $false, $null, $null, $emptyActions))
     try {
         $nativeMenu = $menu.GetType().GetField('_menu', $instanceFlags).GetValue($menu)
-        if (([RunningAppMenuProbe]::GetMenuState($nativeMenu, 0, 0x400) -band 3) -eq 0) { throw 'An empty running-app submenu was not disabled.' }
+        if (([RunningAppMenuProbe]::GetMenuState($nativeMenu, 1, 0x400) -band 3) -eq 0) { throw 'An empty running-app submenu was not disabled.' }
+    } finally { ([IDisposable] $menu).Dispose() }
+
+    $filePaths = [string[]] @($file)
+    $base = $factory.GetMethod('GetBaseMenu', $staticFlags).Invoke($null, [object[]] @($filePaths, $owner, $createActions.Invoke($view, @())))
+    try { $fileSnapshot = $base.GetType().GetMethod('CaptureSnapshot', $instanceFlags).Invoke($base, @()) }
+    finally { ([IDisposable] $base).Dispose() }
+    $menu = $factory.GetMethod('GetContentMenuForContextWithRunningApps', $staticFlags).Invoke($null, [object[]] @($filePaths, $owner, $fileSnapshot, $false, $null, $null, $runningActions))
+    try {
+        $nativeMenu = $menu.GetType().GetField('_menu', $instanceFlags).GetValue($menu)
+        $context = $menu.GetType().GetField('_contextMenu', $instanceFlags).GetValue($menu)
+        $openId = [RunningAppMenuProbe]::GetMenuItemID($nativeMenu, 0)
+        $verb = $factory.GetMethod('GetCommandVerb', $staticFlags).Invoke($null, [object[]] @($context, [uint32] ($openId - 1)))
+        if ($verb -ine 'open') { throw 'The first item is not the Shell Open command.' }
+        $openWithLabel = [SutShellMenuProbe]::OpenWithLabel()
+        $label = [Text.StringBuilder]::new(256)
+        [void] [RunningAppMenuProbe]::GetMenuString($nativeMenu, 2, $label, $label.Capacity, 0x400)
+        if ($label.ToString() -cne $openWithLabel) { throw 'The third item is not the Shell Open With submenu.' }
+        $openWithMenu = [RunningAppMenuProbe]::GetSubMenu($nativeMenu, 2)
+        if ($openWithMenu -eq [IntPtr]::Zero) { throw 'The Shell Open With submenu was lost.' }
+        $menu3 = $assembly.GetType('SUTWinExplorer.IContextMenu3', $true)
+        $parameters = [object[]] @([uint32] 0x0117, $openWithMenu, [IntPtr]::new(2), [IntPtr]::Zero)
+        $result = $menu3.GetMethod('HandleMenuMsg2').Invoke($context, $parameters)
+        if ($result -lt 0 -or [RunningAppMenuProbe]::GetMenuItemCount($openWithMenu) -eq 0) { throw 'The moved Shell Open With submenu did not initialize.' }
+        $emptyMenu = [RunningAppMenuProbe]::CreatePopupMenu()
+        if ($emptyMenu -eq [IntPtr]::Zero) { throw 'Could not create an empty menu fixture.' }
+        try {
+            $factory.GetMethod('MoveShellOpenCommandsToFront', $staticFlags).Invoke($null, [object[]] @($emptyMenu, $context))
+            if ([RunningAppMenuProbe]::GetMenuItemCount($emptyMenu) -ne 2 -or
+                ([RunningAppMenuProbe]::GetMenuState($emptyMenu, 0, 0x400) -band 3) -eq 0 -or
+                ([RunningAppMenuProbe]::GetMenuState($emptyMenu, 1, 0x400) -band 3) -eq 0) { throw 'Unavailable Shell commands did not produce disabled placeholders.' }
+        } finally { [void] [RunningAppMenuProbe]::DestroyMenu($emptyMenu) }
+    } finally { ([IDisposable] $menu).Dispose() }
+
+    $folderPaths = [string[]] @($directory)
+    $base = $factory.GetMethod('GetBaseMenu', $staticFlags).Invoke($null, [object[]] @($folderPaths, $owner, $createActions.Invoke($view, @())))
+    try { $folderSnapshot = $base.GetType().GetMethod('CaptureSnapshot', $instanceFlags).Invoke($base, @()) }
+    finally { ([IDisposable] $base).Dispose() }
+    $menu = $factory.GetMethod('GetContentMenuForContextWithRunningApps', $staticFlags).Invoke($null, [object[]] @($folderPaths, $owner, $folderSnapshot, $false, $null, $null, $emptyActions))
+    try {
+        $nativeMenu = $menu.GetType().GetField('_menu', $instanceFlags).GetValue($menu)
+        $context = $menu.GetType().GetField('_contextMenu', $instanceFlags).GetValue($menu)
+        $openId = [RunningAppMenuProbe]::GetMenuItemID($nativeMenu, 0)
+        $verb = $factory.GetMethod('GetCommandVerb', $staticFlags).Invoke($null, [object[]] @($context, [uint32] ($openId - 1)))
+        if ($verb -ine 'open') { throw 'The folder Shell Open command was not preserved at the top.' }
+        if (([RunningAppMenuProbe]::GetMenuState($nativeMenu, 1, 0x400) -band 3) -eq 0) { throw 'The running-app submenu should be disabled for a folder.' }
     } finally { ([IDisposable] $menu).Dispose() }
 
     $suffix = [Guid]::NewGuid().ToString('N')
@@ -188,7 +235,7 @@ try {
         $runningMenu = $factory.GetMethod('GetContentMenuForContextWithRunningApps', $staticFlags).Invoke($null, [object[]] @($runningPaths, $owner, $runningSnapshot, $false, $null, $null, $actualActions))
         try {
             $nativeMenu = $runningMenu.GetType().GetField('_menu', $instanceFlags).GetValue($runningMenu)
-            $submenu = [RunningAppMenuProbe]::GetSubMenu($nativeMenu, 0)
+            $submenu = [RunningAppMenuProbe]::GetSubMenu($nativeMenu, 1)
             $actionIndex = [Array]::IndexOf($actualActions, $matchingAction)
             $info = [RunningAppMenuProbe+MenuItemInfo]::new()
             $info.Size = [Runtime.InteropServices.Marshal]::SizeOf([type] [RunningAppMenuProbe+MenuItemInfo])

@@ -11,8 +11,9 @@ application supports opening files this way.
 
 ## Content menu
 
-- The content menu places **Open in running app...** first for item selections.
-  Its submenu lists each discovered window as `App name - Window title`, sorted
+- The item Content Menu starts with Shell **Open**, **Open in running app...**,
+  and Shell **Open with**, in that order. Unavailable Shell commands have a
+  disabled placeholder. The running-app submenu lists each discovered window as `App name - Window title`, sorted
   by application and then window title. Each entry shows the app icon when
   available, falling back to the window icon. Untitled windows use `Untitled window`.
 - For a multiple-file selection, show applications registered for every selected

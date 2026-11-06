@@ -542,8 +542,9 @@ selection and scrolling behavior, such as selecting and revealing new items.
   sidebar menus and their backgrounds.
 - [x] ContentView file and folder selections use the Base and Content Menu pair
   described in [CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md).
-- [x] The ContentView item Content Menu starts with **Open in running app...**.
-  Its submenu lists the visible windows of matching running applications as
+- [x] The ContentView item Content Menu starts with Shell **Open**, **Open in
+  running app...**, and Shell **Open with**. An unavailable Shell entry has a
+  disabled placeholder. The running-app submenu lists the visible windows of matching running applications as
   `App name - Window title`, with an app or window icon when available. For multiple files, applications must be registered
   for every selected type. The submenu is disabled for selections containing a
   directory or when no matching window is available. It is not added to the

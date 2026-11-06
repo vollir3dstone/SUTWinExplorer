@@ -554,8 +554,10 @@ Base Menu after its popup closes, including any submenu contents populated
 while it was open. Application toolbar IDs are outside the Shell command-ID range
 and do not participate in this comparison.
 
-For ContentView item selections, KIS Explorer inserts **Open in running app...**
-at the top after Shell filtering. The submenu contains one application action
+For ContentView item selections, the first three entries are Shell **Open**,
+**Open in running app...**, and Shell **Open with**. Shell entries are preserved
+as native commands or submenus; unavailable entries have disabled placeholders.
+The running-app submenu contains one application action
 per matching running window, labeled `App name - Window title` and ordered by
 app and window title, with an app or window icon when available. Multiple selected files must all have the app among their
 Shell associations. A selection containing a directory, or one without matching

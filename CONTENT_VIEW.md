@@ -206,7 +206,9 @@ Explorer; it is disabled for multiple selections. Right-clicking the empty
 background starts its own Base/Content/no-menu sequence; Shift-right-click keeps
 the original Windows background menu.
 
-The item Content Menu starts with **Open in running app...**. Its submenu lists
+The item Content Menu starts with Shell **Open**, **Open in running app...**,
+and Shell **Open with**, in that order. An unavailable Shell command has a
+disabled placeholder. The running-app submenu lists
 each visible matching app window as `App name - Window title`, ordered by app
 and window title, with an app or window icon when available. For several selected files, an app must be registered for every
 selected type. The submenu is disabled when the selection contains a directory

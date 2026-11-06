@@ -220,7 +220,7 @@ internal static class SutContextMenuFactory
             }
             else if (excludedCommands is not null)
             {
-                PrepareContentMenu(menu, contextMenu, excludedCommands, directorySelection, background);
+                PrepareContentMenu(menu, contextMenu, excludedCommands, directorySelection, background, runningApps is not null);
                 if (background) RemoveShellProperties(menu, contextMenu);
             }
             if (background && excludedCommands is not null && backgroundNewAction is not null)
@@ -240,6 +240,7 @@ internal static class SutContextMenuFactory
             }
             if (runningApps is not null)
             {
+                MoveShellOpenCommandsToFront(menu, contextMenu);
                 var existingActions = actions?.ToList() ?? [];
                 runningAppsSubmenu = CreatePopupMenu();
                 if (runningAppsSubmenu == IntPtr.Zero)
@@ -256,7 +257,7 @@ internal static class SutContextMenuFactory
                     }
                     ShellMenuIcons.Apply(runningAppsSubmenu, existingActions, BaseMenuCommandFirst, menuBitmaps,
                         System.Windows.Interop.HwndSource.FromHwnd(owner)?.RootVisual);
-                    if (!InsertMenu(menu, 0, MenuByPosition | MenuPopup | (runningApps.Count == 0 ? MenuDisabled : 0u),
+                    if (!InsertMenu(menu, 1, MenuByPosition | MenuPopup | (runningApps.Count == 0 ? MenuDisabled : 0u),
                             (UIntPtr)(nuint)runningAppsSubmenu, "Open in running app..."))
                         throw new InvalidOperationException("Could not insert the running applications submenu.");
                 }
@@ -725,13 +726,15 @@ internal static class SutContextMenuFactory
         return commands;
     }
 
-    private static void PrepareContentMenu(IntPtr menu, IContextMenu contextMenu, IReadOnlyDictionary<string, int> baseCommands, bool directorySelection, bool background)
+    private static void PrepareContentMenu(IntPtr menu, IContextMenu contextMenu, IReadOnlyDictionary<string, int> baseCommands, bool directorySelection, bool background, bool preserveOpenCommands)
     {
         if (!background)
             RemoveExcludedFileCommands(menu, contextMenu, directorySelection, isContentMenu: true);
         var contentCommands = CollectComparableCommands(menu, contextMenu, allowVerbless: directorySelection || background);
         for (var index = GetMenuItemCount(menu) - 1; index >= 0; index--)
         {
+            if (preserveOpenCommands && (IsShellOpen(menu, contextMenu, index) || IsShellOpenWith(menu, contextMenu, index)))
+                continue;
             var command = ComparableCommand(menu, contextMenu, index, allowVerbless: directorySelection || background);
             if (command is not null && baseCommands.TryGetValue(command, out var baseCount) && baseCount == 1 &&
                 contentCommands.TryGetValue(command, out var contentCount) && contentCount == 1)
@@ -744,6 +747,67 @@ internal static class SutContextMenuFactory
             }
         }
         RemoveRedundantSeparators(menu);
+    }
+
+    private static bool IsShellOpen(IntPtr menu, IContextMenu contextMenu, int index)
+    {
+        var id = GetMenuItemID(menu, index);
+        return id >= FirstCommandId && id <= LastCommandId &&
+            string.Equals(GetCommandVerb(contextMenu, id - FirstCommandId), "open", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsShellOpenWith(IntPtr menu, IContextMenu contextMenu, int index)
+    {
+        var id = GetMenuItemID(menu, index);
+        if (id >= FirstCommandId && id <= LastCommandId &&
+            string.Equals(GetCommandVerb(contextMenu, id - FirstCommandId), "openas", StringComparison.OrdinalIgnoreCase))
+            return true;
+        var module = GetModuleHandle("shell32.dll");
+        var shellLabel = new StringBuilder(256);
+        var itemLabel = new StringBuilder(256);
+        return GetSubMenu(menu, index) != IntPtr.Zero && module != IntPtr.Zero &&
+            LoadString(module, 5376, shellLabel, shellLabel.Capacity) > 0 &&
+            GetMenuString(menu, (uint)index, itemLabel, itemLabel.Capacity, MenuByPosition) > 0 &&
+            string.Equals(shellLabel.ToString(), itemLabel.ToString(), StringComparison.Ordinal);
+    }
+
+    private static void MoveShellOpenCommandsToFront(IntPtr menu, IContextMenu contextMenu)
+    {
+        MoveShellCommand(menu, contextMenu, 0, IsShellOpen, "Open");
+        MoveShellCommand(menu, contextMenu, 1, IsShellOpenWith, "Open with...");
+    }
+
+    private static void MoveShellCommand(IntPtr menu, IContextMenu contextMenu, int target,
+        Func<IntPtr, IContextMenu, int, bool> matches, string unavailableLabel)
+    {
+        var source = target;
+        while (source < GetMenuItemCount(menu) && !matches(menu, contextMenu, source))
+            source++;
+        if (source == GetMenuItemCount(menu))
+        {
+            if (!InsertMenu(menu, (uint)target, MenuByPosition | MenuDisabled, UIntPtr.Zero, unavailableLabel))
+                throw new InvalidOperationException("Could not insert an unavailable Shell command.");
+            return;
+        }
+        if (source == target)
+            return;
+
+        var item = new NativeMenuItemInfo { Size = (uint)Marshal.SizeOf<NativeMenuItemInfo>(), Mask = 0x1EF };
+        if (!GetMenuItemInfo(menu, (uint)source, true, ref item))
+            throw new InvalidOperationException("Could not read the Shell menu item.");
+        item.Text = Marshal.AllocHGlobal(checked((int)(item.TextLength + 1) * sizeof(char)));
+        try
+        {
+            item.TextLength++;
+            if (!GetMenuItemInfo(menu, (uint)source, true, ref item) || !RemoveMenu(menu, (uint)source, MenuByPosition))
+                throw new InvalidOperationException("Could not move the Shell menu item.");
+            if (!InsertMenuItem(menu, (uint)target, true, ref item))
+            {
+                if (item.SubMenu != IntPtr.Zero) _ = DestroyMenu(item.SubMenu);
+                throw new InvalidOperationException("Could not insert the Shell menu item.");
+            }
+        }
+        finally { Marshal.FreeHGlobal(item.Text); }
     }
 
     private static void FilterBackgroundBaseMenu(IntPtr menu, IContextMenu contextMenu, IReadOnlyDictionary<string, int> directoryCommands)
@@ -1018,6 +1082,21 @@ internal static class SutContextMenuFactory
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern bool InsertMenu(IntPtr menu, uint position, uint flags, UIntPtr id, string? text);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool GetMenuItemInfo(IntPtr menu, uint item, bool byPosition, ref NativeMenuItemInfo info);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool InsertMenuItem(IntPtr menu, uint item, bool byPosition, ref NativeMenuItemInfo info);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeMenuItemInfo
+    {
+        public uint Size, Mask, Type, State, Id;
+        public IntPtr SubMenu, CheckedBitmap, UncheckedBitmap, ItemData, Text;
+        public uint TextLength;
+        public IntPtr Bitmap;
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct DefaultContextMenu
