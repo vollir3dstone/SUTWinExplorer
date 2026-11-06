@@ -542,6 +542,19 @@ selection and scrolling behavior, such as selecting and revealing new items.
   sidebar menus and their backgrounds.
 - [x] ContentView file and folder selections use the Base and Content Menu pair
   described in [CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md).
+- [x] The ContentView item Content Menu starts with **Open in running app...**.
+  Its submenu lists the visible windows of matching running applications as
+  `App name - Window title`. For multiple files, applications must be registered
+  for every selected type. The submenu is disabled for selections containing a
+  directory or when no matching window is available. It is not added to the
+  background, sidebar or Shift menus.
+- [x] Choosing a window replaces the Windows clipboard with the selected files
+  and sends `Ctrl+V`, then attempts a drop into that window. Both actions may be
+  processed: the target can open or import a file twice or insert it into an
+  existing document. Paste does not click the target, but its existing keyboard
+  focus can still direct the paste into a document. The application reports
+  transfer errors; sending paste or accepting a drop does not confirm that a
+  file was opened. See [Open with Running App](OPEN_WITH_RUNNING_APP_SPEC.md).
 - [x] ContentView and the Sub directories list support left-button filesystem
   drag-and-drop between each other and compatible external applications. The
   table drags its selection; the list drags only the clicked folder. Directory

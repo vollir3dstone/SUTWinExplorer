@@ -1,7 +1,7 @@
 param(
     [ValidateSet('Audacity', 'IrfanView')]
     [string] $Application = 'Audacity',
-    [ValidateSet('Paste', 'Drop', 'Both')]
+    [ValidateSet('Paste', 'Drop', 'Both', 'Menu')]
     [string] $Transfer = 'Paste',
     [switch] $UseExisting
 )
@@ -103,6 +103,17 @@ function Close-TestSavePrompt([int] $processId, [string] $testName) {
 $assemblyPath = Join-Path $PSScriptRoot '..\bin\Debug\net10.0-windows\SUTWinExplorer.dll'
 $assembly = [Reflection.Assembly]::Load([IO.File]::ReadAllBytes($assemblyPath))
 $accessor = $assembly.GetType('SUTWinExplorer.RunningAppsAccessor', $true)
+if ($Transfer -eq 'Menu') {
+    [System.Windows.Application].GetField('_resourceAssembly', [Reflection.BindingFlags]'Static,NonPublic').SetValue($null, $assembly)
+    $wpfApplication = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.App', $true))
+    $wpfApplication.InitializeComponent()
+    $wpfApplication.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
+    $parseErrors = $null
+    $suiteAst = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'SutShell.TestHelpers.ps1'), [ref]$null, [ref]$parseErrors)
+    if ($parseErrors.Count) { throw $parseErrors[0] }
+    $suiteHelpers = $suiteAst.Find({ param($node) $node -is [System.Management.Automation.Language.StringConstantExpressionAst] -and $node.Value.StartsWith('public sealed class SutShellTestSignal') }, $true)
+    Add-Type -TypeDefinition $suiteHelpers.Value
+}
 $extension = if ($Application -eq 'Audacity') { '.wav' } else { '.jpg' }
 $executableNames = if ($Application -eq 'Audacity') { @('Audacity.exe') } else { @('i_view64.exe', 'i_view32.exe') }
 $processNames = if ($Application -eq 'Audacity') { @('audacity') } else { @('i_view64', 'i_view32') }
@@ -199,7 +210,22 @@ try {
 
     Wait-Until { [DateTime]::UtcNow -ge $pasteNotBefore } "The $Application startup wait did not complete."
     Assert-True ([PasteWindowProbe]::ActivateTestWindow($window.Handle)) "Could not activate the $Application test window."
-    if ($Transfer -eq 'Both') {
+    if ($Transfer -eq 'Menu') {
+        $previousClipboard = [System.Windows.Clipboard]::GetDataObject()
+        $clipboardChanged = $true
+        $view = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
+        $createActions = $view.GetType().GetMethod('CreateRunningAppActions', [Reflection.BindingFlags]'Instance,NonPublic')
+        $actions = $createActions.Invoke($view, [object[]] @(,[string[]] @($filePath)))
+        $title = if ([string]::IsNullOrWhiteSpace($window.Title)) { 'Untitled window' } else { $window.Title }
+        $label = "$($matchingApps[0].App.Name) - $title".Replace('&', '&&')
+        $action = @($actions | Where-Object { $_.Label -ceq $label })
+        Assert-True ($action.Count -eq 1) 'The selected application window was not found exactly once in the menu actions.'
+        $errorProbe = [SutShellPropertiesProbe]::new('Open in running app')
+        try {
+            $action[0].Invoke.Invoke()
+            Assert-True (-not $errorProbe.Opened) 'The running-app menu action reported a transfer error.'
+        } finally { $errorProbe.Dispose() }
+    } elseif ($Transfer -eq 'Both') {
         $previousClipboard = [System.Windows.Clipboard]::GetDataObject()
         $files = [Collections.Specialized.StringCollection]::new()
         $null = $files.Add($filePath)

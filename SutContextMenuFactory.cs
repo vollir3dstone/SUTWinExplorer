@@ -16,6 +16,7 @@ internal static class SutContextMenuFactory
     private const uint MenuByPosition = 0x00000400;
     private const uint MenuDisabled = 0x00000003;
     private const uint MenuSeparator = 0x00000800;
+    private const uint MenuPopup = 0x00000010;
     private const uint MenuOwnerDrawn = 0x00000100;
     private const uint BaseMenuCommandFirst = 0x8000;
     private const string BlacklistResourceName = "SUTWinExplorer.ShellExtensionBlacklist.json";
@@ -57,13 +58,16 @@ internal static class SutContextMenuFactory
         background ? GetBackgroundBaseMenu(paths[0], owner, actions) : GetBaseMenu(paths, owner, actions);
 
     internal static SutContextMenu GetContentMenuForContext(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands, bool background, ShellMenuAction? newAction, ShellMenuAction? openLocation) =>
+        GetContentMenuForContextWithRunningApps(paths, owner, baseCommands, background, newAction, openLocation, null);
+
+    internal static SutContextMenu GetContentMenuForContextWithRunningApps(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands, bool background, ShellMenuAction? newAction, ShellMenuAction? openLocation, IReadOnlyList<ShellMenuAction>? runningApps) =>
         background ? GetBackgroundContentMenu(paths[0], owner, baseCommands, newAction) :
-            CreateCore(paths, owner, background: false, rename: null, excludedCommands: baseCommands, openLocationAction: openLocation);
+            CreateCore(paths, owner, background: false, rename: null, excludedCommands: baseCommands, openLocationAction: openLocation, runningApps: runningApps);
 
     private static SutContextMenu CreateCore(IReadOnlyList<string> paths, IntPtr owner, bool background, Action? rename,
         IReadOnlyList<ShellMenuAction>? actions = null, IReadOnlyDictionary<string, int>? excludedCommands = null,
         IReadOnlyDictionary<string, int>? backgroundBaseCommands = null, ShellMenuAction? backgroundNewAction = null,
-        ShellMenuAction? openLocationAction = null)
+        ShellMenuAction? openLocationAction = null, IReadOnlyList<ShellMenuAction>? runningApps = null)
     {
         var isBaseMenu = actions is not null;
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
@@ -82,6 +86,7 @@ internal static class SutContextMenuFactory
         IntPtr menu = IntPtr.Zero;
         IntPtr keyArray = IntPtr.Zero;
         IntPtr parentPointer = IntPtr.Zero;
+        IntPtr runningAppsSubmenu = IntPtr.Zero;
         IShellFolder? desktopFolder = null;
         IShellFolder? parentFolder = null;
         IShellFolder? targetFolder = null;
@@ -233,6 +238,34 @@ internal static class SutContextMenuFactory
                 }
                 actions = [openLocationAction];
             }
+            if (runningApps is not null)
+            {
+                var existingActions = actions?.ToList() ?? [];
+                runningAppsSubmenu = CreatePopupMenu();
+                if (runningAppsSubmenu == IntPtr.Zero)
+                    throw new InvalidOperationException("Could not create the running applications submenu.");
+                try
+                {
+                    foreach (var action in runningApps)
+                    {
+                        if (existingActions.Count >= 0x8000 || !InsertMenu(runningAppsSubmenu, (uint)GetMenuItemCount(runningAppsSubmenu),
+                                MenuByPosition | (action.IsEnabled ? 0u : MenuDisabled),
+                                (UIntPtr)(BaseMenuCommandFirst + (uint)existingActions.Count), action.Label))
+                            throw new InvalidOperationException("Could not insert a running application.");
+                        existingActions.Add(action);
+                    }
+                    if (!InsertMenu(menu, 0, MenuByPosition | MenuPopup | (runningApps.Count == 0 ? MenuDisabled : 0u),
+                            (UIntPtr)(nuint)runningAppsSubmenu, "Open in running app..."))
+                        throw new InvalidOperationException("Could not insert the running applications submenu.");
+                }
+                catch
+                {
+                    _ = DestroyMenu(runningAppsSubmenu);
+                    runningAppsSubmenu = IntPtr.Zero;
+                    throw;
+                }
+                actions = existingActions;
+            }
             return new SutContextMenu(owner, menu, contextMenu, actions, rename,
                 offset => IsRenameCommand(contextMenu, offset),
                 isBaseMenu ? () => CollectComparableCommands(menu, contextMenu, allowVerbless: directorySelection || background) : null,
@@ -246,7 +279,7 @@ internal static class SutContextMenuFactory
                             if (isBaseMenu && shortcutSelection) RemoveOpenContaining(submenu, contextMenu);
                             if (openLocationAction is not null) ReplaceOpenContaining(submenu, contextMenu, openLocationAction);
                         } : null,
-                    allowRightButton: !isBaseMenu && excludedCommands is null,
+                    allowRightButton: !isBaseMenu && excludedCommands is null, customSubmenu: runningAppsSubmenu,
                 Release);
         }
         catch

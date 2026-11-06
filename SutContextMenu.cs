@@ -14,13 +14,14 @@ internal sealed class SutContextMenu : IDisposable
     private readonly Func<IReadOnlyDictionary<string, int>>? _captureSnapshot;
     private readonly Action<IntPtr>? _filterSubmenu;
     private readonly bool _allowRightButton;
+    private readonly IntPtr _customSubmenu;
     private readonly Action _release;
     private bool _disposed;
     internal bool CommandInvoked { get; private set; }
 
     internal SutContextMenu(IntPtr owner, IntPtr menu, IContextMenu contextMenu,
         IReadOnlyList<ShellMenuAction>? actions, Action? rename, Func<uint, bool> isRename,
-        Func<IReadOnlyDictionary<string, int>>? captureSnapshot, Action<IntPtr>? filterSubmenu, bool allowRightButton, Action release)
+        Func<IReadOnlyDictionary<string, int>>? captureSnapshot, Action<IntPtr>? filterSubmenu, bool allowRightButton, IntPtr customSubmenu, Action release)
     {
         _owner = owner;
         _menu = menu;
@@ -31,6 +32,7 @@ internal sealed class SutContextMenu : IDisposable
         _captureSnapshot = captureSnapshot;
         _filterSubmenu = filterSubmenu;
         _allowRightButton = allowRightButton;
+        _customSubmenu = customSubmenu;
         _release = release;
     }
 
@@ -60,6 +62,8 @@ internal sealed class SutContextMenu : IDisposable
                 {
                     if (message is 0x0117 or 0x002B or 0x002C or 0x0120)
                     {
+                        if (message == 0x0117 && wParam == _customSubmenu && _customSubmenu != IntPtr.Zero)
+                            return DefSubclassProc(window, message, wParam, lParam);
                         var handled = false;
                         var result = IntPtr.Zero;
                         if (menu3 is not null)

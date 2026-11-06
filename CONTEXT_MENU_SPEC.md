@@ -554,6 +554,22 @@ Base Menu after its popup closes, including any submenu contents populated
 while it was open. Application toolbar IDs are outside the Shell command-ID range
 and do not participate in this comparison.
 
+For ContentView item selections, KIS Explorer inserts **Open in running app...**
+at the top after Shell filtering. The submenu contains one application action
+per matching running window, labeled `App name - Window title` and ordered by
+app and window title. Multiple selected files must all have the app among their
+Shell associations. A selection containing a directory, or one without matching
+windows, has a disabled submenu. This action is not added to the background,
+sidebar or Shift menus. Its command IDs belong to the application, not the Shell,
+and coexist with the application-owned **Open parent** action.
+
+Selecting a window replaces the clipboard with the selected files and attempts
+paste by `Ctrl+V` followed by a drop. Paste makes no target click; existing focus
+and the drop position can still cause insertion into an existing document, and
+the target may process both transfers. Clipboard and transfer failures are
+reported, but sent or accepted input does not establish that the target opened
+the files. Details are in [Open with Running App](OPEN_WITH_RUNNING_APP_SPEC.md).
+
 An individual top-level Shell command is comparable only if it is enabled, not
 owner-drawn, has a readable nonempty, nontruncated label and has a Shell command
 ID. Its key is normally the case-normalized verb and the exact label; labels are

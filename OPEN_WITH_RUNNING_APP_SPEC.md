@@ -6,8 +6,26 @@ Identify applications registered to open a file type, find their visible running
 windows, and transfer files to a chosen window without starting another instance.
 The target application decides whether the transfer opens the file, imports its
 contents, or performs another action. This specification describes the current
-accessor and its observed behavior; it does not prescribe a user interface or
-claim that every application supports opening files this way.
+ContentView action, accessor and observed behavior; it does not claim that every
+application supports opening files this way.
+
+## Content menu
+
+- The content menu places **Open in running app...** first for item selections.
+  Its submenu lists each discovered window as `App name - Window title`, sorted
+  by application and then window title. Untitled windows use `Untitled window`.
+- For a multiple-file selection, show applications registered for every selected
+  file type. Windows may include generic handlers in its association results.
+  Selections containing a directory and selections with no matching running
+  windows have a disabled submenu. The action is not added to the background,
+  sidebar or Shift menus.
+- Selecting a window copies the selected file paths to the Windows clipboard,
+  replacing its previous contents, and invokes the combined operation for that
+  window. The clipboard is not restored because the target may read it after the
+  keystroke has been sent. If clipboard preparation fails, still attempt the
+  combined operation so the drop can proceed, and report any failure.
+- Show individual paste and drop errors when either operation fails. A sent
+  paste or accepted drop is not a guarantee that the target opened the files.
 
 ## Applications and windows
 
@@ -108,6 +126,9 @@ the file as a separate document.
   paste. These observations are application-specific, not universal promises.
 - The combined mode is also exercised with IrfanView; it verifies that the
   paste was sent, the drop was accepted, and the JPEG appeared in the target.
+- Content-menu tests cover window discovery, submenu placement, disabled state,
+  and command routing. An IrfanView integration test invokes the content-menu
+  action and verifies that the generated JPEG appears in the target window.
 - Integration tests close their target applications normally. They must not
   force-close an application or automatically discard existing user work;
   only a confirmed test-generated project in a test-started Audacity instance
@@ -117,4 +138,5 @@ the file as a separate document.
 
 - [RunningAppsAccessor.cs](RunningAppsAccessor.cs)
 - [RunningAppsAccessor.Tests.ps1](tests/RunningAppsAccessor.Tests.ps1)
+- [OpenInRunningAppInteraction.Tests.ps1](tests/OpenInRunningAppInteraction.Tests.ps1)
 - [AudacityPaste.Integration.ps1](tests/AudacityPaste.Integration.ps1)

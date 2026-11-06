@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
@@ -90,7 +91,7 @@ public partial class ContentView : UserControl
                 CreateOpenLocationAction(paths)),
             () => SutShell.ShowBackgroundMenu(CurrentPath, new WindowInteropHelper(Window.GetWindow(this)!).Handle),
             () => CurrentPath, CreateContextMenuActions,
-            ShowNewItemDialog, CreateOpenLocationAction);
+            ShowNewItemDialog, CreateOpenLocationAction, CreateRunningAppActions);
         HideDirectoriesCheckBox.GetCheckBox().Checked += FiltersChanged;
         HideDirectoriesCheckBox.GetCheckBox().Unchecked += FiltersChanged;
         HideInternalContentCheckBox.GetCheckBox().Checked += FiltersChanged;
@@ -118,6 +119,61 @@ public partial class ContentView : UserControl
                 () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)),
                 IsTransfer: button.Tag is string action && (action.StartsWith("Link", StringComparison.Ordinal) || action.StartsWith("Copy", StringComparison.Ordinal) || action.StartsWith("Move", StringComparison.Ordinal)),
                 SeparatorBefore: button == NameClipboardCopyButton || button == ItemClipboardPasteButton || button == DeleteButton) { IconSource = button }).ToArray();
+
+    private IReadOnlyList<ShellMenuAction> CreateRunningAppActions(IReadOnlyList<string> paths)
+    {
+        if (paths.Count == 0 || paths.Any(path => !File.Exists(path)))
+            return [];
+
+        try
+        {
+            var apps = RunningAppsAccessor.GetRunningApps(paths[0]);
+            foreach (var path in paths.Skip(1).DistinctBy(Path.GetExtension, StringComparer.OrdinalIgnoreCase))
+            {
+                var registered = RunningAppsAccessor.GetRegisteredApps(path).Select(app => app.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                apps = apps.Where(app => registered.Contains(app.App.Id)).ToArray();
+            }
+            var selectedPaths = paths.ToArray();
+            return apps.OrderBy(app => app.App.Name, StringComparer.CurrentCultureIgnoreCase)
+                .ThenBy(app => app.App.Id, StringComparer.OrdinalIgnoreCase)
+                .SelectMany(app => app.Windows.OrderBy(window => window.Title, StringComparer.CurrentCultureIgnoreCase)
+                    .ThenBy(window => window.Handle.ToInt64())
+                    .Select(window => new ShellMenuAction("open-running-app", $"{app.App.Name} - {(string.IsNullOrWhiteSpace(window.Title) ? "Untitled window" : window.Title)}".Replace("&", "&&"), true,
+                        () => OpenInRunningApp(window, selectedPaths))))
+                .ToArray();
+        }
+        catch (Exception exception)
+        {
+            Trace.TraceError("Could not list running applications: {0}", exception);
+            return [];
+        }
+    }
+
+    private void OpenInRunningApp(AppWindow window, IReadOnlyList<string> paths)
+    {
+        try
+        {
+            string? clipboardError = null;
+            try
+            {
+                var files = new StringCollection();
+                files.AddRange(paths.ToArray());
+                Clipboard.SetFileDropList(files);
+            }
+            catch (System.Runtime.InteropServices.ExternalException exception)
+            {
+                clipboardError = exception.Message;
+            }
+            var result = RunningAppsAccessor.OpenInRunningAppResourcefully(window, paths);
+            if (clipboardError is not null || !result.Paste.Sent || !result.Drop.Dropped)
+                MessageBox.Show(Window.GetWindow(this), $"{(clipboardError is null ? "" : $"Clipboard: {clipboardError}\n")}Paste: {result.Paste.Error ?? "sent (not confirmed)"}\nDrop: {result.Drop.Error ?? "accepted"}",
+                    "Open in running app", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "Open in running app", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
 
     private ShellMenuAction? CreateOpenLocationAction(IReadOnlyList<string> paths)
     {

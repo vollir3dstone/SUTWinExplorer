@@ -206,6 +206,18 @@ Explorer; it is disabled for multiple selections. Right-clicking the empty
 background starts its own Base/Content/no-menu sequence; Shift-right-click keeps
 the original Windows background menu.
 
+The item Content Menu starts with **Open in running app...**. Its submenu lists
+each visible matching app window as `App name - Window title`, ordered by app
+and window title. For several selected files, an app must be registered for every
+selected type. The submenu is disabled when the selection contains a directory
+or no matching window is available; it is not added to background or Shift menus.
+Choosing a window puts the selected files on the Windows clipboard, replacing
+its previous contents, then attempts `Ctrl+V` followed by a drop. Paste does not
+click the target or explicitly set a focused control, but the focused control
+can already be an existing document. Either operation can open, import or insert the files,
+and both can be processed. Errors are reported separately; neither a sent paste
+nor an accepted drop confirms that a file was opened. See [Open with Running App](OPEN_WITH_RUNNING_APP_SPEC.md).
+
 ### Drag and drop
 
 Drag selected filesystem items with the left mouse button to another table,
