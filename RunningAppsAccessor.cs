@@ -88,9 +88,7 @@ public static class RunningAppsAccessor
             var title = new StringBuilder(length + 1);
             _ = GetWindowText(window, title, title.Capacity);
             _ = GetWindowThreadProcessId(window, out uint processId);
-            if (MatchesApp(app.Id, processId) ||
-                (!string.IsNullOrWhiteSpace(app.AppUserModelId) &&
-                 (MatchesApp(app.AppUserModelId, processId) || MatchesHostedAppWindow(window, app.AppUserModelId))))
+            if (MatchesAppWindow(app, window, processId))
                 windows.Add(new AppWindow(window, title.ToString()));
             return true;
         }, IntPtr.Zero))
@@ -362,9 +360,11 @@ public static class RunningAppsAccessor
         if (targetProcessId == 0)
             return new([], null, "The target window is unavailable.");
         string? configuredMethod = GetConfiguredOpenMethod(targetProcessId);
+        if (configuredMethod is null && app is not null && MatchesAppWindow(app, window.Handle, targetProcessId))
+            configuredMethod = ResolveConfiguredAppMethod(app.AppUserModelId);
         if (configuredMethod == "OpenByShellOpen")
         {
-            if (app is null || !MatchesApp(app.Id, targetProcessId))
+            if (app is null || !MatchesAppWindow(app, window.Handle, targetProcessId))
                 return new([], null, "The selected application does not match the target window.");
             var shellOpens = new List<ShellOpenResult>();
             foreach (string file in files)
@@ -440,6 +440,13 @@ public static class RunningAppsAccessor
         return ConfiguredOpenMethods.Value.TryGetValue((executable.ToUpperInvariant(), company.ToUpperInvariant()), out var method) ? method : null;
     }
 
+    private static string? ResolveConfiguredAppMethod(string? appUserModelId)
+    {
+        if (string.IsNullOrWhiteSpace(appUserModelId))
+            return null;
+        return ConfiguredOpenMethods.Value.TryGetValue((string.Empty, appUserModelId.ToUpperInvariant()), out var method) ? method : null;
+    }
+
     private static IReadOnlyDictionary<(string Executable, string Company), string> LoadConfiguredOpenMethods()
     {
         using var stream = typeof(RunningAppsAccessor).Assembly.GetManifestResourceStream("SUTWinExplorer.RunningAppOpenMethods.json")
@@ -449,9 +456,19 @@ public static class RunningAppsAccessor
         foreach (var application in document.RootElement.GetProperty("applications").EnumerateArray())
         {
             string? method = application.GetProperty("method").GetString();
+            bool hasIdentity = false;
             if (method is not ("LetOpenByDialog" or "LetOpenByDialogUsingO" or "LetOpenByDialogUsingCtrlF12" or "DropToAppWindow" or "OpenByShellOpen"))
                 throw new InvalidDataException($"Unsupported running application open method '{method}'.");
-            foreach (var executable in application.GetProperty("executables").EnumerateArray())
+            if (application.TryGetProperty("appUserModelIds", out var appUserModelIds))
+            foreach (var appUserModelId in appUserModelIds.EnumerateArray())
+            {
+                string? identity = appUserModelId.GetString();
+                if (string.IsNullOrWhiteSpace(identity) || !methods.TryAdd((string.Empty, identity.ToUpperInvariant()), method))
+                    throw new InvalidDataException($"Invalid or duplicate running application AppUserModelID '{identity}'.");
+                hasIdentity = true;
+            }
+            if (application.TryGetProperty("executables", out var executables))
+            foreach (var executable in executables.EnumerateArray())
             foreach (var company in application.GetProperty("companies").EnumerateArray())
             {
                 string? executableName = executable.GetString();
@@ -461,7 +478,10 @@ public static class RunningAppsAccessor
                     throw new InvalidDataException("Invalid running application identity.");
                 if (!methods.TryAdd((executableName.ToUpperInvariant(), companyName.ToUpperInvariant()), method))
                     throw new InvalidDataException($"Duplicate running application identity '{executableName}' / '{companyName}'.");
+                hasIdentity = true;
             }
+            if (!hasIdentity)
+                throw new InvalidDataException("A running application must have an identity.");
         }
         return methods;
     }
@@ -673,6 +693,11 @@ public static class RunningAppsAccessor
         }, IntPtr.Zero);
         return matches;
     }
+
+    private static bool MatchesAppWindow(RegisteredApp app, IntPtr window, uint processId)
+        => MatchesApp(app.Id, processId) ||
+           (!string.IsNullOrWhiteSpace(app.AppUserModelId) &&
+            (MatchesApp(app.AppUserModelId, processId) || MatchesHostedAppWindow(window, app.AppUserModelId)));
 
     private static bool MatchesApp(string appId, uint processId)
     {

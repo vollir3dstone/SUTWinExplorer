@@ -51,6 +51,10 @@ if ($resolveMethod.Invoke($null, @('winword.exe', 'microsoft corporation')) -ne 
     $resolveMethod.Invoke($null, @('Acrobat.exe', 'Adobe Systems Incorporated')) -ne 'OpenByShellOpen' -or
     $null -ne $resolveMethod.Invoke($null, @('WINWORD.EXE', 'Another company')) -or
     $null -ne $resolveMethod.Invoke($null, @('unknown.exe', 'Microsoft Corporation'))) { throw 'Application identity matching failed.' }
+$resolveAppMethod = $accessor.GetMethod('ResolveConfiguredAppMethod', $privateStatic)
+if ($resolveAppMethod.Invoke($null, @('microsoft.windows.photos_8wekyb3d8bbwe!app')) -ne 'OpenByShellOpen' -or
+    $null -ne $resolveAppMethod.Invoke($null, @('Unrelated.Package_1234567890123!App')) -or
+    $null -ne $resolveAppMethod.Invoke($null, @($null))) { throw 'Packaged application identity matching failed.' }
 foreach ($executable in @('EXCEL.EXE', 'POWERPNT.EXE', 'OUTLOOK.EXE', 'ONENOTE.EXE', 'MSACCESS.EXE', 'MSPUB.EXE', 'VISIO.EXE', 'WINPROJ.EXE', 'INFOPATH.EXE')) {
     if ($resolveMethod.Invoke($null, @($executable, 'Microsoft Corporation')) -ne 'OpenByShellOpen') { throw "Office application $executable is not configured for Shell Open." }
 }
@@ -128,6 +132,10 @@ try {
     $targetWindow.Show()
     $targetHandle = [System.Windows.Interop.WindowInteropHelper]::new($targetWindow).Handle
     if (-not [ResourcefulTestNative]::Activate($targetHandle)) { throw 'Could not activate the test window.' }
+    $unrelatedPackagedApp = [Activator]::CreateInstance($registeredAppType, [object[]] @('not-a-handler', 'Unrelated package'))
+    $registeredAppType.GetProperty('AppUserModelId').SetValue($unrelatedPackagedApp, 'Microsoft.Windows.Photos_8wekyb3d8bbwe!App')
+    $matchAppWindow = $accessor.GetMethod('MatchesAppWindow', $privateStatic)
+    if ($matchAppWindow.Invoke($null, [object[]] @($unrelatedPackagedApp, $targetHandle, [uint32] $PID))) { throw 'A packaged application matched an unrelated window.' }
     $target = [Activator]::CreateInstance($appWindowType, [object[]] @($targetHandle, 'test target'))
     $resourceful = $accessor.GetMethod('OpenInRunningAppResourcefully')
     $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile, [string] $secondFile), $null))

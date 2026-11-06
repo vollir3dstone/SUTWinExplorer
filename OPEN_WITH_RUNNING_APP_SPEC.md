@@ -128,11 +128,14 @@ the file as a separate document.
   is matched case-insensitively by executable filename and Windows file-version
   company name, independently of installation path and version. These metadata
   are not a security identity; renamed executables or changed/missing company
-  names do not match. Supported names are `LetOpenByDialog`,
+  names do not match. A packaged application can instead be configured by its
+  AppUserModelID; the selected window must match that ID directly or through
+  its hosted application window. Executable/company configuration takes
+  precedence when both match. Supported names are `LetOpenByDialog`,
   `LetOpenByDialogUsingO`, `LetOpenByDialogUsingCtrlF12`, `DropToAppWindow`,
-  and `OpenByShellOpen`. An invalid method or duplicate executable/company pair
-  is an error. Microsoft Office, LibreOffice and Acrobat Reader currently use
-  `OpenByShellOpen` for their configured executables.
+  and `OpenByShellOpen`. An invalid method or duplicate identity is an error.
+  Microsoft Office, LibreOffice, Acrobat Reader and Windows Photos currently
+  use `OpenByShellOpen` for their configured identities.
 - Configured Shell Open requires a registered application matching the selected
   window's process. It invokes that application's handler on the original STA
   for each file, stops at the first failure, and does not attempt another method.
@@ -208,7 +211,7 @@ the file as a separate document.
 ## Verification
 
 The minimum regression gate for changes to opening files in running
-applications consists of all seven resourceful integration tests, run
+applications consists of all eight resourceful integration tests, run
 sequentially:
 
 ```powershell
@@ -219,9 +222,10 @@ pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application Reso
 pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application Word -Transfer Resourceful
 pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application WindowsMediaPlayerLegacy -Transfer Resourceful
 pwsh -NoProfile -STA -File tests/WindowsMediaPlayer.Integration.ps1
+pwsh -NoProfile -STA -File tests/WindowsPhotos.Integration.ps1
 ```
 
-All seven must pass; do not skip a test because its target application is
+All eight must pass; do not skip a test because its target application is
 already running. Close the blocking application before the test, normally if
 possible and forcibly if necessary. Forced termination can discard unsaved work.
 A blocked or skipped test leaves the minimum gate incomplete.
@@ -256,6 +260,11 @@ A blocked or skipped test leaves the minimum gate incomplete.
   In the observed environment the window is discovered by its handler's
   AppUserModelID, and the WAV is opened through its cross-process standard
   Open dialog without a fallback drop.
+- The Windows Photos test matches the registered JPEG handler and its window,
+  dispatches the image through the configured Shell handler, and checks that
+  the uniquely named image appears. Shell Open can display a different window;
+  the test does not require the selected window to be reused. Complete any
+  first-run setup manually before running the test.
 - The WAV, JPEG and MP4 media fixtures live in `tests/resources`. Each test
   copies the fixture to a temporary path with a unique filename before use
   and removes its copy during cleanup, including when the test fails. A file

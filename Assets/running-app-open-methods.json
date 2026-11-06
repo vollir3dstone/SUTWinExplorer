@@ -1,6 +1,11 @@
 {
   "applications": [
     {
+      "name": "Windows Photos",
+      "appUserModelIds": ["Microsoft.Windows.Photos_8wekyb3d8bbwe!App"],
+      "method": "OpenByShellOpen"
+    },
+    {
       "name": "Microsoft Word",
       "executables": ["WINWORD.EXE"],
       "companies": ["Microsoft Corporation"],
