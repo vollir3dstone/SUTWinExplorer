@@ -35,22 +35,33 @@ function Wait-ResourcefulTask($task) {
 $assembly = [Reflection.Assembly]::Load([IO.File]::ReadAllBytes((Join-Path $PSScriptRoot '../bin/Debug/net10.0-windows/SUTWinExplorer.dll')))
 $accessor = $assembly.GetType('SUTWinExplorer.RunningAppsAccessor', $true)
 $appWindowType = $assembly.GetType('SUTWinExplorer.AppWindow', $true)
+$registeredAppType = $assembly.GetType('SUTWinExplorer.RegisteredApp', $true)
+$unknownApp = [Activator]::CreateInstance($registeredAppType, [object[]] @('not-a-registered-app', 'Unknown'))
+$missingPath = [string] (Join-Path ([IO.Path]::GetTempPath()) ('kis-missing-' + [guid]::NewGuid().ToString('N') + '.docx'))
+$shellResult = $accessor.GetMethod('OpenByShellOpen').Invoke($null, [object[]] @($unknownApp, $missingPath))
+if ($shellResult.Dispatched -or -not $shellResult.Error) { throw 'Shell Open must reject a missing file.' }
+$existingPath = [string] (Join-Path $PSScriptRoot '../Configuration.md')
+$shellResult = $accessor.GetMethod('OpenByShellOpen').Invoke($null, [object[]] @($unknownApp, $existingPath))
+if ($shellResult.Dispatched -or -not $shellResult.Error) { throw 'Shell Open must reject an unregistered application.' }
 $privateStatic = [Reflection.BindingFlags]'Static,NonPublic'
 $resolveMethod = $accessor.GetMethod('ResolveConfiguredOpenMethod', $privateStatic)
-if ($resolveMethod.Invoke($null, @('winword.exe', 'microsoft corporation')) -ne 'LetOpenByDialogUsingCtrlF12' -or
-    $resolveMethod.Invoke($null, @('Acrobat.exe', 'Adobe Systems Incorporated')) -ne 'LetOpenByDialog' -or
+if ($resolveMethod.Invoke($null, @('winword.exe', 'microsoft corporation')) -ne 'OpenByShellOpen' -or
+    $resolveMethod.Invoke($null, @('Acrobat.exe', 'Adobe Systems Incorporated')) -ne 'OpenByShellOpen' -or
     $null -ne $resolveMethod.Invoke($null, @('WINWORD.EXE', 'Another company')) -or
     $null -ne $resolveMethod.Invoke($null, @('unknown.exe', 'Microsoft Corporation'))) { throw 'Application identity matching failed.' }
 $configuredMethods = $accessor.GetField('ConfiguredOpenMethods', $privateStatic).GetValue($null).Value
 $testProcess = [Diagnostics.Process]::GetCurrentProcess()
 $testKey = [ValueTuple[string, string]]::new([IO.Path]::GetFileName($testProcess.MainModule.FileName).ToUpperInvariant(), $testProcess.MainModule.FileVersionInfo.CompanyName.ToUpperInvariant())
+$testApp = [Activator]::CreateInstance($registeredAppType, [object[]] @([string] $testProcess.MainModule.FileName, 'Test process'))
 $testProcess.Dispose()
 $directory = Join-Path ([IO.Path]::GetTempPath()) ('kis-resourceful-' + [guid]::NewGuid().ToString('N'))
 [void] [IO.Directory]::CreateDirectory($directory)
 $firstFile = Join-Path $directory 'first.txt'
 $secondFile = Join-Path $directory 'second.txt'
+$unregisteredFile = Join-Path $directory ('file.kis-resourceful-' + [guid]::NewGuid().ToString('N'))
 [IO.File]::WriteAllText($firstFile, 'first')
 [IO.File]::WriteAllText($secondFile, 'second')
+[IO.File]::WriteAllText($unregisteredFile, 'unregistered')
 $targetWindow = [System.Windows.Window]::new()
 $script:resourcefulTargetWindow = $targetWindow
 $targetWindow.Title = 'Resourceful test target'
@@ -103,21 +114,21 @@ try {
     if (-not [ResourcefulTestNative]::Activate($targetHandle)) { throw 'Could not activate the test window.' }
     $target = [Activator]::CreateInstance($appWindowType, [object[]] @($targetHandle, 'test target'))
     $resourceful = $accessor.GetMethod('OpenInRunningAppResourcefully')
-    $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile, [string] $secondFile)))
+    $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile, [string] $secondFile), $null))
     $result = Wait-ResourcefulTask $task
     if ($result.Error -or $result.Dialogs.Count -ne 1 -or $result.Dialogs[0].Submitted -or -not $result.Drop.Dropped) { throw "The multi-file drop fallback failed: $($result.Error) $($result.Drop.Error); dialog=$($result.Dialogs[0].Error); foreground=$([ResourcefulTestNative]::GetForegroundWindow()); target=$targetHandle." }
     if ($script:resourcefulFiles.Count -ne 2 -or $firstFile -notin $script:resourcefulFiles -or $secondFile -notin $script:resourcefulFiles) { throw 'The fallback did not drop both remaining files.' }
     $script:resourcefulFiles = @()
     $script:blockResourceful = $true
     if (-not [ResourcefulTestNative]::Activate($targetHandle)) { throw 'Could not reactivate the test window.' }
-    $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile)))
+    $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile), $null))
     $result = Wait-ResourcefulTask $task
     if ($null -eq $script:resourcefulDialog -or $null -ne $result.Drop -or -not $result.Error -or $script:resourcefulFiles.Count -ne 0) { throw 'An open unsupported dialog did not prevent the fallback drop.' }
     $script:resourcefulDialog.Close()
     $script:resourcefulDialog = $null
     $script:keepDialogInBackground = $true
     if (-not [ResourcefulTestNative]::Activate($targetHandle)) { throw 'Could not reactivate the test window.' }
-    $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile)))
+    $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile), $null))
     $result = Wait-ResourcefulTask $task
     if ($null -eq $script:resourcefulDialog -or [ResourcefulTestNative]::GetForegroundWindow() -ne $targetHandle -or
         $null -ne $result.Drop -or -not $result.Error -or $script:resourcefulFiles.Count -ne 0) { throw 'A background owned dialog did not prevent the fallback drop.' }
@@ -126,22 +137,29 @@ try {
     $script:blockResourceful = $false
     $configuredMethods.Add($testKey, 'LetOpenByDialog')
     if (-not [ResourcefulTestNative]::Activate($targetHandle)) { throw 'Could not reactivate the test window.' }
-    $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile)))
+    $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile), $null))
     $result = Wait-ResourcefulTask $task
     if (-not $result.Error -or $null -ne $result.Drop -or $result.Dialogs.Count -ne 1 -or $result.Dialogs[0].Submitted -or $script:resourcefulFiles.Count -ne 0) { throw 'A configured dialog failure must not fall back to a drop.' }
     $configuredMethods[$testKey] = 'LetOpenByDialogUsingO'
     if (-not [ResourcefulTestNative]::Activate($targetHandle)) { throw 'Could not reactivate the test window.' }
-    $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile)))
+    $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile), $null))
     $result = Wait-ResourcefulTask $task
     if (-not $script:plainOReceived -or -not $result.Error -or $null -ne $result.Drop) { throw 'The configured plain-O dialog method was not used.' }
     $configuredMethods[$testKey] = 'LetOpenByDialogUsingCtrlF12'
     if (-not [ResourcefulTestNative]::Activate($targetHandle)) { throw 'Could not reactivate the test window.' }
-    $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile)))
+    $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile), $null))
     $result = Wait-ResourcefulTask $task
     if (-not $script:ctrlF12Received -or -not $result.Error -or $null -ne $result.Drop) { throw 'The configured Ctrl+F12 dialog method was not used.' }
+    $configuredMethods[$testKey] = 'OpenByShellOpen'
+    $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile), $unknownApp))
+    $result = Wait-ResourcefulTask $task
+    if (-not $result.Error -or $null -ne $result.Drop -or $null -ne $result.ShellOpens -or $result.Dialogs.Count -ne 0) { throw 'A mismatched selected application must not trigger any transfer.' }
+    $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $unregisteredFile, [string] $secondFile), $testApp))
+    $result = Wait-ResourcefulTask $task
+    if (-not $result.Error -or $null -ne $result.Drop -or $result.Dialogs.Count -ne 0 -or $result.ShellOpens.Count -ne 1 -or $result.ShellOpens[0].Dispatched) { throw 'A failed Shell Open must stop without a fallback or further files.' }
     $configuredMethods[$testKey] = 'DropToAppWindow'
     if (-not [ResourcefulTestNative]::Activate($targetHandle)) { throw 'Could not reactivate the test window.' }
-    $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile)))
+    $task = $resourceful.Invoke($null, [object[]] @($target, [string[]] @([string] $firstFile), $null))
     $result = Wait-ResourcefulTask $task
     if ($result.Error -or -not $result.Drop.Dropped -or $result.Dialogs.Count -ne 0 -or $firstFile -notin $script:resourcefulFiles) { throw 'The configured drop method was not used.' }
     'Resourceful open tests passed.'

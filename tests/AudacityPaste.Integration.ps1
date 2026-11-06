@@ -1,9 +1,10 @@
 param(
     [ValidateSet('Audacity', 'IrfanView', 'Word', 'VLC', 'AcrobatReader')]
     [string] $Application = 'Audacity',
-    [ValidateSet('Paste', 'Drop', 'Resourceful', 'Menu', 'OpenDialog', 'OpenDialogO', 'OpenDialogCtrlF12')]
+    [ValidateSet('Paste', 'Drop', 'Resourceful', 'Menu', 'OpenDialog', 'OpenDialogO', 'OpenDialogCtrlF12', 'ShellOpen')]
     [string] $Transfer = 'Paste',
-    [switch] $UseExisting
+    [switch] $UseExisting,
+    [switch] $NonDefault
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,6 +37,8 @@ public static class PasteWindowProbe
     private static extern bool BringWindowToTop(IntPtr window);
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
+    public static extern int AssocQueryString(uint flags, uint kind, string association, string extra, System.Text.StringBuilder output, ref uint length);
     public static bool ActivateTestWindow(IntPtr window)
     {
         uint foreground = GetWindowThreadProcessId(GetForegroundWindow(), out _);
@@ -66,12 +69,28 @@ function Wait-Until([scriptblock] $condition, [string] $message, [int] $seconds 
 }
 
 function Get-WindowNames([IntPtr] $handle) {
-    $root = [System.Windows.Automation.AutomationElement]::FromHandle($handle)
-    if ($null -eq $root) { return @() }
-    $elements = $root.FindAll([System.Windows.Automation.TreeScope]::Subtree, [System.Windows.Automation.Condition]::TrueCondition)
+    try {
+        $root = [System.Windows.Automation.AutomationElement]::FromHandle($handle)
+        if ($null -eq $root) { return @() }
+        $elements = $root.FindAll([System.Windows.Automation.TreeScope]::Subtree, [System.Windows.Automation.Condition]::TrueCondition)
+    } catch [System.Windows.Automation.ElementNotAvailableException] { return @() }
     foreach ($element in $elements) {
         try { $element.Current.Name } catch [System.Windows.Automation.ElementNotAvailableException] { }
     }
+}
+
+function Find-ShellDocument([string] $name, [string[]] $names) {
+    $processIds = @(Get-Process -Name $names -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
+    $roots = [System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
+    foreach ($root in $roots) {
+        try {
+            if ($root.Current.ProcessId -in $processIds -and $root.Current.NativeWindowHandle -ne 0 -and
+                @(Get-WindowNames ([IntPtr] $root.Current.NativeWindowHandle) | Where-Object { $_ -like "*$name*" }).Count -gt 0) {
+                return $true
+            }
+        } catch [System.Windows.Automation.ElementNotAvailableException] { }
+    }
+    return $false
 }
 
 function Close-TestSavePrompt([int] $processId, [string] $testName) {
@@ -123,10 +142,26 @@ $extension, $executableNames, $processNames = switch ($Application) {
     'VLC' { '.mp4'; ,@('vlc.exe'); ,@('vlc') }
     'AcrobatReader' { '.pdf'; ,@('AcroRd32.exe', 'Acrobat.exe'); ,@('AcroRd32', 'Acrobat') }
 }
+if ($NonDefault) {
+    Assert-True ($Application -eq 'Word' -and $Transfer -eq 'ShellOpen') 'NonDefault is supported for the Word ShellOpen test.'
+    $extension = '.html'
+}
 $registered = @($accessor.GetMethod('GetAppsToChooseFrom').Invoke($null, @([string] "test$extension")) |
     Where-Object { [IO.Path]::GetFileName($_.Id) -in $executableNames -and [IO.File]::Exists($_.Id) })
 Assert-True ($registered.Count -eq 1) "Expected exactly one registered $Application executable for $extension files."
 $applicationPath = [string] $registered[0].Id
+$selectedApp = $registered[0].PSObject.BaseObject
+if ($Transfer -eq 'ShellOpen') {
+    Assert-True (-not $UseExisting) 'ShellOpen integration requires a test-started application instance.'
+    if ($NonDefault) {
+        $length = [uint32] 0
+        [void] [PasteWindowProbe]::AssocQueryString(0, 2, $extension, 'open', $null, [ref] $length)
+        Assert-True ($length -gt 0) "The default $extension application could not be determined."
+        $defaultExecutable = [Text.StringBuilder]::new([int] $length)
+        Assert-True ([PasteWindowProbe]::AssocQueryString(0, 2, $extension, 'open', $defaultExecutable, [ref] $length) -eq 0 -and $defaultExecutable.ToString() -ine $applicationPath) 'Word is the default application; the non-default test requires a different default.'
+        Write-Host "Default application: $defaultExecutable; selected application: $applicationPath"
+    }
+}
 
 $existing = @(Get-Process -Name $processNames -ErrorAction SilentlyContinue)
 if ($UseExisting) {
@@ -191,6 +226,9 @@ try {
         Assert-True ([Math]::Abs($player.NaturalDuration.TimeSpan.TotalSeconds - 1) -lt 0.01) 'The test WAV file does not have the expected duration.'
         Write-Host 'Windows decoded the WAV file: one second of 440 Hz PCM audio.'
     } finally { $player.Close() }
+    } elseif ($Application -eq 'Word' -and $extension -eq '.html') {
+        [IO.File]::WriteAllText($filePath, '<!doctype html><html><body><p>Integration test document</p></body></html>', [Text.UTF8Encoding]::new($false))
+        Write-Host "HTML file: $filePath"
     } elseif ($Application -eq 'Word') {
         Add-Type -AssemblyName System.IO.Compression
         $archive = [System.IO.Compression.ZipFile]::Open($filePath, [System.IO.Compression.ZipArchiveMode]::Create)
@@ -268,8 +306,34 @@ try {
     }
 
     Wait-Until { [DateTime]::UtcNow -ge $pasteNotBefore } "The $Application startup wait did not complete."
-    Assert-True ([PasteWindowProbe]::ActivateTestWindow($window.Handle)) "Could not activate the $Application test window."
-    if ($Transfer -in @('OpenDialog', 'OpenDialogO', 'OpenDialogCtrlF12')) {
+    if ($Transfer -ne 'ShellOpen') {
+        Assert-True ([PasteWindowProbe]::ActivateTestWindow($window.Handle)) "Could not activate the $Application test window."
+    }
+    if ($Transfer -eq 'ShellOpen' -and $NonDefault) {
+        $result = $accessor.GetMethod('OpenByShellOpen').Invoke($null, [object[]] @($selectedApp, [string] $filePath))
+        Assert-True ($result.Dispatched) "Shell Open failed: $($result.Error)"
+        Wait-Until {
+            if (Find-ShellDocument $trackName $processNames) { return $true }
+            $process.Refresh()
+            $root = [System.Windows.Automation.AutomationElement]::FromHandle($process.MainWindowHandle)
+            $condition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ClassNameProperty, 'bosa_sdm_msword')
+            return @($root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition) | Where-Object {
+                $_.Current.Name -in @('Datei konvertieren', 'Convert File') -and $_.Current.ProcessId -eq $process.Id
+            }).Count -gt 0
+        } 'The test Word instance did not show the document or a conversion dialog.' 20
+        Write-Host 'The selected Word application received the HTML open request.'
+    } elseif ($Transfer -eq 'ShellOpen') {
+        $firstTrackName = 'KIS-First-' + [guid]::NewGuid().ToString('N')
+        $firstFilePath = Join-Path $directory ($firstTrackName + $extension)
+        [IO.File]::Copy($filePath, $firstFilePath)
+        $firstResult = $accessor.GetMethod('OpenByShellOpen').Invoke($null, [object[]] @($selectedApp, [string] $firstFilePath))
+        Assert-True ($firstResult.Dispatched) "Could not open the first test document: $($firstResult.Error)"
+        Wait-Until { Find-ShellDocument $firstTrackName $processNames } "$Application did not show the first test document." 20
+        Write-Host "First document opened: $firstTrackName"
+        $beforeProcessIds = @(Get-Process -Name $processNames -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
+        $result = $accessor.GetMethod('OpenByShellOpen').Invoke($null, [object[]] @($selectedApp, [string] $filePath))
+        Assert-True ($result.Dispatched) "Shell Open failed: $($result.Error)"
+    } elseif ($Transfer -in @('OpenDialog', 'OpenDialogO', 'OpenDialogCtrlF12')) {
         $method = switch ($Transfer) {
             'OpenDialogO' { 'LetOpenByDialogUsingO' }
             'OpenDialogCtrlF12' { 'LetOpenByDialogUsingCtrlF12' }
@@ -303,7 +367,7 @@ try {
             Assert-True (-not $errorProbe.Opened) 'The running-app menu action reported a transfer error.'
         } finally { $errorProbe.Dispose() }
     } elseif ($Transfer -eq 'Resourceful') {
-        $task = $accessor.GetMethod('OpenInRunningAppResourcefully').Invoke($null, [object[]] @($window, [string[]] @([string] $filePath)))
+        $task = $accessor.GetMethod('OpenInRunningAppResourcefully').Invoke($null, [object[]] @($window, [string[]] @([string] $filePath), $selectedApp))
         Wait-Until { $task.IsCompleted } 'The resourceful operation did not complete.' 15
         $result = $task.GetAwaiter().GetResult()
         Assert-True (-not $result.Error) "The resourceful operation failed: $($result.Error)"
@@ -311,6 +375,8 @@ try {
             Assert-True ($result.Dialogs.Count -eq 1 -and $result.Dialogs[0].Submitted -and $null -eq $result.Drop) 'The Open dialog did not replace the drop.'
         } elseif ($Application -eq 'IrfanView') {
             Assert-True ($result.Dialogs.Count -eq 1 -and -not $result.Dialogs[0].Submitted -and $result.Drop.Dropped) "The fallback drop failed: $($result.Drop.Error)"
+        } elseif ($Application -in @('Word', 'AcrobatReader')) {
+            Assert-True ($result.ShellOpens.Count -eq 1 -and $result.ShellOpens[0].Dispatched -and $null -eq $result.Drop -and $result.Dialogs.Count -eq 0) 'The selected Shell Open handler was not used.'
         } else {
             Assert-True ($result.Dialogs.Count -eq 1 -and ($result.Dialogs[0].Submitted -or ($null -ne $result.Drop -and $result.Drop.Dropped))) 'Neither the Open dialog nor the fallback drop succeeded.'
             Write-Host "Dialog submitted: $($result.Dialogs[0].Submitted); drop accepted: $($null -ne $result.Drop -and $result.Drop.Dropped)"
@@ -340,7 +406,9 @@ try {
         $result = $accessor.GetMethod('PasteByInteractionToAppWindow').Invoke($null, @($window))
         Assert-True ($result.Sent) "Ctrl+V could not be sent: $($result.Error)"
     }
-    if ($Application -eq 'IrfanView' -and $Transfer -eq 'Paste') {
+    if ($Transfer -eq 'ShellOpen' -and $NonDefault) {
+        Write-Host 'Shell Open dispatch completed; the application handles the dialog.'
+    } elseif ($Application -eq 'IrfanView' -and $Transfer -eq 'Paste') {
         $observationEnds = [DateTime]::UtcNow.AddSeconds(10)
         Wait-Until { [DateTime]::UtcNow -ge $observationEnds } 'The IrfanView observation period did not complete.'
         $namesAfterPaste = @(Get-WindowNames $window.Handle)
@@ -349,23 +417,61 @@ try {
     } else {
         Write-Host "$Transfer was sent; checking $Application for the opened file."
         Wait-Until {
-            $process.Refresh()
-            $currentHandle = $process.MainWindowHandle
-            if ($currentHandle -eq [IntPtr]::Zero -or -not [PasteWindowProbe]::IsWindowEnabled($currentHandle)) { return $false }
-            if (@(Get-WindowNames $currentHandle | Where-Object { $_ -like "*$trackName*" }).Count -eq 0) { return $false }
-            if ($Application -eq 'Word') {
-                $root = [System.Windows.Automation.AutomationElement]::FromHandle($currentHandle)
-                $condition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Document)
-                foreach ($document in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)) {
-                    $pattern = $null
-                    if ($document.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref] $pattern) -and $pattern.DocumentRange.GetText(-1) -like '*Integration test document*') { return $true }
-                }
-                return $false
+            if ($Transfer -eq 'ShellOpen') {
+                $currentProcesses = @(Get-Process -Name $processNames -ErrorAction SilentlyContinue)
+                $currentProcessIds = @($currentProcesses | Select-Object -ExpandProperty Id)
+                $roots = [System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
+                $handles = @($roots | Where-Object { $_.Current.ProcessId -in $currentProcessIds -and $_.Current.NativeWindowHandle -ne 0 } | ForEach-Object { [IntPtr] $_.Current.NativeWindowHandle })
+            } else {
+                $process.Refresh()
+                $handles = @($process.MainWindowHandle)
             }
-            return $true
+            foreach ($currentHandle in $handles) {
+                if ($currentHandle -eq [IntPtr]::Zero -or -not [PasteWindowProbe]::IsWindowEnabled($currentHandle)) { continue }
+                if (@(Get-WindowNames $currentHandle | Where-Object { $_ -like "*$trackName*" }).Count -eq 0) { continue }
+                if ($Application -eq 'Word') {
+                    $root = [System.Windows.Automation.AutomationElement]::FromHandle($currentHandle)
+                    $condition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Document)
+                    $hasContent = $false
+                    foreach ($document in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)) {
+                        $pattern = $null
+                        if ($document.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref] $pattern) -and $pattern.DocumentRange.GetText(-1) -like '*Integration test document*') { $hasContent = $true; break }
+                    }
+                    if (-not $hasContent) { continue }
+                }
+                $script:shellDocumentProcessId = [uint32] 0
+                [void] [PasteWindowProbe]::GetWindowThreadProcessId($currentHandle, [ref] $script:shellDocumentProcessId)
+                return $true
+            }
+            return $false
         } "$Application did not show the opened file after $Transfer, or a dialog is blocking it." 15
         $testContentLoaded = $true
         Write-Host "$Application opened the file: $trackName"
+        if ($Transfer -eq 'ShellOpen') {
+            if ($Application -eq 'AcrobatReader') {
+                Add-Type -AssemblyName System.Windows.Forms
+                $process.Refresh()
+                Assert-True ($process.MainWindowTitle -like "*$trackName*" -and [PasteWindowProbe]::ActivateTestWindow($process.MainWindowHandle)) 'Could not activate the second test PDF.'
+                [System.Windows.Forms.SendKeys]::SendWait('^{TAB}')
+                Wait-Until { $process.Refresh(); $process.MainWindowTitle -like "*$firstTrackName*" } 'The first test PDF was not found in the other tab.' 10
+                [System.Windows.Forms.SendKeys]::SendWait('^{TAB}')
+                Wait-Until { $process.Refresh(); $process.MainWindowTitle -like "*$trackName*" } 'The second test PDF was not found after switching back.' 10
+                Write-Host 'Both test PDFs remain open in separate tabs.'
+            } else {
+                Assert-True (Find-ShellDocument $firstTrackName $processNames) 'The first document is no longer visible after opening the second.'
+                Write-Host 'The first document remains visible after opening the second.'
+            }
+            $afterProcessIds = @(Get-Process -Name $processNames -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
+            $newProcessIds = @($afterProcessIds | Where-Object { $_ -notin $beforeProcessIds })
+            Write-Host "Processes before: $($beforeProcessIds -join ', '); after: $($afterProcessIds -join ', '); new: $($newProcessIds -join ', ')"
+            Write-Host "Document window process: $script:shellDocumentProcessId; existing process reused: $($script:shellDocumentProcessId -in $beforeProcessIds)"
+            $observationEnds = [DateTime]::UtcNow.AddSeconds(3)
+            Wait-Until { [DateTime]::UtcNow -ge $observationEnds } 'The shell process observation period did not complete.'
+            $remainingProcesses = @(Get-Process -Name $processNames -ErrorAction SilentlyContinue)
+            $remainingNew = @($remainingProcesses | Where-Object { $_.Id -notin $beforeProcessIds })
+            Write-Host "Processes after observation: $(($remainingProcesses.Id) -join ', '); new processes still running: $(($remainingNew.Id) -join ', ')"
+            foreach ($instance in $remainingNew) { Write-Host "  New process $($instance.Id): window=$($instance.MainWindowHandle); title=$($instance.MainWindowTitle)" }
+        }
     }
 } catch {
     Write-Host "Test error: $_"
@@ -380,6 +486,31 @@ try {
         $process.Refresh()
         try {
             if (-not $process.HasExited -and -not $UseExisting) {
+                if ($Transfer -eq 'ShellOpen' -and $Application -eq 'AcrobatReader' -and $testContentLoaded) {
+                    $process.Refresh()
+                    if ($process.MainWindowTitle -like "*$trackName*" -and [PasteWindowProbe]::ActivateTestWindow($process.MainWindowHandle)) {
+                        [System.Windows.Forms.SendKeys]::SendWait('^{TAB}')
+                        Wait-Until { $process.Refresh(); $process.MainWindowTitle -like "*$firstTrackName*" } 'Could not select the first test PDF for cleanup.' 10
+                        [System.Windows.Forms.SendKeys]::SendWait('^w')
+                        Wait-Until { $process.Refresh(); $process.MainWindowTitle -like "*$trackName*" } 'The first test PDF did not close.' 10
+                    }
+                }
+                if ($Transfer -eq 'ShellOpen' -and -not $NonDefault -and $Application -eq 'Word') {
+                    $roots = [System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
+                    foreach ($root in $roots) {
+                        try {
+                            if ($root.Current.ProcessId -eq $process.Id -and $root.Current.NativeWindowHandle -ne 0 -and
+                                ($root.Current.Name -like "*$trackName*" -or $root.Current.Name -like "*$firstTrackName*")) {
+                                [void] [PasteWindowProbe]::PostMessage([IntPtr] $root.Current.NativeWindowHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
+                            }
+                        } catch [System.Windows.Automation.ElementNotAvailableException] { }
+                    }
+                    Wait-Until { -not (Find-ShellDocument $trackName $processNames) -and -not (Find-ShellDocument $firstTrackName $processNames) } 'The test Word documents did not close.' 10
+                    $process.Refresh()
+                    if (-not $process.HasExited -and $process.MainWindowHandle -eq [IntPtr]::Zero) {
+                        Wait-Until { $process.Refresh(); $process.HasExited -or $process.MainWindowHandle -ne [IntPtr]::Zero } 'The test Word process did not finish closing.' 10
+                    }
+                }
                 if ($Application -eq 'AcrobatReader' -and -not $testContentLoaded) {
                     $root = [System.Windows.Automation.AutomationElement]::FromHandle($process.MainWindowHandle)
                     $condition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ClassNameProperty, '#32770')
@@ -392,7 +523,8 @@ try {
                         }
                     }
                 }
-                if ($Application -eq 'Word' -and $process.MainWindowTitle -like "*$trackName*") {
+                if ($Application -eq 'Word' -and ($process.MainWindowTitle -like "*$trackName*" -or
+                    ($Transfer -eq 'ShellOpen' -and -not $testContentLoaded -and $process.MainWindowTitle -eq 'Word'))) {
                     $root = [System.Windows.Automation.AutomationElement]::FromHandle($process.MainWindowHandle)
                     $condition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ClassNameProperty, 'bosa_sdm_msword')
                     foreach ($dialog in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)) {
@@ -415,7 +547,7 @@ try {
                         }
                     }
                 }
-                if (-not $process.CloseMainWindow()) {
+                if (-not $process.HasExited -and -not $process.CloseMainWindow()) {
                     throw "$Application did not close normally. Resolve any open dialogs or unsaved work."
                 }
                 $promptHandled = $false

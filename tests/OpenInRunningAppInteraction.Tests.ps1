@@ -93,7 +93,7 @@ try {
     try {
         $invalidWindow = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.AppWindow', $true), [object[]] @([IntPtr]::Zero, 'invalid'))
         $open = $view.GetType().GetMethod('OpenInRunningApp', $instanceFlags)
-        $null = $open.Invoke($view, [object[]] @($invalidWindow, $null))
+        $null = $open.Invoke($view, [object[]] @($null, $invalidWindow, $null))
         if ($errorProbe.Opened) { throw 'A running-app exception displayed a result dialog.' }
     } finally { $errorProbe.Dispose() }
     $window = [System.Windows.Window]::new()

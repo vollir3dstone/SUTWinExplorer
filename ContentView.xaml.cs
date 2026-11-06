@@ -143,7 +143,7 @@ public partial class ContentView : UserControl
                     return app.Windows.OrderBy(window => window.Title, StringComparer.CurrentCultureIgnoreCase)
                         .ThenBy(window => window.Handle.ToInt64())
                         .Select(window => new ShellMenuAction("open-running-app", $"{app.App.Name} - {(string.IsNullOrWhiteSpace(window.Title) ? "Untitled window" : window.Title)}".Replace("&", "&&"), true,
-                            () => OpenInRunningApp(window, selectedPaths)) { MenuImage = icon ?? ShellMenuIcons.GetWindowIcon(window.Handle) });
+                            () => OpenInRunningApp(app.App, window, selectedPaths)) { MenuImage = icon ?? ShellMenuIcons.GetWindowIcon(window.Handle) });
                 })
                 .ToArray();
         }
@@ -154,11 +154,11 @@ public partial class ContentView : UserControl
         }
     }
 
-    private async void OpenInRunningApp(AppWindow window, IReadOnlyList<string> paths)
+    private async void OpenInRunningApp(RegisteredApp app, AppWindow window, IReadOnlyList<string> paths)
     {
         try
         {
-            var result = await RunningAppsAccessor.OpenInRunningAppResourcefully(window, paths);
+            var result = await RunningAppsAccessor.OpenInRunningAppResourcefully(window, paths, app);
             if (result.Error is not null) Trace.TraceError("Open in running application failed: {0}", result.Error);
             if (result.Drop is { Dropped: false } drop) Trace.TraceError("Drop to running application failed: {0}", drop.Error);
         }

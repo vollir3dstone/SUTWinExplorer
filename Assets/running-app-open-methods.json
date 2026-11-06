@@ -4,13 +4,14 @@
       "name": "Microsoft Word",
       "executables": ["WINWORD.EXE"],
       "companies": ["Microsoft Corporation"],
-      "method": "LetOpenByDialogUsingCtrlF12"
+      "method": "OpenByShellOpen",
+      "comment": "LetOpenByDialogUsingCtrlF12 is another option for Word."
     },
     {
       "name": "Adobe Acrobat Reader",
       "executables": ["AcroRd32.exe", "Acrobat.exe"],
       "companies": ["Adobe Systems Incorporated"],
-      "method": "LetOpenByDialog"
+      "method": "OpenByShellOpen"
     }
   ]
 }

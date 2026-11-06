@@ -13,7 +13,8 @@ public sealed record RunningApp(RegisteredApp App, IReadOnlyList<AppWindow> Wind
 public sealed record PasteClipboardResult(bool Sent, string? Error);
 public sealed record DropToWindowResult(bool Dropped, string? Error);
 public sealed record OpenFileDialogResult(bool Submitted, string? Error);
-public sealed record ResourcefulOpenResult(IReadOnlyList<OpenFileDialogResult> Dialogs, DropToWindowResult? Drop, string? Error);
+public sealed record ShellOpenResult(bool Dispatched, string? Error);
+public sealed record ResourcefulOpenResult(IReadOnlyList<OpenFileDialogResult> Dialogs, DropToWindowResult? Drop, string? Error, IReadOnlyList<ShellOpenResult>? ShellOpens = null);
 
 public static class RunningAppsAccessor
 {
@@ -95,6 +96,49 @@ public static class RunningAppsAccessor
             .Select(app => new RunningApp(app, GetUserWindows(app)))
             .Where(app => app.Windows.Count != 0)
             .ToArray();
+    }
+
+    public static ShellOpenResult OpenByShellOpen(RegisteredApp app, string filePath)
+    {
+        ArgumentNullException.ThrowIfNull(app);
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        if (!File.Exists(filePath))
+            return new(false, "The file does not exist.");
+        if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
+            return new(false, "Shell Open requires an STA thread.");
+        string extension = Path.GetExtension(filePath);
+        if (string.IsNullOrEmpty(extension) || extension == ".")
+            return new(false, "The file does not have a supported extension.");
+        try
+        {
+            Marshal.ThrowExceptionForHR(SHAssocEnumHandlers(extension, RecommendedAssociationHandlers, out var enumerator));
+            try
+            {
+                while (true)
+                {
+                    int result = enumerator.Next(1, out var handler, out uint fetched);
+                    Marshal.ThrowExceptionForHR(result);
+                    if (fetched == 0)
+                        break;
+                    try
+                    {
+                        if (handler.GetName(out string? id) < 0 || !string.Equals(id, app.Id, StringComparison.OrdinalIgnoreCase))
+                            continue;
+                        var data = ShellDragDrop.CreateDataObject([Path.GetFullPath(filePath)], IntPtr.Zero);
+                        try { Marshal.ThrowExceptionForHR(handler.Invoke(data)); }
+                        finally { if (Marshal.IsComObject(data)) _ = Marshal.ReleaseComObject(data); }
+                        return new(true, null);
+                    }
+                    finally { Marshal.ReleaseComObject(handler); }
+                }
+            }
+            finally { Marshal.ReleaseComObject(enumerator); }
+            return new(false, "The selected application is not registered for this file type.");
+        }
+        catch (Exception exception) when (exception is COMException or Win32Exception or IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            return new(false, $"Could not open the file through the shell: {exception.Message}");
+        }
     }
 
     public static PasteClipboardResult PasteByInteractionToAppWindow(AppWindow window)
@@ -246,7 +290,7 @@ public static class RunningAppsAccessor
         return new(false, "No supported Open dialog appeared for the target window.");
     }
 
-    public static async Task<ResourcefulOpenResult> OpenInRunningAppResourcefully(AppWindow window, IReadOnlyList<string> paths)
+    public static async Task<ResourcefulOpenResult> OpenInRunningAppResourcefully(AppWindow window, IReadOnlyList<string> paths, RegisteredApp? app = null)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentNullException.ThrowIfNull(paths);
@@ -259,6 +303,20 @@ public static class RunningAppsAccessor
         if (targetProcessId == 0)
             return new([], null, "The target window is unavailable.");
         string? configuredMethod = GetConfiguredOpenMethod(targetProcessId);
+        if (configuredMethod == "OpenByShellOpen")
+        {
+            if (app is null || !MatchesApp(app.Id, targetProcessId))
+                return new([], null, "The selected application does not match the target window.");
+            var shellOpens = new List<ShellOpenResult>();
+            foreach (string file in files)
+            {
+                var shellOpen = OpenByShellOpen(app, file);
+                shellOpens.Add(shellOpen);
+                if (!shellOpen.Dispatched)
+                    return new([], null, $"Could not open '{file}' through the selected application: {shellOpen.Error}", shellOpens);
+            }
+            return new([], null, null, shellOpens);
+        }
         if (configuredMethod == "DropToAppWindow")
         {
             var drop = DropToAppWindow(window, files);
@@ -332,7 +390,7 @@ public static class RunningAppsAccessor
         foreach (var application in document.RootElement.GetProperty("applications").EnumerateArray())
         {
             string? method = application.GetProperty("method").GetString();
-            if (method is not ("LetOpenByDialog" or "LetOpenByDialogUsingO" or "LetOpenByDialogUsingCtrlF12" or "DropToAppWindow"))
+            if (method is not ("LetOpenByDialog" or "LetOpenByDialogUsingO" or "LetOpenByDialogUsingCtrlF12" or "DropToAppWindow" or "OpenByShellOpen"))
                 throw new InvalidDataException($"Unsupported running application open method '{method}'.");
             foreach (var executable in application.GetProperty("executables").EnumerateArray())
             foreach (var company in application.GetProperty("companies").EnumerateArray())
@@ -755,5 +813,13 @@ public static class RunningAppsAccessor
         int GetName([MarshalAs(UnmanagedType.LPWStr)] out string? name);
         [PreserveSig]
         int GetUIName([MarshalAs(UnmanagedType.LPWStr)] out string? name);
+        [PreserveSig]
+        int GetIconLocation([MarshalAs(UnmanagedType.LPWStr)] out string? path, out int index);
+        [PreserveSig]
+        int IsRecommended();
+        [PreserveSig]
+        int MakeDefault([MarshalAs(UnmanagedType.LPWStr)] string description);
+        [PreserveSig]
+        int Invoke([MarshalAs(UnmanagedType.Interface)] System.Runtime.InteropServices.ComTypes.IDataObject data);
     }
 }

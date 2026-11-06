@@ -3,7 +3,7 @@
 ## Purpose and scope
 
 Identify applications registered to open a file type, find their visible running
-windows, and transfer files to a chosen window without starting another instance.
+windows, and transfer files using a method appropriate for the selected application.
 The target application decides whether the transfer opens the file, imports its
 contents, or performs another action. This specification describes the current
 ContentView action, accessor and observed behavior; it does not claim that every
@@ -21,8 +21,8 @@ application supports opening files this way.
   Selections containing a directory and selections with no matching running
   windows have a disabled submenu. The action is not added to the background,
   sidebar or Shift menus.
-- Selecting a window invokes the resourceful Open dialog and drop fallback
-  operation for that window. It does not change the clipboard.
+- Selecting a window invokes the resourceful operation for that application and
+  window. It does not change the clipboard.
 - Do not show a transfer result dialog, including on failure. Technical errors
   can be written to the diagnostic trace. A submitted dialog or accepted drop is not
   a guarantee that the target opened the files.
@@ -77,7 +77,7 @@ the file as a separate document.
   In an application with an editable focused control, the key can instead
   change existing content; callers must select this method with care.
 - `LetOpenByDialogUsingCtrlF12` uses the same dialog handling with `Ctrl+F12`.
-  The configured Word entry uses this method.
+  This is an alternative for Word, noted in its configuration entry.
 - Only a newly created foreground standard Win32 dialog owned directly by the
   selected window in the same process is considered. The method looks for the
   standard file name edit control and an enabled Open button; the supported
@@ -91,6 +91,20 @@ the file as a separate document.
 - The Content Menu's resourceful operation uses `Ctrl+O` by default. It uses
   the bare `O` variant only when explicitly configured for the application.
 
+### Shell open
+
+- `OpenByShellOpen` accepts a registered application and one existing file.
+  It invokes the matching Windows Shell association handler for that file type,
+  as in Open With, independently of the default application. A missing handler
+  is an error; it never falls back to another application. It may start a
+  process, reuse one, or show additional UI. `Dispatched` means that the
+  selected handler accepted the request, not that the file opened or that an
+  existing application instance was reused. Subsequent application dialogs
+  are left to the application and its user.
+- The resourceful operation can select this method through per-app
+  configuration. It cannot guarantee delivery to a particular window selected
+  in the running-app menu.
+
 ### Combined operation
 
 - The embedded [running-app-open-methods.json](Assets/running-app-open-methods.json)
@@ -99,9 +113,13 @@ the file as a separate document.
   company name, independently of installation path and version. These metadata
   are not a security identity; renamed executables or changed/missing company
   names do not match. Supported names are `LetOpenByDialog`,
-  `LetOpenByDialogUsingO`, `LetOpenByDialogUsingCtrlF12`, and `DropToAppWindow`.
-  An invalid method or duplicate executable/company pair is an error. Acrobat
-  Reader still uses `LetOpenByDialog` as an unverified placeholder.
+  `LetOpenByDialogUsingO`, `LetOpenByDialogUsingCtrlF12`, `DropToAppWindow`,
+  and `OpenByShellOpen`. An invalid method or duplicate executable/company pair
+  is an error. Word and Acrobat Reader currently use `OpenByShellOpen`.
+- Configured Shell Open requires a registered application matching the selected
+  window's process. It invokes that application's handler on the original STA
+  for each file, stops at the first failure, and does not attempt another method.
+  Application dialogs shown after dispatch are left alone.
 - For a configured application only the configured method is attempted; a
   failed dialog attempt is reported without a fallback drop. For an unknown
   application the default asynchronously attempts `Ctrl+O` for each file.
@@ -113,7 +131,8 @@ the file as a separate document.
   by the same process, with no blocking owned dialog or new owned window.
   The state is checked again on the original STA thread before dropping.
   Otherwise leave the dialog alone and report that the drop was skipped.
-- The result reports each attempted dialog, the optional drop, and any error.
+- The result reports each attempted dialog, the optional drop, any error, and
+  for Shell Open each attempted dispatch, including partial results on failure.
   It does not change the clipboard or use paste. A
   delayed dialog can still appear after the timeout, and neither a posted click
   nor an accepted drop proves the file was opened. The fallback uses the center
@@ -197,8 +216,20 @@ the file as a separate document.
 - `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application Word -Transfer OpenDialogCtrlF12`
   tests `LetOpenByDialogUsingCtrlF12` with a Unicode DOCX filename. In the
   observed Word version, the document opened with the expected content. The
-  resourceful Word test also opened the document using the configured method
-  without a drop.
+  resourceful Word and Acrobat Reader tests also opened their documents using
+  the configured Shell Open method without a drop.
+- Shell-open integration tests for `Word` and `AcrobatReader` start a test
+  instance, open two distinct test documents, check both remain open, and
+  compare application process IDs before and after the second request. In the
+  observed environment, both applications displayed the second document in
+  their existing main process. Word used separate document windows; Reader used
+  separate tabs. No additional application process remained after three seconds.
+  Brief launcher processes can occur and snapshots cannot capture every one.
+  These results depend on the registered handler and application configuration
+  and are not guarantees for other installations. An additional Word test uses
+  an HTML association where Firefox is the default and confirms that the Word
+  handler is selected; an application conversion dialog does not invalidate
+  the dispatch.
 - In the observed environment VLC opened the MP4 through the resourceful
   action. Direct drops opened the DOCX in Word and the PDF in Acrobat Reader.
   Before application-specific routing was added, Word's Ctrl+O attempt was
