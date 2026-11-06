@@ -17,7 +17,7 @@ toggle, TA2, Size, and Date modified. The names describe the columns as follows:
 | Header | Name | Content |
 | --- | --- | --- |
 | MT | Media type | Application-defined media category, displayed as an icon. |
-| ST | Media type sub type | `TB`, `AS`, `RE` or `ED`; empty without a sub type. |
+| ST | Media type sub type | `TE`, `ED` or `RE`; empty without a sub type. |
 | TA1 | Type and/or default app, coarse | Windows Shell base icon. |
 | MO | Modifier | Windows Shell overlay icon. |
 | TA2 | TypeApp2: Type and/or default app, fine | Windows Shell type description. |
@@ -489,7 +489,7 @@ it ambiguous. The media type name remains available as the row's accessibility
 name.
 
 The fixed-width `ST` column follows `MT` and displays the media type sub type
-as `TB` (text-based), `AS` (app-specific), `RE` (render), or `ED` (edit).
+as `TE` (text), `ED` (edit), or `RE` (render).
 Items without a media type sub type have an empty cell.
 
 The supported media types are fixed by the internal `MediaType` enum. Their

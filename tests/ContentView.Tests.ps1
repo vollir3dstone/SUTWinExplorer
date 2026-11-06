@@ -288,7 +288,7 @@ try {
         $subTypePresenter = [System.Windows.Controls.ContentPresenter]::new()
         $subTypePresenter.Content = $testRow
         $subTypePresenter.ContentTemplate = $mediaTypeSubTypeColumn.CellTemplate
-        foreach ($subTypeCase in @(@($notes, 'TB'), @(@($entries | Where-Object { $_.FullPath -eq (Join-Path $directory 'unknown.zzzunknown') })[0], ''))) {
+        foreach ($subTypeCase in @(@($notes, 'TE'), @(@($entries | Where-Object { $_.FullPath -eq (Join-Path $directory 'unknown.zzzunknown') })[0], ''))) {
             $rowType.GetProperty('Entry').SetValue($testRow, $subTypeCase[0])
             $subTypePresenter.Measure([System.Windows.Size]::new(30, 22))
             $subTypePresenter.Arrange([System.Windows.Rect]::new(0, 0, 30, 22))

@@ -24,16 +24,9 @@ internal enum MediaType
 internal enum MediaTypeSubType
 {
     WITHOUT_SUBTYPE,
-    LINES_TEXT_TEXT_BASED,
-    STRUCTURED_DATA_TEXT_BASED,
-    STRUCTURED_DATA_APP_SPECIFIC,
-    COMMAND_DATA_TEXT_BASED,
-    BOOK_RENDER,
-    BOOK_EDIT,
-    IMAGE_RENDER,
-    IMAGE_EDIT,
-    AUDIO_RENDER,
-    VIDEO_RENDER
+    TEXT,
+    EDIT,
+    RENDER
 }
 
 internal static class MediaTypeMap
@@ -90,12 +83,9 @@ internal static class MediaTypeMap
     public static string FormatMediaTypeSubType(MediaTypeSubType mediaTypeSubType) => mediaTypeSubType switch
     {
         MediaTypeSubType.WITHOUT_SUBTYPE => string.Empty,
-        MediaTypeSubType.LINES_TEXT_TEXT_BASED or MediaTypeSubType.STRUCTURED_DATA_TEXT_BASED or
-            MediaTypeSubType.COMMAND_DATA_TEXT_BASED => "TB",
-        MediaTypeSubType.STRUCTURED_DATA_APP_SPECIFIC => "AS",
-        MediaTypeSubType.BOOK_RENDER or MediaTypeSubType.IMAGE_RENDER or MediaTypeSubType.AUDIO_RENDER or
-            MediaTypeSubType.VIDEO_RENDER => "RE",
-        MediaTypeSubType.BOOK_EDIT or MediaTypeSubType.IMAGE_EDIT => "ED",
+        MediaTypeSubType.TEXT => "TE",
+        MediaTypeSubType.EDIT => "ED",
+        MediaTypeSubType.RENDER => "RE",
         _ => throw new ArgumentOutOfRangeException(nameof(mediaTypeSubType), mediaTypeSubType, "Unsupported media type sub type.")
     };
 
@@ -134,18 +124,11 @@ internal static class MediaTypeMap
 
             foreach (var group in extensions.EnumerateObject())
             {
-                var mediaTypeSubType = (type, group.Name) switch
+                var mediaTypeSubType = group.Name switch
                 {
-                    (MediaType.LinesText, "text-based") => MediaTypeSubType.LINES_TEXT_TEXT_BASED,
-                    (MediaType.StructuredData, "text-based") => MediaTypeSubType.STRUCTURED_DATA_TEXT_BASED,
-                    (MediaType.StructuredData, "app-specific") => MediaTypeSubType.STRUCTURED_DATA_APP_SPECIFIC,
-                    (MediaType.CommandData, "text-based") => MediaTypeSubType.COMMAND_DATA_TEXT_BASED,
-                    (MediaType.Book, "render") => MediaTypeSubType.BOOK_RENDER,
-                    (MediaType.Book, "edit") => MediaTypeSubType.BOOK_EDIT,
-                    (MediaType.Image, "render") => MediaTypeSubType.IMAGE_RENDER,
-                    (MediaType.Image, "edit") => MediaTypeSubType.IMAGE_EDIT,
-                    (MediaType.Audio, "render") => MediaTypeSubType.AUDIO_RENDER,
-                    (MediaType.Video, "render") => MediaTypeSubType.VIDEO_RENDER,
+                    "text" => MediaTypeSubType.TEXT,
+                    "edit" => MediaTypeSubType.EDIT,
+                    "render" => MediaTypeSubType.RENDER,
                     _ => throw new InvalidDataException($"Unsupported media type sub type '{typeName}/{group.Name}'.")
                 };
                 AddExtensions(types, group.Value, type, mediaTypeSubType, typeName);

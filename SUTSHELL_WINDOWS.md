@@ -57,7 +57,7 @@ application's media-type classification and icon, including the stock Windows
 folder icon. The JSON mapping remains manually maintained and embedded.
 `MediaTypeMap` also reads media type sub type groups from that mapping, retaining
 the corresponding `MediaTypeSubType` on each directory item. Its formatter maps
-text-based, app-specific, render and edit to `TB`, `AS`, `RE` and `ED`; items
+text, edit and render to `TE`, `ED` and `RE`; items
 without a media type sub type format as an empty string. The table displays
 this value in its `ST` column.
 The WPF table renders the media type in the same row as the other fields.

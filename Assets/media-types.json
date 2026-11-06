@@ -1,71 +1,63 @@
 {
-	"_type": "KIS Explorer Media Types",
-	"_version": "1.02",
-	"types": [
-		{
-			"type": "executable",
-			"extensions": [".exe", ".dll", ".msi"]
-		},
-		{
-			"type": "box",
-			"extensions": {"edit": [".zip", ".7z", ".rar", ".tar", ".gz"]}
-		},
-		{
-			"type": "lines-text",
-			"extensions": 
-				{
-					"text": [".txt", ".text"]
-				}
-		},
-		{
-			"type": "structured-data",
-			"extensions": 
-				{
-					"text": [".xml", ".json", ".csv", ".tsv", ".yaml", ".yml", ".ini", ".cfg"],
-					"edit": [".xlsx", ".xls", ".ods", ".mdb", ".accdb", ".sqlite", ".db", ".mdf", ".parquet"]
-				}
-		},
-		{
-			"type": "command-data",
-			"extensions": 
-				{
-					"text": [
-						".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx",
-						".cs", ".java", ".kt", ".kts", ".swift", ".go", ".rs",
-						".py", ".pyw", ".js", ".mjs", ".cjs", ".jsx", ".mts",
-						".cts", ".tsx", ".php", ".phtml", ".rb", ".pl", ".pm", ".r",
-						".dart", ".scala", ".sc", ".lua", ".sh", ".bash", ".zsh",
-						".bat", ".cmd", ".ps1", ".psm1", ".psd1", ".sql"
-					]
-				},
-			"comment": "'.ts' is assigned to video ('transport stream'), but could mean 'type script' as well;"
-		},
-		{
-			"type": "book",
-			"extensions": 
-				{
-					"text": [".html", ".htm", ".md"],
-					"render": [".pdf", ".ps", ".mht", ".mhtm", ".mhtml", ".chm", ".msg", ".eps"],
-					"edit": [".doc", ".docx", ".odt", ".rtf", ".md", ".pptx", ".ppt", ".vsd", ".vsdx", ".odg"]
-				}
-		},
-		{
-			"type": "image",
-			"extensions": 
-				{
-					"text": [".svg"],
-					"render": [".jpg", ".jpeg", ".jpe", ".jp2", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".avif", ".heic", ".ico"],
-					"edit": [".psd", ".xcf", ".wmf", ".emf", ".tga"]
-				}
-		},
-		{
-			"type": "audio",
-			"extensions": {"render": [".wav", ".mp3", ".aac", ".flac", ".aiff", ".aif", ".m4a", ".m4b", ".weba", ".opus", ".wma", ".ogg", ".mid", ".midi"]}
-		},
-		{
-			"type": "video",
-			"extensions": {"render": [".mp4", ".m4v", ".mov", ".avi", ".wmv", ".mpg", ".mpeg", ".mkv", ".webm", ".ogv", ".ts", ".m2ts", ".3gp", ".flv"]},
-			"comment": "'.ts' is assigned to video ('transport stream'), but could mean 'type script' as well;"
-		}
-	]
+    "_type": "KIS Explorer Media Types",
+    "_version": "1.02",
+    "types": [{
+            "type": "executable",
+            "extensions": [".exe", ".dll", ".msi"]
+        }, {
+            "type": "box",
+            "extensions": {
+                "edit": [".zip", ".7z", ".rar", ".tar", ".gz"]
+            }
+        }, {
+            "type": "lines-text",
+            "extensions": {
+                "text": [".txt", ".text"]
+            }
+        }, {
+            "type": "structured-data",
+            "extensions": {
+                "text": [".xml", ".json", ".csv", ".tsv", ".yaml", ".yml", ".ini", ".cfg"],
+                "edit": [".xlsx", ".xls", ".ods", ".mdb", ".accdb", ".sqlite", ".db", ".mdf", ".parquet"]
+            }
+        }, {
+            "type": "command-data",
+            "extensions": {
+                "text": [
+                    ".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx",
+                    ".cs", ".java", ".kt", ".kts", ".swift", ".go", ".rs",
+                    ".py", ".pyw", ".js", ".mjs", ".cjs", ".jsx", ".mts",
+                    ".cts", ".tsx", ".php", ".phtml", ".rb", ".pl", ".pm", ".r",
+                    ".dart", ".scala", ".sc", ".lua", ".sh", ".bash", ".zsh",
+                    ".bat", ".cmd", ".ps1", ".psm1", ".psd1", ".sql"
+                ]
+            },
+            "comment": "'.ts' is assigned to video ('transport stream'), but could mean 'type script' as well;"
+        }, {
+            "type": "book",
+            "extensions": {
+                "text": [".html", ".htm", ".md"],
+                "render": [".pdf", ".ps", ".mht", ".mhtm", ".mhtml", ".chm", ".msg", ".eps"],
+                "edit": [".doc", ".docx", ".odt", ".rtf", ".pptx", ".ppt", ".vsd", ".vsdx", ".odg"]
+            }
+        }, {
+            "type": "image",
+            "extensions": {
+                "text": [".svg"],
+                "render": [".jpg", ".jpeg", ".jpe", ".jp2", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".avif", ".heic", ".ico"],
+                "edit": [".psd", ".xcf", ".wmf", ".emf", ".tga"]
+            }
+        }, {
+            "type": "audio",
+            "extensions": {
+                "render": [".wav", ".mp3", ".aac", ".flac", ".aiff", ".aif", ".m4a", ".m4b", ".weba", ".opus", ".wma", ".ogg", ".mid", ".midi"]
+            }
+        }, {
+            "type": "video",
+            "extensions": {
+                "render": [".mp4", ".m4v", ".mov", ".avi", ".wmv", ".mpg", ".mpeg", ".mkv", ".webm", ".ogv", ".ts", ".m2ts", ".3gp", ".flv"]
+            },
+            "comment": "'.ts' is assigned to video ('transport stream'), but could mean 'type script' as well;"
+        }
+    ]
 }

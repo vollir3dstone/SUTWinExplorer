@@ -28,17 +28,21 @@ try {
     $getMediaTypeSubType = $mediaMap.GetMethod('GetMediaTypeSubType')
     $formatMediaTypeSubType = $mediaMap.GetMethod('FormatMediaTypeSubType')
     $mediaCases = @(
-        @('notes.txt', $false, 'LinesText', 'LINES_TEXT_TEXT_BASED', 'TB'),
-        @('data.JSON', $false, 'StructuredData', 'STRUCTURED_DATA_TEXT_BASED', 'TB'),
-        @('data.xlsx', $false, 'StructuredData', 'STRUCTURED_DATA_APP_SPECIFIC', 'AS'),
-        @('code.cs', $false, 'CommandData', 'COMMAND_DATA_TEXT_BASED', 'TB'),
-        @('book.pdf', $false, 'Book', 'BOOK_RENDER', 'RE'),
-        @('book.docx', $false, 'Book', 'BOOK_EDIT', 'ED'),
-        @('image.png', $false, 'Image', 'IMAGE_RENDER', 'RE'),
-        @('image.svg', $false, 'Image', 'IMAGE_EDIT', 'ED'),
-        @('audio.mp3', $false, 'Audio', 'AUDIO_RENDER', 'RE'),
-        @('video.ts', $false, 'Video', 'VIDEO_RENDER', 'RE'),
-        @('archive.zip', $false, 'Box', 'WITHOUT_SUBTYPE', ''),
+        @('notes.txt', $false, 'LinesText', 'TEXT', 'TE'),
+        @('data.JSON', $false, 'StructuredData', 'TEXT', 'TE'),
+        @('data.xlsx', $false, 'StructuredData', 'EDIT', 'ED'),
+        @('code.cs', $false, 'CommandData', 'TEXT', 'TE'),
+        @('book.html', $false, 'Book', 'TEXT', 'TE'),
+        @('book.md', $false, 'Book', 'TEXT', 'TE'),
+        @('book.pdf', $false, 'Book', 'RENDER', 'RE'),
+        @('book.docx', $false, 'Book', 'EDIT', 'ED'),
+        @('image.png', $false, 'Image', 'RENDER', 'RE'),
+        @('image.svg', $false, 'Image', 'TEXT', 'TE'),
+        @('image.psd', $false, 'Image', 'EDIT', 'ED'),
+        @('audio.mp3', $false, 'Audio', 'RENDER', 'RE'),
+        @('video.ts', $false, 'Video', 'RENDER', 'RE'),
+        @('archive.zip', $false, 'Box', 'EDIT', 'ED'),
+        @('program.exe', $false, 'Executable', 'WITHOUT_SUBTYPE', ''),
         @('unknown.xyz', $false, 'None', 'WITHOUT_SUBTYPE', ''),
         @('folder.pdf', $true, 'Directory', 'WITHOUT_SUBTYPE', ''),
         @('shortcut.lnk', $false, 'ShellLink', 'WITHOUT_SUBTYPE', ''),
@@ -54,7 +58,7 @@ try {
     $directoryItemType = $assembly.GetType('SUTWinExplorer.DirectoryItem', $true)
     $directoryItem = [Activator]::CreateInstance($directoryItemType, [object[]] @('book.pdf', 'book.pdf', $false, $false))
     $itemMediaTypeSubType = $directoryItemType.GetProperty('MediaTypeSubType', [System.Reflection.BindingFlags]'Instance,NonPublic').GetValue($directoryItem)
-    Assert-True ($itemMediaTypeSubType.ToString() -ceq 'BOOK_RENDER') 'Directory item did not retain its media type sub type.'
+    Assert-True ($itemMediaTypeSubType.ToString() -ceq 'RENDER') 'Directory item did not retain its media type sub type.'
 
     [System.IO.Directory]::CreateDirectory($directory) | Out-Null
     [System.IO.Directory]::CreateDirectory((Join-Path $directory 'Folder')) | Out-Null
