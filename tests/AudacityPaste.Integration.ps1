@@ -327,6 +327,7 @@ $previousClipboard = $null
 $clipboardChanged = $false
 $trackName = $null
 $testContentLoaded = $false
+$temporaryMediaPath = $null
 try {
     if ($Application -in @('AcrobatReader', 'LibreOffice', 'Calc', 'Impress', 'Draw', 'Math', 'Base') -and -not $UseExisting) {
         Wait-Until { @(Get-Process -Name $processNames -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero }).Count -eq 1 } "$Application did not open exactly one main window." 30
@@ -345,32 +346,14 @@ try {
     $trackName = $(if ($Transfer -in @('OpenDialog', 'OpenDialogO', 'OpenDialogCtrlF12')) { 'KIS Öffnen ' } else { 'KIS-Paste-' }) + [guid]::NewGuid().ToString('N')
     $filePath = Join-Path $directory ($trackName + $extension)
     if ($Application -in @('Audacity', 'Resonic', 'WindowsMediaPlayerLegacy')) {
-    $sampleRate = 44100
-    $sampleCount = if ($Application -eq 'WindowsMediaPlayerLegacy') { $sampleRate * 10 } else { $sampleRate }
-    $writer = [IO.BinaryWriter]::new([IO.File]::Create($filePath))
-    try {
-        $writer.Write([Text.Encoding]::ASCII.GetBytes('RIFF'))
-        $writer.Write([uint32] (36 + $sampleCount * 2))
-        $writer.Write([Text.Encoding]::ASCII.GetBytes('WAVEfmt '))
-        $writer.Write([uint32] 16)
-        $writer.Write([uint16] 1)
-        $writer.Write([uint16] 1)
-        $writer.Write([uint32] $sampleRate)
-        $writer.Write([uint32] ($sampleRate * 2))
-        $writer.Write([uint16] 2)
-        $writer.Write([uint16] 16)
-        $writer.Write([Text.Encoding]::ASCII.GetBytes('data'))
-        $writer.Write([uint32] ($sampleCount * 2))
-        for ($sample = 0; $sample -lt $sampleCount; $sample++) {
-            $writer.Write([int16] $(if ($Application -eq 'WindowsMediaPlayerLegacy') { 0 } else { 10000 * [Math]::Sin(2 * [Math]::PI * 440 * $sample / $sampleRate) }))
-        }
-    } finally { $writer.Dispose() }
+    [IO.File]::Copy((Join-Path $PSScriptRoot 'resources\silence.wav'), $filePath)
+    $temporaryMediaPath = $filePath
     Write-Host "WAV file: $filePath"
     $player = [System.Windows.Media.MediaPlayer]::new()
     try {
         $player.Open([Uri]::new($filePath))
         Wait-Until { $player.NaturalDuration.HasTimeSpan } 'Windows could not decode the test WAV file.'
-        $expectedDuration = $sampleCount / $sampleRate
+        $expectedDuration = 10
         Assert-True ([Math]::Abs($player.NaturalDuration.TimeSpan.TotalSeconds - $expectedDuration) -lt 0.01) 'The test WAV file does not have the expected duration.'
         Write-Host "Windows decoded the WAV file: $expectedDuration seconds of PCM audio."
     } finally { $player.Close() }
@@ -469,7 +452,8 @@ try {
         [IO.File]::Copy($filePath, $firstFilePath)
         Write-Host "PPTX files: $firstFilePath; $filePath"
     } elseif ($Application -eq 'VLC') {
-        [IO.File]::Copy((Join-Path $PSScriptRoot 'RunningAppTest.mp4'), $filePath)
+        [IO.File]::Copy((Join-Path $PSScriptRoot 'resources\RunningAppTest.mp4'), $filePath)
+        $temporaryMediaPath = $filePath
         Write-Host "MP4 file: $filePath"
     } elseif ($Application -eq 'AcrobatReader') {
         $content = "BT /F1 18 Tf 72 720 Td (Integration test document) Tj ET`n"
@@ -493,18 +477,8 @@ try {
         [IO.File]::WriteAllText($filePath, $pdf.ToString(), [Text.Encoding]::ASCII)
         Write-Host "PDF file: $filePath"
     } else {
-        $visual = [System.Windows.Media.DrawingVisual]::new()
-        $drawing = $visual.RenderOpen()
-        try {
-            $drawing.DrawRectangle([System.Windows.Media.Brushes]::CornflowerBlue, $null, [System.Windows.Rect]::new(0, 0, 160, 100))
-            $drawing.DrawEllipse([System.Windows.Media.Brushes]::Gold, $null, [System.Windows.Point]::new(80, 50), 30, 30)
-        } finally { $drawing.Close() }
-        $bitmap = [System.Windows.Media.Imaging.RenderTargetBitmap]::new(160, 100, 96, 96, [System.Windows.Media.PixelFormats]::Pbgra32)
-        $bitmap.Render($visual)
-        $encoder = [System.Windows.Media.Imaging.JpegBitmapEncoder]::new()
-        $encoder.Frames.Add([System.Windows.Media.Imaging.BitmapFrame]::Create($bitmap))
-        $stream = [IO.File]::Create($filePath)
-        try { $encoder.Save($stream) } finally { $stream.Dispose() }
+        [IO.File]::Copy((Join-Path $PSScriptRoot 'resources\image.jpg'), $filePath)
+        $temporaryMediaPath = $filePath
         $decoder = [System.Windows.Media.Imaging.JpegBitmapDecoder]::new([Uri]::new($filePath),
             [System.Windows.Media.Imaging.BitmapCreateOptions]::None, [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad)
         Assert-True ($decoder.Frames.Count -eq 1 -and $decoder.Frames[0].PixelWidth -eq 160 -and $decoder.Frames[0].PixelHeight -eq 100) 'The test JPEG could not be decoded at the expected size.'
@@ -753,8 +727,8 @@ try {
             else { [System.Windows.Clipboard]::SetDataObject($previousClipboard, $true) }
         }
     } finally {
-        $process.Refresh()
         try {
+            $process.Refresh()
             if (-not $process.HasExited -and -not $UseExisting) {
                 if ($Application -eq 'Access') {
                     foreach ($instance in @(Get-Process -Name $processNames -ErrorAction SilentlyContinue)) {
@@ -869,6 +843,10 @@ try {
                 } "$Application did not close normally. Resolve any open dialogs or unsaved work." 10
                 Write-Host "$Application closed normally."
             }
-        } finally { $process.Dispose() }
+        } finally {
+            try { $process.Dispose() } finally {
+                if ($null -ne $temporaryMediaPath) { [IO.File]::Delete($temporaryMediaPath) }
+            }
+        }
     }
 }

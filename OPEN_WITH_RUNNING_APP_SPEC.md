@@ -230,15 +230,15 @@ A blocked or skipped test leaves the minimum gate incomplete.
   validation and key delivery, and drops to a test window, including explicit
   and invalid positions.
 - Integration tests exercise paste and drop with Audacity and IrfanView. In the
-  observed tests, Audacity opened the generated WAV by either method; IrfanView
-  opened the generated JPEG by drop but did not open a clipboard file list via
+  observed tests, Audacity opened the test WAV by either method; IrfanView
+  opened the test JPEG by drop but did not open a clipboard file list via
   paste. These observations are application-specific, not universal promises.
 - `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application
-  Audacity -Transfer OpenDialog` tests the Open dialog using a generated WAV
+  Audacity -Transfer OpenDialog` tests the Open dialog using a copy of the test WAV
   with a Unicode name. In the observed environment Audacity opened the file;
   IrfanView did not present a supported dialog in response to `Ctrl+O`.
 - `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application
-  IrfanView -Transfer OpenDialogO` tests the `O` variant with a generated JPEG.
+  IrfanView -Transfer OpenDialogO` tests the `O` variant with a copy of the test JPEG.
   In the observed environment IrfanView opened the file.
 - Resourceful integration tests check dialog submission without a drop in
   Audacity and a fallback drop in IrfanView. `ResourcefulOpen.Tests.ps1` checks
@@ -246,9 +246,9 @@ A blocked or skipped test leaves the minimum gate incomplete.
   direct and shared dialog owners, ambiguous or changed window states,
   configured application identities and Shell Open failure handling.
 - The `Resonic` integration test checks both `OpenDialog` and `Resourceful`
-  with a generated WAV file. In the observed environment, Resonic opened the
+  with a test WAV file. In the observed environment, Resonic opened the
   file through its application-owned standard dialog without a fallback drop.
-- The Legacy player test submits a generated silent WAV through the Open
+- The Legacy player test submits a silent WAV through the Open
   dialog and observes its process transition to an active audio session. It
   does not independently inspect the current track's filename.
 - The modern Windows Media Player test checks discovery of its packaged,
@@ -256,6 +256,10 @@ A blocked or skipped test leaves the minimum gate incomplete.
   In the observed environment the window is discovered by its handler's
   AppUserModelID, and the WAV is opened through its cross-process standard
   Open dialog without a fallback drop.
+- The WAV, JPEG and MP4 media fixtures live in `tests/resources`. Each test
+  copies the fixture to a temporary path with a unique filename before use
+  and removes its copy during cleanup, including when the test fails. A file
+  still locked by an application can cause cleanup to fail.
 - `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application LibreOffice -Transfer Resourceful`
   starts a test-owned Writer instance and passes two generated DOCX files in
   one resourceful operation. In the observed environment, both selected

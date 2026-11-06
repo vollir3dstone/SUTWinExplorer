@@ -55,6 +55,7 @@ $selectedApp = $handlers[0].PSObject.BaseObject
 if ($selectedApp.AppUserModelId -ne $appId) { throw 'The registered player handler did not provide the expected AppUserModelID.' }
 $process = $null
 $windowHandle = [IntPtr]::Zero
+$temporaryMediaPath = $null
 try {
     Start-Process "shell:AppsFolder\$appId"
     Wait-Until {
@@ -73,24 +74,8 @@ try {
     [IO.Directory]::CreateDirectory($directory) | Out-Null
     $trackName = 'KIS-Paste-' + [guid]::NewGuid().ToString('N')
     $filePath = Join-Path $directory ($trackName + '.wav')
-    $sampleRate = 44100
-    $sampleCount = $sampleRate * 10
-    $writer = [IO.BinaryWriter]::new([IO.File]::Create($filePath))
-    try {
-        $writer.Write([Text.Encoding]::ASCII.GetBytes('RIFF'))
-        $writer.Write([uint32] (36 + $sampleCount * 2))
-        $writer.Write([Text.Encoding]::ASCII.GetBytes('WAVEfmt '))
-        $writer.Write([uint32] 16)
-        $writer.Write([uint16] 1)
-        $writer.Write([uint16] 1)
-        $writer.Write([uint32] $sampleRate)
-        $writer.Write([uint32] ($sampleRate * 2))
-        $writer.Write([uint16] 2)
-        $writer.Write([uint16] 16)
-        $writer.Write([Text.Encoding]::ASCII.GetBytes('data'))
-        $writer.Write([uint32] ($sampleCount * 2))
-        $writer.Write([byte[]]::new($sampleCount * 2))
-    } finally { $writer.Dispose() }
+    [IO.File]::Copy((Join-Path $PSScriptRoot 'resources\silence.wav'), $filePath)
+    $temporaryMediaPath = $filePath
 
     $readyAt = [DateTime]::UtcNow.AddSeconds(5)
     Wait-Until { [DateTime]::UtcNow -ge $readyAt } 'The player startup wait did not complete.'
@@ -130,13 +115,17 @@ try {
     } 'Windows Media Player did not show the transferred test track.'
     Write-Host "Windows Media Player opened the test track: $trackName"
 } finally {
-    if ($windowHandle -ne [IntPtr]::Zero) {
-        [void] [ModernPlayerTestWindow]::PostMessage($windowHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
-    }
-    if ($null -ne $process) {
-        try {
-            try { Wait-Until { $process.Refresh(); $process.HasExited } 'The test player did not close normally.' 10 }
-            catch { $process.Refresh(); if (-not $process.HasExited) { $process.Kill(); $process.WaitForExit() } }
-        } finally { $process.Dispose() }
+    try {
+        if ($windowHandle -ne [IntPtr]::Zero) {
+            [void] [ModernPlayerTestWindow]::PostMessage($windowHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
+        }
+        if ($null -ne $process) {
+            try {
+                try { Wait-Until { $process.Refresh(); $process.HasExited } 'The test player did not close normally.' 10 }
+                catch { $process.Refresh(); if (-not $process.HasExited) { $process.Kill(); $process.WaitForExit() } }
+            } finally { $process.Dispose() }
+        }
+    } finally {
+        if ($null -ne $temporaryMediaPath) { [IO.File]::Delete($temporaryMediaPath) }
     }
 }
