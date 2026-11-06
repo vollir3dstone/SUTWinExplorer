@@ -49,6 +49,9 @@ $privateStatic = [Reflection.BindingFlags]'Static,NonPublic'
 $resolveMethod = $accessor.GetMethod('ResolveConfiguredOpenMethod', $privateStatic)
 if ($resolveMethod.Invoke($null, @('winword.exe', 'microsoft corporation')) -ne 'OpenByShellOpen' -or
     $resolveMethod.Invoke($null, @('Acrobat.exe', 'Adobe Systems Incorporated')) -ne 'OpenByShellOpen' -or
+    $resolveMethod.Invoke($null, @('i_view64.exe', 'irfan skiljan')) -ne 'DropToAppWindow' -or
+    $resolveMethod.Invoke($null, @('i_view32.exe', 'irfan skiljan')) -ne 'DropToAppWindow' -or
+    $null -ne $resolveMethod.Invoke($null, @('i_view64.exe', 'Another company')) -or
     $null -ne $resolveMethod.Invoke($null, @('WINWORD.EXE', 'Another company')) -or
     $null -ne $resolveMethod.Invoke($null, @('unknown.exe', 'Microsoft Corporation'))) { throw 'Application identity matching failed.' }
 $resolveAppMethod = $accessor.GetMethod('ResolveConfiguredAppMethod', $privateStatic)

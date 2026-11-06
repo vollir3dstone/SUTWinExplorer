@@ -258,7 +258,7 @@ public static class RunningAppsAccessor
         }
 
         var deadline = Stopwatch.StartNew();
-        while (deadline.Elapsed < TimeSpan.FromSeconds(5))
+        while (deadline.Elapsed < TimeSpan.FromMilliseconds(700))
         {
             await Task.Delay(100).ConfigureAwait(false);
             IntPtr dialog = GetForegroundWindow();

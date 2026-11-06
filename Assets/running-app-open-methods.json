@@ -1,6 +1,13 @@
 {
   "applications": [
     {
+      "name": "IrfanView",
+      "executables": ["i_view64.exe", "i_view32.exe"],
+      "companies": ["Irfan Skiljan"],
+      "method": "DropToAppWindow",
+      "comment": "LetOpenByDialogUsingO is an alternative, measured slightly slower than DropToAppWindow."
+    },
+    {
       "name": "Windows Photos",
       "appUserModelIds": ["Microsoft.Windows.Photos_8wekyb3d8bbwe!App"],
       "method": "OpenByShellOpen"

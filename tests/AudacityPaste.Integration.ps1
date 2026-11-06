@@ -4,7 +4,8 @@ param(
     [ValidateSet('Paste', 'Drop', 'Resourceful', 'Menu', 'OpenDialog', 'OpenDialogO', 'OpenDialogCtrlF12', 'ShellOpen')]
     [string] $Transfer = 'Paste',
     [switch] $UseExisting,
-    [switch] $NonDefault
+    [switch] $NonDefault,
+    [switch] $StartWithImage
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,6 +26,8 @@ public static class PasteWindowProbe
     public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")]
     public static extern IntPtr GetWindow(IntPtr window, uint command);
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetSubMenu(IntPtr menu, int position);
     [DllImport("user32.dll")]
     public static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
     [DllImport("kernel32.dll")]
@@ -176,6 +179,27 @@ function Get-WindowNames([IntPtr] $handle) {
     }
 }
 
+function Get-IrfanRedPixelCount([IntPtr] $handle) {
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($handle)
+    $condition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ClassNameProperty, 'IrfanViewerClass')
+    $viewer = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+    Assert-True ($null -ne $viewer) 'The IrfanView image area was not found.'
+    $bounds = $viewer.Current.BoundingRectangle
+    $bitmap = [System.Drawing.Bitmap]::new([int] $bounds.Width, [int] $bounds.Height)
+    try {
+        $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+        try { $graphics.CopyFromScreen([int] $bounds.X, [int] $bounds.Y, 0, 0, $bitmap.Size) } finally { $graphics.Dispose() }
+        $count = 0
+        for ($y = 0; $y -lt $bitmap.Height; $y += 4) {
+            for ($x = 0; $x -lt $bitmap.Width; $x += 4) {
+                $pixel = $bitmap.GetPixel($x, $y)
+                if ($pixel.R -gt 160 -and $pixel.G -lt 85 -and $pixel.B -lt 100) { $count++ }
+            }
+        }
+        return $count
+    } finally { $bitmap.Dispose() }
+}
+
 function Find-ShellDocument([string] $name, [string[]] $names) {
     $processIds = @(Get-Process -Name $names -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
     $roots = [System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
@@ -250,9 +274,22 @@ $assembly = [Reflection.Assembly]::Load([IO.File]::ReadAllBytes($assemblyPath))
 $accessor = $assembly.GetType('SUTWinExplorer.RunningAppsAccessor', $true)
 if ($Transfer -eq 'Menu') {
     [System.Windows.Application].GetField('_resourceAssembly', [Reflection.BindingFlags]'Static,NonPublic').SetValue($null, $assembly)
-    $wpfApplication = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.App', $true))
-    $wpfApplication.InitializeComponent()
+    $wpfApplication = [System.Windows.Application]::new()
     $wpfApplication.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
+    $resources = [System.Windows.Application]::LoadComponent([Uri]::new('/SUTWinExplorer;component/Styles/InputControlStyles.xaml', [UriKind]::Relative))
+    $wpfApplication.Resources.MergedDictionaries.Add($resources)
+    $buttonStyle = [System.Windows.Style]::new([System.Windows.Controls.Button], $resources[[System.Windows.Controls.Button]])
+    $buttonStyle.Setters.Add([System.Windows.Setter]::new([System.Windows.FrameworkElement]::HeightProperty, [double] 24))
+    $buttonStyle.Setters.Add([System.Windows.Setter]::new([System.Windows.FrameworkElement]::MinHeightProperty, [double] 24))
+    $buttonStyle.Setters.Add([System.Windows.Setter]::new([System.Windows.FrameworkElement]::VerticalAlignmentProperty, [System.Windows.VerticalAlignment]::Center))
+    $buttonStyle.Setters.Add([System.Windows.Setter]::new([System.Windows.Controls.Control]::FocusVisualStyleProperty, $null))
+    $wpfApplication.Resources['ContentPaneButtonStyle'] = $buttonStyle
+    foreach ($key in @('ItemHoverBrush', 'ItemSelectionBrush', 'ItemSelectionBorderBrush', 'ItemRequestBrush')) {
+        $wpfApplication.Resources[$key] = [System.Windows.Media.Brushes]::LightGray
+    }
+    $wpfApplication.Resources['ViewFrameBrush'] = [System.Windows.Media.Brushes]::LightGray
+    $wpfApplication.Resources['ViewFrameThickness'] = [System.Windows.Thickness]::new(1)
+    $wpfApplication.Resources['ShellIconTemplate'] = [System.Windows.DataTemplate]::new()
     $parseErrors = $null
     $suiteAst = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'SutShell.TestHelpers.ps1'), [ref]$null, [ref]$parseErrors)
     if ($parseErrors.Count) { throw $parseErrors[0] }
@@ -282,6 +319,9 @@ if ($Application -in @('LibreOffice', 'Excel', 'Calc', 'PowerPoint', 'Impress', 
 }
 if ($Application -eq 'WindowsMediaPlayerLegacy') {
     Assert-True ($Transfer -eq 'Resourceful' -and -not $UseExisting) "$Application integration requires Resourceful and a test-started instance."
+}
+if ($StartWithImage) {
+    Assert-True ($Application -eq 'IrfanView' -and -not $UseExisting -and $Transfer -in @('Resourceful', 'Drop', 'Menu')) 'StartWithImage requires a test-started IrfanView and Resourceful, Drop or Menu transfer.'
 }
 if ($NonDefault) {
     Assert-True ($Application -eq 'Word' -and $Transfer -eq 'ShellOpen') 'NonDefault is supported for the Word ShellOpen test.'
@@ -321,6 +361,7 @@ if ($UseExisting) {
     $process = if ($Application -eq 'Base') { Start-Process -FilePath $startupPath -ArgumentList "`"$startupFile`"" -PassThru }
         elseif ($Application -in @('LibreOffice', 'Calc', 'Impress', 'Draw', 'Math')) { Start-Process -FilePath $startupPath -PassThru }
         elseif ($Application -eq 'WindowsMediaPlayerLegacy') { Start-Process -FilePath $applicationPath -ArgumentList '/Task','NowPlaying' -PassThru }
+        elseif ($StartWithImage) { Start-Process -FilePath $startupPath -ArgumentList "`"$(Join-Path $PSScriptRoot 'resources\image.jpg')`"" -PassThru }
         else { Start-Process -FilePath $applicationPath -PassThru }
 }
 $previousClipboard = $null
@@ -328,6 +369,7 @@ $clipboardChanged = $false
 $trackName = $null
 $testContentLoaded = $false
 $temporaryMediaPath = $null
+$menuOwner = $null
 try {
     if ($Application -in @('AcrobatReader', 'LibreOffice', 'Calc', 'Impress', 'Draw', 'Math', 'Base') -and -not $UseExisting) {
         Wait-Until { @(Get-Process -Name $processNames -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero }).Count -eq 1 } "$Application did not open exactly one main window." 30
@@ -341,6 +383,10 @@ try {
         Assert-True (@(Get-Process -Name $processNames -ErrorAction SilentlyContinue).Count -eq 1) "Expected exactly one $Application process."
     }
     Assert-True ([PasteWindowProbe]::IsWindowEnabled($process.MainWindowHandle)) "$Application has a blocking dialog. Resolve it before running the test."
+    if ($StartWithImage) {
+        Wait-Until { $process.Refresh(); $process.MainWindowTitle -like '*image.jpg*' } 'IrfanView did not load the initial test image.'
+        Write-Host 'IrfanView started with the initial test image.'
+    }
     $directory = Join-Path ([IO.Path]::GetTempPath()) 'KIS-File-Paste-Test'
     [IO.Directory]::CreateDirectory($directory) | Out-Null
     $trackName = $(if ($Transfer -in @('OpenDialog', 'OpenDialogO', 'OpenDialogCtrlF12')) { 'KIS Öffnen ' } else { 'KIS-Paste-' }) + [guid]::NewGuid().ToString('N')
@@ -477,8 +523,12 @@ try {
         [IO.File]::WriteAllText($filePath, $pdf.ToString(), [Text.Encoding]::ASCII)
         Write-Host "PDF file: $filePath"
     } else {
-        [IO.File]::Copy((Join-Path $PSScriptRoot 'resources\image.jpg'), $filePath)
+        $imageFixture = if ($StartWithImage) { 'resources\image-second.jpg' } else { 'resources\image.jpg' }
+        [IO.File]::Copy((Join-Path $PSScriptRoot $imageFixture), $filePath)
         $temporaryMediaPath = $filePath
+        if ($StartWithImage) {
+            Assert-True ((Get-FileHash -LiteralPath $filePath).Hash -ne (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'resources\image.jpg')).Hash) 'The initial and transferred images must differ.'
+        }
         $decoder = [System.Windows.Media.Imaging.JpegBitmapDecoder]::new([Uri]::new($filePath),
             [System.Windows.Media.Imaging.BitmapCreateOptions]::None, [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad)
         Assert-True ($decoder.Frames.Count -eq 1 -and $decoder.Frames[0].PixelWidth -eq 160 -and $decoder.Frames[0].PixelHeight -eq 100) 'The test JPEG could not be decoded at the expected size.'
@@ -507,6 +557,11 @@ try {
     Assert-True ($mainWindows.Count -eq 1) "The started $Application main window was not found exactly once."
     $window = $mainWindows[0].PSObject.BaseObject
     Assert-True (@(Get-WindowNames $window.Handle | Where-Object { $_ -like "*$trackName*" }).Count -eq 0) 'The test track was already present before paste.'
+    if ($StartWithImage) {
+        Add-Type -AssemblyName System.Drawing
+        Assert-True ([PasteWindowProbe]::ActivateTestWindow($window.Handle)) 'Could not activate IrfanView before checking the initial image.'
+        $initialRedPixels = Get-IrfanRedPixelCount $window.Handle
+    }
     if ($Application -eq 'IrfanView' -and $Transfer -eq 'Paste') {
         $emptyImageStatus = @(Get-WindowNames $window.Handle | Where-Object { $_ -match '(?i)kein bild geladen|no image loaded' })
         Assert-True ($emptyImageStatus.Count -eq 1) 'IrfanView must start without a loaded image for this test.'
@@ -528,7 +583,7 @@ try {
     if ($Application -eq 'WindowsMediaPlayerLegacy') {
         Assert-True (-not [PlaybackSessionProbe]::IsActive([uint32] $process.Id)) 'The test player was already playing before the transfer.'
     }
-    if ($Transfer -ne 'ShellOpen') {
+    if ($Transfer -notin @('ShellOpen', 'Menu')) {
         Assert-True ([PasteWindowProbe]::ActivateTestWindow($window.Handle)) "Could not activate the $Application test window."
     }
     if ($Transfer -eq 'ShellOpen' -and $NonDefault) {
@@ -576,6 +631,14 @@ try {
         }
         Assert-True ($result.Submitted) "The Open dialog was not submitted: $($result.Error)"
     } elseif ($Transfer -eq 'Menu') {
+        $menuOwner = [System.Windows.Window]::new()
+        $menuOwner.Title = 'Running app menu test'
+        $menuOwner.Width = 400
+        $menuOwner.Height = 200
+        $menuOwner.Show()
+        Assert-True ($menuOwner.Activate()) 'Could not activate the test menu owner.'
+        $menuOwnerHandle = [System.Windows.Interop.WindowInteropHelper]::new($menuOwner).Handle
+        Wait-Until { [PasteWindowProbe]::GetForegroundWindow() -eq $menuOwnerHandle } 'The test menu owner did not become foreground.'
         $view = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
         $createActions = $view.GetType().GetMethod('CreateRunningAppActions', [Reflection.BindingFlags]'Instance,NonPublic')
         $actions = $createActions.Invoke($view, [object[]] @(,[string[]] @($filePath)))
@@ -583,11 +646,24 @@ try {
         $label = "$($matchingApps[0].App.Name) - $title".Replace('&', '&&')
         $action = @($actions | Where-Object { $_.Label -ceq $label })
         Assert-True ($action.Count -eq 1) 'The selected application window was not found exactly once in the menu actions.'
+        $instanceFlags = [Reflection.BindingFlags]'Instance,NonPublic'
+        $staticFlags = [Reflection.BindingFlags]'Static,NonPublic'
+        $factory = $assembly.GetType('SUTWinExplorer.SutContextMenuFactory', $true)
+        $paths = [string[]] @($filePath)
+        $createContextActions = $view.GetType().GetMethod('CreateContextMenuActions', $instanceFlags)
+        $baseMenu = $factory.GetMethod('GetBaseMenu', $staticFlags).Invoke($null, [object[]] @($paths, $menuOwnerHandle, $createContextActions.Invoke($view, @())))
+        try { $snapshot = $baseMenu.GetType().GetMethod('CaptureSnapshot', $instanceFlags).Invoke($baseMenu, @()) }
+        finally { ([IDisposable] $baseMenu).Dispose() }
+        $menu = $factory.GetMethod('GetContentMenuForContextWithRunningApps', $staticFlags).Invoke($null, [object[]] @($paths, $menuOwnerHandle, $snapshot, $false, $null, $null, $actions))
         $errorProbe = [SutShellPropertiesProbe]::new('Open in running app')
+        $menuProbe = [SutShellMenuProbe]::new($menuOwnerHandle)
         try {
-            $action[0].Invoke.Invoke()
+            $menuProbe.SelectLabel = $label
+            $findSubmenu = [Func[IntPtr, IntPtr]] { param($nativeMenu) [PasteWindowProbe]::GetSubMenu($nativeMenu, 1) }
+            $menu.GetType().GetMethod('ShowSubmenu', $instanceFlags).Invoke($menu, [object[]] @($findSubmenu, 150, 150))
+            Assert-True ($menu.GetType().GetProperty('CommandInvoked', $instanceFlags).GetValue($menu)) 'The running-app menu command was not invoked.'
             Assert-True (-not $errorProbe.Opened) 'The running-app menu action reported a transfer error.'
-        } finally { $errorProbe.Dispose() }
+        } finally { $menuProbe.Dispose(); $errorProbe.Dispose(); ([IDisposable] $menu).Dispose() }
     } elseif ($Transfer -eq 'Resourceful') {
         $resourcefulFiles = if ($Application -in @('LibreOffice', 'Excel', 'Calc', 'PowerPoint', 'Impress', 'Draw', 'Math')) { [string[]] @($firstFilePath, $filePath) } else { [string[]] @($filePath) }
         $task = $accessor.GetMethod('OpenInRunningAppResourcefully').Invoke($null, [object[]] @($window, [string[]] $resourcefulFiles, $selectedApp))
@@ -597,7 +673,7 @@ try {
         if ($Application -in @('Audacity', 'Resonic', 'WindowsMediaPlayerLegacy')) {
             Assert-True ($result.Dialogs.Count -eq 1 -and $result.Dialogs[0].Submitted -and $null -eq $result.Drop) 'The Open dialog did not replace the drop.'
         } elseif ($Application -eq 'IrfanView') {
-            Assert-True ($result.Dialogs.Count -eq 1 -and -not $result.Dialogs[0].Submitted -and $result.Drop.Dropped) "The fallback drop failed: $($result.Drop.Error)"
+            Assert-True ($result.Dialogs.Count -eq 0 -and $null -ne $result.Drop -and $result.Drop.Dropped) "The configured drop failed: $($result.Drop.Error)"
         } elseif ($Application -in @('Word', 'AcrobatReader', 'LibreOffice', 'Excel', 'Calc', 'PowerPoint', 'Impress', 'Draw', 'Math', 'Access', 'Base')) {
             Assert-True ($result.ShellOpens.Count -eq $resourcefulFiles.Count -and @($result.ShellOpens | Where-Object { -not $_.Dispatched }).Count -eq 0 -and $null -eq $result.Drop -and $result.Dialogs.Count -eq 0) 'The selected Shell Open handler was not used for every file.'
         } else {
@@ -689,6 +765,10 @@ try {
             }
             return $false
         } "$Application did not show the opened file after $Transfer, or a dialog is blocking it." 15
+        if ($StartWithImage) {
+            Wait-Until { (Get-IrfanRedPixelCount $window.Handle) -gt ($initialRedPixels + 30) } 'IrfanView did not visibly show the second image.' 15
+            Write-Host 'IrfanView visibly displayed the red marker from the second image.'
+        }
         $testContentLoaded = $true
         Write-Host "$Application opened the file: $trackName"
         if ($Transfer -eq 'ShellOpen') {
@@ -722,6 +802,7 @@ try {
     throw
 } finally {
     try {
+        if ($null -ne $menuOwner) { $menuOwner.Close() }
         if ($clipboardChanged) {
             if ($null -eq $previousClipboard) { [System.Windows.Clipboard]::Clear() }
             else { [System.Windows.Clipboard]::SetDataObject($previousClipboard, $true) }

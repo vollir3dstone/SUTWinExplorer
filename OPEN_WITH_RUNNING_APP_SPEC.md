@@ -106,6 +106,8 @@ the file as a separate document.
   must handle any dialog left open on failure.
 - The Content Menu's resourceful operation uses `Ctrl+O` by default. It uses
   the bare `O` variant only when explicitly configured for the application.
+- The search for a supported dialog times out after 0.7 seconds. This timeout
+  applies to each of the dialog shortcuts above.
 
 ### Shell open
 
@@ -135,7 +137,9 @@ the file as a separate document.
   `LetOpenByDialogUsingO`, `LetOpenByDialogUsingCtrlF12`, `DropToAppWindow`,
   and `OpenByShellOpen`. An invalid method or duplicate identity is an error.
   Microsoft Office, LibreOffice, Acrobat Reader and Windows Photos currently
-  use `OpenByShellOpen` for their configured identities.
+  use `OpenByShellOpen` for their configured identities. IrfanView uses
+  `DropToAppWindow`; `LetOpenByDialogUsingO` is a slightly slower alternative
+  recorded in its JSON entry.
 - Configured Shell Open requires a registered application matching the selected
   window's process. It invokes that application's handler on the original STA
   for each file, stops at the first failure, and does not attempt another method.
@@ -157,6 +161,36 @@ the file as a separate document.
   delayed dialog can still appear after the timeout, and neither a posted click
   nor an accepted drop proves the file was opened. The fallback uses the center
   of the client area and can import or insert into an existing document.
+
+### Dialog and IrfanView timing measurements
+
+For each application known to support `Ctrl+O`, five measurements were made
+on this machine with the application already started and ready. Time was
+measured from shortcut injection until a new visible foreground dialog with
+the expected owner and process was observed, polling every 2 ms. The dialog's
+file name edit and Open button were verified afterwards; the dialog was then
+cancelled without submitting a file. Times are rounded to milliseconds.
+
+| Application | Samples | Minimum | Mean | Maximum |
+| --- | ---: | ---: | ---: | ---: |
+| Audacity | 5 | 174 ms | 180 ms | 196 ms |
+| VLC | 5 | 350 ms | 358 ms | 364 ms |
+| Resonic | 5 | 412 ms | 431 ms | 456 ms |
+| Windows Media Player Legacy | 5 | 352 ms | 385 ms | 432 ms |
+| Windows Media Player | 5 | 464 ms | 480 ms | 499 ms |
+
+The measurement observes dialog visibility, not necessarily when all controls
+are usable. The longest observation leaves about 201 ms within the 0.7-second
+timeout; production polling is every 100 ms. Busy or slower systems can exceed
+the timeout, and a late dialog may appear during or after the guarded fallback.
+
+IrfanView was compared separately with an initial image already loaded and a
+different image sent to the same window. Five runs per method measured from
+invoking the method until its completion and observation of the new filename,
+using the integration harness's polling; the visible red marker of the second
+image was verified afterwards. Direct center drop took 470-488 ms, averaging
+480 ms; the `O` dialog took 509-525 ms, averaging 515 ms. The configured direct
+drop was faster in every run on this machine; these are not universal timings.
 
 ### Paste by interaction
 
@@ -245,10 +279,15 @@ A blocked or skipped test leaves the minimum gate incomplete.
   IrfanView -Transfer OpenDialogO` tests the `O` variant with a copy of the test JPEG.
   In the observed environment IrfanView opened the file.
 - Resourceful integration tests check dialog submission without a drop in
-  Audacity and a fallback drop in IrfanView. `ResourcefulOpen.Tests.ps1` checks
+  Audacity and the configured direct drop in IrfanView. `ResourcefulOpen.Tests.ps1` checks
   multi-file fallback, suppression when an unsupported dialog remains open,
   direct and shared dialog owners, ambiguous or changed window states,
   configured application identities and Shell Open failure handling.
+- `pwsh -NoProfile -STA -File tests/AudacityPaste.Integration.ps1 -Application IrfanView -Transfer Menu -StartWithImage`
+  starts IrfanView with the first JPEG and selects the running-app native
+  submenu entry for a visually distinct second JPEG from another foreground
+  window. It checks both the second filename and the red marker in the visible
+  image area. It does not exercise opening the parent context menu.
 - The `Resonic` integration test checks both `OpenDialog` and `Resourceful`
   with a test WAV file. In the observed environment, Resonic opened the
   file through its application-owned standard dialog without a fallback drop.
