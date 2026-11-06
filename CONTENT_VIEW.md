@@ -17,7 +17,7 @@ toggle, TA2, Size, and Date modified. The names describe the columns as follows:
 | Header | Name | Content |
 | --- | --- | --- |
 | MT | Media type | Application-defined media category, displayed as an icon. |
-| ST | Media type sub type | `TE`, `ED` or `RE`; empty without a sub type. |
+| ST | Media type sub type | 16-by-16 icon; empty without a sub type. |
 | TA1 | Type and/or default app, coarse | Windows Shell base icon. |
 | MO | Modifier | Windows Shell overlay icon. |
 | TA2 | TypeApp2: Type and/or default app, fine | Windows Shell type description. |
@@ -488,9 +488,10 @@ displays an empty cell. The media type name remains available as the row's
 accessibility name.
 
 The non-sortable, fixed 30-DIP `ST` column follows `MT` and stays visible when
-the right columns are hidden. It displays the media type sub type as `TE`
-(`TEXT`), `ED` (`EDIT`), or `RE` (`RENDER`); `WITHOUT_SUBTYPE` displays an
-empty cell. These enum values are shared across media types. JSON extensions
+the right columns are hidden. It displays a 16-by-16 DIP icon for `TEXT`,
+`EDIT`, or `RENDER`; `WITHOUT_SUBTYPE` displays an empty cell. The sub type
+name remains available to accessibility tools. These enum values are shared
+across media types. JSON extensions
 may be an array without a sub type or an object whose `text`, `edit`, and
 `render` properties contain extension arrays. For example, `.md` and `.svg`
 are `TEXT`, `.zip` is `EDIT`, and `.pdf` is `RENDER`; `.exe` has no sub type.

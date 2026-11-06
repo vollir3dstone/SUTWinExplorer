@@ -19,6 +19,8 @@ $directory = Join-Path ([System.IO.Path]::GetTempPath()) ('kis-content-test-' + 
 try {
     [System.IO.Directory]::CreateDirectory((Join-Path $directory 'Folder')) | Out-Null
     [System.IO.File]::WriteAllText((Join-Path $directory 'notes.txt'), 'hello')
+    [System.IO.File]::WriteAllText((Join-Path $directory 'subtype-edit.zip'), '')
+    [System.IO.File]::WriteAllText((Join-Path $directory 'subtype-render.pdf'), '')
     [System.IO.File]::SetLastWriteTime((Join-Path $directory 'notes.txt'), [datetime]::new(2026, 11, 2, 9, 5, 0))
     [System.IO.File]::WriteAllText((Join-Path $directory '.internal'), 'hidden')
     [System.IO.File]::WriteAllText((Join-Path $directory 'unknown.zzzunknown'), 'unknown')
@@ -288,13 +290,21 @@ try {
         $subTypePresenter = [System.Windows.Controls.ContentPresenter]::new()
         $subTypePresenter.Content = $testRow
         $subTypePresenter.ContentTemplate = $mediaTypeSubTypeColumn.CellTemplate
-        foreach ($subTypeCase in @(@($notes, 'TE'), @(@($entries | Where-Object { $_.FullPath -eq (Join-Path $directory 'unknown.zzzunknown') })[0], ''))) {
+        foreach ($subTypeCase in @(
+            @($notes, 'text'),
+            @(@($entries | Where-Object { $_.FullPath -eq (Join-Path $directory 'subtype-edit.zip') })[0], 'edit'),
+            @(@($entries | Where-Object { $_.FullPath -eq (Join-Path $directory 'subtype-render.pdf') })[0], 'render'),
+            @(@($entries | Where-Object { $_.FullPath -eq (Join-Path $directory 'unknown.zzzunknown') })[0], '')
+        )) {
             $rowType.GetProperty('Entry').SetValue($testRow, $subTypeCase[0])
             $subTypePresenter.Measure([System.Windows.Size]::new(30, 22))
             $subTypePresenter.Arrange([System.Windows.Rect]::new(0, 0, 30, 22))
             $subTypePresenter.UpdateLayout()
             $subTypeCell = [System.Windows.Media.VisualTreeHelper]::GetChild($subTypePresenter, 0)
-            Assert-True ($subTypeCell.Text -ceq $subTypeCase[1]) 'Media type sub type cell binding is incorrect.'
+            Assert-True ($subTypeCell -is [System.Windows.Controls.Image] -and $subTypeCell.Width -eq 16 -and $subTypeCell.Height -eq 16 -and
+                [object]::ReferenceEquals($subTypeCell.Source, $subTypeCase[0].MediaTypeSubTypeIcon) -and
+                [System.Windows.Automation.AutomationProperties]::GetName($subTypeCell) -ceq $subTypeCase[1] -and
+                (($null -eq $subTypeCell.Source) -eq ($subTypeCase[1] -ceq ''))) 'Media type sub type icon binding is incorrect.'
         }
         $rowType.GetProperty('Entry').SetValue($testRow, $testEntry)
         $cells = foreach ($column in @($view.FindName('TypeApp1Icon'), $modifierColumn)) {

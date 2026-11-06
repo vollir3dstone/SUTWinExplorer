@@ -264,7 +264,8 @@ background loading policy, publication checks, and lifecycle are specified in
 
 An entry carries its display name, filesystem path, directory flag, type,
 formatted size and date, Shell icon/overlay, media-type icon and accessible
-name, and formatted media type sub type (`TE`, `ED`, `RE`, or empty). In the
+name, and media type sub type icon and accessible name (empty without a sub
+type). In the
 Windows implementation, the entry contains at most one classical
 Shell overlay: it is the overlay selected by Windows, not a list of all applicable
 overlay handlers. Explorer status-column icons are not necessarily overlays.

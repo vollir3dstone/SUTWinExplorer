@@ -59,6 +59,25 @@ try {
     $directoryItem = [Activator]::CreateInstance($directoryItemType, [object[]] @('book.pdf', 'book.pdf', $false, $false))
     $itemMediaTypeSubType = $directoryItemType.GetProperty('MediaTypeSubType', [System.Reflection.BindingFlags]'Instance,NonPublic').GetValue($directoryItem)
     Assert-True ($itemMediaTypeSubType.ToString() -ceq 'RENDER') 'Directory item did not retain its media type sub type.'
+    $mediaTypeSubTypeType = $assembly.GetType('SUTWinExplorer.MediaTypeSubType', $true)
+    $getMediaTypeSubTypeIcon = $assembly.GetType('SUTWinExplorer.MediaTypeIconMap', $true).GetMethod('GetMediaTypeSubTypeIcon')
+    foreach ($iconCase in @(@('TEXT', 'subtype_text 16.png'), @('EDIT', 'subtype_edit 16.png'), @('RENDER', 'subtype_render.png'))) {
+        $mediaTypeSubType = [Enum]::Parse($mediaTypeSubTypeType, $iconCase[0])
+        $icon = $getMediaTypeSubTypeIcon.Invoke($null, [object[]] @($mediaTypeSubType))
+        $sameIcon = $getMediaTypeSubTypeIcon.Invoke($null, [object[]] @($mediaTypeSubType))
+        $resource = [System.Windows.Application]::GetResourceStream([uri]::new("/Assets/$($iconCase[1])", [UriKind]::Relative))
+        try {
+            $expected = [System.Windows.Media.Imaging.BitmapFrame]::Create($resource.Stream, [System.Windows.Media.Imaging.BitmapCreateOptions]::None, [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad)
+        } finally { $resource.Stream.Dispose() }
+        $actualPixels = [byte[]]::new(16 * 16 * 4)
+        $expectedPixels = [byte[]]::new(16 * 16 * 4)
+        ([System.Windows.Media.Imaging.FormatConvertedBitmap]::new($icon, [System.Windows.Media.PixelFormats]::Bgra32, $null, 0)).CopyPixels($actualPixels, 64, 0)
+        ([System.Windows.Media.Imaging.FormatConvertedBitmap]::new($expected, [System.Windows.Media.PixelFormats]::Bgra32, $null, 0)).CopyPixels($expectedPixels, 64, 0)
+        Assert-True ($icon.PixelWidth -eq 16 -and $icon.PixelHeight -eq 16 -and $icon.IsFrozen -and
+            [object]::ReferenceEquals($icon, $sameIcon) -and [Convert]::ToBase64String($actualPixels) -ceq [Convert]::ToBase64String($expectedPixels)) "Incorrect or uncached media type sub type icon for $($iconCase[0])."
+    }
+    $withoutMediaTypeSubType = [Enum]::Parse($mediaTypeSubTypeType, 'WITHOUT_SUBTYPE')
+    Assert-True ($null -eq $getMediaTypeSubTypeIcon.Invoke($null, [object[]] @($withoutMediaTypeSubType))) 'An absent media type sub type must not have an icon.'
 
     [System.IO.Directory]::CreateDirectory($directory) | Out-Null
     [System.IO.Directory]::CreateDirectory((Join-Path $directory 'Folder')) | Out-Null

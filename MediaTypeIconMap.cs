@@ -9,12 +9,25 @@ namespace SUTWinExplorer;
 internal static class MediaTypeIconMap
 {
     private static readonly IReadOnlyDictionary<MediaType, ImageSource> Icons = CreateIcons();
+    private static readonly IReadOnlyDictionary<MediaTypeSubType, ImageSource> MediaTypeSubTypeIcons = new Dictionary<MediaTypeSubType, ImageSource>
+    {
+        [MediaTypeSubType.TEXT] = LoadAsset("subtype_text 16.png"),
+        [MediaTypeSubType.EDIT] = LoadAsset("subtype_edit 16.png"),
+        [MediaTypeSubType.RENDER] = LoadAsset("subtype_render.png")
+    };
 
     public static ImageSource? GetIcon(MediaType type) => type == MediaType.None
         ? null
         : Icons.TryGetValue(type, out var icon)
             ? icon
             : throw new ArgumentOutOfRangeException(nameof(type), type, "No icon is defined for this media type.");
+
+    public static ImageSource? GetMediaTypeSubTypeIcon(MediaTypeSubType mediaTypeSubType) =>
+        mediaTypeSubType == MediaTypeSubType.WITHOUT_SUBTYPE
+            ? null
+            : MediaTypeSubTypeIcons.TryGetValue(mediaTypeSubType, out var icon)
+                ? icon
+                : throw new ArgumentOutOfRangeException(nameof(mediaTypeSubType), mediaTypeSubType, "No icon is defined for this media type sub type.");
 
     private static Dictionary<MediaType, ImageSource> CreateIcons() => new()
     {

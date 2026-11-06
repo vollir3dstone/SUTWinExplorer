@@ -401,8 +401,9 @@ may show its requested row in light gray without changing the active selection.
   unknown extensions are blank. The manually maintained JSON is embedded at
   build time; media type names remain available to accessibility tools.
 - [x] The fixed 30-DIP `ST` column immediately follows `MT` and displays the
-  media type sub type as `TE` for `TEXT`, `ED` for `EDIT`, or `RE` for
-  `RENDER`. `WITHOUT_SUBTYPE` is displayed as an empty cell. The column is not
+  media type sub type as a 16-by-16 DIP icon for `TEXT`, `EDIT`, or `RENDER`.
+  The sub type name is available to accessibility tools. `WITHOUT_SUBTYPE` is
+  displayed as an empty cell. The column is not
   sortable or resizable and remains visible when the right columns are hidden.
   JSON subtype groups `text`, `edit`, and `render` apply independently of the
   media type; an extension array without groups means `WITHOUT_SUBTYPE`.

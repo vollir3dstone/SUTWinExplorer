@@ -275,7 +275,8 @@
                             </GridViewColumn.Header>
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding Entry.MediaTypeSubTypeText}" HorizontalAlignment="Center" />
+                                     <Image Width="16" Height="16" Source="{Binding Entry.MediaTypeSubTypeIcon}"
+                                         AutomationProperties.Name="{Binding Entry.MediaTypeSubTypeName}" />
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
                         </GridViewColumn>
