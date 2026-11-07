@@ -61,7 +61,7 @@ $relocate = [Activator]::CreateInstance($actionType, [object[]] @('Relocate', 'R
 $states = @('Link', 'Copy', 'Move') | ForEach-Object { $assembly.GetType("SUTWinExplorer.${_}WorkflowState", $true).GetProperty('Shared').GetValue($null) }
 try {
     foreach ($state in $states) { $state.Prepare([string[]] @('C:\test')) }
-    $actions = $menuType.GetMethod('CreateBaseActions', $flags).Invoke($null, [object[]] @($sourceActions, $relocate))
+    $actions = $menuType.GetMethod('CreateBaseActions', $flags).Invoke($null, [object[]] @($sourceActions, $relocate, [string[]] @($PSScriptRoot), [IntPtr]::Zero))
     $abort = @($actions | Where-Object Id -eq 'AbortTransfer')[0]
     Assert-True ($abort.IsEnabled) 'Abort transfer was not enabled for prepared transfers.'
     $menu = [BaseMenuLayoutProbe]::CreatePopupMenu()
@@ -76,13 +76,13 @@ try {
                 $text.ToString()
             }
         })
-        $expected = @('Properties', '|', 'Copy name to clipboard', 'Copy path to clipboard', 'Copy item to clipboard', '|',
+        $expected = @('Properties', '|', 'Prepare copy to external', 'Prepare linking from external', 'Prepare move to external', '|', 'Copy name to clipboard', 'Copy path to clipboard', 'Copy item to clipboard', '|',
             'Abort transfer', 'Mark link item', 'Mark copy item', 'Mark move item', '|', 'Shell command', '|', 'Rename', 'Relocate', '|', 'Delete')
         Assert-True (($actual -join ',') -ceq ($expected -join ',')) "Incorrect base menu layout: $($actual -join ',')"
     } finally { [void] [SutShellMenuProbe]::DestroyMenu($menu) }
     $abort.Invoke.Invoke()
     Assert-True (@($states | Where-Object IsPrepared).Count -eq 0) 'Abort transfer did not clear all prepared transfers.'
-    $idleActions = $menuType.GetMethod('CreateBaseActions', $flags).Invoke($null, [object[]] @($sourceActions, $relocate))
+    $idleActions = $menuType.GetMethod('CreateBaseActions', $flags).Invoke($null, [object[]] @($sourceActions, $relocate, [string[]] @($PSScriptRoot), [IntPtr]::Zero))
     Assert-True (-not @($idleActions | Where-Object Id -eq 'AbortTransfer')[0].IsEnabled) 'Abort transfer was enabled without a prepared transfer.'
 } finally { foreach ($state in $states) { $state.Abort() } }
 'SutContextMenuFactory tests passed.'

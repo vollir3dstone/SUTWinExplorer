@@ -9,6 +9,33 @@ internal static class ShellDragDrop
 {
     private static readonly short DropDescriptionFormat = unchecked((short)RegisterClipboardFormat("DropDescription"));
 
+    internal static void PrepareLinkToClipboard(IReadOnlyList<string> paths, IntPtr owner)
+    {
+        var data = CreateDataObject(paths, owner);
+        var memory = IntPtr.Zero;
+        try
+        {
+            memory = GlobalAlloc(0x0042, sizeof(uint));
+            if (memory == IntPtr.Zero)
+                throw new OutOfMemoryException();
+            var pointer = GlobalLock(memory);
+            if (pointer == IntPtr.Zero)
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+            try { Marshal.WriteInt32(pointer, 4); }
+            finally { _ = GlobalUnlock(memory); }
+            var format = new FORMATETC { cfFormat = unchecked((short)RegisterClipboardFormat("Preferred DropEffect")), dwAspect = DVASPECT.DVASPECT_CONTENT, lindex = -1, tymed = TYMED.TYMED_HGLOBAL };
+            var medium = new STGMEDIUM { tymed = TYMED.TYMED_HGLOBAL, unionmember = memory };
+            data.SetData(ref format, ref medium, true);
+            memory = IntPtr.Zero;
+            Marshal.ThrowExceptionForHR(OleSetClipboard(data));
+        }
+        finally
+        {
+            if (memory != IntPtr.Zero) _ = GlobalFree(memory);
+            if (Marshal.IsComObject(data)) _ = Marshal.ReleaseComObject(data);
+        }
+    }
+
     internal static void ReportPasteSucceeded(IDataObject data)
     {
         var memory = GlobalAlloc(0x0042, sizeof(uint));
@@ -138,6 +165,8 @@ internal static class ShellDragDrop
 
     [DllImport("shell32.dll", PreserveSig = true)]
     private static extern int SHGetDesktopFolder(out IShellFolder desktop);
+    [DllImport("ole32.dll", PreserveSig = true)]
+    private static extern int OleSetClipboard(IDataObject data);
     [DllImport("shell32.dll", PreserveSig = true)]
     private static extern int SHBindToParent(IntPtr pidl, ref Guid interfaceId, out IShellFolder parent, out IntPtr child);
     [DllImport("shell32.dll")]

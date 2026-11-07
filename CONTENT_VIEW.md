@@ -739,6 +739,14 @@ returns successfully. Preflight cannot prevent subsequent changes and no
 rollback is performed after a partial transfer.
 
 Toolbar and Base Menu Item clipboard copy invoke the Shell Copy verb. Item clipboard
+copy is also available as `Prepare copy to external` in the Base Menu, followed
+by `Prepare linking from external` and `Prepare move to external`. They prepare
+the selected items, clicked sidebar directory, or active directory for a
+background menu on the global Shell clipboard without changing an internal
+prepared transfer. Move uses Shell Cut; Link requests the explicit Link effect,
+which requires destination support. In a native Shell background-menu probe,
+Paste and Paste shortcut were not enabled for that Link effect.
+Item clipboard
 paste validates the clipboard's file paths and preferred drop effect again at
 execution, then performs Copy, Move or explicit Link. A completed Move reports
 success to the original clipboard source; a rejected notification is reported

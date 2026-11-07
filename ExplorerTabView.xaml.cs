@@ -1426,8 +1426,9 @@ public partial class Pathview : UserControl
             IsTransfer: action.Name.StartsWith("Link", StringComparison.Ordinal) || action.Name.StartsWith("Copy", StringComparison.Ordinal) || action.Name.StartsWith("Move", StringComparison.Ordinal),
             SeparatorBefore: action.Name is "NameClipboardCopy" or "ItemClipboardPaste" or "Delete")
             { IconSource = (Button)DirectoryContent.FindName(action.Name + "Button") }).ToArray();
+        var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
         return SutContextMenuFactory.CreateBaseActions(menuActions,
-            new ShellMenuAction("Relocate", "Relocate", !entry.IsTop && Directory.Exists(entry.Path), () => ShowRelocateDialog(entry.Path)));
+            new ShellMenuAction("Relocate", "Relocate", !entry.IsTop && Directory.Exists(entry.Path), () => ShowRelocateDialog(entry.Path)), [entry.Path], owner);
     }
 
     private IReadOnlyList<ShellMenuAction> CreateBackgroundMenuActions()

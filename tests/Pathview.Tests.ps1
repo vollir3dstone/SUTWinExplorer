@@ -217,6 +217,24 @@ try {
             Assert-True ($menuProbe.SelectIndex -eq 1 -and $menuProbe.Items[0] -ceq 'Abort transfer' -and
                 [IO.File]::Exists((Join-Path $subdirectoryEntry.Path 'sidebar-transfer.txt')) -and -not $workflow.IsPrepared) 'Sidebar directory content menu copied to the wrong destination.'
         } finally { $menuProbe.Dispose(); $workflow.Abort() }
+        $workflow.Prepare([string[]] @($sidebarSource))
+        foreach ($externalCase in @(@('PrepareCopyToExternal', 1), @('PrepareLinkingFromExternal', 4), @('PrepareMoveToExternal', 2))) {
+            $externalId, $effect = $externalCase
+            $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
+            $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
+            $menuProbe.SelectCommandId = Get-ActionCommandId $externalId
+            try {
+                $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true))
+                Assert-True (Test-BaseMenu $menuProbe) "Sidebar $externalId did not use the Base Menu."
+            } finally { $menuProbe.Dispose() }
+            $clipboardData = [System.Windows.Clipboard]::GetDataObject()
+            $clipboardEffect = [BitConverter]::ToUInt32($clipboardData.GetData('Preferred DropEffect', $false).ToArray(), 0)
+            $clipboardPaths = @([System.Windows.Clipboard]::GetFileDropList())
+            Assert-True (($clipboardEffect -eq $effect -or ($effect -eq 1 -and $clipboardEffect -eq 5)) -and
+                $clipboardPaths.Count -eq 1 -and $clipboardPaths[0] -ceq $subdirectoryEntry.Path -and
+                [IO.Directory]::Exists($subdirectoryEntry.Path) -and $workflow.IsPrepared) "Sidebar $externalId prepared the wrong source or changed the internal transfer."
+        }
+        $workflow.Abort()
         $sidebarClipboardFile = [string] (Join-Path $directory 'sidebar-clipboard.txt')
         [IO.File]::WriteAllText($sidebarClipboardFile, 'sidebar clipboard')
         $clipboardData = [System.Windows.DataObject]::new()

@@ -100,6 +100,21 @@ try {
     $destination = Join-Path $root 'destination'
     [IO.Directory]::CreateDirectory($source) | Out-Null
     [IO.Directory]::CreateDirectory($destination) | Out-Null
+    $linkSource = [string] (Join-Path $source 'prepare-link.txt')
+    [IO.File]::WriteAllText($linkSource, 'link')
+    $prepareLink = $assembly.GetType('SUTWinExplorer.ShellDragDrop', $true).GetMethod('PrepareLinkToClipboard', $flags)
+    $null = $prepareLink.Invoke($null, [object[]] @([string[]] @($linkSource), [IntPtr]::Zero))
+    $linkData = [System.Windows.Clipboard]::GetDataObject()
+    $linkEffect = $linkData.GetData('Preferred DropEffect', $false)
+    if ($linkEffect -isnot [IO.MemoryStream] -or [BitConverter]::ToUInt32($linkEffect.ToArray(), 0) -ne 4 -or
+        $linkSource -notin @([System.Windows.Clipboard]::GetFileDropList())) { throw 'Prepared Link does not expose the requested Shell effect and source.' }
+    $linkTarget = Join-Path $root 'link-target'
+    [IO.Directory]::CreateDirectory($linkTarget) | Out-Null
+    $factory = $assembly.GetType('SUTWinExplorer.SutContextMenuFactory', $true)
+    $null = $paste.Invoke($null, [object[]] @([string] $linkTarget, [IntPtr]::Zero))
+    $shortcuts = @([IO.Directory]::GetFiles($linkTarget, '*.lnk'))
+    $resolveLink = $assembly.GetType('SUTWinExplorer.ShellFileOperations', $true).GetMethod('GetLinkTarget')
+    if ($shortcuts.Count -ne 1 -or $resolveLink.Invoke($null, [object[]] @($shortcuts[0])) -cne $linkSource -or -not [IO.File]::Exists($linkSource)) { throw 'Prepared Link did not create a shortcut to its source.' }
     $getOperation = $shell.GetMethod('TryGetClipboardOperation', $flags)
     $abort = $shell.GetMethod('AbortClipboardOperation', $flags)
     foreach ($effect in @(2, 4)) {

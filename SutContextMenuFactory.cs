@@ -630,14 +630,30 @@ internal static class SutContextMenuFactory
         RemoveRedundantSeparators(menu);
     }
 
-    internal static IReadOnlyList<ShellMenuAction> CreateBaseActions(IReadOnlyList<ShellMenuAction> actions, ShellMenuAction relocate)
+    internal static IReadOnlyList<ShellMenuAction> CreateBaseActions(IReadOnlyList<ShellMenuAction> actions, ShellMenuAction relocate,
+        IReadOnlyList<string> paths, IntPtr owner)
     {
         ShellMenuAction Existing(string id, string label, bool separator = false) =>
             actions.Single(action => action.Id == id) with { Label = label, IsTransfer = false, SeparatorBefore = separator };
+        ShellMenuAction Prepare(string id, string label, ClipboardOperation operation, bool separator = false) =>
+            new(id, label, paths.Count > 0 && paths.All(path => File.Exists(path) || Directory.Exists(path)) &&
+                (operation != ClipboardOperation.Move || paths.All(ShellFileOperations.CanDelete)), () =>
+            {
+                try { SutShell.PrepareExternalTransfer(paths, owner, operation); }
+                catch (Exception exception)
+                {
+                    System.Windows.MessageBox.Show(exception.Message, "Operation failed", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                }
+            }, SeparatorBefore: separator)
+            { IconSource = actions.Single(action => action.Id == (operation switch
+                { ClipboardOperation.Copy => "ItemClipboardCopy", ClipboardOperation.Link => "LinkMarkItem", _ => "MoveMarkItem" })).IconSource };
 
         return new ShellMenuAction[]
         {
             Existing("Properties", "Properties"),
+            Prepare("PrepareCopyToExternal", "Prepare copy to external", ClipboardOperation.Copy, true),
+            Prepare("PrepareLinkingFromExternal", "Prepare linking from external", ClipboardOperation.Link),
+            Prepare("PrepareMoveToExternal", "Prepare move to external", ClipboardOperation.Move),
             Existing("NameClipboardCopy", "Copy name to clipboard", true),
             Existing("PathClipboardCopy", "Copy path to clipboard"),
             Existing("ItemClipboardCopy", "Copy item to clipboard"),

@@ -308,6 +308,22 @@ internal static class SutShell
         menu.InvokeVerb("copy");
     }
 
+    internal static void PrepareExternalTransfer(IReadOnlyList<string> paths, IntPtr owner, ClipboardOperation operation)
+    {
+        if (operation == ClipboardOperation.Link)
+        {
+            ShellDragDrop.PrepareLinkToClipboard(paths, owner);
+            return;
+        }
+        using var menu = SutContextMenuFactory.GetItemMenu(paths, owner);
+        menu.InvokeVerb(operation switch
+        {
+            ClipboardOperation.Copy => "copy",
+            ClipboardOperation.Move => "cut",
+            _ => throw new ArgumentOutOfRangeException(nameof(operation))
+        });
+    }
+
     internal static bool ClipboardContainsItems()
     {
         return TryGetClipboardOperation(out _, out _);

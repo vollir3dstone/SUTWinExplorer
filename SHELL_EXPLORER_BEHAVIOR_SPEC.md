@@ -63,6 +63,14 @@ The three Clipboard copy buttons are grouped in the selection row. Item clipboar
 paste is in the directory column before the transfer buttons. These actions are
 also available in the applicable Base Menus, using the same icons as their buttons.
 
+Each Base Menu also groups **Prepare copy to external**, **Prepare linking from
+external**, and **Prepare move to external** immediately after Properties. They
+replace the global Shell clipboard with the selected items, clicked directory,
+or active directory for a background; they do not execute or change internal
+transfers. Copy and Move use Shell Copy and Cut, while Link requests an explicit
+Link effect. External targets must support that effect: a native Shell background
+menu probe did not enable Paste or Paste shortcut for it.
+
 The application-owned transfers have separate controls and do not use clipboard
 icons:
 

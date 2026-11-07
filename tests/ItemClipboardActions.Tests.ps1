@@ -97,12 +97,12 @@ public sealed class SequenceMenuProbe : IDisposable
                 }
                 else if (mode == "move" && phase++ == 0)
                     mouse_event(1, GetSystemMetrics(36) * 4, 0, 0, UIntPtr.Zero);
-                else if (mode == "command" && phase < 3)
+                else if (mode == "command" && phase < 6)
                 {
-                    PostMessage(window, 0x0100, (IntPtr)(phase < 2 ? 0x28 : 0x0D), IntPtr.Zero);
+                    PostMessage(window, 0x0100, (IntPtr)(phase < 5 ? 0x28 : 0x0D), IntPtr.Zero);
                     phase++;
                 }
-                else if (mode != "command" || phase++ > 5)
+                else if (mode != "command" || phase++ > 8)
                     PostMessage(owner, 0x001F, IntPtr.Zero, IntPtr.Zero);
                 return false;
             }, IntPtr.Zero);

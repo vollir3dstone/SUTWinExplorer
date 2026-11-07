@@ -156,6 +156,10 @@ separators are removed when the Shell section is empty:
 ```text
 Properties
 ---
+Prepare copy to external
+Prepare linking from external
+Prepare move to external
+---
 Copy name to clipboard
 Copy path to clipboard
 Copy item to clipboard
@@ -180,6 +184,12 @@ not include clipboard Paste or the transfer execute actions. Item actions use
 the selected ContentView rows or the clicked sidebar directory; background
 actions use the active directory, regardless of the previous table selection.
 The exact Shell block varies by selection, registrations and extensions.
+The three Prepare actions replace the global Shell clipboard with the selected
+filesystem items, the clicked directory, or the active directory for a background.
+Copy and Move use the Shell Copy and Cut verbs; Link requests the explicit Shell
+Link effect. Preparing does not execute a transfer or change the application's
+prepared transfers. External destinations must support the requested Link effect;
+the tested native Shell background menu did not enable Paste for it.
 
 ### Content Menu Layouts
 
@@ -350,8 +360,9 @@ Windows fallback. Supported direct types and their limits are described in
 [CONTENT_VIEW.md](CONTENT_VIEW.md). The background Content Menu excludes the
 native Shell `paste` command; the original Shift menu is unchanged.
 
-For an existing active directory, Properties and the three clipboard-copy
-actions are enabled. Mark link and Mark copy additionally require that no
+For an existing active directory, Properties, the three external Prepare actions
+and the three clipboard-copy actions are enabled, except that external Move
+requires a deletable source. Mark link and Mark copy additionally require that no
 transfer is prepared; Mark move also requires an editable Shell name. Rename
 requires an editable name and an available active-directory rename handler;
 Relocate requires an editable name and an available relocate handler. Delete

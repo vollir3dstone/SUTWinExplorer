@@ -233,7 +233,8 @@ public partial class ContentView : UserControl
         var selected = FileList.SelectedItems.OfType<DirectoryRow>().ToArray();
         var relocate = new ShellMenuAction("Relocate", "Relocate", selected.Length == 1 && RenameButton.IsEnabled && RelocateRequested is not null,
             () => RelocateRequested?.Invoke(selected[0].FullPath));
-        return SutContextMenuFactory.CreateBaseActions(actions, relocate);
+        var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
+        return SutContextMenuFactory.CreateBaseActions(actions, relocate, selected.Select(row => row.FullPath).ToArray(), owner);
     }
 
     internal IReadOnlyList<ShellMenuAction> CreateActiveDirectoryMenuActions()
@@ -258,8 +259,9 @@ public partial class ContentView : UserControl
             return new ShellMenuAction(id, System.Windows.Automation.AutomationProperties.GetName(button), enabled,
                 () => ExecuteActiveDirectoryMenuAction(id, path)) { IconSource = button };
         }).ToArray();
+        var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
         return SutContextMenuFactory.CreateBaseActions(actions,
-            new ShellMenuAction("Relocate", "Relocate", editable && RelocateRequested is not null, () => RelocateRequested?.Invoke(path)));
+            new ShellMenuAction("Relocate", "Relocate", editable && RelocateRequested is not null, () => RelocateRequested?.Invoke(path)), [path], owner);
     }
 
     private void ExecuteActiveDirectoryMenuAction(string action, string path)

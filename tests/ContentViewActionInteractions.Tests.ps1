@@ -60,6 +60,36 @@ try {
         $list.SelectedItems.Add($notesMenuRow) | Out-Null
         $list.SelectedItems.Add($otherFileRow) | Out-Null
         $selectedPaths = @($notesMenuRow.Entry.FullPath, $otherFileRow.Entry.FullPath)
+        $preparedWorkflow = $assembly.GetType('SUTWinExplorer.CopyWorkflowState', $true).GetProperty('Shared').GetValue($null)
+        $preparedWorkflow.Prepare([string[]] @($selectedPaths[0]))
+        foreach ($externalCase in @(@('PrepareCopyToExternal', 1), @('PrepareLinkingFromExternal', 4), @('PrepareMoveToExternal', 2))) {
+            $externalId, $effect = $externalCase
+            foreach ($background in @($false, $true)) {
+                $list.SelectedItems.Clear()
+                $list.SelectedItems.Add($notesMenuRow) | Out-Null
+                $list.SelectedItems.Add($otherFileRow) | Out-Null
+                $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+                $menuProbe.SelectCommandId = Get-ActionCommandId $externalId
+                try {
+                    $target = if ($background) { $null } else { $notesMenuRow.PSObject.BaseObject }
+                    $null = $showMenu.Invoke($view, [object[]] @($target))
+                    Assert-True ($menuProbe.Items[2] -ceq 'Prepare copy to external' -and $menuProbe.Items[3] -ceq 'Prepare linking from external' -and
+                        $menuProbe.Items[4] -ceq 'Prepare move to external' -and ($menuProbe.States[1] -band 0x800) -ne 0 -and
+                        ($menuProbe.States[5] -band 0x800) -ne 0 -and $menuProbe.SelectIndex -ge 2 -and $menuProbe.SelectIndex -le 4) 'External preparation commands have incorrect Base Menu ordering.'
+                } finally { $menuProbe.Dispose() }
+                $clipboardData = [System.Windows.Clipboard]::GetDataObject()
+                $clipboardEffect = [BitConverter]::ToUInt32($clipboardData.GetData('Preferred DropEffect', $false).ToArray(), 0)
+                $clipboardPaths = @([System.Windows.Clipboard]::GetFileDropList())
+                $expectedPaths = if ($background) { @($directory) } else { $selectedPaths }
+                Assert-True (($clipboardEffect -eq $effect -or ($effect -eq 1 -and $clipboardEffect -eq 5)) -and
+                    $clipboardPaths.Count -eq $expectedPaths.Count -and @($expectedPaths | Where-Object { $_ -notin $clipboardPaths }).Count -eq 0 -and
+                    $preparedWorkflow.IsPrepared -and @($preparedWorkflow.PreparedPaths)[0] -ceq $selectedPaths[0]) "External $externalId prepared the wrong source or changed the internal transfer for background=$background."
+            }
+        }
+        $preparedWorkflow.Abort()
+        $list.SelectedItems.Clear()
+        $list.SelectedItems.Add($notesMenuRow) | Out-Null
+        $list.SelectedItems.Add($otherFileRow) | Out-Null
         foreach ($operation in @('Link', 'Copy', 'Move')) {
             $view.FindName("${operation}MarkItemButton").RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
             $workflowType = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true)
