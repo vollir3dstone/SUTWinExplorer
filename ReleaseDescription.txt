@@ -1,5 +1,5 @@
-2.01
-Explorer now uses a custom table to display a directory content, no longer the Windows shell.
-Many new features.
+3.01
+File copy, move, link is now based on the shell concepts and actions.
+Code clean up.
 
 Mostly produced with Github Copilot GPT-6.1 Terra.
