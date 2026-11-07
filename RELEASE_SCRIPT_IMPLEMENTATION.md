@@ -4,12 +4,14 @@ This document describes the implementation. For usage, see [RELEASE_GUIDE.md](RE
 
 ## Files and Responsibilities
 
+- [release.ps1](release.ps1) orchestrates the local build, installer, release commits, list updates, and annotated Git tag.
 - [create_release_notes.ps1](create_release_notes.ps1) reads the release description and Git history and maintains releases and comments without modifying the description file.
 - [ReleaseDescription.txt](ReleaseDescription.txt) is edited by hand; its first line is the shared version and the remaining text is the release comment.
 - [RELEASES.html](RELEASES.html) contains both the stored release data and its browser presentation.
 - [SUTWinExplorer.csproj](SUTWinExplorer.csproj) reads the version as `InformationalVersion`, suppresses the automatically appended source revision, and fails the build if the version file is missing or empty. The numeric Windows file version remains `1.0.0.0`.
 - [installer-config/build-installer.ps1](installer-config/build-installer.ps1) reads the same version for Inno Setup metadata and encodes filename-prohibited characters for the output filename.
 - [tests/Release.Tests.ps1](tests/Release.Tests.ps1) exercises the workflow in an isolated temporary Git repository.
+- [tests/ReleaseWorkflow.Tests.ps1](tests/ReleaseWorkflow.Tests.ps1) tests the orchestration in a temporary Git repository with simulated builds.
 
 ## Release Processing
 

@@ -57,6 +57,10 @@ Both profiles enable native-library self-extraction. The publish output includes
 
 ## Release Checklist
 
+For the complete local release, including commits, release notes, and Git tag,
+use [release.ps1](release.ps1) as described in [RELEASE_GUIDE.md](RELEASE_GUIDE.md).
+The following checklist covers building and distributing application files only.
+
 1. Build the application with `dotnet build .\SUTWinExplorer.csproj -c Debug`.
 2. Publish the `Included` profile for machines that should not require a preinstalled .NET runtime, or publish the `Dependent` profile when the .NET 10 Desktop Runtime is a deployment prerequisite.
 3. Distribute the contents of the selected output directory. Keep the `.pdb` file for diagnostics if desired; it is not required to run the application.
