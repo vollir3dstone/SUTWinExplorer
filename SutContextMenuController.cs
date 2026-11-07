@@ -76,6 +76,7 @@ internal sealed class SutContextMenuController<T> where T : class
 
     internal void Show(T? target, IntPtr owner, bool alternate)
     {
+        using var language = ShellMenuLanguage.Enter();
         try { ShowCore(target, owner, alternate); }
         catch { Reset(); throw; }
     }

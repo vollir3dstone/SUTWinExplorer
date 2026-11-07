@@ -51,6 +51,33 @@ public static class BaseMenuLayoutProbe
 }
 '@
 $actionType = $assembly.GetType('SUTWinExplorer.ShellMenuAction', $true)
+$shellNewLabels = $menuType.GetField('BackgroundNewLabels', [Reflection.BindingFlags]'Static,NonPublic').GetValue($null).Value
+$testShellLabel = 'Shell New Test Label'
+$null = $shellNewLabels.Add($testShellLabel)
+try {
+    foreach ($resourceFile in @('Strings.resx', 'Strings.de.resx')) {
+        $resource = [xml] [IO.File]::ReadAllText((Join-Path $PSScriptRoot "..\Assets\Strings\$resourceFile"))
+        $actionLabel = [string] @($resource.root.data | Where-Object name -eq 'ContentMenu_Action_New')[0].value
+        $newAction = [Activator]::CreateInstance($actionType, [object[]] @('New', $actionLabel, $true, [Action] {}, $false, $false))
+        foreach ($withShellNew in @($true, $false)) {
+            $testMenu = [BaseMenuLayoutProbe]::CreatePopupMenu()
+            try {
+                if ($withShellNew) {
+                    $submenu = [BaseMenuLayoutProbe]::CreatePopupMenu()
+                    if (-not [BaseMenuLayoutProbe]::AppendMenu($testMenu, 0x10, [UIntPtr] ([uint64] $submenu.ToInt64()), $testShellLabel)) {
+                        [void] [SutShellMenuProbe]::DestroyMenu($submenu)
+                        throw 'Could not add the test Shell New submenu.'
+                    }
+                }
+                $null = $menuType.GetMethod('ReplaceBackgroundNew', $flags).Invoke($null, [object[]] @($testMenu, $newAction))
+                $labels = $menuType.GetMethod('CollectMenuLabels', $flags).Invoke($null, @($testMenu))
+                Assert-True ([SutShellMenuProbe]::GetMenuItemCount($testMenu) -eq 1 -and
+                    $labels.Contains("item`0$actionLabel") -and
+                    [SutShellMenuProbe]::GetMenuItemID($testMenu, 0) -eq 0x8000) "New action did not use $resourceFile when Shell New present: $withShellNew."
+            } finally { [void] [SutShellMenuProbe]::DestroyMenu($testMenu) }
+        }
+    }
+} finally { $null = $shellNewLabels.Remove($testShellLabel) }
 $ids = @('Properties', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', 'LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem', 'Rename', 'Delete')
 $sourceActions = [Array]::CreateInstance($actionType, $ids.Count)
 $noop = [Action] { }

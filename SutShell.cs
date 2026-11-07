@@ -476,24 +476,28 @@ internal static class SutShell
 
     internal static void ShowItemMenu(IReadOnlyList<string> paths, IntPtr owner, Action? rename = null)
     {
+        using var language = ShellMenuLanguage.Enter();
         using var menu = SutContextMenuFactory.GetItemMenu(paths, owner, rename);
         menu.Show();
     }
 
     internal static void ShowItemMenuWithOpenLocation(IReadOnlyList<string> paths, IntPtr owner, Action? rename, ShellMenuAction? openLocation)
     {
+        using var language = ShellMenuLanguage.Enter();
         using var menu = SutContextMenuFactory.GetItemMenuWithOpenLocation(paths, owner, rename, openLocation);
         menu.Show();
     }
 
     internal static void ShowBackgroundMenu(string path, IntPtr owner)
     {
+        using var language = ShellMenuLanguage.Enter();
         using var menu = SutContextMenuFactory.GetBackgroundMenu(path, owner);
         menu.Show();
     }
 
     internal static void ShowNewMenu(string path, IntPtr owner, int x, int y)
     {
+        using var language = ShellMenuLanguage.Enter();
         using var menu = SutContextMenuFactory.GetBackgroundMenu(path, owner);
         menu.ShowSubmenu(SutContextMenuFactory.FindBackgroundNewSubmenu, x, y);
     }

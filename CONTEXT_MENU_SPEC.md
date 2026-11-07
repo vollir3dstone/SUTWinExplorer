@@ -370,8 +370,8 @@ fresh native background menu and removes unique matches to the displayed Base
 Menu snapshot. `New` is in the Content Menu, not the Base Menu, and opens the
 same application-owned type and name dialog as the ContentView New button.
 The factory replaces the native New submenu with the supplied application
-action, retaining the Shell's localized label when found and otherwise appending
-the action with its `New...` fallback label. It keeps the original Windows menu for Shift and the dialog's explicit
+action, or appends the action if the native submenu is not found. The action
+always uses the application's localized label. It keeps the original Windows menu for Shift and the dialog's explicit
 Windows fallback. Supported direct types and their limits are described in
 [CONTENT_VIEW.md](CONTENT_VIEW.md). The background Content Menu excludes the
 native Shell `paste` command; the original Shift menu is unchanged.

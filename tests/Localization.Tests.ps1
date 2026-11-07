@@ -50,6 +50,35 @@ try {
                     throw "Language selection $selection did not apply the expected UI culture."
                 }
             }
+            $shellLanguage = $assembly.GetType('SUTWinExplorer.ShellMenuLanguage', $true)
+            $getLanguages = $shellLanguage.GetMethod('GetThreadPreferredUILanguages', $flags)
+            $setLanguages = $shellLanguage.GetMethod('SetThreadPreferredUILanguages', $flags)
+            $enterLanguage = $shellLanguage.GetMethod('Enter', $flags)
+            function Get-NativeThreadLanguages {
+                $arguments = [object[]] @([uint32] 0x48, [uint32] 0, $null, [uint32] 0)
+                if (-not $getLanguages.Invoke($null, $arguments)) { throw 'Could not query native thread languages.' }
+                $arguments[2] = [char[]]::new($arguments[3])
+                if (-not $getLanguages.Invoke($null, $arguments)) { throw 'Could not read native thread languages.' }
+                return (-join $arguments[2]).TrimEnd([char] 0)
+            }
+            $setArguments = [object[]] @([uint32] 0x8, "de-DE`0`0", [uint32] 0)
+            if (-not $setLanguages.Invoke($null, $setArguments)) { throw 'Could not set test thread language.' }
+            $before = Get-NativeThreadLanguages
+            if ($enterLanguage.Invoke($null, @()) -ne $null -or (Get-NativeThreadLanguages) -cne $before) {
+                throw 'System default changed the native thread language.'
+            }
+            $applyLanguage.Invoke($null, [object[]] @([Enum]::Parse($languageType, 'English'), $systemCulture)) | Out-Null
+            $before = Get-NativeThreadLanguages
+            $outer = $enterLanguage.Invoke($null, @())
+            try {
+                if ((Get-NativeThreadLanguages) -cne 'en-US') { throw 'English native thread language was not applied.' }
+                $inner = $enterLanguage.Invoke($null, @())
+                try {
+                    if ((Get-NativeThreadLanguages) -cne 'en-US') { throw 'Nested English native thread language was not applied.' }
+                } finally { $inner.Dispose() }
+                if ((Get-NativeThreadLanguages) -cne 'en-US') { throw 'Nested thread language was not restored.' }
+            } finally { $outer.Dispose() }
+            if ((Get-NativeThreadLanguages) -cne $before) { throw 'Original thread languages were not restored.' }
         } finally {
             [System.Globalization.CultureInfo]::DefaultThreadCurrentUICulture = $originalDefaultCulture
         }

@@ -33,8 +33,11 @@ a changed selection takes effect when the application is restarted.
 
 There is no live language switching. XAML strings are
 resolved when controls are created; menu and dialog strings are resolved when
-those are created. Windows Shell labels and operating-system error messages
-come from Windows. Some lower-level technical error messages remain in English.
+those are created. With English selected, Shell menus request English from the
+Windows resource loader while they are created and displayed. Windows and Shell
+extensions may still use another language when English is unavailable or they
+use their own language settings. Operating-system error messages come from
+Windows. Some lower-level technical error messages remain in English.
 Resource files are compiled into the application; changing them requires a
 rebuild.
 

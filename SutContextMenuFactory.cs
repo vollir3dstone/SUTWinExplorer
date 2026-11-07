@@ -981,18 +981,14 @@ internal static class SutContextMenuFactory
     private static void ReplaceBackgroundNew(IntPtr menu, ShellMenuAction action)
     {
         var position = GetMenuItemCount(menu);
-        var label = action.Label;
         for (var index = GetMenuItemCount(menu) - 1; index >= 0; index--)
         {
             if (GetSubMenu(menu, index) == IntPtr.Zero || !HasShellMenuLabel(menu, index, BackgroundNewLabels.Value)) continue;
-            var shellLabel = new StringBuilder(512);
-            if (GetMenuString(menu, (uint)index, shellLabel, shellLabel.Capacity, MenuByPosition) > 0)
-                label = shellLabel.ToString();
             if (!DeleteMenu(menu, (uint)index, MenuByPosition))
                 throw new InvalidOperationException("Could not replace the Shell New menu.");
             position = index;
         }
-        if (!InsertMenu(menu, (uint)position, MenuByPosition | (action.IsEnabled ? 0u : MenuDisabled), (UIntPtr)BaseMenuCommandFirst, label))
+        if (!InsertMenu(menu, (uint)position, MenuByPosition | (action.IsEnabled ? 0u : MenuDisabled), (UIntPtr)BaseMenuCommandFirst, action.Label))
             throw new InvalidOperationException("Could not insert the New action.");
         RemoveRedundantSeparators(menu);
     }
