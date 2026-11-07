@@ -383,7 +383,10 @@ The Base Menu contains `Properties`, a separator, `Copy name to clipboard`,
 entries, a separator, `Rename`, `Relocate`, a separator, and `Delete`. Unavailable
 application actions remain visible and disabled. Abort transfer clears any
 prepared Link, Copy and Move workflows; the individual execute and clipboard
-paste actions remain available on the toolbar. In the sidebar, item-targeted
+paste actions are available on the toolbar when its button group is shown. The
+action-button groups are hidden by default; their visibility flags are described
+in [Configuration](Configuration.md#pathview-action-groups) and do not disable
+context-menu actions. In the sidebar, item-targeted
 actions operate on the clicked directory rather than the ContentView selection.
 Rename uses the sidebar inline editor. Relocate requires one file or directory and
 offers either a destination parent or a full destination including the new name.

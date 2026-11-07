@@ -265,6 +265,7 @@
                             <Image Width="16" Height="16" Source="/Assets/ic_fluent_color_32_regular.png" />
                         </Button>
                     </StackPanel>
+                    <StackPanel x:Name="PathActionButtons" Orientation="Horizontal" Visibility="Collapsed">
                         <Button x:Name="MoveMarkCurrentDirectoryButton" Content="Move🠝"
                             Style="{StaticResource ContentPaneButtonStyle}" Width="48" Padding="0"
                             Margin="4,0,0,0" IsEnabled="False" ToolTip="Move mark item"
@@ -275,6 +276,7 @@
                         <Button x:Name="RelocateCurrentDirectoryButton" Content="Relocate..."
                             Style="{StaticResource ContentPaneButtonStyle}" Padding="10,1"
                             Margin="4,0,0,0" IsEnabled="False" Click="RelocateCurrentDirectoryButton_Click" />
+                    </StackPanel>
                 </StackPanel>
                 <Popup x:Name="PaneColorPopup" PlacementTarget="{Binding ElementName=PaneColorButton}"
                        Placement="Bottom" StaysOpen="False" AllowsTransparency="True"

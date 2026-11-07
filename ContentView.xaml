@@ -14,7 +14,6 @@
             <Grid x:Name="HeaderArea" Grid.Row="0" Grid.Column="1" Margin="0,0,10,8">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="8" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid x:Name="ViewControlsRow" Grid.Row="0">
@@ -80,7 +79,7 @@
                     </TextBlock>
                     </ScrollViewer>
                 </Grid>
-            <Grid x:Name="SelectionControlsRow" Grid.Row="2">
+            <Grid x:Name="SelectionControlsRow" Grid.Row="1" Margin="0,8,0,0" Visibility="Collapsed">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -149,17 +148,7 @@
             <Grid x:Name="DirectoryActions" Grid.Row="1" Grid.Column="0" Margin="4,0,8,0" MinWidth="72">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" MinHeight="4" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" MinHeight="4" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" MinHeight="4" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" MinHeight="4" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" MinHeight="4" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" MinHeight="4" />
+                    <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
                 <StackPanel x:Name="DirectoryHeading" Grid.Row="0">
                     <Border x:Name="DirectoryBadge" Style="{StaticResource BadgeStyle}">
@@ -181,30 +170,45 @@
                     </Grid>
                     <TextBlock x:Name="StatusLabel" Foreground="#A12727" HorizontalAlignment="Center" />
                 </StackPanel>
-                <Button x:Name="NewButton" Grid.Row="2" Content="New…" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="New" ToolTip="New"
+                <Grid x:Name="DirectoryButtonGroup" Grid.Row="1" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" MinHeight="4" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" MinHeight="4" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" MinHeight="4" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" MinHeight="4" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" MinHeight="4" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" MinHeight="4" />
+                    </Grid.RowDefinitions>
+                <Button x:Name="NewButton" Grid.Row="1" Content="New…" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="New" ToolTip="New"
                         Tag="New" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
-                <Button x:Name="ItemClipboardPasteButton" Grid.Row="4" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Item clipboard paste" ToolTip="Item clipboard paste"
+                <Button x:Name="ItemClipboardPasteButton" Grid.Row="3" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Item clipboard paste" ToolTip="Item clipboard paste"
                     Tag="ItemClipboardPaste" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click">
                     <StackPanel Orientation="Horizontal"><TextBlock Text="Item" VerticalAlignment="Center" /><Control Width="14" Height="14" Margin="2,0,0,0" Template="{StaticResource ClipboardPasteIconTemplate}" /></StackPanel>
                 </Button>
-                <StackPanel Grid.Row="6">
+                <StackPanel Grid.Row="5">
                     <Button x:Name="LinkAbortButton" Content="Link✕" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Link abort" ToolTip="Link abort"
                         Tag="LinkAbort" Width="Auto" HorizontalAlignment="Stretch" Padding="0" Margin="0,0,0,4" IsEnabled="False" Click="ContentOperationButton_Click" />
                     <Button x:Name="LinkExecuteButton" Content="Link🠟" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Link execute" ToolTip="Link execute"
                         Tag="LinkExecute" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
                 </StackPanel>
-                <StackPanel Grid.Row="8">
+                <StackPanel Grid.Row="7">
                     <Button x:Name="CopyAbortButton" Content="Copy✕" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Copy abort" ToolTip="Copy abort"
                         Tag="CopyAbort" Width="Auto" HorizontalAlignment="Stretch" Padding="0" Margin="0,0,0,4" IsEnabled="False" Click="ContentOperationButton_Click" />
                     <Button x:Name="CopyExecuteButton" Content="Copy🠟" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Copy execute" ToolTip="Copy execute"
                         Tag="CopyExecute" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
                 </StackPanel>
-                <StackPanel Grid.Row="10">
+                <StackPanel Grid.Row="9">
                     <Button x:Name="MoveAbortButton" Content="Move✕" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Move abort" ToolTip="Move abort"
                         Tag="MoveAbort" Width="Auto" HorizontalAlignment="Stretch" Padding="0" Margin="0,0,0,4" IsEnabled="False" Click="ContentOperationButton_Click" />
                     <Button x:Name="MoveExecuteButton" Content="Move🠟" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="Move execute" ToolTip="Move execute"
                         Tag="MoveExecute" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
                 </StackPanel>
+                </Grid>
             </Grid>
             <ListView x:Name="FileList" Grid.Row="1" Grid.Column="1" SelectionMode="Extended"
                       VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"

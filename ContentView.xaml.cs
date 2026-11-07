@@ -16,6 +16,18 @@ namespace SUTWinExplorer;
 
 public partial class ContentView : UserControl
 {
+    public bool ShowSelectedActionButtons
+    {
+        get => SelectionControlsRow.Visibility == Visibility.Visible;
+        set => SelectionControlsRow.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public bool ShowDirectoryActionButtons
+    {
+        get => DirectoryButtonGroup.Visibility == Visibility.Visible;
+        set => DirectoryButtonGroup.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private bool _initialized;
     private IDisposable? _directoryObserver;
     private ClipboardChangeMonitor? _clipboardMonitor;

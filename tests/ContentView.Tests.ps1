@@ -42,6 +42,11 @@ try {
     [System.Threading.SynchronizationContext]::SetSynchronizationContext(
         [System.Windows.Threading.DispatcherSynchronizationContext]::new([System.Windows.Threading.Dispatcher]::CurrentDispatcher))
     $view = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
+    Assert-True (-not $view.ShowSelectedActionButtons -and -not $view.ShowDirectoryActionButtons -and
+        $view.FindName('SelectionControlsRow').Visibility -eq 'Collapsed' -and
+        $view.FindName('DirectoryButtonGroup').Visibility -eq 'Collapsed') 'ContentView action groups must default to hidden.'
+    $view.ShowSelectedActionButtons = $true
+    $view.ShowDirectoryActionButtons = $true
     $viewFlags = [System.Reflection.BindingFlags]'Instance,NonPublic'
     $null = $view.GetType().GetMethod('Initialize', $viewFlags).Invoke($view, [object[]] @([bool] $true))
     $menuActionOrder = @($view.GetType().GetMethod('CreateContextMenuActions', $viewFlags).Invoke($view, @()) | ForEach-Object { $_.Id })
@@ -108,7 +113,7 @@ try {
         }
         $previousBottom = $headingPosition.Y + $heading.ActualHeight
         $gaps = @()
-        $groups = @($directoryActions.Children | Where-Object { [System.Windows.Controls.Grid]::GetRow($_) -gt [System.Windows.Controls.Grid]::GetRow($heading) } | Sort-Object { [System.Windows.Controls.Grid]::GetRow($_) })
+        $groups = @($view.FindName('DirectoryButtonGroup').Children | Sort-Object { [System.Windows.Controls.Grid]::GetRow($_) })
         Assert-True ($groups.Count -gt 0) 'The directory action groups are missing.'
         foreach ($group in $groups) {
             $position = $group.TranslatePoint([System.Windows.Point]::new(0, 0), $view)

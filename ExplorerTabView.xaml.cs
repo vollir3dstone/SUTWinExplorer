@@ -20,6 +20,24 @@ public partial class Pathview : UserControl
 {
     public const double DirectoryTreeRowHeight = 24;
 
+    public bool ShowPathActionButtons
+    {
+        get => PathActionButtons.Visibility == Visibility.Visible;
+        set => PathActionButtons.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public bool ShowSelectedActionButtons
+    {
+        get => DirectoryContent.ShowSelectedActionButtons;
+        set => DirectoryContent.ShowSelectedActionButtons = value;
+    }
+
+    public bool ShowDirectoryActionButtons
+    {
+        get => DirectoryContent.ShowDirectoryActionButtons;
+        set => DirectoryContent.ShowDirectoryActionButtons = value;
+    }
+
     public static readonly DependencyProperty PaneBackgroundProperty =
         DependencyProperty.Register(
             nameof(PaneBackground),

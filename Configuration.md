@@ -17,6 +17,23 @@ configuration directory or reloaded at runtime. Changing it requires rebuilding
 the application. Matching, supported methods, fallback behavior, and limitations
 are described in [OPEN_WITH_RUNNING_APP_SPEC.md](OPEN_WITH_RUNNING_APP_SPEC.md).
 
+## Pathview action groups
+
+Each Pathview exposes three independent Boolean properties for future
+configuration integration. All default to `false` and are not currently read
+from, written to, or editable in a configuration file or user interface.
+
+| Property | When `true` |
+| --- | --- |
+| `ShowPathActionButtons` | Shows Move mark item, Rename and Relocate on the right of the path header. Other header controls, including the color picker, retain their normal visibility. |
+| `ShowSelectedActionButtons` | Shows the complete FOR SELECTED row above the content table. When false, the row and its spacing are collapsed. |
+| `ShowDirectoryActionButtons` | Shows the New, clipboard paste and transfer buttons under DIRECTORY. The sidebar, heading, counts and status remain visible when false. |
+
+The properties affect only their Pathview; changing one does not change the
+other two or other Pathviews. Hidden buttons remain available internally for
+the corresponding context-menu actions. No persistence or migration is
+implemented for these properties yet.
+
 ## Use cases
 
 The application always has one active use case during normal operation. It
