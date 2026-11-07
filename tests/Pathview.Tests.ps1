@@ -41,8 +41,8 @@ try {
         $pathGroup = $fixedPathview.FindName('PathActionButtons')
         $selectedGroup = $content.FindName('SelectionControlsRow')
         $directoryGroup = $content.FindName('DirectoryButtonGroup')
-        Assert-True (-not $fixedPathview.ShowPathActionButtons -and -not $fixedPathview.ShowSelectedActionButtons -and
-            -not $fixedPathview.ShowDirectoryActionButtons -and $pathGroup.Visibility -eq 'Collapsed' -and
+        Assert-True (-not $fixedPathview.ShowDirectoryRowActionButtons -and -not $fixedPathview.ShowSelectedItemsActionButtons -and
+            -not $fixedPathview.ShowDirectoryColumnActionButtons -and $pathGroup.Visibility -eq 'Collapsed' -and
             $selectedGroup.Visibility -eq 'Collapsed' -and $directoryGroup.Visibility -eq 'Collapsed') 'Action groups must default to hidden.'
         Assert-True ($fixedPathview.FindName('PaneColorButton').IsVisible -and $fixedPathview.FindName('EditCustomNameButton').IsVisible -and
             $fixedPathview.FindName('BrowsePathviewButton').IsVisible -and $fixedPathview.FindName('OpenInExplorerButton').IsVisible -and
@@ -51,9 +51,9 @@ try {
         foreach ($path in @($false, $true)) {
             foreach ($selected in @($false, $true)) {
                 foreach ($directoryButtons in @($false, $true)) {
-                    $fixedPathview.ShowPathActionButtons = $path
-                    $fixedPathview.ShowSelectedActionButtons = $selected
-                    $fixedPathview.ShowDirectoryActionButtons = $directoryButtons
+                    $fixedPathview.ShowDirectoryRowActionButtons = $path
+                    $fixedPathview.ShowSelectedItemsActionButtons = $selected
+                    $fixedPathview.ShowDirectoryColumnActionButtons = $directoryButtons
                     $fixedWindow.UpdateLayout()
                     Assert-True ($pathGroup.IsVisible -eq $path -and $selectedGroup.IsVisible -eq $selected -and
                         $directoryGroup.IsVisible -eq $directoryButtons -and $content.FindName('DirectoryHeading').IsVisible -and
@@ -66,9 +66,9 @@ try {
                 }
             }
         }
-        $fixedPathview.ShowPathActionButtons = $false
-        $fixedPathview.ShowSelectedActionButtons = $false
-        $fixedPathview.ShowDirectoryActionButtons = $false
+        $fixedPathview.ShowDirectoryRowActionButtons = $false
+        $fixedPathview.ShowSelectedItemsActionButtons = $false
+        $fixedPathview.ShowDirectoryColumnActionButtons = $false
         $fixedWindow.UpdateLayout()
         foreach ($action in @(@{ Button = 'RenameCurrentDirectoryButton'; Title = 'Rename directory'; Value = [IO.Path]::GetFileName($directory) },
                               @{ Button = 'RelocateCurrentDirectoryButton'; Title = 'Relocate directory'; Value = [IO.Path]::GetDirectoryName($directory) })) {
@@ -150,13 +150,13 @@ try {
         $listFrame = $fixedPathview.FindName('SubdirectoriesListFrame')
         $point = $listFrame.TranslatePoint([System.Windows.Point]::new(4, $listFrame.ActualHeight / 2), $fixedPathview)
         Assert-True (-not $isBackgroundAt.Invoke($fixedPathview, [object[]] @($point))) 'The subdirectory list margin was treated as Pathview background.'
-        $fixedPathview.ShowPathActionButtons = $true
+        $fixedPathview.ShowDirectoryRowActionButtons = $true
         $fixedWindow.UpdateLayout()
         $disabledButton.IsEnabled = $false
         try {
             $point = $disabledButton.TranslatePoint([System.Windows.Point]::new($disabledButton.ActualWidth / 2, $disabledButton.ActualHeight / 2), $fixedPathview)
             Assert-True (-not $isBackgroundAt.Invoke($fixedPathview, [object[]] @($point))) 'A disabled button was treated as Pathview background.'
-        } finally { $disabledButton.IsEnabled = $true; $fixedPathview.ShowPathActionButtons = $false; $fixedWindow.UpdateLayout() }
+        } finally { $disabledButton.IsEnabled = $true; $fixedPathview.ShowDirectoryRowActionButtons = $false; $fixedWindow.UpdateLayout() }
         $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
         $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
         try {

@@ -74,6 +74,41 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ConfigurationButton_Click(object sender, RoutedEventArgs e)
+    {
+        var application = (App)Application.Current;
+        var dialog = new ConfigurationDialog(application.Configuration.Interface) { Owner = this };
+        if (dialog.ShowDialog() != true)
+            return;
+
+        var configuration = new ExplorerConfiguration
+        {
+            Type = application.Configuration.Type,
+            Version = application.Configuration.Version,
+            Interface = dialog.GetConfiguration(),
+            AdditionalProperties = application.Configuration.AdditionalProperties
+        };
+        try
+        {
+            application.ConfigurationStore.Save(configuration);
+            application.Configuration = configuration;
+            foreach (var view in _tabsByPathview.Keys)
+                ApplyInterfaceConfiguration(view, configuration.Interface);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, $"Cannot save configuration: {exception.Message}",
+                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private static void ApplyInterfaceConfiguration(Pathview view, InterfaceConfiguration configuration)
+    {
+        view.ShowDirectoryRowActionButtons = configuration.ShowDirectoryRowActionButtons;
+        view.ShowDirectoryColumnActionButtons = configuration.ShowDirectoryColumnActionButtons;
+        view.ShowSelectedItemsActionButtons = configuration.ShowSelectedItemsActionButtons;
+    }
+
     private void UseCasesButton_Click(object sender, RoutedEventArgs e)
     {
         if (UseCasesPane.Visibility == Visibility.Visible)
@@ -299,6 +334,7 @@ public partial class MainWindow : Window
             if (view is not null)
                 Pathview_TabColorChanged(view, color);
         });
+        ApplyInterfaceConfiguration(view, ((App)Application.Current).Configuration.Interface);
         if (useCaseEntry is not null)
             _useCaseEntriesByPathview.Add(view, useCaseEntry);
         var hasCurrentPath = !string.IsNullOrWhiteSpace(view.CurrentPath);

@@ -24,14 +24,14 @@ try {
     $pathviewConstructor = $pathviewType.GetConstructors()[0]
     $fixedPathview = $pathviewConstructor.Invoke([object[]] @([string] $directory, [bool] $false, $null, $null, $null, $null))
     $browsePathview = $pathviewConstructor.Invoke([object[]] @([string] $directory, [bool] $true, $null, $null, $null, $null))
-    $fixedPathview.ShowPathActionButtons = $true
-    $fixedPathview.ShowSelectedActionButtons = $true
-    $fixedPathview.ShowDirectoryActionButtons = $true
-    Assert-True (-not $browsePathview.ShowPathActionButtons -and -not $browsePathview.ShowSelectedActionButtons -and
-        -not $browsePathview.ShowDirectoryActionButtons) 'Action group flags must be independent across Pathviews.'
-    $fixedPathview.ShowPathActionButtons = $false
-    $fixedPathview.ShowSelectedActionButtons = $false
-    $fixedPathview.ShowDirectoryActionButtons = $false
+    $fixedPathview.ShowDirectoryRowActionButtons = $true
+    $fixedPathview.ShowSelectedItemsActionButtons = $true
+    $fixedPathview.ShowDirectoryColumnActionButtons = $true
+    Assert-True (-not $browsePathview.ShowDirectoryRowActionButtons -and -not $browsePathview.ShowSelectedItemsActionButtons -and
+        -not $browsePathview.ShowDirectoryColumnActionButtons) 'Action group flags must be independent across Pathviews.'
+    $fixedPathview.ShowDirectoryRowActionButtons = $false
+    $fixedPathview.ShowSelectedItemsActionButtons = $false
+    $fixedPathview.ShowDirectoryColumnActionButtons = $false
     foreach ($pathview in @($fixedPathview, $browsePathview)) {
         $prefix = $pathview.FindName('LocationHeaderPrefix')
         $group = @($prefix.Children | Where-Object { $_ -is [System.Windows.Controls.Grid] })[0]

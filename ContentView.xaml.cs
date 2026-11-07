@@ -16,13 +16,13 @@ namespace SUTWinExplorer;
 
 public partial class ContentView : UserControl
 {
-    public bool ShowSelectedActionButtons
+    public bool ShowSelectedItemsActionButtons
     {
         get => SelectionControlsRow.Visibility == Visibility.Visible;
         set => SelectionControlsRow.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    public bool ShowDirectoryActionButtons
+    public bool ShowDirectoryColumnActionButtons
     {
         get => DirectoryButtonGroup.Visibility == Visibility.Visible;
         set => DirectoryButtonGroup.Visibility = value ? Visibility.Visible : Visibility.Collapsed;

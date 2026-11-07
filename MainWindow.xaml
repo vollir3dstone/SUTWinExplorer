@@ -48,6 +48,11 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0">
+                <Button x:Name="ConfigurationButton" Style="{StaticResource TabCloseButtonStyle}"
+                        Width="24" Height="24" Margin="0,0,10,0" Click="ConfigurationButton_Click"
+                        ToolTip="Configuration" AutomationProperties.Name="Configuration">
+                    <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="18" />
+                </Button>
                 <Button x:Name="UseCasesButton" Style="{StaticResource TabCloseButtonStyle}"
                         Width="24" Height="24" Margin="0,0,6,0" Click="UseCasesButton_Click"
                         ToolTip="Use cases" AutomationProperties.Name="Use cases">

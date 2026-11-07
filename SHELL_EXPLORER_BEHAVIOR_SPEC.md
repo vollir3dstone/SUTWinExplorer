@@ -115,12 +115,17 @@ can be prepared at a time, but clipboard actions remain independent of it:
   [SHELL_EXPLORER_ARCHITECTURE.md](SHELL_EXPLORER_ARCHITECTURE.md#2026-11-01-separate-product-name-from-internal-identity).
 
 ### Navigation and tabs
+- [x] A gear button at the far left of the top toolbar opens the Configuration
+  dialog. Its three checkboxes control the path, FOR SELECTED and DIRECTORY
+  action-button groups across all Pathviews. Apply saves and updates open views;
+  Cancel leaves them unchanged. New views and future sessions use the saved
+  settings. The file format and defaults are in [Configuration.md](Configuration.md).
 - [x] The active use case restores its stored filesystem Pathviews as Fixed tabs;
   `default` is active at startup. Fixed tabs are saved on successful opening and removed from the
   use case on explicit close; unavailable locations remain marked and stored.
   BROWSE stays selected at startup, and virtual **This PC** cannot be pinned.
-  The active use case icon and name appear at the left of the top toolbar before
-  the navigation buttons; the name uses the same font as the path display.
+  The active use case icon and name appear after the configuration button and
+  before the navigation buttons; the name uses the same font as the path display.
   Only one KIS Explorer instance runs on the machine. Use case configuration
   and acceptance checks are specified in [Configuration.md](Configuration.md).
 - [x] The use case icon toggles between TabsView and UseCasesView. A single

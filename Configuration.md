@@ -19,26 +19,47 @@ are described in [OPEN_WITH_RUNNING_APP_SPEC.md](OPEN_WITH_RUNNING_APP_SPEC.md).
 
 ## Pathview action groups
 
-Each Pathview exposes three independent Boolean properties for future
-configuration integration. All default to `false` and are not currently read
-from, written to, or editable in a configuration file or user interface.
+The gear button at the far left of the top toolbar opens the Configuration
+dialog. Its three checkboxes change independent settings for all Pathviews.
+Apply saves the settings and immediately updates open Pathviews; newly opened
+Pathviews use the same settings. Cancel or closing the dialog makes no changes.
+
+The settings are stored in `%APPDATA%\KIS Explorer\KIS Explorer Configuration.kisexplorer.json`.
+On first startup the file is created with all flags set to `false`:
+
+```json
+{
+  "_type": "KIS Explorer Configuration",
+  "_version": "1.01",
+  "Interface": {
+    "ShowDirectoryRowActionButtons": false,
+    "ShowDirectoryColumnActionButtons": false,
+    "ShowSelectedItemsActionButtons": false
+  }
+}
+```
+
+All three flags, the type, version and Interface object are required. Invalid,
+unreadable or unsupported configuration is reported at startup and left
+untouched. Unknown properties are retained when saving. Saving uses a temporary
+file followed by replacement; on failure the previous settings remain active
+and an error is reported. The file is loaded at startup, not monitored for
+external changes during a session.
 
 | Property | When `true` |
 | --- | --- |
-| `ShowPathActionButtons` | Shows Move mark item, Rename and Relocate on the right of the path header. Other header controls, including the color picker, retain their normal visibility. |
-| `ShowSelectedActionButtons` | Shows the complete FOR SELECTED row above the content table. When false, the row and its spacing are collapsed. |
-| `ShowDirectoryActionButtons` | Shows the New, clipboard paste and transfer buttons under DIRECTORY. The sidebar, heading, counts and status remain visible when false. |
+| `ShowDirectoryRowActionButtons` | Shows Move mark item, Rename and Relocate on the right of the path header. Other header controls, including the color picker, retain their normal visibility. |
+| `ShowDirectoryColumnActionButtons` | Shows the New, clipboard paste and transfer buttons under DIRECTORY. The sidebar, heading, counts and status remain visible when false. |
+| `ShowSelectedItemsActionButtons` | Shows the complete FOR SELECTED row above the content table. When false, the row and its spacing are collapsed. |
 
-The properties affect only their Pathview; changing one does not change the
-other two or other Pathviews. Hidden buttons remain available internally for
-the corresponding context-menu actions. No persistence or migration is
-implemented for these properties yet.
+The checkboxes do not affect one another. Hidden buttons remain available
+internally for the corresponding context-menu actions.
 
 ## Use cases
 
 The application always has one active use case during normal operation. It
 loads and activates `default` at startup. The active use case icon and name
-appear at the left of the top toolbar before the navigation buttons. The icon
+appear after the configuration button and before the navigation buttons. The icon
 opens [UseCasesView](UseCasesView.md), where use cases can be created,
 renamed, deleted, inspected, and activated. The default use case file is:
 

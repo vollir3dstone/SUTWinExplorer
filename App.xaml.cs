@@ -15,6 +15,8 @@ public partial class App : Application
 
 	internal UseCaseStore UseCaseStore { get; private set; } = null!;
 	internal UseCaseConfiguration ActiveUseCase { get; private set; } = null!;
+	internal ExplorerConfigurationStore ConfigurationStore { get; private set; } = null!;
+	internal ExplorerConfiguration Configuration { get; set; } = ExplorerConfiguration.CreateDefault();
 
 	internal void SetActiveUseCase(UseCaseStore store, UseCaseConfiguration useCase)
 	{
@@ -36,6 +38,8 @@ public partial class App : Application
 			}
 
 			var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KIS Explorer");
+			ConfigurationStore = new ExplorerConfigurationStore(directory);
+			Configuration = ConfigurationStore.LoadOrCreate();
 			var cacheDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KIS Explorer");
 			ShellIconProvider.InitializeCache(Path.Combine(cacheDirectory, "IconCache.json"));
 			_iconChangeObserver = new IconChangeObserver(ShellIconProvider.Cache!, Dispatcher);

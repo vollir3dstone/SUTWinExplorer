@@ -79,6 +79,10 @@ one-test-file-per-subject partition. Important examples are:
 - `SutShell.Tests.ps1` covers Shell access; `SutContextMenuFactory.Tests.ps1`,
 	`DirectoryLocationDialog.Tests.ps1` and `SortOrderBaseline.Tests.ps1` cover
 	components or their baseline behavior.
+- `ExplorerConfiguration.Tests.ps1` checks configuration creation, validation,
+	atomic saving and preservation of unknown fields. `ConfigurationDialog.Tests.ps1`
+	checks dialog cancellation and application across existing and new Pathviews,
+	using an isolated configuration directory.
 - `RenameActions.Tests.ps1`, `MoveActions.Tests.ps1`, `CopyActions.Tests.ps1`,
 	`LinkActions.Tests.ps1` and `RelocateActions.Tests.ps1` group action cases.
 	New item, delete, properties and item clipboard have their own action tests;
