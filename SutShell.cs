@@ -8,6 +8,8 @@ using System.Windows.Media;
 
 namespace SUTWinExplorer;
 
+internal enum ClipboardOperation { Copy, Move, Link }
+
 internal static class SutShell
 {
     private static readonly ConcurrentDictionary<string, DirectoryIconSession> DirectoryIcons = new(StringComparer.OrdinalIgnoreCase);
@@ -308,18 +310,51 @@ internal static class SutShell
 
     internal static bool ClipboardContainsItems()
     {
-        return TryGetClipboardCopyPaths(out _);
+        return TryGetClipboardOperation(out _, out _);
     }
 
     internal static void PasteFromClipboard(string path, IntPtr owner)
     {
-        if (!TryGetClipboardCopyPaths(out var paths))
-            throw new InvalidOperationException("The clipboard does not contain a supported copy operation.");
-        ShellFileOperations.Copy(paths, path, owner, new List<string>());
+        ExecuteClipboardTransfer(path, owner, null, null, new List<string>(), new List<(string, string)>());
     }
 
-    private static bool TryGetClipboardCopyPaths(out string[] paths)
+    internal static bool TryGetClipboardOperation(out ClipboardOperation operation, out uint sequence)
     {
+        sequence = GetClipboardSequenceNumber();
+        return TryGetClipboardData(out operation, out _) && sequence == GetClipboardSequenceNumber();
+    }
+
+    internal static void ExecuteClipboardTransfer(string path, IntPtr owner, ClipboardOperation? expected, uint? expectedSequence,
+        IList<string> insertedPaths, IList<(string OldPath, string NewPath)> movedDirectories)
+    {
+        var sequence = GetClipboardSequenceNumber();
+        Marshal.ThrowExceptionForHR(OleGetClipboard(out var source));
+        if (!TryGetClipboardData(out var operation, out var paths) || sequence != GetClipboardSequenceNumber() ||
+            (expected is not null && operation != expected) || (expectedSequence is not null && sequence != expectedSequence))
+            throw new InvalidOperationException("The clipboard operation is no longer available.");
+
+        switch (operation)
+        {
+            case ClipboardOperation.Copy:
+                ShellFileOperations.Copy(paths, path, owner, insertedPaths);
+                break;
+            case ClipboardOperation.Link:
+                ShellFileOperations.Link(paths, path, insertedPaths);
+                break;
+            case ClipboardOperation.Move:
+                ShellFileOperations.Move(paths, path, owner, insertedPaths, movedDirectories, requireComplete: true);
+                try { ShellDragDrop.ReportPasteSucceeded(source); }
+                catch (Exception exception) when (exception is ExternalException or NotImplementedException)
+                {
+                    throw new InvalidOperationException("The items were moved, but the clipboard source did not accept the completion notification.", exception);
+                }
+                break;
+        }
+    }
+
+    private static bool TryGetClipboardData(out ClipboardOperation operation, out string[] paths)
+    {
+        operation = default;
         paths = [];
         try
         {
@@ -329,13 +364,28 @@ internal static class SutShell
                 data.GetData("Preferred DropEffect", false) is not MemoryStream effect)
                 return false;
             var bytes = effect.ToArray();
-            if (bytes.Length < sizeof(uint) || (BitConverter.ToUInt32(bytes, 0) is not (1 or 5)))
+            if (bytes.Length < sizeof(uint))
+                return false;
+            operation = BitConverter.ToUInt32(bytes, 0) switch
+            {
+                1 or 5 => ClipboardOperation.Copy,
+                2 => ClipboardOperation.Move,
+                4 => ClipboardOperation.Link,
+                _ => (ClipboardOperation)(-1)
+            };
+            if ((int)operation == -1)
                 return false;
             paths = items;
             return true;
         }
         catch (ExternalException) { return false; }
     }
+
+    [DllImport("ole32.dll", PreserveSig = true)]
+    private static extern int OleGetClipboard(out System.Runtime.InteropServices.ComTypes.IDataObject data);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetClipboardSequenceNumber();
 
     internal static void Move(IReadOnlyList<string> paths, string destination, IntPtr owner, IList<string> insertedPaths) =>
         ShellFileOperations.Move(paths, destination, owner, insertedPaths);

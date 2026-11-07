@@ -9,6 +9,26 @@ internal static class ShellDragDrop
 {
     private static readonly short DropDescriptionFormat = unchecked((short)RegisterClipboardFormat("DropDescription"));
 
+    internal static void ReportPasteSucceeded(IDataObject data)
+    {
+        var memory = GlobalAlloc(0x0042, sizeof(uint));
+        if (memory == IntPtr.Zero)
+            throw new OutOfMemoryException();
+        try
+        {
+            var pointer = GlobalLock(memory);
+            if (pointer == IntPtr.Zero)
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+            try { Marshal.WriteInt32(pointer, 2); }
+            finally { _ = GlobalUnlock(memory); }
+            var format = new FORMATETC { cfFormat = unchecked((short)RegisterClipboardFormat("Paste Succeeded")), dwAspect = DVASPECT.DVASPECT_CONTENT, lindex = -1, tymed = TYMED.TYMED_HGLOBAL };
+            var medium = new STGMEDIUM { tymed = TYMED.TYMED_HGLOBAL, unionmember = memory };
+            data.SetData(ref format, ref medium, true);
+            memory = IntPtr.Zero;
+        }
+        finally { if (memory != IntPtr.Zero) _ = GlobalFree(memory); }
+    }
+
     internal static void SetDropDescription(IDataObject data, DragDropEffects effect, bool rejectedMove)
     {
         var (imageType, message) = effect switch

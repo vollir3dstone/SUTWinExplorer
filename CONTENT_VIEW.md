@@ -437,13 +437,11 @@ does not start a transfer and leaves the staged state available. See the
 for the full rules, error behavior, and acceptance criteria.
 
 The app-owned workflows do not use or change the Shell clipboard. Item clipboard copy
-copies the selected filesystem items to the clipboard; Item clipboard paste copies
-eligible clipboard items to the current directory. Cut, Link and clipboard data
-without an identifiable supported Copy effect are rejected without changing the
-source or clipboard. A Copy effect that also permits Link is accepted, but only
-a copy is performed.
+copies the selected filesystem items to the clipboard; Item clipboard paste performs
+the requested Copy, Cut/Move or explicit Link in the current directory. Copy with Link
+also permitted is treated as Copy; other combined, missing or unsupported effects are rejected.
 Item clipboard copy is in the same selection-row group as Name and Path clipboard copy;
-Item clipboard paste is in the DIRECTORY column before the Link group. Item clipboard paste is enabled for supported filesystem Copy data
+Item clipboard paste is in the DIRECTORY column before the Link group. Item clipboard paste is enabled for supported filesystem clipboard data
 and an existing destination directory. These clipboard actions and
 external clipboard operations do not alter any prepared workflow.
 
@@ -742,12 +740,15 @@ rollback is performed after a partial transfer.
 
 Toolbar and Base Menu Item clipboard copy invoke the Shell Copy verb. Item clipboard
 paste validates the clipboard's file paths and preferred drop effect again at
-execution, then explicitly copies the captured paths using `IFileOperation`.
+execution, then performs Copy, Move or explicit Link. A completed Move reports
+success to the original clipboard source; a rejected notification is reported
+after the move. Partial or canceled moves do not report success.
 It does not invoke the Shell Paste verb. Clipboard changes update Item clipboard
 paste availability but do not prepare, cancel, or replace internal transfers.
-When supported clipboard Copy data is available, directory-item and background
-Content Menus offer Item clipboard paste at the top, targeting the clicked or
-current directory respectively. Native Paste is excluded from those menus.
+When supported clipboard data is available, directory-item and background Content
+Menus offer the matching operation at the top, targeting the clicked or current
+directory respectively. The menu rejects an action if the clipboard changed after
+it was built. Native Paste is excluded from those menus.
 
 Rename is enabled for exactly one selected filesystem item and starts the
 Shell inline editor. Do not invoke the selection `IContextMenu` with the

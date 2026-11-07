@@ -307,10 +307,10 @@ try {
             try { $null = $controllerShow.Invoke($controller, [object[]] @($target, $ownerHandle, $true)) }
             finally { $menuProbe.Dispose() }
             $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-            $menuProbe.SelectLabel = 'Item clipboard paste'
+            $menuProbe.SelectLabel = 'Copy clipboard item here'
             try {
                 $null = $controllerShow.Invoke($controller, [object[]] @($target, $ownerHandle, $true))
-                Assert-True ($menuProbe.Items[0] -ceq 'Item clipboard paste' -and $menuProbe.SelectIndex -eq 0 -and
+                Assert-True ($menuProbe.Items[0] -ceq 'Copy clipboard item here' -and $menuProbe.SelectIndex -eq 0 -and
                     ($menuProbe.States[1] -band 0x800) -ne 0 -and $menuProbe.Items[2] -ceq 'Abort transfer' -and
                     $menuProbe.Items[3] -ceq 'Insert copy of marked item') "Incorrect clipboard content menu for background=$background`: items=$($menuProbe.Items -join '|'), index=$($menuProbe.SelectIndex), states=$($menuProbe.States -join ',')."
             } finally { $menuProbe.Dispose() }
@@ -338,7 +338,61 @@ try {
         $cutData.SetFileDropList($cutPaths)
         $cutData.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] 2)))
         [System.Windows.Clipboard]::SetDataObject($cutData, $true)
-        Assert-True (@($createTransfers.Invoke($view, [object[]] @([string] $targetDirectory))).Count -eq 0) 'Clipboard Cut appeared as a Copy paste action.'
+        $cutActions = @($createTransfers.Invoke($view, [object[]] @([string] $targetDirectory)))
+        Assert-True ($cutActions.Count -eq 1 -and $cutActions[0].Id -ceq 'ClipboardItemMove' -and $cutActions[0].Label -ceq 'Move cut item here') 'Clipboard Cut did not offer the Move action.'
+        $shellType = $assembly.GetType('SUTWinExplorer.SutShell', $true)
+        $pasteClipboard = $shellType.GetMethod('PasteFromClipboard', $factoryFlags)
+        $getClipboardOperation = $shellType.GetMethod('TryGetClipboardOperation', $factoryFlags)
+        $executeClipboard = $shellType.GetMethod('ExecuteClipboardTransfer', $factoryFlags)
+        $getLinkTarget = $assembly.GetType('SUTWinExplorer.ShellFileOperations', $true).GetMethod('GetLinkTarget')
+        foreach ($case in @(@('copy', 1, 'ClipboardItemCopy', 'Copy clipboard item here'),
+            @('shell-copy', 5, 'ClipboardItemCopy', 'Copy clipboard item here'),
+            @('move', 2, 'ClipboardItemMove', 'Move cut item here'),
+            @('link', 4, 'ClipboardItemLink', 'Link to externally selected item'),
+            @('mixed', 3, '', ''), @('all', 7, '', ''), @('none', 0, '', ''), @('missing', -1, '', ''))) {
+            $name, $effect, $expectedId, $expectedLabel = $case
+            $sourceFile = [string] (Join-Path $directory ("clipboard-case-$name.txt"))
+            [IO.File]::WriteAllText($sourceFile, $name)
+            $data = [System.Windows.DataObject]::new()
+            $paths = [System.Collections.Specialized.StringCollection]::new()
+            $null = $paths.Add($sourceFile)
+            $data.SetFileDropList($paths)
+            if ($effect -ge 0) { $data.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] $effect))) }
+            [System.Windows.Clipboard]::SetDataObject($data, $false)
+            $actions = @($createTransfers.Invoke($view, [object[]] @([string] $targetDirectory)))
+            if (-not $expectedId) {
+                Assert-True ($actions.Count -eq 0) "Unsupported $name clipboard effect exposed an action."
+                continue
+            }
+            Assert-True ($actions.Count -eq 1 -and $actions[0].Id -ceq $expectedId -and $actions[0].Label -ceq $expectedLabel) "Incorrect action for $name."
+            try { $null = $pasteClipboard.Invoke($null, [object[]] @([string] $targetDirectory, $ownerHandle)) }
+            catch {
+                if ($name -ne 'move' -or -not $_.Exception.ToString().Contains('The items were moved, but the clipboard source did not accept')) { throw "Clipboard $name failed: $($_.Exception)" }
+            }
+            $targetName = [IO.Path]::GetFileName($sourceFile)
+            if ($name -eq 'link') { $targetName += ' - Shortcut.lnk' }
+            $targetFile = Join-Path $targetDirectory $targetName
+            Assert-True ([IO.File]::Exists($targetFile) -and ([IO.File]::Exists($sourceFile) -eq ($name -ne 'move'))) "Incorrect clipboard transfer for $name."
+            if ($name -eq 'link') { Assert-True ($getLinkTarget.Invoke($null, [object[]] @([string] $targetFile)) -ceq $sourceFile) 'Clipboard shortcut has the wrong target.' }
+        }
+        $staleSource = [string] (Join-Path $directory 'stale-clipboard.txt')
+        [IO.File]::WriteAllText($staleSource, 'stale')
+        $data = [System.Windows.DataObject]::new()
+        $paths = [System.Collections.Specialized.StringCollection]::new()
+        $null = $paths.Add($staleSource)
+        $data.SetFileDropList($paths)
+        $data.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] 1)))
+        [System.Windows.Clipboard]::SetDataObject($data, $true)
+        $operationArgs = [object[]] @($null, [uint32] 0)
+        Assert-True ([bool] $getClipboardOperation.Invoke($null, $operationArgs)) 'Could not capture clipboard operation.'
+        [System.Windows.Clipboard]::SetDataObject($data, $true)
+        $inserted = [System.Collections.Generic.List[string]]::new()
+        $moved = [System.Collections.Generic.List[System.ValueTuple[string,string]]]::new()
+        try {
+            $null = $executeClipboard.Invoke($null, [object[]] @([string] $targetDirectory, $ownerHandle, $operationArgs[0], $operationArgs[1], $inserted, $moved))
+            throw 'A stale clipboard operation was accepted.'
+        } catch { if ($_.Exception.GetBaseException() -isnot [InvalidOperationException]) { throw } }
+        Assert-True ([IO.File]::Exists($staleSource) -and -not [IO.File]::Exists((Join-Path $targetDirectory 'stale-clipboard.txt'))) 'A stale clipboard operation changed files.'
         [System.Windows.Clipboard]::SetText('no clipboard files')
         foreach ($operation in @('Link', 'Copy', 'Move')) {
             foreach ($background in @($false, $true)) {

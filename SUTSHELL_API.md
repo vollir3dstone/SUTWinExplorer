@@ -23,7 +23,7 @@ Shell helpers directly.
 | `Open(path)` | Opens an item using the OS shell. |
 | `Link(paths, destination, insertedPaths)` | Create Shell shortcuts for the selected paths in the destination, without overwriting existing items. Appends created paths; a later failure can leave earlier shortcuts in place. |
 | `Copy(paths, destination, owner, insertedPaths)` / `Move(...)` | Run the native transfer operation and append actual destination paths reported by the Shell to the caller's mutable list. Only direct children of the destination are collected. Failures propagate and a transfer is not atomic; the list can contain items completed before a failure. |
-| `CopyToClipboard(paths, owner)` / `ClipboardContainsItems()` / `PasteFromClipboard(path, owner)` | Copy items to the Shell clipboard, check for supported filesystem Copy data, or copy its captured paths to the destination. Paste rechecks the clipboard and rejects Cut, Link-only, missing and ambiguous effects; it never invokes the Shell Paste verb. |
+| `CopyToClipboard(paths, owner)` / `ClipboardContainsItems()` / `PasteFromClipboard(path, owner)` | Copy items to the Shell clipboard, check for supported filesystem data, or perform its requested Copy, Move or explicit Link. Copy with Link permitted is treated as Copy; other combined and missing effects are rejected. A complete Move reports success to the original source; failure to report is surfaced after the move. Paste never invokes the Shell Paste verb. |
 | `Delete(paths, owner)` | Delete selected filesystem items using `IFileOperation`, requesting recycling and undo. Rejects drive/share roots; the Shell controls confirmation and may not support recycling for every location. Failures and cancellation propagate, and deletion is not atomic. |
 | `ShowItemMenu(paths, owner, rename)` / `ShowBackgroundMenu(path, owner)` | Show a native Windows context menu for one or more items from the same directory, or for a folder background. The optional single-item rename callback starts the caller's editor. |
 | `ShowNewMenu(path, owner, x, y)` / `ShowProperties(paths, owner)` | Show the native background New submenu as the explicit Windows fallback, or invoke the Shell properties command for one or more selected items in the same directory. The normal New action uses the application dialog and `NewItemOperations`. |
@@ -290,7 +290,7 @@ and resumes when it is visible again.
 A newer refresh cancels previous requests and cannot be overwritten by their
 results. A slow OS call can still delay completion of its batch. ContentView
 supports multiple selection, its own inline rename editor, Shell-backed Delete,
-clipboard Copy and copy-only Paste, and left-button filesystem drag-and-drop.
+clipboard Copy and effect-specific Paste, and left-button filesystem drag-and-drop.
 The Sub directories list also supports drag-and-drop, using the clicked folder
 as its source rather than a persistent selection. Its menu or keyboard selection
 is temporary. The **Active path and siblings** tree accepts drops on filesystem

@@ -57,7 +57,7 @@ appear in tooltips and Base Menus; the buttons use these compact labels and symb
 | **Name clipboard copy** | `Name` + Clipboard copy icon (clipboard with a left-pointing arrow) | Copies selected filesystem names as text. |
 | **Path clipboard copy** | `Path` + Clipboard copy icon | Copies selected full filesystem paths as text. |
 | **Item clipboard copy** | `Item` + Clipboard copy icon | Copies selected files and directories to the Windows clipboard. |
-| **Item clipboard paste** | `Item` + Clipboard paste icon (clipboard with a right-pointing arrow) | Copies supported clipboard files and directories into the current directory; Cut and Link are rejected. |
+| **Item clipboard paste** | `Item` + Clipboard paste icon (clipboard with a right-pointing arrow) | Copies, moves or links supported clipboard files and directories into the current directory, according to the requested effect. |
 
 The three Clipboard copy buttons are grouped in the selection row. Item clipboard
 paste is in the directory column before the transfer buttons. These actions are
@@ -431,15 +431,18 @@ may show its requested row in light gray without changing the active selection.
   Shell shortcut for each source, without modifying it; existing names are not
   overwritten. Copy uses native file copy and Move uses native file move.
   **Item clipboard copy** copies selected files and directories to the Windows clipboard;
-  **Item clipboard paste** copies supported clipboard filesystem items into the current directory.
-  When supported Copy data is available, directory-item and background Content
-  Menus offer Item clipboard paste first, followed by a separator. It targets the
+  **Item clipboard paste** performs the supported clipboard operation in the current directory.
+  When supported clipboard data is available, directory-item and background Content
+  Menus offer **Copy clipboard item here**, **Move cut item here**, or **Link to
+  externally selected item** first, followed by a separator. It targets the
   clicked directory or the current directory respectively. Native Paste is
   excluded from these Content Menus.
   Item clipboard copy is in the selection-row group with Name and Path clipboard copy; Item clipboard paste is in the directory
-  column before the Link group and is enabled for a supported clipboard Copy and an
-  existing destination directory. Cut, Link-only and missing or ambiguous drop effects
-  are rejected. Copy with Link also permitted is accepted but always performs a copy.
+  column before the Link group and is enabled for a supported clipboard operation and an
+  existing destination directory. Only an explicit Link effect creates a shortcut.
+  Copy with Link also permitted is treated as Copy; other combined or missing effects
+  are rejected. After a complete Move, the original clipboard source is notified;
+  a notification failure is reported as occurring after the move.
   These actions are independent of all prepared transfers. Internal Mark item, Execute
   and Abort do not change the clipboard, and external clipboard operations do not
   change any internal transfer state. Staging records paths only: it does not keep

@@ -140,15 +140,14 @@ public partial class ContentView : UserControl
         var copy = CopyWorkflowState.Shared.IsPrepared;
         var move = MoveWorkflowState.Shared.IsPrepared;
         var actions = new List<ShellMenuAction>();
-        if (Directory.Exists(destination) && SutShell.ClipboardContainsItems())
+        if (Directory.Exists(destination) && SutShell.TryGetClipboardOperation(out var clipboardOperation, out var clipboardSequence))
         {
-            actions.Add(new ShellMenuAction("ItemClipboardPaste", "Item clipboard paste", true, () =>
+            var (id, label) = ClipboardAction(clipboardOperation);
+            actions.Add(new ShellMenuAction(id, label, true, () =>
             {
                 try
                 {
-                    var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
-                    try { SutShell.PasteFromClipboard(destination, owner); }
-                    finally { Refresh(true); }
+                    ExecuteClipboardTransfer(destination, clipboardOperation, clipboardSequence);
                 }
                 catch (OperationCanceledException) { }
                 catch (Exception exception)
@@ -178,6 +177,34 @@ public partial class ContentView : UserControl
             SeparatorBefore: actions.Count > 0));
         actions.Add(execute);
         return actions;
+    }
+
+    private static (string Id, string Label) ClipboardAction(ClipboardOperation operation) => operation switch
+    {
+        ClipboardOperation.Copy => ("ClipboardItemCopy", "Copy clipboard item here"),
+        ClipboardOperation.Move => ("ClipboardItemMove", "Move cut item here"),
+        ClipboardOperation.Link => ("ClipboardItemLink", "Link to externally selected item"),
+        _ => throw new ArgumentOutOfRangeException(nameof(operation))
+    };
+
+    private void ExecuteClipboardTransfer(string destination, ClipboardOperation? expected = null, uint? sequence = null)
+    {
+        var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
+        var inserted = new List<string>();
+        var movedDirectories = new List<(string OldPath, string NewPath)>();
+        try
+        {
+            RunDirectoryOperation(() =>
+            {
+                try { SutShell.ExecuteClipboardTransfer(destination, owner, expected, sequence, inserted, movedDirectories); }
+                finally
+                {
+                    foreach (var (oldPath, newPath) in movedDirectories)
+                        DirectoryRenamed?.Invoke(oldPath, newPath);
+                }
+            });
+        }
+        finally { RevealInsertedItems(inserted); Refresh(true); }
     }
 
     private IReadOnlyList<ShellMenuAction> CreateContextMenuActionsForContext(bool background)
@@ -1102,8 +1129,7 @@ public partial class ContentView : UserControl
                     SutShell.CopyToClipboard(selectedPaths, owner);
                     break;
                 case "ItemClipboardPaste":
-                    try { SutShell.PasteFromClipboard(CurrentPath, owner); }
-                    finally { Refresh(true); }
+                    ExecuteClipboardTransfer(CurrentPath);
                     break;
                 case "LinkMarkItem":
                     if (CopyWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared)
@@ -1154,7 +1180,7 @@ public partial class ContentView : UserControl
                     break;
             }
         }
-        catch (OperationCanceledException) when (action == "Delete")
+        catch (OperationCanceledException) when (action is "Delete" or "ItemClipboardPaste")
         {
         }
         catch (Exception exception)
@@ -1242,8 +1268,14 @@ public partial class ContentView : UserControl
         MoveAbortButton.IsEnabled = movePrepared;
     }
 
-    private void UpdateClipboardButton() =>
-        ItemClipboardPasteButton.IsEnabled = Directory.Exists(CurrentPath) && SutShell.ClipboardContainsItems();
+    private void UpdateClipboardButton()
+    {
+        var available = SutShell.TryGetClipboardOperation(out var operation, out _);
+        ItemClipboardPasteButton.IsEnabled = Directory.Exists(CurrentPath) && available;
+        var label = available ? ClipboardAction(operation).Label : "Item clipboard paste";
+        ItemClipboardPasteButton.ToolTip = label;
+        System.Windows.Automation.AutomationProperties.SetName(ItemClipboardPasteButton, label);
+    }
 
     private void FileList_SizeChanged(object sender, SizeChangedEventArgs e)
     {

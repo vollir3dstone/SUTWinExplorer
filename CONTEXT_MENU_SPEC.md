@@ -190,7 +190,7 @@ application actions where appropriate:
 | Context | Application additions and ordering |
 | --- | --- |
 | ContentView item selection | Shell `Open`, `Open in running app...`, Shell `Open with`, then remaining eligible Shell entries. Clipboard paste and prepared transfer actions for a directory precede this group when available. Missing Shell Open/Open with commands have disabled placeholders. The running-app submenu is built for the selection and available windows; it is disabled when no eligible window exists or a directory is selected. |
-| Directory item | Supported clipboard Copy data adds `Item clipboard paste` first, followed by a separator. A prepared transfer adds `Abort transfer` and the matching execute command before the remaining menu. The clicked directory is the destination. This applies to directory rows and sidebar directory items. |
+| Directory item | Supported clipboard data adds its Copy, Move or explicit Link action first, followed by a separator. A prepared transfer adds `Abort transfer` and the matching execute command before the remaining menu. The clicked directory is the destination. This applies to directory rows and sidebar directory items. |
 | Active directory background | The same clipboard paste and prepared transfer actions appear in the same order, targeting the active directory. The filtered Shell background commands include application-owned `New` in place of Windows New. |
 | Selection containing a `.lnk` | Application `Open parent` replaces Shell Open file location, or is appended when Windows does not supply it; it is enabled only for one selected item. |
 
@@ -359,10 +359,11 @@ requires a deletable directory and no prepared transfer. Drive roots have no
 editable Shell name and cannot be deleted. A missing or virtual target can fall
 back to the native background menu rather than the paired menus.
 
-When supported filesystem Copy data is available on the clipboard, the Content
-Menu for a directory item or the active directory background starts with
-`Item clipboard paste`, followed by a separator. The action revalidates the
-clipboard when invoked. When a Link, Copy or Move is prepared, `Abort transfer`
+When supported filesystem data is available on the clipboard, the Content Menu
+for a directory item or active directory background starts with `Copy clipboard
+item here`, `Move cut item here`, or `Link to externally selected item`, followed
+by a separator. The action revalidates the clipboard when invoked and rejects a
+changed clipboard. When a Link, Copy or Move is prepared, `Abort transfer`
 and the matching execute action (`Insert link to marked item`, `Insert copy of
 marked item`, or `Move marked item here`) follow, with their own separator. The
 clicked directory is the destination for an item menu; the active directory is
@@ -411,10 +412,11 @@ that workflow to be prepared. Link, Copy and Move use the application's mutually
 exclusive prepared-operation workflows, not the Windows clipboard: mark item prepares
 selected paths, execute operates in the current folder, and abort clears the
 prepared operation. Item clipboard copy invokes the Shell Copy verb for its selection and
-Item clipboard paste explicitly copies supported clipboard file paths into the current
-directory or the clicked directory for a directory Content Menu. It rejects Cut,
-Link-only and ambiguous clipboard data; a Copy effect that
-also permits Link is accepted but cannot create a link. These actions
+the clipboard action performs the requested Copy, Move or explicit Link into the
+current directory or clicked directory. A Copy effect that also permits Link is
+treated as Copy; other combined, missing or unsupported effects are rejected.
+After a complete Move, the original source receives Shell completion feedback;
+if it rejects feedback, the application reports that the move already occurred. These actions
 and external clipboard operations do not change the internal workflows. Link execute
 creates Shell shortcuts without changing the sources.
 The application-owned New, Link execute, Copy execute and Move execute

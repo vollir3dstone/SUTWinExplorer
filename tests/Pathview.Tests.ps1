@@ -230,7 +230,7 @@ try {
         try { $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true)) }
         finally { $menuProbe.Dispose() }
         $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
-        $menuProbe.SelectLabel = 'Item clipboard paste'
+        $menuProbe.SelectLabel = 'Copy clipboard item here'
         try {
             $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true))
             Assert-True ($menuProbe.SelectIndex -eq 0 -and ($menuProbe.States[1] -band 0x800) -ne 0 -and

@@ -110,9 +110,9 @@ internal static class ShellFileOperations
             (operation, source, destination, sink) => operation.CopyItem(source, destination, null, sink));
 
     public static void Move(IReadOnlyList<string> sourcePaths, string destinationPath, IntPtr ownerWindow, IList<string> insertedPaths,
-        IList<(string OldPath, string NewPath)>? movedDirectories = null) =>
+        IList<(string OldPath, string NewPath)>? movedDirectories = null, bool requireComplete = false) =>
         Transfer(sourcePaths, destinationPath, ownerWindow, "move", insertedPaths,
-            (operation, source, destination, sink) => operation.MoveItem(source, destination, null, sink), movedDirectories);
+            (operation, source, destination, sink) => operation.MoveItem(source, destination, null, sink), movedDirectories, requireComplete);
 
     internal static void MoveDirectoryWithName(string sourcePath, string destinationPath, string newName, IntPtr ownerWindow,
         IList<string> insertedPaths, IList<(string OldPath, string NewPath)> movedDirectories) =>
@@ -235,7 +235,8 @@ internal static class ShellFileOperations
         string operationName,
         IList<string> insertedPaths,
         Func<IFileOperationNative, IShellItemNative, IShellItemNative, IntPtr, int> queueOperation,
-        IList<(string OldPath, string NewPath)>? movedDirectories = null)
+        IList<(string OldPath, string NewPath)>? movedDirectories = null,
+        bool requireComplete = false)
     {
         if (sourcePaths.Count == 0)
             throw new InvalidOperationException($"Select one or more items to {operationName}.");
@@ -245,6 +246,7 @@ internal static class ShellFileOperations
         IFileOperationNative? operation = null;
         IShellItemNative? destination = null;
         var sources = new List<IShellItemNative>(sourcePaths.Count);
+        var initialInsertedCount = insertedPaths.Count;
         var sink = new TransferProgressSink(destinationPath, insertedPaths, movedDirectories);
         var sinkPointer = IntPtr.Zero;
         try
@@ -285,6 +287,9 @@ internal static class ShellFileOperations
             Marshal.ThrowExceptionForHR(operation.GetAnyOperationsAborted(out var operationsAborted));
             if (operationsAborted)
                 throw new OperationCanceledException("The Shell move operation was canceled.");
+            if (requireComplete && (insertedPaths.Count - initialInsertedCount != sourcePaths.Count ||
+                sourcePaths.Any(path => File.Exists(path) || Directory.Exists(path))))
+                throw new InvalidOperationException("The Shell move operation did not complete for every item.");
         }
         finally
         {
