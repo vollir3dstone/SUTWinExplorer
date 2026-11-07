@@ -185,6 +185,18 @@ function Show-SequenceMenu($controller, $row, [IntPtr] $owner, [string] $mode, [
     if (-not $probe.Seen -or $probe.IsBase -ne $expectedBase) { throw "Unexpected menu for $mode`: seen=$($probe.Seen), base=$($probe.IsBase), expected=$expectedBase." }
     if ($mode -eq 'move-right' -and (-not $probe.SecondSeen -or -not $probe.SecondIsBase)) { throw "The right-click after movement did not open a new Base Menu: second=$($probe.SecondSeen), base=$($probe.SecondIsBase), click window=$($probe.ClickWindow)." }
 }
+function Get-MenuIconPixels($menu, [uint32] $command) {
+    $handle = $menu.GetType().GetField('_menu', $flags).GetValue($menu)
+    $item = [ItemMenuProbe+MenuItemInfo]::new()
+    $item.Size = [uint32] [Runtime.InteropServices.Marshal]::SizeOf([type] [ItemMenuProbe+MenuItemInfo])
+    $item.Mask = 0x80
+    if (-not [ItemMenuProbe]::GetMenuItemInfo($handle, $command, $false, [ref] $item) -or $item.Bitmap -eq [IntPtr]::Zero) { throw "Missing icon for command $command." }
+    $bitmap = [ItemMenuProbe+BitmapInfo]::new()
+    if ([ItemMenuProbe]::GetObject($item.Bitmap, [Runtime.InteropServices.Marshal]::SizeOf([type] [ItemMenuProbe+BitmapInfo]), [ref] $bitmap) -eq 0 -or $bitmap.Bits -eq [IntPtr]::Zero -or $bitmap.BitsPixel -ne 32) { throw "Invalid icon for command $command." }
+    $pixels = [byte[]]::new($bitmap.WidthBytes * $bitmap.Height)
+    [Runtime.InteropServices.Marshal]::Copy($bitmap.Bits, $pixels, 0, $pixels.Length)
+    return ,$pixels
+}
 function Assert-ItemMenu($actions, [string[]] $paths, [bool] $background, [IntPtr] $owner) {
     $factory = $assembly.GetType('SUTWinExplorer.SutContextMenuFactory', $true)
     $menu = $factory.GetMethod('GetBaseMenuForContext', $staticFlags).Invoke($null, [object[]] @($paths, $owner, $actions, $background))
@@ -329,6 +341,46 @@ try {
     $owner = [System.Windows.Interop.WindowInteropHelper]::new($window).Handle
     $actions = $view.GetType().GetMethod('CreateContextMenuActions', $flags).Invoke($view, @())
     Assert-ItemMenu $actions ([string[]] @($file, $folder)) $false $owner
+    $factory = $assembly.GetType('SUTWinExplorer.SutContextMenuFactory', $true)
+    $baseMenu = $factory.GetMethod('GetBaseMenuForContext', $staticFlags).Invoke($null, [object[]] @([string[]] @($folder), $owner, $actions, $false))
+    try {
+        $actionIds = @($actions | ForEach-Object Id)
+        $expectedTransferPixels = Get-MenuIconPixels $baseMenu ([uint32] (0x8000 + [Array]::IndexOf($actionIds, 'PrepareCopyToExternal')))
+    } finally { ([IDisposable] $baseMenu).Dispose() }
+    $copy.Prepare([string[]] @($file))
+    try {
+        $contentActions = $view.GetType().GetMethod('CreateContentTransferActions', $flags)
+        foreach ($effect in @(1, 2, 4)) {
+            $data = [System.Windows.DataObject]::new()
+            $paths = [System.Collections.Specialized.StringCollection]::new()
+            [void] $paths.Add($file)
+            $data.SetFileDropList($paths)
+            $data.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] $effect)))
+            Wait-Until {
+                try { [System.Windows.Clipboard]::SetDataObject($data, $true); $true }
+                catch { if ($_.Exception.GetBaseException() -isnot [Runtime.InteropServices.ExternalException]) { throw }; $false }
+            } "set clipboard for content menu icon $effect"
+            $transferActions = $contentActions.Invoke($view, [object[]] @([string] $folder))
+            $ids = @($transferActions | ForEach-Object Id)
+            $transferId = switch ($effect) { 1 { 'ClipboardItemCopy' } 2 { 'ClipboardItemMove' } 4 { 'ClipboardItemLink' } }
+            if ($transferId -notin $ids -or 'AbortTransfer' -notin $ids) { throw "Missing content actions for effect $effect." }
+            foreach ($background in @($false, $true)) {
+                $excluded = [System.Collections.Generic.Dictionary[string,int]]::new()
+                $contentMenu = $factory.GetMethod('GetContentMenuWithTransferActions', $staticFlags).Invoke($null, [object[]] @([string[]] @($folder), $owner, $excluded, $background, $null, $null, $null, $transferActions))
+                try {
+                    $actual = Get-MenuIconPixels $contentMenu ([uint32] (0x8000 + [Array]::IndexOf($ids, $transferId)))
+                    if ([Convert]::ToBase64String($actual) -cne [Convert]::ToBase64String($expectedTransferPixels)) { throw "Incorrect $transferId content menu icon, background=$background." }
+                    if ($effect -in @(2, 4)) {
+                        $abortId = if ($effect -eq 2) { 'AbortClipboardMove' } else { 'AbortClipboardLink' }
+                        if ($abortId -notin $ids) { throw "Missing $abortId action." }
+                        $abortPixels = Get-MenuIconPixels $contentMenu ([uint32] (0x8000 + [Array]::IndexOf($ids, $abortId)))
+                        $internalPixels = Get-MenuIconPixels $contentMenu ([uint32] (0x8000 + [Array]::IndexOf($ids, 'AbortTransfer')))
+                        if ([Convert]::ToBase64String($abortPixels) -cne [Convert]::ToBase64String($internalPixels)) { throw "Incorrect $abortId content menu icon, background=$background." }
+                    }
+                } finally { ([IDisposable] $contentMenu).Dispose() }
+            }
+        }
+    } finally { $copy.Abort() }
     $controller = $view.GetType().GetField('_contextMenu', $flags).GetValue($view)
     $reset = $controller.GetType().GetMethod('Reset', $flags)
     $baseCommands = $controller.GetType().GetField('_baseCommands', $flags)
@@ -506,7 +558,15 @@ try {
         catch { if ($_.Exception.GetBaseException() -isnot [Runtime.InteropServices.ExternalException]) { throw }; $false }
     } 'set clipboard for contention test'
     Wait-Until { $itemClipboardPaste.IsEnabled -and [bool] $containsItems.Invoke($null, @()) } 'clipboard button before contention'
-    $clipboardLock = [ClipboardLock]::new()
+    $lockState = @{ Lock = $null }
+    Wait-Until {
+        try { $lockState.Lock = [ClipboardLock]::new(); $true }
+        catch {
+            if (-not $_.Exception.ToString().Contains('Could not lock the clipboard for the contention test.')) { throw }
+            $false
+        }
+    } 'acquire clipboard for contention test'
+    $clipboardLock = $lockState.Lock
     try {
         $read = $assembly.GetType('SUTWinExplorer.SutShell', $true).GetMethod('TryGetClipboardOperationForUpdate', $staticFlags)
         $readArgs = [object[]] @($null, $false)

@@ -164,7 +164,7 @@
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <TextBlock x:Name="DirectoryCountLabel" Text="-" TextAlignment="Right" Foreground="#596675" />
-                        <TextBlock Grid.Column="1" Text=" dirs" Foreground="#596675" />
+                        <TextBlock Grid.Column="1" Text=" subdir." Foreground="#596675" />
                         <TextBlock x:Name="FileCountLabel" Grid.Row="1" Text="-" TextAlignment="Right" Foreground="#596675" />
                         <TextBlock Grid.Row="1" Grid.Column="1" Text=" files" Foreground="#596675" />
                     </Grid>

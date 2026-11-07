@@ -100,6 +100,7 @@ try {
         $headingPosition = $heading.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
         $dirCount = $view.FindName('DirectoryCountLabel')
         $fileCount = $view.FindName('FileCountLabel')
+        Assert-True (@($dirCount.Parent.Children | Where-Object { $_ -is [System.Windows.Controls.TextBlock] -and $_.Text -ceq ' subdir.' }).Count -eq 1) 'The subdirectory count label is incorrect.'
         $expectedDirs = @([IO.Directory]::EnumerateDirectories($directory)).Count
         $expectedFiles = @([IO.Directory]::EnumerateFiles($directory)).Count
         Assert-True ($dirCount.Text -eq "$expectedDirs" -and $fileCount.Text -eq "$expectedFiles" -and

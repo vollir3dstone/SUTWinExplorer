@@ -75,7 +75,8 @@ internal static class ShellMenuIcons
         var button = action.IconSource;
         if (action.MenuImage is { } imageSource)
             icon = new Image { Source = imageSource, Width = 16, Height = 16, Stretch = Stretch.Uniform };
-        else if (action.Id is "PrepareCopyToExternal" or "PrepareLinkingFromExternal" or "PrepareMoveToExternal")
+        else if (action.Id is "PrepareCopyToExternal" or "PrepareLinkingFromExternal" or "PrepareMoveToExternal" or
+            "ClipboardItemCopy" or "ClipboardItemMove" or "ClipboardItemLink")
             icon = new Image { Source = ExternalTransferIcon.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
         else if (button?.Content is StackPanel panel && panel.Children.OfType<Control>().FirstOrDefault() is { Template: not null } source)
             icon = new Control { Template = source.Template, Width = 14, Height = 14, Foreground = SystemColors.MenuTextBrush };
@@ -86,7 +87,7 @@ internal static class ShellMenuIcons
                 return IntPtr.Zero;
             icon = new TextBlock { Text = text[prefixLength..], FontFamily = button.FontFamily, FontSize = button.FontSize, Foreground = SystemColors.MenuTextBrush };
         }
-        else if (action.Id is "Properties" or "Rename" or "Relocate" or "AbortTransfer")
+        else if (action.Id is "Properties" or "Rename" or "Relocate" or "AbortTransfer" or "AbortClipboardMove" or "AbortClipboardLink")
         {
             var glyph = action.Id switch { "Properties" => "\uE946", "Rename" => "\uE70F", "Relocate" => "\uE8DE", _ => "\uE711" };
             icon = new TextBlock { Text = glyph, FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = 14, Foreground = SystemColors.MenuTextBrush };
