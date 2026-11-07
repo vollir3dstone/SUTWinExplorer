@@ -9,6 +9,8 @@ namespace SUTWinExplorer;
 /// </summary>
 public partial class App : Application
 {
+	static App() => LocalizedText.ApplyProcessLanguageSelection(LanguageSelection.English);
+
 	private Mutex? _instanceMutex;
 	private bool _ownsInstanceMutex;
 	private IconChangeObserver? _iconChangeObserver;
@@ -40,6 +42,7 @@ public partial class App : Application
 			var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KIS Explorer");
 			ConfigurationStore = new ExplorerConfigurationStore(directory);
 			Configuration = ConfigurationStore.LoadOrCreate();
+			LocalizedText.ApplyProcessLanguageSelection(Configuration.Interface.LanguageSelection);
 			LocalizedText.ApplyLanguageSelection(Configuration.Interface.LanguageSelection, System.Globalization.CultureInfo.CurrentUICulture);
 			var cacheDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KIS Explorer");
 			ShellIconProvider.InitializeCache(Path.Combine(cacheDirectory, "IconCache.json"));

@@ -14,6 +14,24 @@ internal static class LocalizedText
     internal static string Get(string id) => Resources.GetString(id) ??
         throw new InvalidOperationException($"Missing string resource: {id}");
 
+    internal static void ApplyProcessLanguageSelection(LanguageSelection selection)
+    {
+        var languages = selection switch
+        {
+            LanguageSelection.English => "en-US\0\0",
+            LanguageSelection.SystemDefault => null,
+            _ => throw new ArgumentOutOfRangeException(nameof(selection))
+        };
+        if (!SetProcessPreferredUILanguages(0x8, languages, out var count))
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        if (selection == LanguageSelection.English && count == 0)
+            throw new InvalidOperationException("Could not set the process UI language to English.");
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetProcessPreferredUILanguages(uint flags, string? languages, out uint count);
+
     internal static void ApplyLanguageSelection(LanguageSelection selection, CultureInfo systemCulture)
     {
         var culture = selection switch

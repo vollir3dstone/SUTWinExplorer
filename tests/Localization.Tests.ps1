@@ -37,6 +37,31 @@ try {
     if ($SatelliteOnly) {
         $applyLanguage = $assembly.GetType('SUTWinExplorer.LocalizedText', $true).GetMethod('ApplyLanguageSelection', $flags)
         $languageType = $assembly.GetType('SUTWinExplorer.LanguageSelection', $true)
+        $applyProcessLanguage = $assembly.GetType('SUTWinExplorer.LocalizedText', $true).GetMethod('ApplyProcessLanguageSelection', $flags)
+        Add-Type @'
+using System.Runtime.InteropServices;
+public static class ProcessLanguageProbe
+{
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetProcessPreferredUILanguages(uint flags, out uint count, [Out] char[] languages, ref uint size);
+}
+'@
+        function Get-NativeProcessLanguages {
+            [uint32] $count = 0
+            [uint32] $size = 0
+            if (-not [ProcessLanguageProbe]::GetProcessPreferredUILanguages(0x8, [ref] $count, $null, [ref] $size)) { throw 'Could not query process UI languages.' }
+            $buffer = [char[]]::new($size)
+            if (-not [ProcessLanguageProbe]::GetProcessPreferredUILanguages(0x8, [ref] $count, $buffer, [ref] $size)) { throw 'Could not read process UI languages.' }
+            return (-join $buffer).TrimEnd([char] 0)
+        }
+        $applyProcessLanguage.Invoke($null, [object[]] @([Enum]::Parse($languageType, 'SystemDefault'))) | Out-Null
+        [Runtime.CompilerServices.RuntimeHelpers]::RunClassConstructor($assembly.GetType('SUTWinExplorer.App', $true).TypeHandle)
+        if ((Get-NativeProcessLanguages) -cne 'en-US') { throw 'English process UI language was not applied before App construction.' }
+        $applyProcessLanguage.Invoke($null, [object[]] @([Enum]::Parse($languageType, 'SystemDefault'))) | Out-Null
+        if ((Get-NativeProcessLanguages) -cne '') { throw 'System default did not clear the process UI languages.' }
+        $applyProcessLanguage.Invoke($null, [object[]] @([Enum]::Parse($languageType, 'English'))) | Out-Null
+        if ((Get-NativeProcessLanguages) -cne 'en-US') { throw 'English process UI language was not applied.' }
         $originalDefaultCulture = [System.Globalization.CultureInfo]::DefaultThreadCurrentUICulture
         try {
             $systemCulture = [System.Globalization.CultureInfo]::GetCultureInfo('de-DE')

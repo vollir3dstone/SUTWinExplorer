@@ -33,10 +33,16 @@ a changed selection takes effect when the application is restarted.
 
 There is no live language switching. XAML strings are
 resolved when controls are created; menu and dialog strings are resolved when
-those are created. With English selected, Shell menus request English from the
-Windows resource loader while they are created and displayed. Windows and Shell
-extensions may still use another language when English is unavailable or they
-use their own language settings. Operating-system error messages come from
+those are created. At startup, the application initially sets an English process
+UI language preference before constructing the WPF application. After loading the
+configuration, it clears that preference for System default; for English it also
+requests English on the menu thread while Shell menus are created and displayed.
+With System default, native resources loaded before the preference is cleared
+could remain in English; this has not been verified with an English Windows
+language pack installed.
+Windows and Shell extensions may still use another language when English is
+unavailable or they use their own language settings. The process preference may
+also affect other native UI in the application. Operating-system error messages come from
 Windows. Some lower-level technical error messages remain in English.
 Resource files are compiled into the application; changing them requires a
 rebuild.
