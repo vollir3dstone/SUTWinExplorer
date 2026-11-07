@@ -29,8 +29,8 @@ New-Item -ItemType Directory -Path $directory | Out-Null
 try {
     & git -C $directory init -q
     if ($LASTEXITCODE -ne 0) { throw 'Could not initialize test repository.' }
-    Copy-Item (Join-Path $PSScriptRoot '..\release.ps1') $directory
-    $script = Join-Path $directory 'release.ps1'
+    Copy-Item (Join-Path $PSScriptRoot '..\create_release_notes.ps1') $directory
+    $script = Join-Path $directory 'create_release_notes.ps1'
     $descriptionPath = Join-Path $directory 'ReleaseDescription.txt'
     $releasePath = Join-Path $directory 'RELEASES.html'
     Add-TestCommit $directory 'First & <commit>'
