@@ -1,18 +1,44 @@
+param([switch] $SatelliteOnly)
+
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
-$assembly = [Reflection.Assembly]::Load([IO.File]::ReadAllBytes((Join-Path $PSScriptRoot '..\bin\Debug\net10.0-windows\SUTWinExplorer.dll')))
+$assemblyPath = (Resolve-Path (Join-Path $PSScriptRoot '..\bin\Debug\net10.0-windows\SUTWinExplorer.dll')).Path
+$assembly = if ($SatelliteOnly) { [Reflection.Assembly]::LoadFrom($assemblyPath) } else { [Reflection.Assembly]::Load([IO.File]::ReadAllBytes($assemblyPath)) }
 $flags = [Reflection.BindingFlags]'Static,NonPublic'
 $getText = $assembly.GetType('SUTWinExplorer.LocalizedText', $true).GetMethod('Get', $flags)
-$resources = [xml] [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\Strings.resx'))
+$resources = [xml] [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\Assets\Strings\Strings.resx'))
+$germanResources = [xml] [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\Assets\Strings\Strings.de.resx'))
 $keys = @($resources.root.data | ForEach-Object { $_.name })
 if (@($keys | Select-Object -Unique).Count -ne $keys.Count) { throw 'Duplicate string resource IDs.' }
+$germanKeys = @($germanResources.root.data | ForEach-Object { $_.name })
+if (@($germanKeys | Select-Object -Unique).Count -ne $germanKeys.Count -or
+    @(Compare-Object $keys $germanKeys).Count -ne 0) { throw 'German resource IDs differ from the neutral resource IDs.' }
+$germanValues = @{}
+foreach ($resource in $germanResources.root.data) { $germanValues[$resource.name] = [string] $resource.value }
+$neutralValues = @{}
+foreach ($resource in $resources.root.data) {
+    $neutralValues[$resource.name] = [string] $resource.value
+    $neutralPlaceholders = @([regex]::Matches([string] $resource.value, '\{\d+\}') | ForEach-Object Value | Sort-Object) -join ','
+    $germanPlaceholders = @([regex]::Matches($germanValues[$resource.name], '\{\d+\}') | ForEach-Object Value | Sort-Object) -join ','
+    if ($neutralPlaceholders -cne $germanPlaceholders) { throw "Format placeholders differ for $($resource.name)." }
+}
 $originalCulture = [System.Globalization.CultureInfo]::CurrentUICulture
 try {
-    foreach ($culture in @('en-US', 'de-DE')) {
+    $cultures = if ($SatelliteOnly) { @('en-US', 'de-DE', 'fr-FR') } else { @('en-US') }
+    foreach ($culture in $cultures) {
         [System.Globalization.CultureInfo]::CurrentUICulture = [System.Globalization.CultureInfo]::GetCultureInfo($culture)
         foreach ($key in $keys) {
-            if ([string]::IsNullOrEmpty($getText.Invoke($null, [object[]] @([string] $key)))) { throw "Missing resource $key for $culture." }
+            $value = $getText.Invoke($null, [object[]] @([string] $key))
+            if ([string]::IsNullOrEmpty($value)) { throw "Missing resource $key for $culture." }
+            if ($culture -eq 'de-DE' -and $value -cne $germanValues[$key]) { throw "German resource $key was not loaded for $culture." }
+            if ($culture -ne 'de-DE' -and $value -cne $neutralValues[$key]) { throw "Neutral resource $key was not loaded for $culture." }
         }
+    }
+    if ($SatelliteOnly) {
+        [System.Globalization.CultureInfo]::CurrentUICulture = [System.Globalization.CultureInfo]::GetCultureInfo('de-DE')
+    } else {
+        & (Get-Process -Id $PID).Path -NoProfile -STA -File $PSCommandPath -SatelliteOnly
+        if ($LASTEXITCODE -ne 0) { throw 'Satellite resource validation failed.' }
     }
     foreach ($xaml in @('MainWindow.xaml', 'ExplorerTabView.xaml', 'ContentView.xaml', 'UseCasesView.xaml')) {
         $text = [IO.File]::ReadAllText((Join-Path $PSScriptRoot "..\$xaml"))

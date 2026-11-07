@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms</value></resheader>
+  <data name="BaseMenu_Action_Properties" xml:space="preserve"><value>Eigenschaften</value></data>
+  <data name="BaseMenu_Action_PrepareCopyToExternal" xml:space="preserve"><value>Kopieren vorbereiten</value></data>
+  <data name="BaseMenu_Action_PrepareLinkingFromExternal" xml:space="preserve"><value>Verknüpfen vorbereiten</value></data>
+  <data name="BaseMenu_Action_PrepareMoveToExternal" xml:space="preserve"><value>Verschieben vorbereiten</value></data>
+  <data name="BaseMenu_Action_NameClipboardCopy" xml:space="preserve"><value>Namen ins Clipboard kopieren</value></data>
+  <data name="BaseMenu_Action_PathClipboardCopy" xml:space="preserve"><value>Pfad ins Clipboard kopieren</value></data>
+  <data name="BaseMenu_Action_ItemClipboardCopy" xml:space="preserve"><value>Element ins Clipboard kopieren</value></data>
+  <data name="BaseMenu_Action_AbortTransfer" xml:space="preserve"><value>Übertragung abbrechen</value></data>
+  <data name="BaseMenu_Action_LinkMarkItem" xml:space="preserve"><value>Element zum Verknüpfen markieren</value></data>
+  <data name="BaseMenu_Action_CopyMarkItem" xml:space="preserve"><value>Element zum Kopieren markieren</value></data>
+  <data name="BaseMenu_Action_MoveMarkItem" xml:space="preserve"><value>Element zum Verschieben markieren</value></data>
+  <data name="BaseMenu_Action_Rename" xml:space="preserve"><value>Umbenennen</value></data>
+  <data name="BaseMenu_Action_Relocate" xml:space="preserve"><value>Verschieben</value></data>
+  <data name="BaseMenu_Action_Delete" xml:space="preserve"><value>Löschen</value></data>
+  <data name="ContentMenu_Action_AbortTransfer" xml:space="preserve"><value>Übertragung abbrechen</value></data>
+  <data name="ContentMenu_Action_AbortClipboardMove" xml:space="preserve"><value>Verschieben aus dem Clipboard abbrechen</value></data>
+  <data name="ContentMenu_Action_AbortClipboardLink" xml:space="preserve"><value>Verknüpfen aus dem Clipboard abbrechen</value></data>
+  <data name="ContentMenu_Action_ClipboardItemCopy" xml:space="preserve"><value>Clipboard-Element hierher kopieren</value></data>
+  <data name="ContentMenu_Action_ClipboardItemMove" xml:space="preserve"><value>Ausgeschnittenes Element hierher verschieben</value></data>
+  <data name="ContentMenu_Action_ClipboardItemLink" xml:space="preserve"><value>Extern ausgewähltes Element hier verknüpfen</value></data>
+  <data name="ContentMenu_Action_LinkExecute" xml:space="preserve"><value>Verknüpfung zum markierten Element einfügen</value></data>
+  <data name="ContentMenu_Action_CopyExecute" xml:space="preserve"><value>Kopie des markierten Elements einfügen</value></data>
+  <data name="ContentMenu_Action_MoveExecute" xml:space="preserve"><value>Markiertes Element hierher verschieben</value></data>
+  <data name="ContentMenu_Action_New" xml:space="preserve"><value>Neu…</value></data>
+  <data name="ContentMenu_Action_OpenContainingDirectory" xml:space="preserve"><value>Übergeordnetes Verzeichnis öffnen</value></data>
+  <data name="ContentMenu_Action_OpenInRunningApp" xml:space="preserve"><value>In laufender Anwendung öffnen...</value></data>
+  <data name="PathviewSidebarColumn_Button_ItemClipboardPaste_Tooltip" xml:space="preserve"><value>Element aus dem Clipboard einfügen</value></data>
+  <data name="PathviewSidebarColumn_Button_LinkAbort_Tooltip" xml:space="preserve"><value>Verknüpfen abbrechen</value></data>
+  <data name="PathviewSidebarColumn_Button_CopyAbort_Tooltip" xml:space="preserve"><value>Kopieren abbrechen</value></data>
+  <data name="PathviewSidebarColumn_Button_MoveAbort_Tooltip" xml:space="preserve"><value>Verschieben abbrechen</value></data>
+  <data name="PathviewHeaderRow_Button_Browse" xml:space="preserve"><value>Browsen</value></data>
+  <data name="PathviewHeaderRow_Button_Pin" xml:space="preserve"><value>Anpinnen</value></data>
+  <data name="PathviewHeaderRow_Button_OpenInExplorer_Tooltip" xml:space="preserve"><value>Im Windows Explorer öffnen</value></data>
+  <data name="PathviewHeaderRow_Button_OpenInExplorer_Accessibility" xml:space="preserve"><value>Aktuellen Pfad in einem neuen Windows-Explorer-Fenster öffnen</value></data>
+  <data name="PathviewHeaderRow_Label_Fixed" xml:space="preserve"><value>FIXIERT</value></data>
+  <data name="PathviewHeaderRow_Button_EditCustomName" xml:space="preserve"><value>Eigenen Pfad-View-Namen bearbeiten</value></data>
+  <data name="PathviewHeaderRow_Button_PaneColor" xml:space="preserve"><value>Hintergrundfarbe der Pfad-View wählen</value></data>
+  <data name="PathviewHeaderRow_Button_MoveMarkItem" xml:space="preserve"><value>Versch.🠝</value></data>
+  <data name="PathviewHeaderRow_Button_MoveMarkItem_Tooltip" xml:space="preserve"><value>Element zum Verschieben markieren</value></data>
+  <data name="PathviewHeaderRow_Button_Rename" xml:space="preserve"><value>Umbenennen...</value></data>
+  <data name="PathviewHeaderRow_Button_Relocate" xml:space="preserve"><value>Verschieben...</value></data>
+  <data name="PathviewHeaderRow_Label_PaneColor" xml:space="preserve"><value>Hintergrundfarbe</value></data>
+  <data name="PathviewHeaderRow_Color_Select_Tooltip" xml:space="preserve"><value>Diese Farbe wählen</value></data>
+  <data name="PathviewHeaderRow_Color_Select_Accessibility" xml:space="preserve"><value>Hintergrundfarbe der Pfad-View festlegen</value></data>
+  <data name="PathviewSidebar_Tab_ActivePath" xml:space="preserve"><value>Aktiver Pfad</value></data>
+  <data name="PathviewSidebar_Tab_ActivePathAndSiblings" xml:space="preserve"><value>Aktiver Pfad und Nachbarn</value></data>
+  <data name="PathviewSidebar_Group_Path" xml:space="preserve"><value>Pfad</value></data>
+  <data name="PathviewSidebar_Group_Subdirectories" xml:space="preserve"><value>Unterverzeichnisse</value></data>
+  <data name="PathviewSidebar_Label_View" xml:space="preserve"><value>ANSICHT:</value></data>
+  <data name="PathviewSidebar_CheckBox_HideInternal" xml:space="preserve"><value>Interne ausbl.</value></data>
+  <data name="PathviewSidebar_CheckBox_HideSiblings" xml:space="preserve"><value>Nachbarn ausblenden</value></data>
+  <data name="MainWindow_Title" xml:space="preserve"><value>KIS Explorer</value></data>
+  <data name="MainToolbar_Button_Configuration" xml:space="preserve"><value>Konfiguration</value></data>
+  <data name="MainToolbar_Button_UseCases" xml:space="preserve"><value>Use Cases</value></data>
+  <data name="MainToolbar_Button_Back" xml:space="preserve"><value>Zurück</value></data>
+  <data name="MainToolbar_Button_Forward" xml:space="preserve"><value>Vorwärts</value></data>
+  <data name="MainToolbar_Button_Up" xml:space="preserve"><value>Eine Ebene nach oben</value></data>
+  <data name="MainToolbar_Button_AddressClipboardPaste" xml:space="preserve"><value>Pfad einfügen und öffnen</value></data>
+  <data name="MainToolbar_Button_AddressClipboardCopy" xml:space="preserve"><value>Pfad ins Clipboard kopieren</value></data>
+  <data name="MainToolbar_Button_Go" xml:space="preserve"><value>Öffnen</value></data>
+  <data name="UseCases_Label_Title" xml:space="preserve"><value>Use Cases</value></data>
+  <data name="UseCases_Button_New" xml:space="preserve"><value>Neu</value></data>
+  <data name="UseCases_Label_ForSelected" xml:space="preserve"><value>FÜR AUSGEWÄHLTEN:</value></data>
+  <data name="UseCases_Button_Edit" xml:space="preserve"><value>Bearbeiten</value></data>
+  <data name="UseCases_Button_Delete" xml:space="preserve"><value>Löschen</value></data>
+  <data name="UseCases_Input_SelectedName" xml:space="preserve"><value>Name des ausgewählten Use Case</value></data>
+  <data name="UseCases_Table_Pathviews" xml:space="preserve"><value>Pfad-Views des Use Case</value></data>
+  <data name="UseCases_Column_Name" xml:space="preserve"><value>Name</value></data>
+  <data name="UseCases_Column_Path" xml:space="preserve"><value>Pfad</value></data>
+  <data name="ContentView_Filter_Label_View" xml:space="preserve"><value>ANSICHT:</value></data>
+  <data name="ContentView_Filter_HideDirectories" xml:space="preserve"><value>Verzeichnisse ausbl.</value></data>
+  <data name="ContentView_Filter_HideInternal" xml:space="preserve"><value>Interne ausbl.</value></data>
+  <data name="ContentView_Filter_NamePattern" xml:space="preserve"><value>Namensmuster  </value></data>
+  <data name="ContentView_Filter_NamePattern_Tooltip" xml:space="preserve"><value>* und ? als Platzhalter verwenden</value></data>
+  <data name="ContentView_Filter_ClearNamePattern" xml:space="preserve"><value>Namensmuster löschen</value></data>
+  <data name="ContentView_Filter_SortOrder" xml:space="preserve"><value>  Sortierung  </value></data>
+  <data name="ContentView_Filter_Reset_Tooltip" xml:space="preserve"><value>Inhaltsfilter und Sortierung zurücksetzen</value></data>
+  <data name="ContentView_Filter_Reset" xml:space="preserve"><value>Zurücksetzen</value></data>
+  <data name="ContentView_Selected_Label" xml:space="preserve"><value>FÜR AUSGEWÄHLTE:</value></data>
+  <data name="ContentView_Selected_Button_Properties" xml:space="preserve"><value>Eigenschaften…</value></data>
+  <data name="ContentView_Selected_Button_NameClipboardCopy" xml:space="preserve"><value>Name</value></data>
+  <data name="ContentView_Selected_Button_NameClipboardCopy_Tooltip" xml:space="preserve"><value>Namen ins Clipboard kopieren</value></data>
+  <data name="ContentView_Selected_Button_PathClipboardCopy" xml:space="preserve"><value>Pfad</value></data>
+  <data name="ContentView_Selected_Button_PathClipboardCopy_Tooltip" xml:space="preserve"><value>Pfad ins Clipboard kopieren</value></data>
+  <data name="ContentView_Selected_Button_ItemClipboardCopy_Tooltip" xml:space="preserve"><value>Element ins Clipboard kopieren</value></data>
+  <data name="ContentView_Selected_Button_LinkMarkItem" xml:space="preserve"><value>Link🠝</value></data>
+  <data name="ContentView_Selected_Button_LinkMarkItem_Tooltip" xml:space="preserve"><value>Element zum Verknüpfen markieren</value></data>
+  <data name="ContentView_Selected_Button_CopyMarkItem" xml:space="preserve"><value>Kopie🠝</value></data>
+  <data name="ContentView_Selected_Button_CopyMarkItem_Tooltip" xml:space="preserve"><value>Element zum Kopieren markieren</value></data>
+  <data name="ContentView_Selected_Button_MoveMarkItem" xml:space="preserve"><value>Versch.🠝</value></data>
+  <data name="ContentView_Selected_Button_Rename" xml:space="preserve"><value>Umbenennen…</value></data>
+  <data name="ContentView_Selected_Button_Delete" xml:space="preserve"><value>Lösch.🗑️</value></data>
+  <data name="PathviewSidebarColumn_Label_Directory" xml:space="preserve"><value>VERZEICHNIS</value></data>
+  <data name="PathviewSidebarColumn_Count_Tooltip" xml:space="preserve"><value>Ungefilterte Elemente in diesem Verzeichnis</value></data>
+  <data name="PathviewSidebarColumn_Count_Directories" xml:space="preserve"><value> Verz.</value></data>
+  <data name="PathviewSidebarColumn_Count_Files" xml:space="preserve"><value> Dateien</value></data>
+  <data name="PathviewSidebarColumn_Button_New_Tooltip" xml:space="preserve"><value>Neu</value></data>
+  <data name="PathviewSidebarColumn_Button_Item" xml:space="preserve"><value>Element</value></data>
+  <data name="PathviewSidebarColumn_Button_LinkAbort" xml:space="preserve"><value>Link✕</value></data>
+  <data name="PathviewSidebarColumn_Button_LinkExecute" xml:space="preserve"><value>Link🠟</value></data>
+  <data name="PathviewSidebarColumn_Button_LinkExecute_Tooltip" xml:space="preserve"><value>Verknüpfung einfügen</value></data>
+  <data name="PathviewSidebarColumn_Button_CopyAbort" xml:space="preserve"><value>Kopie✕</value></data>
+  <data name="PathviewSidebarColumn_Button_CopyExecute" xml:space="preserve"><value>Kopie🠟</value></data>
+  <data name="PathviewSidebarColumn_Button_CopyExecute_Tooltip" xml:space="preserve"><value>Kopie einfügen</value></data>
+  <data name="PathviewSidebarColumn_Button_MoveAbort" xml:space="preserve"><value>Versch.✕</value></data>
+  <data name="PathviewSidebarColumn_Button_MoveExecute" xml:space="preserve"><value>Versch.🠟</value></data>
+  <data name="PathviewSidebarColumn_Button_MoveExecute_Tooltip" xml:space="preserve"><value>Verschieben ausführen</value></data>
+  <data name="ContentView_Column_MediaType" xml:space="preserve"><value>MT</value></data>
+  <data name="ContentView_Column_MediaType_Tooltip" xml:space="preserve"><value>Nach Medientyp sortieren</value></data>
+  <data name="ContentView_Column_MediaSubType" xml:space="preserve"><value>ST</value></data>
+  <data name="ContentView_Column_MediaSubType_Tooltip" xml:space="preserve"><value>Medientyp-Untertyp</value></data>
+  <data name="ContentView_Column_Modifier" xml:space="preserve"><value>MO</value></data>
+  <data name="ContentView_Column_Modifier_Tooltip" xml:space="preserve"><value>Modifikatorsymbol</value></data>
+  <data name="ContentView_Column_Name_Tooltip" xml:space="preserve"><value>Nach Namen sortieren</value></data>
+  <data name="ContentView_Column_TypeApp1" xml:space="preserve"><value>TA1</value></data>
+  <data name="ContentView_Column_TypeApp1_Tooltip" xml:space="preserve"><value>Nach TA1 sortieren (Typ und/oder Standardanwendung, grob)</value></data>
+  <data name="ContentView_Column_HideRight" xml:space="preserve"><value>Rechte Spalten ausblenden</value></data>
+  <data name="ContentView_Column_TypeApp2" xml:space="preserve"><value>TA2</value></data>
+  <data name="ContentView_Column_TypeApp2_Tooltip" xml:space="preserve"><value>Nach TA2 sortieren (Typ und/oder Standardanwendung, fein)</value></data>
+  <data name="ContentView_Column_Size" xml:space="preserve"><value>Größe</value></data>
+  <data name="ContentView_Column_Size_Tooltip" xml:space="preserve"><value>Nach Größe sortieren</value></data>
+  <data name="ContentView_Column_DateModified" xml:space="preserve"><value>Datum Änd.</value></data>
+  <data name="ContentView_Column_DateModified_Tooltip" xml:space="preserve"><value>Nach Änderungsdatum sortieren</value></data>
+  <data name="Common_Button_Cancel" xml:space="preserve"><value>Abbrechen</value></data>
+  <data name="Common_Button_Apply" xml:space="preserve"><value>Übernehmen</value></data>
+  <data name="ConfigurationDialog_Title" xml:space="preserve"><value>Konfiguration</value></data>
+  <data name="ConfigurationDialog_Label_Interface" xml:space="preserve"><value>Oberfläche</value></data>
+  <data name="ConfigurationDialog_CheckBox_DirectoryRowActions" xml:space="preserve"><value>Aktionsbuttons in der Verzeichniszeile anzeigen</value></data>
+  <data name="ConfigurationDialog_CheckBox_DirectoryColumnActions" xml:space="preserve"><value>Aktionsbuttons in der Verzeichnisspalte anzeigen</value></data>
+  <data name="ConfigurationDialog_CheckBox_SelectedItemsActions" xml:space="preserve"><value>Aktionsbuttons für ausgewählte Elemente anzeigen</value></data>
+  <data name="ConfigurationDialog_CheckBox_InternalItemTransfers" xml:space="preserve"><value>Interne Elementübertragungen aktivieren</value></data>
+  <data name="CustomNameDialog_Title" xml:space="preserve"><value>Eigener Pfad-View-Name</value></data>
+  <data name="CustomNameDialog_Label_Name" xml:space="preserve"><value>Eigener Name</value></data>
+  <data name="CustomNameDialog_Label_Undefined" xml:space="preserve"><value>(Kein eigener Name festgelegt)</value></data>
+  <data name="DirectoryLocationDialog_Title_RelocateFile" xml:space="preserve"><value>Datei verschieben</value></data>
+  <data name="DirectoryLocationDialog_Title_RelocateDirectory" xml:space="preserve"><value>Verzeichnis verschieben</value></data>
+  <data name="DirectoryLocationDialog_Title_RenameDirectory" xml:space="preserve"><value>Verzeichnis umbenennen</value></data>
+  <data name="DirectoryLocationDialog_Choice_DestinationParent" xml:space="preserve"><value>Ziel (übergeordnetes Verzeichnis)</value></data>
+  <data name="DirectoryLocationDialog_Choice_DestinationAndName" xml:space="preserve"><value>Ziel und neuer Name</value></data>
+  <data name="DirectoryLocationDialog_Label_DirectoryName" xml:space="preserve"><value>Verzeichnisname</value></data>
+  <data name="MoveConfirmationDialog_Title" xml:space="preserve"><value>Verschieben bestätigen</value></data>
+  <data name="MoveConfirmationDialog_Prompt" xml:space="preserve"><value>Diese ausgewählten Elemente verschieben?</value></data>
+  <data name="MoveConfirmationDialog_Button_Move" xml:space="preserve"><value>Verschieben</value></data>
+  <data name="NewItemDialog_Title" xml:space="preserve"><value>Neues Element</value></data>
+  <data name="NewItemDialog_Label_Type" xml:space="preserve"><value>Typ</value></data>
+  <data name="NewItemDialog_Label_Name" xml:space="preserve"><value>Name</value></data>
+  <data name="NewItemDialog_Button_Windows" xml:space="preserve"><value>Weitere Typen über Windows…</value></data>
+  <data name="NewItemDialog_Button_Windows_Tooltip" xml:space="preserve"><value>Windows legt den anfänglichen Namen fest und öffnet möglicherweise einen eigenen Assistenten.</value></data>
+  <data name="NewItemDialog_Button_Create" xml:space="preserve"><value>Erstellen</value></data>
+  <data name="NewItemDialog_ConfirmExtension" xml:space="preserve"><value>Der Name endet nicht auf {0}. Trotzdem erstellen?</value></data>
+  <data name="NewItemDialog_ConfirmExtension_Title" xml:space="preserve"><value>Dateierweiterung</value></data>
+  <data name="NewItemDialog_CreateError_Title" xml:space="preserve"><value>Element konnte nicht erstellt werden</value></data>
+  <data name="Common_Error_OperationFailed" xml:space="preserve"><value>Vorgang fehlgeschlagen</value></data>
+  <data name="Common_Error_ContextMenuFailed" xml:space="preserve"><value>Kontextmenü fehlgeschlagen</value></data>
+  <data name="ContentView_Sort_Date" xml:space="preserve"><value>Datum</value></data>
+  <data name="ContentView_Column_ShowRight" xml:space="preserve"><value>Rechte Spalten anzeigen</value></data>
+  <data name="ContentView_Status_DetailsUnavailable" xml:space="preserve"><value>Einige Elementdetails konnten nicht geladen werden.</value></data>
+  <data name="ContentView_RunningApp_UntitledWindow" xml:space="preserve"><value>Fenster ohne Titel</value></data>
+  <data name="ContentView_Error_CannotOpenParent" xml:space="preserve"><value>Übergeordnetes Verzeichnis kann nicht geöffnet werden</value></data>
+  <data name="ContentView_Error_ShortcutUnavailable" xml:space="preserve"><value>Das Verknüpfungsziel ist nicht verfügbar oder kein Dateisystemelement.</value></data>
+  <data name="ContentView_Error_ShortcutWithoutParent" xml:space="preserve"><value>Das Verknüpfungsziel hat kein übergeordnetes Verzeichnis.</value></data>
+  <data name="ContentView_Error_CannotOpenItem" xml:space="preserve"><value>Element kann nicht geöffnet werden</value></data>
+  <data name="ContentView_Error_CannotRenameItem" xml:space="preserve"><value>Element kann nicht umbenannt werden</value></data>
+  <data name="ContentView_Error_SelectForProperties" xml:space="preserve"><value>Wählen Sie mindestens ein Element aus, um die Eigenschaften anzuzeigen.</value></data>
+  <data name="ContentView_Error_SelectForItemClipboardCopy" xml:space="preserve"><value>Wählen Sie mindestens ein Element aus, um es ins Clipboard zu kopieren.</value></data>
+  <data name="ContentView_Error_SelectForNameClipboardCopy" xml:space="preserve"><value>Wählen Sie mindestens ein Element aus, um dessen Namen ins Clipboard zu kopieren.</value></data>
+  <data name="ContentView_Error_SelectForPathClipboardCopy" xml:space="preserve"><value>Wählen Sie mindestens ein Element aus, um dessen Pfad ins Clipboard zu kopieren.</value></data>
+  <data name="Transfer_Error_LinkAlreadyPrepared" xml:space="preserve"><value>Schließen Sie die vorbereitete Übertragung ab oder brechen Sie sie ab, bevor Sie eine Verknüpfung vorbereiten.</value></data>
+  <data name="Transfer_Error_CopyAlreadyPrepared" xml:space="preserve"><value>Schließen Sie die vorbereitete Übertragung ab oder brechen Sie sie ab, bevor Sie eine Kopie vorbereiten.</value></data>
+  <data name="Transfer_Error_MoveAlreadyPrepared" xml:space="preserve"><value>Schließen Sie die vorbereitete Übertragung ab oder brechen Sie sie ab, bevor Sie ein Verschieben vorbereiten.</value></data>
+  <data name="PathviewHeaderRow_Button_Browse_Tooltip" xml:space="preserve"><value>Diesen Ort in der Browsen-Pfad-View öffnen</value></data>
+  <data name="PathviewHeaderRow_Button_Pin_Tooltip" xml:space="preserve"><value>Diesen Ort als feste Pfad-View anpinnen</value></data>
+  <data name="Pathview_Error_CannotRenameDirectory" xml:space="preserve"><value>Verzeichnis kann nicht umbenannt werden</value></data>
+  <data name="Pathview_Error_CannotRelocateFile" xml:space="preserve"><value>Datei kann nicht verschoben werden</value></data>
+  <data name="Pathview_Error_CannotRelocateDirectory" xml:space="preserve"><value>Verzeichnis kann nicht verschoben werden</value></data>
+  <data name="Pathview_Error_AbsoluteDestination" xml:space="preserve"><value>Geben Sie einen absoluten Pfad zum Zielverzeichnis ein.</value></data>
+  <data name="Pathview_Error_CannotRelocateDrive" xml:space="preserve"><value>Ein Laufwerk kann nicht verschoben werden.</value></data>
+  <data name="Pathview_Error_InvalidDestination" xml:space="preserve"><value>Geben Sie einen gültigen Pfad zum Zielverzeichnis ein.</value></data>
+  <data name="Pathview_Error_DestinationMissing" xml:space="preserve"><value>Das Zielverzeichnis existiert nicht.</value></data>
+  <data name="Pathview_Error_DestinationExists" xml:space="preserve"><value>Im Zielverzeichnis existiert bereits ein Element mit diesem Namen.</value></data>
+  <data name="Pathview_Error_DestinationInsideSource" xml:space="preserve"><value>Ein Verzeichnis kann nicht in sich selbst oder eines seiner Unterverzeichnisse verschoben werden.</value></data>
+  <data name="Pathview_Error_RelocationIncomplete" xml:space="preserve"><value>Die Shell hat das Verschieben nicht als abgeschlossen gemeldet.</value></data>
+  <data name="Pathview_Error_CannotOpenExplorer" xml:space="preserve"><value>Windows Explorer kann nicht geöffnet werden</value></data>
+  <data name="Pathview_Error_CannotOpenDirectory" xml:space="preserve"><value>Verzeichnis kann nicht geöffnet werden</value></data>
+  <data name="Pathview_Error_InvalidDirectoryName" xml:space="preserve"><value>Geben Sie einen gültigen Verzeichnisnamen ein.</value></data>
+  <data name="PathviewSidebar_Label_Loading" xml:space="preserve"><value>Wird geladen</value></data>
+  <data name="SortOrderWidget_Tooltip" xml:space="preserve"><value>Klicken zum Umkehren; Ziehen oder Alt+Links/Rechts zum Umsortieren</value></data>
+  <data name="SortOrderWidget_Accessibility" xml:space="preserve"><value>{0}, {1}, Priorität {2}</value></data>
+  <data name="SortOrderWidget_Direction_Ascending" xml:space="preserve"><value>Aufsteigend</value></data>
+  <data name="SortOrderWidget_Direction_Descending" xml:space="preserve"><value>Absteigend</value></data>
+  <data name="App_Error_AlreadyRunning" xml:space="preserve"><value>KIS Explorer wird bereits ausgeführt.</value></data>
+  <data name="App_Error_CannotStart" xml:space="preserve"><value>KIS Explorer kann nicht gestartet werden: {0}</value></data>
+  <data name="MainWindow_Error_SaveConfiguration" xml:space="preserve"><value>Konfiguration kann nicht gespeichert werden: {0}</value></data>
+  <data name="MainWindow_Error_FinishUseCaseEdit" xml:space="preserve"><value>Schließen Sie die Bearbeitung des Namens des Use Case ab oder drücken Sie Escape zum Abbrechen.</value></data>
+  <data name="MainWindow_Error_ListUseCases" xml:space="preserve"><value>Use Cases können nicht aufgelistet werden: {0}</value></data>
+  <data name="MainWindow_Error_OpenUseCase" xml:space="preserve"><value>Use Case '{0}' kann nicht geöffnet werden: {1}</value></data>
+  <data name="MainWindow_Error_ActivateUseCase" xml:space="preserve"><value>Use Case '{0}' kann nicht aktiviert werden: {1}</value></data>
+  <data name="MainWindow_Error_CreateUseCase" xml:space="preserve"><value>Use Case '{0}' kann nicht erstellt werden: {1}</value></data>
+  <data name="MainWindow_Error_RenameUseCase" xml:space="preserve"><value>Use Case kann nicht umbenannt werden: {0}</value></data>
+  <data name="MainWindow_Error_DeleteUseCase" xml:space="preserve"><value>Use Case '{0}' kann nicht gelöscht werden: {1}</value></data>
+  <data name="MainWindow_Error_SaveActiveUseCase" xml:space="preserve"><value>Der aktive Use Case kann nicht gespeichert werden: {0}</value></data>
+  <data name="MainWindow_Error_UpdateRenamedLocation" xml:space="preserve"><value>Umbenannter Ort kann nicht aktualisiert werden</value></data>
+  <data name="MainWindow_Error_OpenLocation" xml:space="preserve"><value>Ort kann nicht geöffnet werden</value></data>
+  <data name="MainWindow_Error_OpenLocationWithPath" xml:space="preserve"><value>Ort kann nicht geöffnet werden: {0}</value></data>
+  <data name="MainWindow_Error_ClipboardPaste" xml:space="preserve"><value>Einfügen aus dem Clipboard fehlgeschlagen</value></data>
+  <data name="MainWindow_Error_ClipboardCopy" xml:space="preserve"><value>Kopieren ins Clipboard fehlgeschlagen</value></data>
+  <data name="MainWindow_Tab_Browse" xml:space="preserve"><value>BROWSEN</value></data>
+  <data name="MainWindow_Tab_Close" xml:space="preserve"><value>Tab schließen</value></data>
+  <data name="UseCases_ConfirmDelete" xml:space="preserve"><value>Use Case '{0}' löschen?</value></data>
+  <data name="UseCases_ConfirmDelete_Title" xml:space="preserve"><value>Use Case löschen</value></data>
+  <data name="UseCases_Error_ReservedName" xml:space="preserve"><value>Der Name 'new' ist für Use Cases reserviert. Geben Sie einen anderen Namen ein oder brechen Sie ab, um den neuen Use Case zu verwerfen.</value></data>
+  <data name="UseCases_Error_InvalidName" xml:space="preserve"><value>Geben Sie einen gültigen Namen für den Use Case ein, der nicht 'new' lautet.</value></data>
+  <data name="UseCases_Error_InvalidName_Title" xml:space="preserve"><value>Ungültiger Name für den Use Case</value></data>
+  <data name="NewItem_Type_Directory" xml:space="preserve"><value>Verzeichnis</value></data>
+  <data name="NewItem_Type_TextFile" xml:space="preserve"><value>Textdatei</value></data>
+  <data name="NewItem_Type_GenericFile" xml:space="preserve"><value>{0}-Datei</value></data>
+  <data name="NewItem_Error_DestinationUnavailable" xml:space="preserve"><value>Das Zielverzeichnis ist nicht verfügbar.</value></data>
+  <data name="NewItem_Error_InvalidName" xml:space="preserve"><value>Geben Sie einen gültigen Datei- oder Verzeichnisnamen ein.</value></data>
+  <data name="NewItem_Error_ReservedName" xml:space="preserve"><value>Dieser Name ist von Windows reserviert.</value></data>
+  <data name="Shell_Error_DragFailed" xml:space="preserve"><value>Ziehen fehlgeschlagen</value></data>
+  <data name="Shell_Error_DropFailed" xml:space="preserve"><value>Ablegen fehlgeschlagen</value></data>
+  <data name="Shell_Error_ContextMenuFailed" xml:space="preserve"><value>Shell-Kontextmenü fehlgeschlagen</value></data>
+  <data name="Configuration_Error_Empty" xml:space="preserve"><value>Die Konfiguration ist leer.</value></data>
+  <data name="Configuration_Error_Invalid" xml:space="preserve"><value>Die Konfiguration enthält einen ungültigen Typ, eine ungültige Version oder ein ungültiges Interface.</value></data>
+  <data name="UseCaseStore_Error_InvalidFilename" xml:space="preserve"><value>Der Name des Use Case kann nicht in einem Dateinamen verwendet werden.</value></data>
+  <data name="UseCaseStore_Error_Empty" xml:space="preserve"><value>Der Use Case ist leer.</value></data>
+  <data name="UseCaseStore_Error_Invalid" xml:space="preserve"><value>Der Use Case enthält einen ungültigen Typ, Namen oder eine ungültige Pfad-View-Liste.</value></data>
+  <data name="UseCaseStore_Error_InvalidPathview" xml:space="preserve"><value>Der Use Case enthält eine ungültige oder doppelte Pfad-View.</value></data>
+  <data name="UseCaseStore_Error_ReservedName" xml:space="preserve"><value>Der Name 'new' ist reserviert.</value></data>
+  <data name="UseCaseStore_Error_RenameDefault" xml:space="preserve"><value>Der Standard-Use Case kann nicht umbenannt werden.</value></data>
+  <data name="UseCaseStore_Error_NameMismatch" xml:space="preserve"><value>Der Name des Use Case stimmt nicht mit dem Dateinamen überein.</value></data>
+  <data name="UseCaseStore_Error_DeleteDefault" xml:space="preserve"><value>Der Standard-Use Case kann nicht gelöscht werden.</value></data>
+  <data name="Transfer_Error_LinkNotPrepared" xml:space="preserve"><value>Es ist keine Verknüpfung zum Einfügen vorbereitet.</value></data>
+  <data name="Transfer_Error_LinkPrepared" xml:space="preserve"><value>Eine Verknüpfung ist bereits vorbereitet.</value></data>
+  <data name="Transfer_Error_LinkNoSelection" xml:space="preserve"><value>Wählen Sie mindestens ein Element zum Verknüpfen aus.</value></data>
+  <data name="Transfer_Error_CopyNotPrepared" xml:space="preserve"><value>Es ist keine Kopie zum Einfügen vorbereitet.</value></data>
+  <data name="Transfer_Error_CopyPrepared" xml:space="preserve"><value>Eine Kopie ist bereits vorbereitet.</value></data>
+  <data name="Transfer_Error_CopyNoSelection" xml:space="preserve"><value>Wählen Sie mindestens ein Element zum Kopieren aus.</value></data>
+  <data name="Transfer_Error_MoveNotPrepared" xml:space="preserve"><value>Es ist kein Verschieben zur Ausführung vorbereitet.</value></data>
+  <data name="Transfer_Error_MovePrepared" xml:space="preserve"><value>Ein Verschieben ist bereits vorbereitet.</value></data>
+  <data name="Transfer_Error_MoveNoSelection" xml:space="preserve"><value>Wählen Sie mindestens ein Element zum Verschieben aus.</value></data>
+  <data name="Shell_Error_ItemAlreadyExists" xml:space="preserve"><value>Ein Element mit diesem Namen existiert bereits.</value></data>
+  <data name="Clipboard_Error_AbortUnsupported" xml:space="preserve"><value>Nur Verschieben oder Verknüpfen aus dem Clipboard kann abgebrochen werden.</value></data>
+  <data name="Clipboard_Error_OperationUnavailable" xml:space="preserve"><value>Der Clipboard-Vorgang ist nicht mehr verfügbar.</value></data>
+  <data name="Clipboard_Error_LinkClearFailed" xml:space="preserve"><value>Die Verknüpfungen wurden erstellt, aber das Clipboard konnte nicht geleert werden.</value></data>
+  <data name="Clipboard_Error_MoveNotificationFailed" xml:space="preserve"><value>Die Elemente wurden verschoben, aber die Clipboard-Quelle hat die Abschlussmeldung nicht angenommen.</value></data>
+  <data name="Pathview_Error_DirectoryUnavailable" xml:space="preserve"><value>Das Verzeichnis existiert nicht oder ist nicht zugänglich: {0}</value></data>
+  <data name="NewItem_Error_TemplateUnavailable" xml:space="preserve"><value>Die Vorlage ist nicht verfügbar.</value></data>
+  <data name="ShellTransfer_Error_LinkNoSelection" xml:space="preserve"><value>Wählen Sie mindestens ein Element zum Verknüpfen aus.</value></data>
+  <data name="ShellTransfer_Error_CopyNoSelection" xml:space="preserve"><value>Wählen Sie mindestens ein Element zum Kopieren aus.</value></data>
+  <data name="ShellTransfer_Error_MoveNoSelection" xml:space="preserve"><value>Wählen Sie mindestens ein Element zum Verschieben aus.</value></data>
+  <data name="ShellTransfer_Error_DeleteNoSelection" xml:space="preserve"><value>Wählen Sie mindestens ein Element zum Löschen aus.</value></data>
+  <data name="ShellTransfer_Error_DeleteLocation" xml:space="preserve"><value>Dieser Ort kann nicht gelöscht werden: {0}</value></data>
+  <data name="ShellTransfer_Error_DeleteSourceUnavailable" xml:space="preserve"><value>Löschen nicht möglich, da diese Quelle nicht mehr existiert oder nicht zugänglich ist: {0}</value></data>
+  <data name="ShellTransfer_Error_MoveIncomplete" xml:space="preserve"><value>Die Shell hat das Verschieben nicht für alle Elemente abgeschlossen.</value></data>
+  <data name="ShellTransfer_Error_DestinationNotDirectory" xml:space="preserve"><value>Das Ziel ist kein Verzeichnis: {0}</value></data>
+  <data name="ShellTransfer_Error_DestinationUnavailable" xml:space="preserve"><value>Das Zielverzeichnis existiert nicht mehr oder ist nicht zugänglich: {0}</value></data>
+  <data name="ShellTransfer_Error_CopySourceUnavailable" xml:space="preserve"><value>Kopieren nicht möglich, da diese Quelle nicht mehr existiert oder nicht zugänglich ist: {0}</value></data>
+  <data name="ShellTransfer_Error_MoveSourceUnavailable" xml:space="preserve"><value>Verschieben nicht möglich, da diese Quelle nicht mehr existiert oder nicht zugänglich ist: {0}</value></data>
+  <data name="ShellTransfer_Error_LinkSourceUnavailable" xml:space="preserve"><value>Verknüpfen nicht möglich, da diese Quelle nicht mehr existiert oder nicht zugänglich ist: {0}</value></data>
+</root>

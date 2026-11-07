@@ -39,7 +39,7 @@
   <data name="PathviewHeaderRow_Button_OpenInExplorer_Tooltip" xml:space="preserve"><value>Open in Windows Explorer</value></data>
   <data name="PathviewHeaderRow_Button_OpenInExplorer_Accessibility" xml:space="preserve"><value>Open current path in a new Windows Explorer window</value></data>
   <data name="PathviewHeaderRow_Label_Fixed" xml:space="preserve"><value>FIXED</value></data>
-  <data name="PathviewHeaderRow_Button_EditCustomName" xml:space="preserve"><value>Edit custom Pathview name</value></data>
+  <data name="PathviewHeaderRow_Button_EditCustomName" xml:space="preserve"><value>Edit custom Path-View name</value></data>
   <data name="PathviewHeaderRow_Button_PaneColor" xml:space="preserve"><value>Choose pane background color</value></data>
   <data name="PathviewHeaderRow_Button_MoveMarkItem" xml:space="preserve"><value>Move🠝</value></data>
   <data name="PathviewHeaderRow_Button_MoveMarkItem_Tooltip" xml:space="preserve"><value>Move mark item</value></data>
@@ -70,7 +70,7 @@
   <data name="UseCases_Button_Edit" xml:space="preserve"><value>Edit</value></data>
   <data name="UseCases_Button_Delete" xml:space="preserve"><value>Delete</value></data>
   <data name="UseCases_Input_SelectedName" xml:space="preserve"><value>Selected use case name</value></data>
-  <data name="UseCases_Table_Pathviews" xml:space="preserve"><value>Use case Pathviews</value></data>
+  <data name="UseCases_Table_Pathviews" xml:space="preserve"><value>Use case Path-Views</value></data>
   <data name="UseCases_Column_Name" xml:space="preserve"><value>Name</value></data>
   <data name="UseCases_Column_Path" xml:space="preserve"><value>Path</value></data>
   <data name="ContentView_Filter_Label_View" xml:space="preserve"><value>VIEW:</value></data>
@@ -135,7 +135,7 @@
   <data name="ConfigurationDialog_CheckBox_DirectoryColumnActions" xml:space="preserve"><value>Show directory column action buttons</value></data>
   <data name="ConfigurationDialog_CheckBox_SelectedItemsActions" xml:space="preserve"><value>Show selected items action buttons</value></data>
   <data name="ConfigurationDialog_CheckBox_InternalItemTransfers" xml:space="preserve"><value>Enable internal item transfers</value></data>
-  <data name="CustomNameDialog_Title" xml:space="preserve"><value>Custom Pathview name</value></data>
+  <data name="CustomNameDialog_Title" xml:space="preserve"><value>Custom Path-View name</value></data>
   <data name="CustomNameDialog_Label_Name" xml:space="preserve"><value>Custom name</value></data>
   <data name="CustomNameDialog_Label_Undefined" xml:space="preserve"><value>(Undefined custom name)</value></data>
   <data name="DirectoryLocationDialog_Title_RelocateFile" xml:space="preserve"><value>Relocate file</value></data>
@@ -174,8 +174,8 @@
   <data name="Transfer_Error_LinkAlreadyPrepared" xml:space="preserve"><value>Abort or complete the prepared transfer before starting a Link.</value></data>
   <data name="Transfer_Error_CopyAlreadyPrepared" xml:space="preserve"><value>Abort or complete the prepared transfer before starting a Copy.</value></data>
   <data name="Transfer_Error_MoveAlreadyPrepared" xml:space="preserve"><value>Abort or complete the prepared transfer before starting a Move.</value></data>
-  <data name="PathviewHeaderRow_Button_Browse_Tooltip" xml:space="preserve"><value>Open this location in the browsable Pathview</value></data>
-  <data name="PathviewHeaderRow_Button_Pin_Tooltip" xml:space="preserve"><value>Keep this location open in a non-browsable Pathview</value></data>
+  <data name="PathviewHeaderRow_Button_Browse_Tooltip" xml:space="preserve"><value>Open this location in the browsable Path-View</value></data>
+  <data name="PathviewHeaderRow_Button_Pin_Tooltip" xml:space="preserve"><value>Keep this location open in a non-browsable Path-View</value></data>
   <data name="Pathview_Error_CannotRenameDirectory" xml:space="preserve"><value>Cannot rename directory</value></data>
   <data name="Pathview_Error_CannotRelocateFile" xml:space="preserve"><value>Cannot relocate file</value></data>
   <data name="Pathview_Error_CannotRelocateDirectory" xml:space="preserve"><value>Cannot relocate directory</value></data>
@@ -230,8 +230,8 @@
   <data name="Configuration_Error_Invalid" xml:space="preserve"><value>The configuration has an invalid type, version, or Interface.</value></data>
   <data name="UseCaseStore_Error_InvalidFilename" xml:space="preserve"><value>The use case name cannot be used in a filename.</value></data>
   <data name="UseCaseStore_Error_Empty" xml:space="preserve"><value>The use case is empty.</value></data>
-  <data name="UseCaseStore_Error_Invalid" xml:space="preserve"><value>The use case has an invalid type, name, or Pathviews list.</value></data>
-  <data name="UseCaseStore_Error_InvalidPathview" xml:space="preserve"><value>The use case contains an invalid or duplicate Pathview.</value></data>
+  <data name="UseCaseStore_Error_Invalid" xml:space="preserve"><value>The use case has an invalid type, name, or Path-Views list.</value></data>
+  <data name="UseCaseStore_Error_InvalidPathview" xml:space="preserve"><value>The use case contains an invalid or duplicate Path-View.</value></data>
   <data name="UseCaseStore_Error_ReservedName" xml:space="preserve"><value>The name 'new' is reserved.</value></data>
   <data name="UseCaseStore_Error_RenameDefault" xml:space="preserve"><value>The default use case cannot be renamed.</value></data>
   <data name="UseCaseStore_Error_NameMismatch" xml:space="preserve"><value>The use case name does not match its filename.</value></data>

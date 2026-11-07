@@ -9,6 +9,11 @@
       "SUTWinExplorer/1.0.0": {
         "runtime": {
           "SUTWinExplorer.dll": {}
+        },
+        "resources": {
+          "de/SUTWinExplorer.resources.dll": {
+            "locale": "de"
+          }
         }
       }
     }

@@ -5,7 +5,7 @@ namespace SUTWinExplorer;
 
 internal static class LocalizedText
 {
-    private static readonly ResourceManager Resources = new("SUTWinExplorer.Strings", typeof(LocalizedText).Assembly);
+    private static readonly ResourceManager Resources = new("SUTWinExplorer.Assets.Strings.Strings", typeof(LocalizedText).Assembly);
 
     internal static string Get(string id) => Resources.GetString(id) ??
         throw new InvalidOperationException($"Missing string resource: {id}");
