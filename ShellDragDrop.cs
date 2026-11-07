@@ -1,11 +1,42 @@
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
+using DragDropEffects = System.Windows.DragDropEffects;
 
 namespace SUTWinExplorer;
 
 internal static class ShellDragDrop
 {
+    private static readonly short DropDescriptionFormat = unchecked((short)RegisterClipboardFormat("DropDescription"));
+
+    internal static void SetDropDescription(IDataObject data, DragDropEffects effect)
+    {
+        var (imageType, message) = effect switch
+        {
+            DragDropEffects.Copy => (1, "Copy"),
+            DragDropEffects.Move => (2, "Move"),
+            DragDropEffects.Link => (3, "Create shortcut"),
+            _ => (0, "Cannot drop here")
+        };
+        var description = new DropDescription { Type = imageType, Message = message, Insert = string.Empty };
+        var memory = GlobalAlloc(0x0042, (nuint)Marshal.SizeOf<DropDescription>());
+        if (memory == IntPtr.Zero)
+            throw new OutOfMemoryException();
+        try
+        {
+            var pointer = GlobalLock(memory);
+            if (pointer == IntPtr.Zero)
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+            try { Marshal.StructureToPtr(description, pointer, false); }
+            finally { _ = GlobalUnlock(memory); }
+            var format = new FORMATETC { cfFormat = DropDescriptionFormat, dwAspect = DVASPECT.DVASPECT_CONTENT, lindex = -1, tymed = TYMED.TYMED_HGLOBAL };
+            var medium = new STGMEDIUM { tymed = TYMED.TYMED_HGLOBAL, unionmember = memory };
+            data.SetData(ref format, ref medium, true);
+            memory = IntPtr.Zero;
+        }
+        finally { if (memory != IntPtr.Zero) _ = GlobalFree(memory); }
+    }
+
     internal static IDataObject CreateDataObject(IReadOnlyList<string> paths, IntPtr owner)
     {
         if (paths.Count == 0)
@@ -92,6 +123,24 @@ internal static class ShellDragDrop
     private static extern IntPtr ILFindLastID(IntPtr pidl);
     [DllImport("shell32.dll", PreserveSig = true)]
     private static extern int SHDoDragDrop(IntPtr owner, IDataObject data, IntPtr source, uint allowedEffects, out uint effect);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern uint RegisterClipboardFormat(string format);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr GlobalAlloc(uint flags, nuint bytes);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr GlobalLock(IntPtr memory);
+    [DllImport("kernel32.dll")]
+    private static extern bool GlobalUnlock(IntPtr memory);
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GlobalFree(IntPtr memory);
+}
+
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+internal struct DropDescription
+{
+    internal int Type;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] internal string Message;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] internal string Insert;
 }
 
 internal sealed class ShellDropTarget(IDropTargetNative target) : IDisposable
@@ -142,4 +191,16 @@ internal interface IDropTargetNative
     [PreserveSig] int DragOver(uint keys, DropPoint point, ref uint effect);
     [PreserveSig] int DragLeave();
     [PreserveSig] int Drop(IDataObject data, uint keys, DropPoint point, ref uint effect);
+}
+
+[ComImport]
+[Guid("4657278B-411B-11D2-839A-00C04FD918D0")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IDropTargetHelperNative
+{
+    [PreserveSig] int DragEnter(IntPtr window, IDataObject data, ref DropPoint point, uint effect);
+    [PreserveSig] int DragLeave();
+    [PreserveSig] int DragOver(ref DropPoint point, uint effect);
+    [PreserveSig] int Drop(IDataObject data, ref DropPoint point, uint effect);
+    [PreserveSig] int Show([MarshalAs(UnmanagedType.Bool)] bool show);
 }

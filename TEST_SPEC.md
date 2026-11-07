@@ -185,6 +185,15 @@ waits for them to exit normally, requests window closure when needed, and checks
 their exit codes. Forced termination is reserved for a probe that does not
 close in time and is reported as a test failure.
 
+Run `pwsh -NoProfile -STA -File tests/ShellDragDrop.Tests.ps1 -Suite Native`
+for the native Shell checks, `-Suite Interactions` for table and sidebar mouse
+interactions, or `-Suite Feedback` for external Shell feedback and transitions.
+`-Suite Explorer` uses a real Windows Explorer window and a temporary file to
+check default-move rejection on Pathview background; it captures the hover in
+`artifacts/explorer-drag-feedback.png` for visual inspection. These GUI suites
+move the mouse and require an interactive desktop. The default `-Suite All`
+runs Native, Interactions and Feedback; Explorer is opt-in.
+
 ### Open Issue: Test Process Shutdown and Explorer Mutex
 
 Some GUI test PowerShell processes have intermittently remained in Windows

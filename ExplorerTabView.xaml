@@ -315,7 +315,7 @@
                               Margin="0,0,0,4" Padding="0">
                         <Border x:Name="ActivePathTreeFrame" BorderBrush="{StaticResource ViewFrameBrush}"
                             BorderThickness="{StaticResource ViewFrameThickness}">
-                            <TreeView x:Name="ActivePathTree"
+                            <TreeView x:Name="ActivePathTree" AllowDrop="False"
                                       ItemContainerStyle="{StaticResource DirectoryTreeItemStyle}"
                                       BorderThickness="0" Padding="0"
                                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -454,7 +454,7 @@
                     </StackPanel>
                     <Border x:Name="ActivePathAndSiblingsTreeFrame" Grid.Row="2" BorderBrush="{StaticResource ViewFrameBrush}"
                             BorderThickness="{StaticResource ViewFrameThickness}" Margin="4,0,4,0">
-                        <TreeView x:Name="ActivePathAndSiblingsTree"
+                        <TreeView x:Name="ActivePathAndSiblingsTree" AllowDrop="False"
                                   BorderThickness="0" Padding="0"
                                   ItemContainerStyle="{StaticResource DirectoryTreeItemStyle}"
                                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"

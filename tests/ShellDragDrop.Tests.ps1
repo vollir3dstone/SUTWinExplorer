@@ -1,3 +1,4 @@
+param([ValidateSet('All', 'Native', 'Interactions', 'Feedback', 'Explorer')] [string] $Suite = 'All')
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
 Add-Type @'
@@ -17,15 +18,21 @@ public sealed class DragMouseProbe : IDisposable
     public static IntPtr FindWindowByTitle(string title) => FindWindow(null, title);
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr window, out Rect rect);
     public static int[] WindowCenter(IntPtr window) { GetWindowRect(window, out var rect); return new[] { (rect.Left + rect.Right) / 2, (rect.Top + rect.Bottom) / 2 }; }
-    private readonly int sourceX, sourceY, targetX, targetY;
+    private readonly int sourceX, sourceY, targetX, targetY, middleX, middleY;
     private readonly byte modifier;
-    private readonly bool right, clickOnly;
+    private readonly bool right, clickOnly, hasMiddle;
+    private bool holdAtTarget;
     private readonly Timer timer;
     private int phase, busy;
     public bool Done;
+    public bool AtTarget, Continue;
     public string StartWindow;
     public DragMouseProbe(int sourceX, int sourceY, int targetX, int targetY, byte modifier, bool right)
         : this(sourceX, sourceY, targetX, targetY, modifier, right, false) { }
+    public DragMouseProbe(int sourceX, int sourceY, int middleX, int middleY, int targetX, int targetY, byte modifier, bool useMiddle)
+        : this(sourceX, sourceY, targetX, targetY, modifier, false, false) { this.middleX = middleX; this.middleY = middleY; hasMiddle = useMiddle; }
+    public DragMouseProbe(int sourceX, int sourceY, int targetX, int targetY, byte modifier, bool right, bool clickOnly, bool holdAtTarget)
+        : this(sourceX, sourceY, targetX, targetY, modifier, right, clickOnly) { this.holdAtTarget = holdAtTarget; }
     public DragMouseProbe(int sourceX, int sourceY, int targetX, int targetY, byte modifier, bool right, bool clickOnly)
     {
         this.sourceX = sourceX; this.sourceY = sourceY; this.targetX = targetX; this.targetY = targetY; this.modifier = modifier; this.right = right; this.clickOnly = clickOnly;
@@ -54,10 +61,13 @@ public sealed class DragMouseProbe : IDisposable
                     mouse_event(right ? 8u : 2u, 0, 0, 0, UIntPtr.Zero);
                     break;
                 case 1: if (clickOnly) mouse_event(right ? 16u : 4u, 0, 0, 0, UIntPtr.Zero); else { SetCursorPos(sourceX + 30, sourceY); mouse_event(1, 1, 0, 0, UIntPtr.Zero); } break;
-                case 2: if (!clickOnly) { SetCursorPos(targetX, targetY); mouse_event(1, 1, 0, 0, UIntPtr.Zero); } break;
+                case 2: if (!clickOnly) { SetCursorPos(hasMiddle ? middleX : targetX, hasMiddle ? middleY : targetY); mouse_event(1, 1, 0, 0, UIntPtr.Zero); AtTarget = true; } break;
                 case 3:
-                    mouse_event(right ? 16u : 4u, 0, 0, 0, UIntPtr.Zero);
+                    if (holdAtTarget && !Continue) { phase--; break; }
+                    if (hasMiddle) { SetCursorPos(targetX, targetY); mouse_event(1, 1, 0, 0, UIntPtr.Zero); }
+                    else mouse_event(right ? 16u : 4u, 0, 0, 0, UIntPtr.Zero);
                     break;
+                case 4: if (hasMiddle) mouse_event(right ? 16u : 4u, 0, 0, 0, UIntPtr.Zero); break;
                 case 10:
                     SetModifiers(true);
                     Done = true;
@@ -67,7 +77,7 @@ public sealed class DragMouseProbe : IDisposable
         }
         finally { Volatile.Write(ref busy, 0); }
     }
-    public void Dispose() { timer.Dispose(); mouse_event(right ? 16u : 4u, 0, 0, 0, UIntPtr.Zero); SetModifiers(true); }
+    public void Dispose() { timer.Dispose(); if (!Done) mouse_event(right ? 16u : 4u, 0, 0, 0, UIntPtr.Zero); SetModifiers(true); }
 }
 public sealed class RightMenuProbe : IDisposable
 {
@@ -122,6 +132,9 @@ $source = Join-Path $root 'source'
 $destination = Join-Path $root 'destination'
 [IO.Directory]::CreateDirectory($source) | Out-Null
 [IO.Directory]::CreateDirectory($destination) | Out-Null
+$traceWriter = [IO.StringWriter]::new()
+$traceListener = [Diagnostics.TextWriterTraceListener]::new($traceWriter)
+$null = [Diagnostics.Trace]::Listeners.Add($traceListener)
 try {
     $driveRoot = [IO.Path]::GetPathRoot($source)
     $driveData = $dragDrop.GetMethod('CreateDataObject', $flags).Invoke($null, [object[]] @([string[]] @($driveRoot), [IntPtr]::Zero))
@@ -142,6 +155,10 @@ try {
             ([IDisposable] $target).Dispose()
             if ([Runtime.InteropServices.Marshal]::IsComObject($data)) { $null = [Runtime.InteropServices.Marshal]::ReleaseComObject($data) }
         }
+    }
+    if ($Suite -eq 'Native') {
+        'Shell drag-and-drop native tests passed.'
+        return
     }
     [System.Windows.Application].GetField('_resourceAssembly', [Reflection.BindingFlags]'Static,NonPublic').SetValue($null, $assembly)
     $application = [System.Windows.Application]::new()
@@ -195,13 +212,15 @@ try {
         $null = $viewType.GetMethod('Refresh', $flags).Invoke($views[1], @($true))
         $sourceList = $views[0].FindName('FileList'); $targetList = $views[1].FindName('FileList')
         Wait-Until { $sourceList.SelectedItems.Count -eq 1 -and $null -ne $sourceList.ItemContainerGenerator.ContainerFromItem($sourceList.SelectedItems[0]) -and $targetList.IsVisible } 'drag test views'
-        $sourceRow = $sourceList.ItemContainerGenerator.ContainerFromItem($sourceList.SelectedItems[0])
-        $start = $sourceRow.PointToScreen([System.Windows.Point]::new(100, 10))
-        $end = $targetList.PointToScreen([System.Windows.Point]::new(100, $targetList.ActualHeight - 20))
-        $probe = [DragMouseProbe]::new([int] $start.X, [int] $start.Y, [int] $end.X, [int] $end.Y, 0x11, $false)
-        try { Wait-Until { $probe.Done -and [IO.File]::Exists((Join-Path $destination 'mouse-copy.txt')) } 'mouse drag copy to table background' }
-        finally { $probe.Dispose() }
-        if (-not [IO.File]::Exists($sourceFile)) { throw 'Mouse copy removed its source.' }
+        if ($Suite -in @('All', 'Interactions')) {
+            $sourceRow = $sourceList.ItemContainerGenerator.ContainerFromItem($sourceList.SelectedItems[0])
+            $start = $sourceRow.PointToScreen([System.Windows.Point]::new(100, 10))
+            $end = $targetList.PointToScreen([System.Windows.Point]::new(100, $targetList.ActualHeight - 20))
+            $probe = [DragMouseProbe]::new([int] $start.X, [int] $start.Y, [int] $end.X, [int] $end.Y, 0x11, $false)
+            try { Wait-Until { $probe.Done -and [IO.File]::Exists((Join-Path $destination 'mouse-copy.txt')) } 'mouse drag copy to table background' }
+            finally { $probe.Dispose() }
+            if (-not [IO.File]::Exists($sourceFile)) { throw 'Mouse copy removed its source.' }
+        }
         $folderTarget = [string] (Join-Path $destination 'target-folder')
         [IO.Directory]::CreateDirectory($folderTarget) | Out-Null
         $fileTarget = [string] (Join-Path $destination 'target-file.txt')
@@ -225,11 +244,24 @@ try {
                 Wait-Until { $probe.Done } 'mouse drag input'
             } finally { $probe.Dispose() }
         }
+        function Assert-BackgroundRejectsMoveAndLink([string] $name, [System.Windows.Point] $point, [string] $targetDirectory = $destination) {
+            foreach ($modifier in @(0, 0x10, 0xFF)) {
+                $fileName = "rejected-$name-$modifier.txt"
+                $file = [string] (Join-Path $source $fileName)
+                [IO.File]::WriteAllText($file, 'rejected')
+                Invoke-MouseDrag @($file) $point $modifier $false
+                if (-not [IO.File]::Exists($file) -or [IO.File]::Exists((Join-Path $targetDirectory $fileName)) -or @([IO.Directory]::GetFiles($targetDirectory, "*rejected-$name-$modifier*.lnk")).Count -ne 0) { throw "$name accepted modifier $modifier." }
+                [IO.File]::Delete($file)
+            }
+        }
+        if ($Suite -in @('All', 'Interactions')) {
         $fileDrop = [string] (Join-Path $source 'file-row.txt')
         [IO.File]::WriteAllText($fileDrop, 'file row')
         Invoke-MouseDrag @($fileDrop) (Get-TargetPoint $fileTarget) 0x11 $false
-        Wait-Until { [IO.File]::Exists((Join-Path $destination 'file-row.txt')) } 'copy onto file row'
-        if ([IO.File]::ReadAllText($fileTarget) -cne 'target' -or -not [IO.File]::Exists($fileDrop)) { throw 'Dropping on a file row changed the target or source.' }
+        if ([IO.File]::Exists((Join-Path $destination 'file-row.txt')) -or [IO.File]::ReadAllText($fileTarget) -cne 'target' -or -not [IO.File]::Exists($fileDrop)) { throw 'File row accepted a copy or changed the source or target.' }
+        [IO.File]::Delete($fileDrop)
+        Assert-BackgroundRejectsMoveAndLink 'file-row' (Get-TargetPoint $fileTarget)
+        Assert-BackgroundRejectsMoveAndLink 'table-background' ($targetList.PointToScreen([System.Windows.Point]::new(100, $targetList.ActualHeight - 20)))
         $folderDrop = [string] (Join-Path $source 'folder-row.txt')
         [IO.File]::WriteAllText($folderDrop, 'folder row')
         Invoke-MouseDrag @($folderDrop) (Get-TargetPoint $folderTarget) 0x11 $false
@@ -241,17 +273,8 @@ try {
         Invoke-MouseDrag @($copyFirst, $copySecond) (Get-TargetPoint $folderTarget) 0x11 $false
         Wait-Until { [IO.File]::Exists((Join-Path $folderTarget 'copy-first.txt')) -and [IO.File]::Exists((Join-Path $folderTarget 'copy-second.txt')) } 'copy multiple selected items'
         if (-not [IO.File]::Exists($copyFirst) -or -not [IO.File]::Exists($copySecond)) { throw 'Multiple-item copy removed a source.' }
-        $multiFirst = [string] (Join-Path $source 'multi-first.txt')
-        $multiSecond = [string] (Join-Path $source 'multi-second.txt')
-        [IO.File]::WriteAllText($multiFirst, 'first'); [IO.File]::WriteAllText($multiSecond, 'second')
-        Invoke-MouseDrag @($multiFirst, $multiSecond) (Get-TargetPoint $folderTarget) 0 $false
-        Wait-Until { [IO.File]::Exists((Join-Path $folderTarget 'multi-first.txt')) -and [IO.File]::Exists((Join-Path $folderTarget 'multi-second.txt')) } 'move multiple selected items'
-        if ([IO.File]::Exists($multiFirst) -or [IO.File]::Exists($multiSecond)) { throw 'Multiple-item move left a source behind.' }
-        $linkDrop = [string] (Join-Path $source 'mouse-link.txt')
-        [IO.File]::WriteAllText($linkDrop, 'mouse link')
-        Invoke-MouseDrag @($linkDrop) (Get-TargetPoint $folderTarget) 0xFF $false
-        Wait-Until { @([IO.Directory]::GetFiles($folderTarget, '*mouse-link*.lnk')).Count -eq 1 } 'mouse drag link'
-        if (-not [IO.File]::Exists($linkDrop) -or [IO.File]::Exists((Join-Path $folderTarget 'mouse-link.txt'))) { throw 'Link drop changed or copied the source.' }
+        Assert-BackgroundRejectsMoveAndLink 'folder-row' (Get-TargetPoint $folderTarget) $folderTarget
+        }
         function Stop-ExternalProbe([Diagnostics.Process] $process) {
             try {
                 if (-not $process.WaitForExit(2000)) {
@@ -279,6 +302,7 @@ try {
         }
         $externalFile = [string] (Join-Path $source 'external-source.txt')
         [IO.File]::WriteAllText($externalFile, 'external source')
+        if ($Suite -in @('All', 'Interactions')) {
         foreach ($mode in @('source', 'text', 'right-source')) {
             $result = Join-Path $root ("$mode-result.txt")
             $external = Start-ExternalProbe $mode $externalFile $result
@@ -295,6 +319,52 @@ try {
                 if ($mode -eq 'source' -and (-not [IO.File]::Exists((Join-Path $folderTarget 'external-source.txt')) -or -not [IO.File]::Exists($externalFile))) { throw 'External file copy failed.' }
             } finally { Stop-ExternalProbe $process }
         }
+        }
+        if ($Suite -in @('All', 'Feedback')) {
+        foreach ($case in @(@('copy', 0x11, 'Copy', 'folder'), @('folder-default', 0, 'None', 'folder'), @('folder-move', 0x10, 'None', 'folder'), @('folder-link', 0xFF, 'None', 'folder'), @('file-copy', 0x11, 'None', 'file'), @('reject-default', 0, 'None', 'background'), @('reject-move', 0x10, 'None', 'background'), @('reject-link', 0xFF, 'None', 'background'))) {
+            $null = $traceWriter.GetStringBuilder().Clear()
+            $name, $modifier, $expected, $targetKind = $case
+            $feedbackFile = [string] (Join-Path $source "external-feedback-$name.txt")
+            [IO.File]::WriteAllText($feedbackFile, $name)
+            $result = Join-Path $root "feedback-$name.txt"
+            $external = Start-ExternalProbe 'source-all' $feedbackFile $result
+            $process = $external[0]; $position = $external[1]
+            try {
+                $end = if ($targetKind -eq 'folder') { Get-TargetPoint $folderTarget } elseif ($targetKind -eq 'file') { Get-TargetPoint $fileTarget } else { $targetList.PointToScreen([System.Windows.Point]::new(100, $targetList.ActualHeight - 20)) }
+                $probe = [DragMouseProbe]::new($position[0], $position[1], [int] $end.X, [int] $end.Y, $modifier, $false)
+                try { Wait-Until { $probe.Done -and [IO.File]::Exists($result) } "external feedback $name" }
+                finally { $probe.Dispose() }
+                $feedback = [IO.File]::ReadAllText($result + '.feedback')
+                $effect = [IO.File]::ReadAllText($result)
+                $description = [IO.File]::ReadAllText($result + '.feedback.description')
+                $traceListener.Flush()
+                if ($traceWriter.ToString() -match 'Drag image (update|drop|cleanup) failed') { throw "External $name drag-image manager failed: $traceWriter" }
+                if ($feedback -ne $expected) { throw "External $name feedback=$feedback, expected=$expected, drop=$effect." }
+                $expectedDescription = @{ None = '0:Cannot drop here'; Copy = '1:Copy'; Move = '2:Move'; Link = '3:Create shortcut' }[$expected]
+                if ($description -ne $expectedDescription) { throw "External $name description=$description, expected=$expectedDescription." }
+                $targetFile = Join-Path $folderTarget ([IO.Path]::GetFileName($feedbackFile))
+                if ($name -eq 'copy') { Wait-Until { [IO.File]::Exists($targetFile) -and [IO.File]::Exists($feedbackFile) } 'external feedback copy' }
+                elseif ($effect -ne 'None' -or -not [IO.File]::Exists($feedbackFile) -or [IO.File]::Exists($targetFile) -or [IO.File]::Exists((Join-Path $destination ([IO.Path]::GetFileName($feedbackFile)))) -or @([IO.Directory]::GetFiles($destination, "*$name*.lnk")).Count -ne 0 -or @([IO.Directory]::GetFiles($folderTarget, "*$name*.lnk")).Count -ne 0) { throw "External $name was not rejected." }
+            } finally { Stop-ExternalProbe $process }
+        }
+        $feedbackFile = [string] (Join-Path $source 'external-feedback-transition.txt')
+        [IO.File]::WriteAllText($feedbackFile, 'transition')
+        $result = Join-Path $root 'feedback-transition.txt'
+        $external = Start-ExternalProbe 'source-all' $feedbackFile $result
+        $process = $external[0]; $position = $external[1]
+        try {
+            $middle = Get-TargetPoint $folderTarget
+            $end = Get-TargetPoint $fileTarget
+            $probe = [DragMouseProbe]::new($position[0], $position[1], [int] $middle.X, [int] $middle.Y, [int] $end.X, [int] $end.Y, 0x11, $true)
+            try { Wait-Until { $probe.Done -and [IO.File]::Exists($result) } 'external feedback transition' }
+            finally { $probe.Dispose() }
+            $history = [IO.File]::ReadAllText($result + '.feedback.history')
+            if ($history -notmatch '(?s)Copy\|1:Copy.*None\|0:Cannot drop here') { throw "External transition feedback did not change from Copy to forbidden: $history" }
+            if ([IO.File]::ReadAllText($result) -ne 'None' -or -not [IO.File]::Exists($feedbackFile) -or [IO.File]::Exists((Join-Path $destination 'external-feedback-transition.txt'))) { throw 'External transition drop was not rejected.' }
+        } finally { Stop-ExternalProbe $process }
+        }
+        $owner = [System.Windows.Interop.WindowInteropHelper]::new($window).Handle
+        if ($Suite -in @('All', 'Interactions')) {
         $externalDestination = [string] (Join-Path $root 'external-destination')
         [IO.Directory]::CreateDirectory($externalDestination) | Out-Null
         $outgoingFile = [string] (Join-Path $source 'external-target.txt')
@@ -317,6 +387,7 @@ try {
             Wait-Until { $menuProbe.Done } 'right-click menu'
             if (-not $menuProbe.MenuSeen) { throw 'The context menu did not open on right-button down.' }
         } finally { $menuProbe.Dispose() }
+        }
 
         $sidebarSource = [string] (Join-Path $destination 'sidebar-source')
         [IO.Directory]::CreateDirectory($sidebarSource) | Out-Null
@@ -331,14 +402,122 @@ try {
         $sidebar = $pathview.FindName('ActivePathSubdirectoriesList')
         Wait-Until { $sidebar.IsVisible -and @($sidebar.Items | Where-Object { $_.Path -eq $sidebarSource }).Count -eq 1 } 'sidebar drag test view'
         if (-not $sidebar.AllowDrop -or $pathview.FindName('ActivePathTree').AllowDrop -or $pathview.FindName('ActivePathAndSiblingsTree').AllowDrop) { throw 'Drag-and-drop was enabled on the wrong sidebar controls.' }
+        if ($Suite -in @('All', 'Interactions')) {
+        foreach ($targetName in @('LocationLabel', 'LocationBaseIcon')) {
+            $backgroundFile = [string] (Join-Path $source ("pathview-$targetName.txt"))
+            [IO.File]::WriteAllText($backgroundFile, $targetName)
+            $target = $pathview.FindName($targetName)
+            $point = $target.PointToScreen([System.Windows.Point]::new($target.ActualWidth / 2, $target.ActualHeight / 2))
+            Invoke-MouseDrag @($backgroundFile) $point 0x11 $false
+            Wait-Until { [IO.File]::Exists((Join-Path $destination ("pathview-$targetName.txt"))) } "copy onto $targetName background"
+            if (-not [IO.File]::Exists($backgroundFile)) { throw "Copy onto $targetName removed its source." }
+        }
+        }
+        $target = $pathview.FindName('LocationLabel')
+        $point = $target.PointToScreen([System.Windows.Point]::new($target.ActualWidth / 2, $target.ActualHeight / 2))
+        if ($Suite -in @('All', 'Interactions')) { Assert-BackgroundRejectsMoveAndLink 'pathview-background' $point }
+        if ($Suite -in @('All', 'Feedback')) {
+        foreach ($case in @(@('copy', 0x11, 'Copy'), @('default', 0, 'None'), @('move', 0x10, 'None'), @('link', 0xFF, 'None'))) {
+            $null = $traceWriter.GetStringBuilder().Clear()
+            $name, $modifier, $expected = $case
+            $feedbackFile = [string] (Join-Path $source "external-pathview-$name.txt")
+            [IO.File]::WriteAllText($feedbackFile, $name)
+            $result = Join-Path $root "pathview-feedback-$name.txt"
+            $external = Start-ExternalProbe 'source-all' $feedbackFile $result
+            $process = $external[0]; $position = $external[1]
+            try {
+                $probe = [DragMouseProbe]::new($position[0], $position[1], [int] $point.X, [int] $point.Y, $modifier, $false)
+                try { Wait-Until { $probe.Done -and [IO.File]::Exists($result) } "external Pathview feedback $name" }
+                finally { $probe.Dispose() }
+                $feedback = [IO.File]::ReadAllText($result + '.feedback')
+                $description = [IO.File]::ReadAllText($result + '.feedback.description')
+                $traceListener.Flush()
+                if ($traceWriter.ToString() -match 'Drag image (update|drop|cleanup) failed') { throw "External Pathview $name drag-image manager failed: $traceWriter" }
+                if ($feedback -ne $expected) { throw "External Pathview $name feedback=$feedback, expected=$expected." }
+                $expectedDescription = @{ None = '0:Cannot drop here'; Copy = '1:Copy'; Move = '2:Move'; Link = '3:Create shortcut' }[$expected]
+                if ($description -ne $expectedDescription) { throw "External Pathview $name description=$description, expected=$expectedDescription." }
+                $targetFile = Join-Path $destination ([IO.Path]::GetFileName($feedbackFile))
+                if ($name -eq 'copy') { Wait-Until { [IO.File]::Exists($targetFile) -and [IO.File]::Exists($feedbackFile) } 'external Pathview copy' }
+                elseif ([IO.File]::ReadAllText($result) -ne 'None' -or -not [IO.File]::Exists($feedbackFile) -or [IO.File]::Exists($targetFile) -or @([IO.Directory]::GetFiles($destination, "*external-pathview-$name*.lnk")).Count -ne 0) { throw "External Pathview $name was not rejected." }
+            } finally { Stop-ExternalProbe $process }
+        }
+        }
+        if ($Suite -eq 'Explorer') {
+            Add-Type -AssemblyName UIAutomationClient
+            Add-Type -AssemblyName UIAutomationTypes
+            Add-Type -AssemblyName System.Drawing
+            $explorerFile = [string] (Join-Path $source 'explorer-feedback.txt')
+            [IO.File]::WriteAllText($explorerFile, 'explorer feedback')
+            $shell = New-Object -ComObject Shell.Application
+            $existingWindows = @($shell.Windows() | ForEach-Object { $_.HWND })
+            $shell.Open($source)
+            $explorer = $null
+            try {
+                Wait-Until { $script:explorer = @($shell.Windows() | Where-Object { $_.HWND -notin $existingWindows -and $_.Document.Folder.Self.Path -eq $source }) | Select-Object -First 1; $null -ne $script:explorer } 'Explorer source window'
+                $explorer = $script:explorer
+                $explorer.Left = 50; $explorer.Top = 60; $explorer.Width = 500; $explorer.Height = 500
+                $explorer.Document.SelectItem($explorer.Document.Folder.ParseName('explorer-feedback.txt'), 29)
+                $rootElement = [System.Windows.Automation.AutomationElement]::FromHandle([IntPtr] $explorer.HWND)
+                $itemCondition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, 'explorer-feedback.txt')
+                $item = $null
+                Wait-Until { $script:item = $rootElement.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $itemCondition); $null -ne $script:item -and -not $script:item.Current.IsOffscreen } 'Explorer source item'
+                $item = $script:item
+                $rectangle = $item.Current.BoundingRectangle
+                $observed = @{ Seen = $false; Effect = ''; Allowed = ''; Keys = '' }
+                $handler = [System.Windows.DragEventHandler] { param($sender, $eventArgs) $observed.Seen = $true; $observed.Effect = $eventArgs.Effects.ToString(); $observed.Allowed = $eventArgs.AllowedEffects.ToString(); $observed.Keys = $eventArgs.KeyStates.ToString() }.GetNewClosure()
+                $pathview.AddHandler([System.Windows.DragDrop]::PreviewDragOverEvent, $handler, $true)
+                $probe = [DragMouseProbe]::new([int] ($rectangle.X + [Math]::Min(60, $rectangle.Width / 2)), [int] ($rectangle.Y + $rectangle.Height / 2), [int] $point.X, [int] $point.Y, 0, $false, $false, $true)
+                try {
+                    try { Wait-Until { $probe.AtTarget -and $observed.Seen } 'Explorer drag over Pathview background' }
+                    catch { throw "Explorer drag did not reach Pathview: start=$($rectangle.X),$($rectangle.Y),$($rectangle.Width),$($rectangle.Height), target=$point, startWindow=$($probe.StartWindow), atTarget=$($probe.AtTarget), seen=$($observed.Seen)." }
+                    $imagePath = Join-Path $PSScriptRoot '../artifacts/explorer-drag-feedback.png'
+                    $image = [System.Drawing.Bitmap]::new(360, 180)
+                    $graphics = [System.Drawing.Graphics]::FromImage($image)
+                    try {
+                        $graphics.CopyFromScreen([int] $point.X - 30, [int] $point.Y - 35, 0, 0, $image.Size, [System.Drawing.CopyPixelOperation]::SourceCopy)
+                        $image.Save($imagePath, [System.Drawing.Imaging.ImageFormat]::Png)
+                    } finally { $graphics.Dispose(); $image.Dispose() }
+                    "Explorer hover: effect=$($observed.Effect), allowed=$($observed.Allowed), keys=$($observed.Keys), screenshot=$imagePath"
+                    $probe.Continue = $true
+                    Wait-Until { $probe.Done } 'Explorer drag completion'
+                    if ($observed.Effect -ne 'None' -or -not [IO.File]::Exists($explorerFile) -or [IO.File]::Exists((Join-Path $destination 'explorer-feedback.txt'))) { throw 'Explorer default move was not rejected.' }
+                } finally { $probe.Dispose(); $pathview.RemoveHandler([System.Windows.DragDrop]::PreviewDragOverEvent, $handler) }
+            } finally { if ($null -ne $explorer) { $explorer.Quit() } }
+        }
+        if ($Suite -in @('All', 'Interactions')) {
+        $buttonFile = [string] (Join-Path $source 'excluded-button.txt')
+        [IO.File]::WriteAllText($buttonFile, 'excluded')
+        $button = $pathview.FindName('OpenInExplorerButton')
+        $point = $button.PointToScreen([System.Windows.Point]::new($button.ActualWidth / 2, $button.ActualHeight / 2))
+        Invoke-MouseDrag @($buttonFile) $point 0x11 $false
+        if ([IO.File]::Exists((Join-Path $destination 'excluded-button.txt')) -or -not [IO.File]::Exists($buttonFile)) { throw 'The button accepted a Pathview background drop.' }
+        $pathviewContent = $pathview.FindName('DirectoryContent')
+        $pathviewList = $pathviewContent.FindName('FileList')
+        $null = $viewType.GetMethod('RevealInsertedItems', $flags).Invoke($pathviewContent, [object[]] @(,[string[]] @($folderTarget)))
+        Wait-Until { $pathviewList.IsVisible -and @($pathviewList.Items | Where-Object { $rowPath.GetValue($_) -eq $folderTarget }).Count -eq 1 } 'Pathview table folder row'
+        $folderRow = @($pathviewList.Items | Where-Object { $rowPath.GetValue($_) -eq $folderTarget })[0]
+        $pathviewList.ScrollIntoView($folderRow)
+        Wait-Until { $null -ne $pathviewList.ItemContainerGenerator.ContainerFromItem($folderRow) } 'Pathview table folder container'
+        $point = $pathviewList.ItemContainerGenerator.ContainerFromItem($folderRow).PointToScreen([System.Windows.Point]::new(100, 10))
+        $tableFile = [string] (Join-Path $source 'pathview-table-row.txt')
+        [IO.File]::WriteAllText($tableFile, 'table row')
+        Invoke-MouseDrag @($tableFile) $point 0x11 $false
+        Wait-Until { [IO.File]::Exists((Join-Path $folderTarget 'pathview-table-row.txt')) } 'copy onto Pathview table folder row'
+        if ([IO.File]::Exists((Join-Path $destination 'pathview-table-row.txt')) -or -not [IO.File]::Exists($tableFile)) { throw 'Pathview background intercepted the table folder drop.' }
+        $excludedFile = [string] (Join-Path $source 'excluded-tree.txt')
+        [IO.File]::WriteAllText($excludedFile, 'excluded')
         $activeTree = $pathview.FindName('ActivePathTree')
         Wait-Until { $null -ne $activeTree.ItemContainerGenerator.ContainerFromIndex(0) } 'active path tree row'
         $point = $activeTree.ItemContainerGenerator.ContainerFromIndex(0).PointToScreen([System.Windows.Point]::new(60, 10))
+        Invoke-MouseDrag @($excludedFile) $point 0x11 $false
+        if ([IO.File]::Exists((Join-Path $destination 'excluded-tree.txt')) -or -not [IO.File]::Exists($excludedFile)) { throw 'The tree accepted a Pathview background drop.' }
+        if ($navigation.Paths.Count -ne 0) { throw "Dropping on the active path tree triggered navigation: $($navigation.Paths -join ',')." }
         $menuProbe = [RightMenuProbe]::new([int] $point.X, [int] $point.Y, $owner, $true)
         try {
             Wait-Until { $menuProbe.Done } 'active path tree right-click'
             if ($menuProbe.MenuSeen) { throw 'The active path tree unexpectedly opened a context menu.' }
         } finally { $menuProbe.Dispose() }
+        if ($navigation.Paths.Count -ne 0) { throw "Tree right-click triggered navigation: $($navigation.Paths -join ',')." }
         function Get-SidebarPoint([string] $path) {
             Wait-Until { @($sidebar.Items | Where-Object { $_.Path -eq $path }).Count -eq 1 } "sidebar row $path"
             $item = @($sidebar.Items | Where-Object { $_.Path -eq $path })[0]
@@ -350,21 +529,14 @@ try {
         [IO.File]::WriteAllText($sidebarFile, 'sidebar row')
         Invoke-MouseDrag @($sidebarFile) (Get-SidebarPoint $folderTarget) 0x11 $false
         Wait-Until { [IO.File]::Exists((Join-Path $folderTarget 'sidebar-row.txt')) } 'copy onto sidebar folder row'
-        if ($navigation.Paths.Count -ne 0) { throw 'Dropping on sidebar row triggered navigation.' }
+        if ($navigation.Paths.Count -ne 0) { throw "Dropping on sidebar row triggered navigation: $($navigation.Paths -join ',')." }
         $backgroundFile = [string] (Join-Path $source 'sidebar-background.txt')
         [IO.File]::WriteAllText($backgroundFile, 'sidebar background')
         $backgroundPoint = $sidebar.PointToScreen([System.Windows.Point]::new(60, $sidebar.ActualHeight - 20))
         Invoke-MouseDrag @($backgroundFile) $backgroundPoint 0x11 $false
         Wait-Until { [IO.File]::Exists((Join-Path $destination 'sidebar-background.txt')) } 'copy onto sidebar background'
-        $sidebarMove = [string] (Join-Path $source 'sidebar-move.txt')
-        [IO.File]::WriteAllText($sidebarMove, 'sidebar move')
-        Invoke-MouseDrag @($sidebarMove) (Get-SidebarPoint $folderTarget) 0x10 $false
-        Wait-Until { [IO.File]::Exists((Join-Path $folderTarget 'sidebar-move.txt')) -and -not [IO.File]::Exists($sidebarMove) } 'move onto sidebar folder row'
-        $sidebarLink = [string] (Join-Path $source 'sidebar-link.txt')
-        [IO.File]::WriteAllText($sidebarLink, 'sidebar link')
-        Invoke-MouseDrag @($sidebarLink) (Get-SidebarPoint $folderTarget) 0xFF $false
-        Wait-Until { @([IO.Directory]::GetFiles($folderTarget, '*sidebar-link*.lnk')).Count -eq 1 } 'link onto sidebar folder row'
-        if (-not [IO.File]::Exists($sidebarLink)) { throw 'Sidebar link removed its source.' }
+        Assert-BackgroundRejectsMoveAndLink 'sidebar-background' $backgroundPoint
+        Assert-BackgroundRejectsMoveAndLink 'sidebar-row' (Get-SidebarPoint $folderTarget) $folderTarget
         $start = Get-SidebarPoint $sidebarSource
         $end = $sourceList.PointToScreen([System.Windows.Point]::new(100, $sourceList.ActualHeight - 20))
         $sidebar.SelectedItem = @($sidebar.Items | Where-Object { $_.Path -eq $folderTarget })[0]
@@ -403,11 +575,16 @@ try {
         try { Wait-Until { $probe.Done -and $navigation.Paths.Count -eq 1 } 'sidebar click navigation' }
         finally { $probe.Dispose() }
         if ($navigation.Paths[0] -ne $sidebarSource) { throw 'Sidebar click navigated to the wrong folder.' }
+        }
     } finally {
         $window.Close()
         [System.Threading.SynchronizationContext]::SetSynchronizationContext($previousContext)
     }
-    'Shell drag-and-drop tests passed.'
+    $traceListener.Flush()
+    if ($traceWriter.ToString() -match 'Drag image (update|drop|cleanup) failed') { throw "Shell drag-image manager failed: $traceWriter" }
+    "Shell drag-and-drop $Suite tests passed."
 } finally {
+    [Diagnostics.Trace]::Listeners.Remove($traceListener)
+    $traceListener.Dispose()
     [IO.Directory]::Delete($root, $true)
 }

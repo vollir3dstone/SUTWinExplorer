@@ -704,12 +704,21 @@ The custom table and Sub directories list share `ListViewDragSource` and
 `ListViewDropTarget` for left-button filesystem drag-and-drop. The table supplies
 its selection, while the list supplies only the clicked folder. `ShellDragDrop`
 obtains a Shell data object and delegates incoming drags to the native folder
-drop target. Directory rows select their own destination; file rows and the
-background select the current directory. Non-filesystem and right-button drags
+drop target. Directory rows select their own destination; backgrounds select the
+current directory. Both accept only a Shell-selected Copy effect. File rows
+reject all drops. Move and Link are rejected, not converted.
+Non-filesystem and right-button drags
 are rejected, and tree views do not participate. Ordinary right-click menu
 handlers remain independent of drag-and-drop. Integration tests in
 [ShellDragDrop.Tests.ps1](tests/ShellDragDrop.Tests.ps1) exercise real gestures,
 modifier effects, cross-process data and right-click behavior.
+
+The Pathview also uses `ListViewDropTarget` for eligible background surfaces,
+sharing the context-menu visual hit test and targeting the current directory.
+Excluded controls and list surfaces retain their own drop handling.
+The accepted effect is also sent to the Shell drag-image manager and its drop
+description when the source provides a Shell drag image. Rejected drops use
+the prohibition image; sources without a Shell image retain normal feedback.
 
 For **Active path and siblings** tree and **Sub directories** items, the helper requests `CMF_CANRENAME` and
 dispatches the Shell's rename command to a WPF inline editor; committing calls

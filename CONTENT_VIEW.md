@@ -237,12 +237,18 @@ independently of table selection. It has no persistent, user-managed selection o
 multiple selection like the table; any selection used for its menu or keyboard
 interaction is temporary. Its folder rows target the corresponding folder and
 its background targets the current directory. Tree views do not participate.
-Dropping on a directory row targets that directory; dropping on a file row or empty table
-space targets the current directory. A file row is never invoked as a drop
-target. Non-filesystem data and right-button drags into the table are rejected.
+Dropping on a directory row targets that directory; empty table space targets the
+current directory. File rows reject all drops. Non-filesystem data and
+right-button drags into the table are rejected.
+The eligible Pathview background also accepts filesystem drops into the current
+directory, using the same exclusions as the background context menu. Tree views,
+interactive controls and list frames are not treated as Pathview background.
 
-The Windows Shell chooses Copy, Move or Link and provides the usual modifier-key
-behavior. Drag-and-drop does not use or change the Windows clipboard or the
+The Windows Shell chooses Copy, Move or Link with the usual modifier keys.
+Directory rows and Pathview, table and list backgrounds accept Copy only,
+rejecting Move and Link rather than converting them. A default drag that the
+Shell chooses to move is therefore also rejected.
+Drag-and-drop does not use or change the Windows clipboard or the
 application's prepared Link, Copy and Move workflows. Starting a left drag
 invalidates any pending context-menu sequence; ordinary right-click handling is
 unchanged. Shell collision prompts, permissions and cancellation apply as usual.

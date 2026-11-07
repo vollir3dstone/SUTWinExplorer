@@ -568,12 +568,17 @@ selection and scrolling behavior, such as selecting and revealing new items.
   still safe. The clipboard is unchanged. A drop can modify an existing document;
   a submitted dialog or accepted drop does not confirm that a file was opened.
   No transfer result dialog is shown. See [Open with Running App](OPEN_WITH_RUNNING_APP_SPEC.md).
-- [x] ContentView and the Sub directories list support left-button filesystem
+- [x] Incoming filesystem drops are accepted only on eligible backgrounds and
+  directory items, and only when the Shell selects Copy. All other effects,
+  including a default Shell move, are rejected rather than converted to Copy.
+  ContentView and the Sub directories list support left-button filesystem
   drag-and-drop between each other and compatible external applications. The
   table drags its selection; the list drags only the clicked folder. Directory
-  rows target that directory; file rows and empty space target the current
-  directory. Copy, Move and Link use Shell effects and modifier keys; right-button
-  drags and non-filesystem data are rejected. Tree views do not participate.
+  items target that directory; backgrounds target the current directory. File
+  rows, right-button drags and non-filesystem data are rejected. Tree views do
+  not participate.
+  Eligible Pathview background surfaces also accept drops into the current
+  directory, with the same exclusions as the background context menu.
   Clipboard and prepared transfers are independent.
 - [x] Leaving the system double-click area around the opening point or executing
   a menu command resets the context-menu sequence, even if the pointer returns.

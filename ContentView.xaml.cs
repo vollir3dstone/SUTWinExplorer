@@ -128,6 +128,8 @@ public partial class ContentView : UserControl
 
     internal void ClearSelection() => FileList.SelectedItems.Clear();
 
+    internal bool CanAcceptDrop => _editingRow is null;
+
     internal Func<int, int, bool>? AdditionalBackgroundHitTest { get; set; }
 
     internal void ShowBackgroundMenu() => ShowMenuCore(null, alternate: true);

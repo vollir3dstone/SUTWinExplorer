@@ -293,6 +293,10 @@ supports multiple selection, its own inline rename editor, Shell-backed Delete,
 clipboard Copy and copy-only Paste, and left-button filesystem drag-and-drop.
 The Sub directories list also supports drag-and-drop, using the clicked folder
 as its source rather than a persistent selection. Its menu or keyboard selection
-is temporary; tree views do not support drag-and-drop. `ShellDragDrop` creates Shell data objects and
+is temporary; tree views do not support drag-and-drop. Eligible Pathview
+background surfaces accept drops into the current directory, using the same
+exclusions as the background context menu. Pathview and list backgrounds and
+directory rows accept only Copy; file rows reject all drops.
+`ShellDragDrop` creates Shell data objects and
 forwards WPF drag events to the target directory's native `IDropTarget`. Watchers are best-effort and
 are not a complete replacement for all Shell namespace notifications.

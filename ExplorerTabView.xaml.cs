@@ -99,6 +99,8 @@ public partial class Pathview : UserControl
         _subdirectoryContextMenu = CreateDirectoryMenuController(ActivePathSubdirectoriesList, false);
         DirectoryContent.AdditionalBackgroundHitTest = (screenX, screenY) =>
             IsPathviewBackgroundAt(PointFromScreen(new Point(screenX, screenY)));
+        _ = new ListViewDropTarget(this, IsPathviewBackgroundAt, () => CurrentPath,
+            () => _editingTreeEntry is null && DirectoryContent.CanAcceptDrop);
         _ = new ListViewDropTarget(ActivePathSubdirectoriesList,
             item => item is TreeEntry { IsPlaceholder: false } entry ? entry.Path : null,
             () => CurrentPath, () => _editingTreeEntry is null);
