@@ -276,7 +276,70 @@ try {
         $controllerShow = $controller.GetType().GetMethod('Show', $viewFlags)
         $controllerReset = $controller.GetType().GetMethod('Reset', $viewFlags)
         $createTransfers = $view.GetType().GetMethod('CreateContentTransferActions', $viewFlags)
+        $menuClipboardFile = [string] (Join-Path $directory 'content-menu-paste.txt')
+        [IO.File]::WriteAllText($menuClipboardFile, 'content menu paste')
+        $escapedPath = $menuClipboardFile.Replace("'", "''")
+        $script = "Add-Type -AssemblyName PresentationFramework; `$data = [System.Windows.DataObject]::new(); `$paths = [System.Collections.Specialized.StringCollection]::new(); `$null = `$paths.Add('$escapedPath'); `$data.SetFileDropList(`$paths); `$data.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] 1))); [System.Windows.Clipboard]::SetDataObject(`$data, `$true)"
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($script))
+        & pwsh -NoProfile -STA -EncodedCommand $encoded
+        Assert-True ($LASTEXITCODE -eq 0) 'Could not set external Copy clipboard data.'
+        $menuType = $assembly.GetType('SUTWinExplorer.SutContextMenuFactory', $true)
+        $factoryFlags = [Reflection.BindingFlags]'Static,NonPublic'
+        $nativeBackground = $menuType.GetMethod('GetBackgroundMenu', $factoryFlags).Invoke($null, [object[]] @([string] $clipboardDestination, $ownerHandle))
+        try { $nativeBackgroundVerbs = @(Get-ShellMenuVerbs $nativeBackground) }
+        finally { ([IDisposable] $nativeBackground).Dispose() }
+        Assert-True ('paste' -in $nativeBackgroundVerbs) "Native background menu did not expose paste: $($nativeBackgroundVerbs -join ',')."
+        $backgroundBase = $menuType.GetMethod('GetBaseMenuForContext', $factoryFlags).Invoke($null, [object[]] @([string[]] @($clipboardDestination), $ownerHandle,
+            $view.GetType().GetMethod('CreateActiveDirectoryMenuActions', $viewFlags).Invoke($view, @()), $true))
+        try { $snapshot = $backgroundBase.GetType().GetMethod('CaptureSnapshot', $viewFlags).Invoke($backgroundBase, @()) }
+        finally { ([IDisposable] $backgroundBase).Dispose() }
+        $backgroundContent = $menuType.GetMethod('GetContentMenuWithTransferActions', $factoryFlags).Invoke($null, [object[]] @([string[]] @($clipboardDestination), $ownerHandle, $snapshot, $true, $null, $null, $null,
+            $createTransfers.Invoke($view, [object[]] @([string] $clipboardDestination))))
+        try { Assert-True ('paste' -notin @(Get-ShellMenuVerbs $backgroundContent)) "Native background paste was not filtered; original verbs=$($nativeBackgroundVerbs -join ',')." }
+        finally { ([IDisposable] $backgroundContent).Dispose() }
+        $clipboardWorkflow = $assembly.GetType('SUTWinExplorer.CopyWorkflowState', $true).GetProperty('Shared').GetValue($null)
+        foreach ($background in @($false, $true)) {
+            $target = if ($background) { $null } else { $targetRow.PSObject.BaseObject }
+            if (-not $background) { $list.SelectedItem = $target }
+            $clipboardWorkflow.Prepare([string[]] @($menuClipboardFile))
+            $null = $controllerReset.Invoke($controller, @())
+            $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+            try { $null = $controllerShow.Invoke($controller, [object[]] @($target, $ownerHandle, $true)) }
+            finally { $menuProbe.Dispose() }
+            $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+            $menuProbe.SelectLabel = 'Item clipboard paste'
+            try {
+                $null = $controllerShow.Invoke($controller, [object[]] @($target, $ownerHandle, $true))
+                Assert-True ($menuProbe.Items[0] -ceq 'Item clipboard paste' -and $menuProbe.SelectIndex -eq 0 -and
+                    ($menuProbe.States[1] -band 0x800) -ne 0 -and $menuProbe.Items[2] -ceq 'Abort transfer' -and
+                    $menuProbe.Items[3] -ceq 'Insert copy of marked item') "Incorrect clipboard content menu for background=$background`: items=$($menuProbe.Items -join '|'), index=$($menuProbe.SelectIndex), states=$($menuProbe.States -join ',')."
+            } finally { $menuProbe.Dispose() }
+            $destination = if ($background) { $clipboardDestination } else { $targetDirectory }
+            Assert-True ([IO.File]::Exists((Join-Path $destination 'content-menu-paste.txt')) -and [IO.File]::Exists($menuClipboardFile) -and $clipboardWorkflow.IsPrepared) "Clipboard paste used the wrong destination or changed the prepared transfer for background=$background."
+            $clipboardWorkflow.Abort()
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $probe = [SutShellUiProbe]::new()
+            $probe.List = $list; $probe.AwaitAll = $true; $probe.Frame = $frame
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+            $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
+            $timer.Start()
+            try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+            Assert-True $probe.Ready 'Content view did not reload after clipboard paste.'
+        }
+        [System.Windows.Clipboard]::SetText('no clipboard files')
         Assert-True (@($createTransfers.Invoke($view, [object[]] @([string] $targetDirectory))).Count -eq 0) 'Transfer actions appeared without a prepared transfer.'
+        $emptyContent = $menuType.GetMethod('GetContentMenuForContext', $factoryFlags).Invoke($null, [object[]] @([string[]] @($clipboardDestination), $ownerHandle, $snapshot, $true, $null, $null))
+        try { Assert-True ('paste' -notin @(Get-ShellMenuVerbs $emptyContent)) 'Native background paste appeared without supported clipboard data.' }
+        finally { ([IDisposable] $emptyContent).Dispose() }
+        $cutData = [System.Windows.DataObject]::new()
+        $cutPaths = [System.Collections.Specialized.StringCollection]::new()
+        $null = $cutPaths.Add($menuClipboardFile)
+        $cutData.SetFileDropList($cutPaths)
+        $cutData.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] 2)))
+        [System.Windows.Clipboard]::SetDataObject($cutData, $true)
+        Assert-True (@($createTransfers.Invoke($view, [object[]] @([string] $targetDirectory))).Count -eq 0) 'Clipboard Cut appeared as a Copy paste action.'
+        [System.Windows.Clipboard]::SetText('no clipboard files')
         foreach ($operation in @('Link', 'Copy', 'Move')) {
             foreach ($background in @($false, $true)) {
                 $sourceFile = Join-Path $directory ("content-$operation-$background.txt")

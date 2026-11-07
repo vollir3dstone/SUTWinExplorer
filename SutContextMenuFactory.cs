@@ -277,16 +277,19 @@ internal static class SutContextMenuFactory
             if (contentActions is { Count: > 0 })
             {
                 var existingActions = actions?.ToList() ?? [];
+                var position = 0u;
                 for (var index = 0; index < contentActions.Count; index++)
                 {
                     var action = contentActions[index];
-                    if (existingActions.Count >= 0x8000 || !InsertMenu(menu, (uint)index, MenuByPosition | (action.IsEnabled ? 0u : MenuDisabled),
+                    if (position > 0 && action.SeparatorBefore && !InsertMenu(menu, position++, MenuByPosition | MenuSeparator, UIntPtr.Zero, null))
+                        throw new InvalidOperationException("Could not insert a content menu separator.");
+                    if (existingActions.Count >= 0x8000 || !InsertMenu(menu, position++, MenuByPosition | (action.IsEnabled ? 0u : MenuDisabled),
                             (UIntPtr)(BaseMenuCommandFirst + (uint)existingActions.Count), action.Label))
                         throw new InvalidOperationException("Could not insert a content menu action.");
                     existingActions.Add(action);
                 }
-                if (GetMenuItemCount(menu) > contentActions.Count &&
-                    !InsertMenu(menu, (uint)contentActions.Count, MenuByPosition | MenuSeparator, UIntPtr.Zero, null))
+                if (GetMenuItemCount(menu) > position &&
+                    !InsertMenu(menu, position, MenuByPosition | MenuSeparator, UIntPtr.Zero, null))
                     throw new InvalidOperationException("Could not insert the content menu separator.");
                 ShellMenuIcons.Apply(menu, existingActions, BaseMenuCommandFirst, menuBitmaps);
                 actions = existingActions;
@@ -295,7 +298,7 @@ internal static class SutContextMenuFactory
                 offset => IsRenameCommand(contextMenu, offset),
                 isBaseMenu ? () => CollectComparableCommands(menu, contextMenu, allowVerbless: directorySelection || background) : null,
                 background && (isBaseMenu || excludedCommands is not null)
-                    ? submenu => RemoveBackgroundViewMenus(submenu, contextMenu)
+                    ? submenu => { RemoveBackgroundViewMenus(submenu, contextMenu); if (excludedCommands is not null) RemoveBackgroundPaste(submenu, contextMenu); }
                     : isBaseMenu || excludedCommands is not null || openLocationAction is not null
                         ? submenu =>
                         {
@@ -776,6 +779,8 @@ internal static class SutContextMenuFactory
     {
         if (!background)
             RemoveExcludedFileCommands(menu, contextMenu, directorySelection, isContentMenu: true);
+        else
+            RemoveBackgroundPaste(menu, contextMenu);
         var contentCommands = CollectComparableCommands(menu, contextMenu, allowVerbless: directorySelection || background);
         for (var index = GetMenuItemCount(menu) - 1; index >= 0; index--)
         {
@@ -891,6 +896,25 @@ internal static class SutContextMenuFactory
                     GetCommandVerb(contextMenu, id - FirstCommandId) is { } verb && ExcludedBackgroundVerbs.Contains(verb) &&
                     !RemoveMenu(menu, (uint)index, MenuByPosition))
                     throw new InvalidOperationException("Could not remove a Shell background command.");
+            }
+        }
+        RemoveRedundantSeparators(menu);
+    }
+
+    private static void RemoveBackgroundPaste(IntPtr menu, IContextMenu contextMenu)
+    {
+        for (var index = GetMenuItemCount(menu) - 1; index >= 0; index--)
+        {
+            var submenu = GetSubMenu(menu, index);
+            if (submenu != IntPtr.Zero)
+                RemoveBackgroundPaste(submenu, contextMenu);
+            else
+            {
+                var id = GetMenuItemID(menu, index);
+                if (id >= FirstCommandId && id <= LastCommandId &&
+                    string.Equals(GetCommandVerb(contextMenu, id - FirstCommandId), "paste", StringComparison.OrdinalIgnoreCase) &&
+                    !RemoveMenu(menu, (uint)index, MenuByPosition))
+                    throw new InvalidOperationException("Could not remove the Shell background paste command.");
             }
         }
         RemoveRedundantSeparators(menu);

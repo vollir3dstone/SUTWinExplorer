@@ -139,8 +139,26 @@ public partial class ContentView : UserControl
         var link = LinkWorkflowState.Shared.IsPrepared;
         var copy = CopyWorkflowState.Shared.IsPrepared;
         var move = MoveWorkflowState.Shared.IsPrepared;
+        var actions = new List<ShellMenuAction>();
+        if (Directory.Exists(destination) && SutShell.ClipboardContainsItems())
+        {
+            actions.Add(new ShellMenuAction("ItemClipboardPaste", "Item clipboard paste", true, () =>
+            {
+                try
+                {
+                    var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
+                    try { SutShell.PasteFromClipboard(destination, owner); }
+                    finally { Refresh(true); }
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception exception)
+                {
+                    MessageBox.Show(Window.GetWindow(this), exception.Message, "Operation failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }) { IconSource = ItemClipboardPasteButton });
+        }
         if (!link && !copy && !move)
-            return [];
+            return actions;
 
         void Execute(string action)
         {
@@ -155,12 +173,11 @@ public partial class ContentView : UserControl
         var execute = link ? new ShellMenuAction("LinkExecute", "Insert link to marked item", true, () => Execute("LinkExecute")) { IconSource = LinkExecuteButton } :
             copy ? new ShellMenuAction("CopyExecute", "Insert copy of marked item", true, () => Execute("CopyExecute")) { IconSource = CopyExecuteButton } :
             new ShellMenuAction("MoveExecute", "Move marked item here", true, () => Execute("MoveExecute")) { IconSource = MoveExecuteButton };
-        return
-        [
-            new ShellMenuAction("AbortTransfer", "Abort transfer", true,
-                () => { LinkWorkflowState.Shared.Abort(); CopyWorkflowState.Shared.Abort(); MoveWorkflowState.Shared.Abort(); }),
-            execute
-        ];
+        actions.Add(new ShellMenuAction("AbortTransfer", "Abort transfer", true,
+            () => { LinkWorkflowState.Shared.Abort(); CopyWorkflowState.Shared.Abort(); MoveWorkflowState.Shared.Abort(); },
+            SeparatorBefore: actions.Count > 0));
+        actions.Add(execute);
+        return actions;
     }
 
     private IReadOnlyList<ShellMenuAction> CreateContextMenuActionsForContext(bool background)

@@ -11,6 +11,7 @@ $testView = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.Conten
 $menuActionOrder = @($testView.GetType().GetMethod('CreateContextMenuActions', $viewFlags).Invoke($testView, @()) | ForEach-Object { $_.Id })
 $directory = Join-Path ([System.IO.Path]::GetTempPath()) ('kis-pathview-test-' + [guid]::NewGuid().ToString('N'))
 $previousContext = [System.Threading.SynchronizationContext]::Current
+$savedClipboard = [System.Windows.Clipboard]::GetDataObject()
 
 function Find-TextVisual($parent, [string] $text) {
     if ($parent -is [System.Windows.Controls.TextBlock] -and $parent.Text -ceq $text) { return $parent }
@@ -22,6 +23,7 @@ function Find-TextVisual($parent, [string] $text) {
 }
 
 try {
+    [System.Windows.Clipboard]::SetText('pathview test')
     [System.IO.Directory]::CreateDirectory((Join-Path $directory 'OtherFolder')) | Out-Null
     [System.Threading.SynchronizationContext]::SetSynchronizationContext(
         [System.Windows.Threading.DispatcherSynchronizationContext]::new([System.Windows.Threading.Dispatcher]::CurrentDispatcher))
@@ -215,6 +217,26 @@ try {
             Assert-True ($menuProbe.SelectIndex -eq 1 -and $menuProbe.Items[0] -ceq 'Abort transfer' -and
                 [IO.File]::Exists((Join-Path $subdirectoryEntry.Path 'sidebar-transfer.txt')) -and -not $workflow.IsPrepared) 'Sidebar directory content menu copied to the wrong destination.'
         } finally { $menuProbe.Dispose(); $workflow.Abort() }
+        $sidebarClipboardFile = [string] (Join-Path $directory 'sidebar-clipboard.txt')
+        [IO.File]::WriteAllText($sidebarClipboardFile, 'sidebar clipboard')
+        $clipboardData = [System.Windows.DataObject]::new()
+        $clipboardPaths = [System.Collections.Specialized.StringCollection]::new()
+        $null = $clipboardPaths.Add($sidebarClipboardFile)
+        $clipboardData.SetFileDropList($clipboardPaths)
+        $clipboardData.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] 1)))
+        [System.Windows.Clipboard]::SetDataObject($clipboardData, $true)
+        $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
+        $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
+        try { $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true)) }
+        finally { $menuProbe.Dispose() }
+        $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
+        $menuProbe.SelectLabel = 'Item clipboard paste'
+        try {
+            $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true))
+            Assert-True ($menuProbe.SelectIndex -eq 0 -and ($menuProbe.States[1] -band 0x800) -ne 0 -and
+                [IO.File]::Exists((Join-Path $subdirectoryEntry.Path 'sidebar-clipboard.txt')) -and [IO.File]::Exists($sidebarClipboardFile)) 'Sidebar clipboard paste used the wrong menu position or destination.'
+        } finally { $menuProbe.Dispose() }
+        [System.Windows.Clipboard]::SetText('pathview test')
         $activeTree = $fixedPathview.FindName('ActivePathTree')
         $treeItem = $activeTree.ItemContainerGenerator.ContainerFromIndex(0)
         Assert-True ($null -ne $treeItem) 'The fixed Active path tree was not realized.'
@@ -263,6 +285,8 @@ try {
     }
     'Pathview tests passed.'
 } finally {
+    if ($null -eq $savedClipboard) { [System.Windows.Clipboard]::Clear() }
+    else { [System.Windows.Clipboard]::SetDataObject($savedClipboard, $true) }
     [System.Threading.SynchronizationContext]::SetSynchronizationContext($previousContext)
     $application.Shutdown()
     if (Test-Path -LiteralPath $directory) { Remove-Item -LiteralPath $directory -Recurse -Force }

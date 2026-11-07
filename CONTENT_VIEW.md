@@ -737,6 +737,9 @@ paste validates the clipboard's file paths and preferred drop effect again at
 execution, then explicitly copies the captured paths using `IFileOperation`.
 It does not invoke the Shell Paste verb. Clipboard changes update Item clipboard
 paste availability but do not prepare, cancel, or replace internal transfers.
+When supported clipboard Copy data is available, directory-item and background
+Content Menus offer Item clipboard paste at the top, targeting the clicked or
+current directory respectively. Native Paste is excluded from those menus.
 
 Rename is enabled for exactly one selected filesystem item and starts the
 Shell inline editor. Do not invoke the selection `IContextMenu` with the

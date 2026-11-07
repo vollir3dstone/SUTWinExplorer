@@ -432,6 +432,10 @@ may show its requested row in light gray without changing the active selection.
   overwritten. Copy uses native file copy and Move uses native file move.
   **Item clipboard copy** copies selected files and directories to the Windows clipboard;
   **Item clipboard paste** copies supported clipboard filesystem items into the current directory.
+  When supported Copy data is available, directory-item and background Content
+  Menus offer Item clipboard paste first, followed by a separator. It targets the
+  clicked directory or the current directory respectively. Native Paste is
+  excluded from these Content Menus.
   Item clipboard copy is in the selection-row group with Name and Path clipboard copy; Item clipboard paste is in the directory
   column before the Link group and is enabled for a supported clipboard Copy and an
   existing destination directory. Cut, Link-only and missing or ambiguous drop effects

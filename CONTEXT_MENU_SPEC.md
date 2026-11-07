@@ -339,10 +339,8 @@ The factory replaces the native New submenu with the supplied application
 action, retaining the Shell's localized label when found and otherwise appending
 the action with its `New...` fallback label. It keeps the original Windows menu for Shift and the dialog's explicit
 Windows fallback. Supported direct types and their limits are described in
-[CONTENT_VIEW.md](CONTENT_VIEW.md). Background
-commands such as Windows clipboard Paste are not subjected to the selected-item
-file-verb exclusion list; they are distinct from the application's prepared
-Link/Copy/Move workflows.
+[CONTENT_VIEW.md](CONTENT_VIEW.md). The background Content Menu excludes the
+native Shell `paste` command; the original Shift menu is unchanged.
 
 For an existing active directory, Properties and the three clipboard-copy
 actions are enabled. Mark link and Mark copy additionally require that no
@@ -353,13 +351,17 @@ requires a deletable directory and no prepared transfer. Drive roots have no
 editable Shell name and cannot be deleted. A missing or virtual target can fall
 back to the native background menu rather than the paired menus.
 
-When a Link, Copy or Move is prepared, the Content Menu for a directory item
-or the active directory background starts with `Abort transfer` and the matching
-execute action (`Insert link to marked item`, `Insert copy of marked item`, or
-`Move marked item here`), followed by a separator. The clicked directory is the
-destination for an item menu; the active directory is the destination for a
-background menu. With no prepared transfer, or for a file item, these entries
-are absent. Existing Shell and `New` commands retain their behavior.
+When supported filesystem Copy data is available on the clipboard, the Content
+Menu for a directory item or the active directory background starts with
+`Item clipboard paste`, followed by a separator. The action revalidates the
+clipboard when invoked. When a Link, Copy or Move is prepared, `Abort transfer`
+and the matching execute action (`Insert link to marked item`, `Insert copy of
+marked item`, or `Move marked item here`) follow, with their own separator. The
+clicked directory is the destination for an item menu; the active directory is
+the destination for a background menu. Clipboard paste and prepared transfers
+are independent. Unsupported clipboard data, missing transfers and file items
+do not offer their respective actions. Existing Shell and `New` commands retain
+their behavior.
 
 Both paired background menus exclude the Shell commands `refresh` and
 `viewcustomwizard` (Refresh and Customize this folder). The original native
@@ -402,7 +404,8 @@ exclusive prepared-operation workflows, not the Windows clipboard: mark item pre
 selected paths, execute operates in the current folder, and abort clears the
 prepared operation. Item clipboard copy invokes the Shell Copy verb for its selection and
 Item clipboard paste explicitly copies supported clipboard file paths into the current
-directory. It rejects Cut, Link-only and ambiguous clipboard data; a Copy effect that
+directory or the clicked directory for a directory Content Menu. It rejects Cut,
+Link-only and ambiguous clipboard data; a Copy effect that
 also permits Link is accepted but cannot create a link. These actions
 and external clipboard operations do not change the internal workflows. Link execute
 creates Shell shortcuts without changing the sources.
