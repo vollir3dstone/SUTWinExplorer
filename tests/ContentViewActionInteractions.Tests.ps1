@@ -47,6 +47,12 @@ try {
         $notesMenuRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'notes.txt') })[0]
         $otherFileRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq (Join-Path $directory 'exact.bin') })[0]
         Assert-True ($probe.Ready -and $null -ne $notesMenuRow -and $null -ne $otherFileRow) "ContentView action fixture did not load: $($probe.Error)"
+        $list.SelectedItems.Add($notesMenuRow) | Out-Null
+        $list.SelectedItems.Add($otherFileRow) | Out-Null
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        $menuProbe.SelectCommandId = Get-ActionCommandId 'PathClipboardCopy'
+        try { $null = $showMenu.Invoke($view, [object[]] @($null)) } finally { $menuProbe.Dispose() }
+        Assert-True ($list.SelectedItems.Count -eq 0 -and [System.Windows.Clipboard]::GetText() -ceq $directory) 'The background menu did not clear the selection and use the active directory.'
         $unfilteredMenu = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path (Join-Path $directory 'notes.txt') -Generic | ConvertFrom-Json).Menu
         $notepadEntries = @($unfilteredMenu | Where-Object { $_.Verb -eq 'ANotepad++64' })
         $viewerEntries = @($unfilteredMenu | Where-Object { $_.Verb -eq 'view SUTTextViewer' })

@@ -90,7 +90,7 @@ public partial class ContentView : UserControl
                 CreateOpenLocationAction(paths)),
             () => SutShell.ShowBackgroundMenu(CurrentPath, new WindowInteropHelper(Window.GetWindow(this)!).Handle),
             () => CurrentPath, () => CreateContextMenuActionsForContext(true),
-            ShowNewItemDialog, CreateOpenLocationAction, CreateRunningAppActions, CreateContentTransferActions);
+            ShowNewItemDialog, CreateOpenLocationAction, CreateRunningAppActions, CreateContentTransferActions, ClearSelection);
         HideDirectoriesCheckBox.GetCheckBox().Checked += FiltersChanged;
         HideDirectoriesCheckBox.GetCheckBox().Unchecked += FiltersChanged;
         HideInternalContentCheckBox.GetCheckBox().Checked += FiltersChanged;
@@ -112,6 +112,8 @@ public partial class ContentView : UserControl
     }
 
     private IReadOnlyList<ShellMenuAction> CreateContextMenuActions() => CreateContextMenuActionsForContext(false);
+
+    internal void ClearSelection() => FileList.SelectedItems.Clear();
 
     internal IReadOnlyList<ShellMenuAction> CreateContentTransferActions(string destination)
     {
@@ -144,18 +146,72 @@ public partial class ContentView : UserControl
 
     private IReadOnlyList<ShellMenuAction> CreateContextMenuActionsForContext(bool background)
     {
+        if (background)
+            return CreateActiveDirectoryMenuActions();
         var actions = new[] { PropertiesButton, NameClipboardCopyButton, PathClipboardCopyButton, ItemClipboardCopyButton, LinkMarkItemButton, CopyMarkItemButton,
             MoveMarkItemButton, RenameButton, DeleteButton }.Select(button => new ShellMenuAction(
                 (string)button.Tag, System.Windows.Automation.AutomationProperties.GetName(button), button.IsEnabled,
                 () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)),
                 IsTransfer: button.Tag is string action && (action.StartsWith("Link", StringComparison.Ordinal) || action.StartsWith("Copy", StringComparison.Ordinal) || action.StartsWith("Move", StringComparison.Ordinal)),
                 SeparatorBefore: button == NameClipboardCopyButton || button == DeleteButton) { IconSource = button }).ToArray();
-        if (background)
-            actions = actions.Select(action => action with { IsEnabled = false }).ToArray();
         var selected = FileList.SelectedItems.OfType<DirectoryRow>().ToArray();
-        var relocate = new ShellMenuAction("Relocate", "Relocate", !background && selected.Length == 1 && RenameButton.IsEnabled && RelocateRequested is not null,
+        var relocate = new ShellMenuAction("Relocate", "Relocate", selected.Length == 1 && RenameButton.IsEnabled && RelocateRequested is not null,
             () => RelocateRequested?.Invoke(selected[0].FullPath));
         return SutContextMenuFactory.CreateBaseActions(actions, relocate);
+    }
+
+    internal IReadOnlyList<ShellMenuAction> CreateActiveDirectoryMenuActions()
+    {
+        var path = CurrentPath;
+        var exists = Directory.Exists(path);
+        var editable = exists && SutShell.GetEditName(path) is not null;
+        var canStart = !LinkWorkflowState.Shared.IsPrepared && !CopyWorkflowState.Shared.IsPrepared && !MoveWorkflowState.Shared.IsPrepared;
+        var buttons = new[] { PropertiesButton, NameClipboardCopyButton, PathClipboardCopyButton, ItemClipboardCopyButton,
+            LinkMarkItemButton, CopyMarkItemButton, MoveMarkItemButton, RenameButton, DeleteButton };
+        var actions = buttons.Select(button =>
+        {
+            var id = (string)button.Tag;
+            var enabled = id switch
+            {
+                "LinkMarkItem" or "CopyMarkItem" => exists && canStart,
+                "MoveMarkItem" => editable && canStart,
+                "Rename" => editable && RenameActiveDirectoryRequested is not null,
+                "Delete" => exists && canStart && ShellFileOperations.CanDelete(path),
+                _ => exists
+            };
+            return new ShellMenuAction(id, System.Windows.Automation.AutomationProperties.GetName(button), enabled,
+                () => ExecuteActiveDirectoryMenuAction(id, path)) { IconSource = button };
+        }).ToArray();
+        return SutContextMenuFactory.CreateBaseActions(actions,
+            new ShellMenuAction("Relocate", "Relocate", editable && RelocateRequested is not null, () => RelocateRequested?.Invoke(path)));
+    }
+
+    private void ExecuteActiveDirectoryMenuAction(string action, string path)
+    {
+        try
+        {
+            var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
+            switch (action)
+            {
+                case "Properties": SutShell.ShowProperties([path], owner); break;
+                case "NameClipboardCopy": Clipboard.SetText(SutShell.GetFileSystemName(path)); break;
+                case "PathClipboardCopy": Clipboard.SetText(path); break;
+                case "ItemClipboardCopy": SutShell.CopyToClipboard([path], owner); break;
+                case "LinkMarkItem": LinkWorkflowState.Shared.Prepare([path]); break;
+                case "CopyMarkItem": CopyWorkflowState.Shared.Prepare([path]); break;
+                case "MoveMarkItem": MoveWorkflowState.Shared.Prepare([path]); break;
+                case "Rename": RenameActiveDirectoryRequested?.Invoke(); break;
+                case "Delete":
+                    try { SutShell.Delete([path], owner); }
+                    finally { Refresh(true); }
+                    break;
+            }
+        }
+        catch (OperationCanceledException) when (action == "Delete") { }
+        catch (Exception exception)
+        {
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "Operation failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private IReadOnlyList<ShellMenuAction> CreateRunningAppActions(IReadOnlyList<string> paths)
@@ -298,6 +354,7 @@ public partial class ContentView : UserControl
     internal event EventHandler<string>? DirectoryOpenRequested;
     internal event Action<string, string>? DirectoryRenamed;
     internal event Action<string>? RelocateRequested;
+    internal event Action? RenameActiveDirectoryRequested;
     internal event EventHandler<DirectoryNotification>? FileSystemChanged;
     internal Action<Action>? DirectoryOperation { get; set; }
 

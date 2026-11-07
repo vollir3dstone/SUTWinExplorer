@@ -123,6 +123,7 @@ public partial class Pathview : UserControl
         DirectoryContent.DirectoryOpenRequested += ContentView_DirectoryOpenRequested;
         DirectoryContent.DirectoryRenamed += NotifyDirectoryRenamed;
         DirectoryContent.RelocateRequested += ShowRelocateDialog;
+        DirectoryContent.RenameActiveDirectoryRequested += () => RenameCurrentDirectoryButton_Click(this, new RoutedEventArgs());
         DirectoryContent.DirectoryOperation = RunDirectoryOperation;
         DirectoryContent.FileSystemChanged += ContentView_FileSystemChanged;
         DirectoryContent.Initialize(IsBrowsable);
@@ -1355,7 +1356,8 @@ public partial class Pathview : UserControl
             (entry, _) => ShowNativeMenu(this, entry.Path, !entry.IsTop ? () => BeginTreeRename(entry) : null),
             () => { if (!tree) ShowNativeBackgroundMenu(this, CurrentPath); },
             () => CurrentPath, CreateBackgroundMenuActions,
-            DirectoryContent.ShowNewItemDialog, transferActions: DirectoryContent.CreateContentTransferActions);
+            DirectoryContent.ShowNewItemDialog, transferActions: DirectoryContent.CreateContentTransferActions,
+            clearBackgroundSelection: DirectoryContent.ClearSelection);
     }
 
     private void SelectDirectoryMenuTarget(TreeEntry? entry, bool tree)
@@ -1405,27 +1407,7 @@ public partial class Pathview : UserControl
     }
 
     private IReadOnlyList<ShellMenuAction> CreateBackgroundMenuActions()
-    {
-        var linkPrepared = LinkWorkflowState.Shared.IsPrepared;
-        var copyPrepared = CopyWorkflowState.Shared.IsPrepared;
-        var movePrepared = MoveWorkflowState.Shared.IsPrepared;
-        var actions = new (string Name, bool Enabled)[]
-        {
-            ("Properties", false), ("NameClipboardCopy", false), ("PathClipboardCopy", false),
-            ("ItemClipboardCopy", false), ("ItemClipboardPaste", Directory.Exists(CurrentPath) && SutShell.ClipboardContainsItems()), ("LinkMarkItem", false),
-            ("LinkAbort", linkPrepared), ("LinkExecute", linkPrepared), ("CopyMarkItem", false),
-            ("CopyAbort", copyPrepared), ("CopyExecute", copyPrepared), ("MoveMarkItem", false),
-            ("MoveAbort", movePrepared), ("MoveExecute", movePrepared), ("Rename", false), ("Delete", false)
-        };
-        var menuActions = actions.Select(action => new ShellMenuAction(
-            action.Name,
-            System.Windows.Automation.AutomationProperties.GetName((Button)DirectoryContent.FindName(action.Name + "Button")),
-            action.Enabled, () => ExecuteDirectoryMenuAction(action.Name, null),
-            IsTransfer: action.Name.StartsWith("Link", StringComparison.Ordinal) || action.Name.StartsWith("Copy", StringComparison.Ordinal) || action.Name.StartsWith("Move", StringComparison.Ordinal),
-            SeparatorBefore: action.Name is "NameClipboardCopy" or "ItemClipboardPaste" or "Delete")
-            { IconSource = (Button)DirectoryContent.FindName(action.Name + "Button") }).ToArray();
-        return SutContextMenuFactory.CreateBaseActions(menuActions, new ShellMenuAction("Relocate", "Relocate", false, () => { }));
-    }
+        => DirectoryContent.CreateActiveDirectoryMenuActions();
 
     private void ExecuteDirectoryMenuAction(string action, TreeEntry? entry)
     {
@@ -1582,7 +1564,10 @@ public partial class Pathview : UserControl
         if (ActivePathSubdirectoriesList.SelectedItem is TreeEntry entry && !entry.IsPlaceholder)
             ShowSubdirectoryMenu(entry, alternate: false);
         else
+        {
+            DirectoryContent.ClearSelection();
             ShowNativeBackgroundMenu(this, CurrentPath);
+        }
 
         e.Handled = true;
     }

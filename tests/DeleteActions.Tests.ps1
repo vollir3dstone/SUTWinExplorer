@@ -120,6 +120,39 @@ try {
             })
             Assert-True ($remaining.Count -eq 0) "Could not restore $($remaining.Count) Delete test fixtures from the Recycle Bin."
         }
+        $backgroundDirectory = Join-Path $directory 'background-delete-fixture'
+        [System.IO.Directory]::CreateDirectory($backgroundDirectory) | Out-Null
+        [System.IO.File]::WriteAllText((Join-Path $backgroundDirectory 'selected-file'), 'content')
+        try {
+            $null = $view.GetType().GetMethod('SetCurrentPath', $viewFlags).Invoke($view, [object[]] @([string] $backgroundDirectory))
+            $null = $view.GetType().GetMethod('Refresh', $viewFlags).Invoke($view, [object[]] @([bool] $true))
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $probe = [SutShellUiProbe]::new()
+            $probe.List = $list
+            $probe.AwaitAll = $true
+            $probe.Frame = $frame
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+            $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
+            $timer.Start()
+            try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+            Assert-True ($probe.Ready -and $list.Items.Count -eq 1) 'The background Delete fixture did not load.'
+            $list.SelectedItem = $list.Items[0]
+            $actions = $view.GetType().GetMethod('CreateActiveDirectoryMenuActions', $viewFlags).Invoke($view, @())
+            $deleteAction = @($actions | Where-Object { $_.Id -eq 'Delete' })[0]
+            Assert-True $deleteAction.IsEnabled 'Background Delete was disabled for the active directory.'
+            $confirmationProbe = [SutShellDeleteConfirmProbe]::new()
+            try { $deleteAction.Invoke.Invoke() } finally { $confirmationProbe.Dispose() }
+            Assert-True (-not [System.IO.Directory]::Exists($backgroundDirectory)) 'Background Delete did not delete the active directory.'
+            $recycled = @($recycleBin.Items() | Where-Object {
+                $_.Name -eq 'background-delete-fixture' -and [string]::Equals($recycleBin.GetDetailsOf($_, 1), $directory, [StringComparison]::OrdinalIgnoreCase)
+            })
+            Assert-True ($recycled.Count -eq 1) 'Background Delete did not send the active directory to the Recycle Bin.'
+        } finally {
+            foreach ($item in @($recycleBin.Items() | Where-Object {
+                $_.Name -eq 'background-delete-fixture' -and [string]::Equals($recycleBin.GetDetailsOf($_, 1), $directory, [StringComparison]::OrdinalIgnoreCase)
+            })) { $item.Verbs().Item(0).DoIt() }
+        }
     } finally { $window.Close() }
     'Delete action tests passed.'
 } finally {

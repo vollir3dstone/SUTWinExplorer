@@ -198,9 +198,11 @@ try {
         Assert-ShellMenu $directoryActions $head $false $owner
         $backgroundExpected = $expected
         $backgroundActions = $createBackground.Invoke($pathview, @())
-        $backgroundDisabled = @('Properties', 'Rename', 'Relocate', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', 'LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem', 'Delete') + $(if ($case -eq 'Idle') { @('AbortTransfer') } else { @() })
+        $backgroundDisabled = $directoryDisabled
         Assert-Menu $backgroundActions $backgroundExpected $backgroundDisabled
         Assert-ShellMenu $backgroundActions $head $true $owner
+        $contentBackground = $view.GetType().GetMethod('CreateContextMenuActionsForContext', $flags).Invoke($view, [object[]] @($true))
+        Assert-Menu $contentBackground $backgroundExpected $backgroundDisabled
         foreach ($name in $actionIds) {
             $enabled = switch ($name) {
                 'Properties' { $true } 'Rename' { $true } 'NameClipboardCopy' { $true } 'PathClipboardCopy' { $true } 'ItemClipboardCopy' { $true } 'ItemClipboardPaste' { $clipboardReady } 'Delete' { $case -eq 'Idle' }
@@ -215,6 +217,12 @@ try {
         $link.Abort()
         $copy.Abort()
         $move.Abort()
+    }
+    $rootView = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
+    $null = $rootView.GetType().GetMethod('SetCurrentPath', $flags).Invoke($rootView, [object[]] @([string] [IO.Path]::GetPathRoot($directory)))
+    $rootActions = $rootView.GetType().GetMethod('CreateActiveDirectoryMenuActions', $flags).Invoke($rootView, @())
+    foreach ($id in @('MoveMarkItem', 'Rename', 'Relocate', 'Delete')) {
+        if ((@($rootActions | Where-Object { $_.Id -eq $id })[0].IsEnabled)) { throw "$id was enabled for a drive root." }
     }
     $originalClipboard = [System.Windows.Clipboard]::GetDataObject()
     try {
@@ -249,6 +257,42 @@ try {
         $reveal = $view.GetType().GetMethod('RevealInsertedItems', $flags)
         $null = $reveal.Invoke($view, [object[]] @(,[string[]] @($testFile)))
         Wait-SelectedPaths $view ([string[]] @($testFile))
+        foreach ($backgroundKind in @('Content', 'Sidebar')) {
+            $backgroundActions = if ($backgroundKind -eq 'Content') {
+                $view.GetType().GetMethod('CreateContextMenuActionsForContext', $flags).Invoke($view, [object[]] @($true))
+            } else { $createBackground.Invoke($pathview, @()) }
+            foreach ($case in @(@('NameClipboardCopy', [IO.Path]::GetFileName($directory)), @('PathClipboardCopy', $directory))) {
+                @($backgroundActions | Where-Object { $_.Id -eq $case[0] })[0].Invoke.Invoke()
+                Assert-ClipboardText $case[1] "$backgroundKind background copied the wrong directory value:"
+            }
+            @($backgroundActions | Where-Object { $_.Id -eq 'ItemClipboardCopy' })[0].Invoke.Invoke()
+            Assert-ClipboardFiles ([string[]] @($directory))
+            foreach ($transferCase in @(@('Link', $link), @('Copy', $copy), @('Move', $move))) {
+                $operation, $state = $transferCase
+                $actions = if ($backgroundKind -eq 'Content') {
+                    $view.GetType().GetMethod('CreateContextMenuActionsForContext', $flags).Invoke($view, [object[]] @($true))
+                } else { $createBackground.Invoke($pathview, @()) }
+                @($actions | Where-Object { $_.Id -eq "${operation}MarkItem" })[0].Invoke.Invoke()
+                if (-not $state.IsPrepared -or @($state.PreparedPaths).Count -ne 1 -or $state.PreparedPaths[0] -cne $directory) {
+                    throw "$backgroundKind background marked the selection instead of the active directory for $operation."
+                }
+                $state.Abort()
+            }
+            Wait-SelectedPaths $view ([string[]] @($testFile))
+            foreach ($dialogCase in @(@('Rename', 'Rename directory'), @('Relocate', 'Relocate directory'))) {
+                $dialogState = @{ Seen = $false }
+                $timer = [System.Windows.Threading.DispatcherTimer]::new()
+                $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+                $timer.add_Tick({
+                    $dialog = @([System.Windows.Application]::Current.Windows | Where-Object { $_.Title -eq $dialogCase[1] -and $_.IsVisible }) | Select-Object -First 1
+                    if ($null -ne $dialog) { $dialogState.Seen = $true; $dialog.DialogResult = $false }
+                }.GetNewClosure())
+                $timer.Start()
+                try { @($backgroundActions | Where-Object { $_.Id -eq $dialogCase[0] })[0].Invoke.Invoke() }
+                finally { $timer.Stop() }
+                if (-not $dialogState.Seen -or $pathview.CurrentPath -cne $directory) { throw "$backgroundKind background $($dialogCase[0]) did not open the active directory dialog." }
+            }
+        }
         if (-not (@($createContent.Invoke($view, @()) | Where-Object { $_.Id -eq 'Relocate' })[0].IsEnabled)) { throw 'Relocate was disabled for a single file.' }
         if (-not $view.FindName('NameClipboardCopyButton').IsEnabled) { throw 'Name clipboard copy was disabled for a single file.' }
         $view.FindName('NameClipboardCopyButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))

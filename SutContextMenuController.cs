@@ -18,6 +18,7 @@ internal sealed class SutContextMenuController<T> where T : class
     private readonly Func<IReadOnlyList<string>, ShellMenuAction?>? _openLocation;
     private readonly Func<IReadOnlyList<string>, IReadOnlyList<ShellMenuAction>>? _runningApps;
     private readonly Func<string, IReadOnlyList<ShellMenuAction>>? _transferActions;
+    private readonly Action? _clearBackgroundSelection;
     private IReadOnlyDictionary<string, int>? _baseCommands;
     private string? _basePath;
     private bool _baseIsBackground;
@@ -32,7 +33,8 @@ internal sealed class SutContextMenuController<T> where T : class
         Action showBackground, Func<string> backgroundPath, Func<IReadOnlyList<ShellMenuAction>> backgroundActions, Action<string> showNew,
         Func<IReadOnlyList<string>, ShellMenuAction?>? openLocation = null,
         Func<IReadOnlyList<string>, IReadOnlyList<ShellMenuAction>>? runningApps = null,
-        Func<string, IReadOnlyList<ShellMenuAction>>? transferActions = null)
+        Func<string, IReadOnlyList<ShellMenuAction>>? transferActions = null,
+        Action? clearBackgroundSelection = null)
     {
         _path = path;
         _selection = selection;
@@ -47,6 +49,7 @@ internal sealed class SutContextMenuController<T> where T : class
         _openLocation = openLocation;
         _runningApps = runningApps;
         _transferActions = transferActions;
+        _clearBackgroundSelection = clearBackgroundSelection;
     }
 
     internal bool IsDifferentTarget(T target) => _basePath is not null &&
@@ -83,6 +86,7 @@ internal sealed class SutContextMenuController<T> where T : class
         while (true)
         {
             var background = target is null;
+            if (background) _clearBackgroundSelection?.Invoke();
             IReadOnlyList<string> selectedPaths = background ? [_backgroundPath()] : _selection();
             if (forceNative || selectedPaths.Count == 0 ||
                 !selectedPaths.All(path => File.Exists(path) || Directory.Exists(path)) ||

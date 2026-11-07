@@ -211,9 +211,11 @@ a verb. Matching is conservative: different labels, empty or lazy submenus,
 ambiguous commands and provider-specific differences can prevent a match; the
 presence of a registration alone is not proof of an identical command.
 
-The Base Menu includes the application's common actions. With no selected
-item, item actions are disabled; Abort transfer remains available when a transfer
-is prepared. The background Content Menu starts with a
+The Base Menu includes the application's common actions. Requesting a background
+menu clears the ContentView selection before the menu opens. Background actions
+target the active directory. Directory
+actions follow the normal transfer and drive-root restrictions; Abort transfer
+remains available when a transfer is prepared. The background Content Menu starts with a
 fresh native background menu and removes unique matches to the displayed Base
 Menu snapshot. `New` is in the Content Menu, not the Base Menu, and opens the
 same application-owned type and name dialog as the ContentView New button.

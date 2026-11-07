@@ -91,6 +91,11 @@ try {
         $timer.Start()
         try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
         Assert-True ($probe.Ready -and $sidebarList.SelectedItems.Count -eq 1 -and $sidebarList.SelectedItem.Entry.FullPath -eq (Join-Path $directory 'chosen-folder')) 'The sidebar-created folder was not selected in its ContentView.'
+        $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
+        $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
+        try { $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $true)) }
+        finally { $menuProbe.Dispose() }
+        Assert-True ($sidebarList.SelectedItems.Count -eq 0) 'The sidebar background menu did not clear the ContentView selection.'
         [IO.Directory]::Delete((Join-Path $directory 'chosen-folder'))
         $sidebarHideDirectories.IsChecked = $true
         foreach ($operation in @('Copy', 'Move')) {
@@ -102,7 +107,7 @@ try {
             $menuProbe.SelectCommandId = Get-ActionCommandId 'AbortTransfer'
             try {
                 $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $true))
-                Assert-True (($menuProbe.States[0] -band 3) -ne 0 -and ($menuProbe.States[2] -band 3) -ne 0 -and ($menuProbe.States[3] -band 3) -ne 0 -and
+                Assert-True (($menuProbe.States[0] -band 3) -eq 0 -and ($menuProbe.States[2] -band 3) -eq 0 -and ($menuProbe.States[3] -band 3) -eq 0 -and
                     ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'CopyMarkItem')] -band 3) -ne 0 -and ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'MoveMarkItem')] -band 3) -ne 0 -and ($menuProbe.States[$menuProbe.SelectIndex] -band 3) -eq 0 -and
                     -not $workflow.IsPrepared) "The sidebar background $operation action did not match the workflow state."
             } finally { $menuProbe.Dispose(); $workflow.Abort() }
@@ -120,7 +125,7 @@ try {
         $menuProbe.SelectCommandId = Get-ActionCommandId 'New' @('New')
         try {
             $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $true))
-            Assert-True ($newProbe.Seen -and $null -eq $newProbe.Error -and $workflow.IsPrepared) 'The New command was displaced by the active transfer actions.'
+            Assert-True ($newProbe.Seen -and $null -eq $newProbe.Error -and $workflow.IsPrepared) "The New command was displaced by the active transfer actions: seen=$($newProbe.Seen), error=$($newProbe.Error), prepared=$($workflow.IsPrepared), items=$($menuProbe.Items -join ',')."
         } finally { $newProbe.Timer.Stop(); $menuProbe.Dispose() }
         $fixedPathview.GetType().GetMethod('SelectDirectoryMenuTarget', $viewFlags).Invoke($fixedPathview, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $false))
         $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
