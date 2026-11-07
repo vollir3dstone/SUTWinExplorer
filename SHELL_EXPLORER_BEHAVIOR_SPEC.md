@@ -540,18 +540,19 @@ selection and scrolling behavior, such as selecting and revealing new items.
 
 ### Context menus and file operations
 
-- [x] The Base Menu starts with the application-owned **Properties**, followed
-  by a separator, **Name clipboard copy**, **Path clipboard copy**, **Item clipboard copy**, another separator, **Item clipboard paste**, and the available Link, Copy and Move
-  actions. Shell commands follow, then a separator, **Rename**, another separator,
-  and **Delete**. Unavailable transfer actions are
-  omitted; other unavailable actions remain visible and disabled. With an
-  eligible selection and no prepared transfer, Link mark item, Copy mark item and Move mark item
-  are available. A prepared transfer shows its abort and execute actions. The same rules apply to the content and
-  sidebar menus and their backgrounds.
+- [x] The Base Menu contains **Properties**, the three copy-to-clipboard
+  actions, **Abort transfer**, the three mark-transfer actions, filtered Shell
+  commands, **Rename**, **Relocate**, and **Delete**, in that order and with
+  separators between groups. Unavailable application actions remain visible
+  and disabled. A prepared transfer enables Abort and disables marking another
+  transfer; its execute command appears in the Content Menu of a directory item
+  or active-directory background. The exact layouts and enabled states are in
+  [CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md).
 - [x] ContentView file and folder selections use the Base and Content Menu pair
   described in [CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md).
 - [x] The ContentView item Content Menu starts with Shell **Open**, **Open in
-  running app...**, and Shell **Open with**. An unavailable Shell entry has a
+  running app...**, and Shell **Open with**, after any prepared transfer actions
+  for a directory target. An unavailable Shell entry has a
   disabled placeholder. The running-app submenu lists the visible windows of matching running applications as
   `App name - Window title`, with an app or window icon when available. For multiple files, applications must be registered
   for every selected type. The submenu is disabled for selections containing a
@@ -581,17 +582,21 @@ selection and scrolling behavior, such as selecting and revealing new items.
   Shift item menu. In a fixed Pathview it opens the location in the browsable
   Pathview. Multiple selections disable the action. An unavailable or
   non-filesystem target reports an error without opening Windows Explorer.
-- [x] Right-clicking empty content space cycles through the active folder's
-  background Base Menu, Content Menu and no menu; Shift opens the native menu.
+- [x] Empty content space and other eligible Pathview background surfaces,
+  including labels and icons, share the active directory context-menu sequence:
+  Base Menu, Content Menu, then no menu. Each background request clears the
+  ContentView table selection, even outside the table; Shift opens the native
+  background menu. Interactive controls, table chrome, trees and the Sub
+  directories list are excluded.
 - [x] The **Active path and siblings** tree uses the directory Base and Content
   Menu pair. The **Path** tree in the **Active path** tab has no context menu. Where
   renaming is available, **Rename** starts an inline editor in the tree; Enter
   commits and Escape cancels. Renamed active paths and open tabs are updated.
 - [x] In a fixed Pathview's **Sub directories** list, right-clicking a folder
-  shows the directory Base and Content Menu pair; right-clicking empty list space
-  cycles through the background pair and no menu. The Apps key and Shift+F10 show
-  the selected folder's menu or, when no folder is selected, the background
-  menu. Closing a folder's context menu clears the list selection. Where the
+  shows the directory Base and Content Menu pair. Empty list space has no
+  background menu. The Apps key and Shift+F10 show the selected folder's menu;
+  without a selected folder they show no menu. Closing a folder's context menu
+  clears the list selection. Where the
   Shell permits renaming, **Rename** starts an inline editor in the list; Enter
   commits and Escape cancels.
 - [x] The native menu can execute common commands, including Properties,

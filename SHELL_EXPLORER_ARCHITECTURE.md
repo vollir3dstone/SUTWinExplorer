@@ -689,7 +689,11 @@ no context menu. The helper queries native Shell context menus and forwards requ
 `IContextMenu2`/`IContextMenu3` menu messages.
 
 The custom ContentView and participating sidebar widgets use the paired menus
-described in [CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md). Their controller
+described in [CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md). ContentView owns one
+active-directory background sequence shared across eligible Pathview surfaces;
+the sidebar controllers own independent directory-item sequences and do not
+offer background menus. A background request clears the ContentView selection
+and targets the active directory. Each controller
 temporarily monitors mouse movement during a menu sequence: leaving the system
 double-click area or executing a command resets it, without closing an open
 popup on movement. The next normal right-click starts a new Base Menu; native

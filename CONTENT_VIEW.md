@@ -203,12 +203,18 @@ the same row while either menu is open. For `.lnk` selections its Shell Open fil
 location command is replaced by the application action **Open parent**, as in the Content Menu.
 That action opens the target's parent directory, including for folder targets, in the browsable Pathview and
 reports an unavailable or non-filesystem target instead of launching Windows
-Explorer; it is disabled for multiple selections. Right-clicking the empty
-background starts its own Base/Content/no-menu sequence; Shift-right-click keeps
-the original Windows background menu.
+Explorer; it is disabled for multiple selections. Empty table space and eligible
+non-interactive surfaces elsewhere in the same Pathview share one active
+directory Base/Content/no-menu sequence. Requesting it clears the table
+selection even when the click is outside the table; actions target the active
+directory. Shift-right-click keeps the original Windows background menu. Trees,
+the Sub directories list, table chrome and recognized interactive controls are
+excluded. See [CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md) for the full surface
+classification, menu layouts and keyboard behavior.
 
 The item Content Menu starts with Shell **Open**, **Open in running app...**,
-and Shell **Open with**, in that order. An unavailable Shell command has a
+and Shell **Open with**, in that order, except that a prepared transfer targeting
+a directory places its actions first. An unavailable Shell command has a
 disabled placeholder. The running-app submenu lists
 each visible matching app window as `App name - Window title`, ordered by app
 and window title, with an app or window icon when available. For several selected files, an app must be registered for every

@@ -40,8 +40,13 @@ implementation is in [ContentView.xaml.cs](ContentView.xaml.cs),
 
 ### View and Controller
 
-Each participating widget owns a `SutContextMenuController<T>` for its own
-target type and menu-series state. The view constructs and calls the controller;
+ContentView owns a `SutContextMenuController<DirectoryRow>` for its item menus
+and for the **active directory context-menu sequence** shared by all eligible
+background surfaces in its Pathview. The **Active path and siblings** tree and
+the **Sub directories** list each have a separate
+`SutContextMenuController<TreeEntry>` for their directory items. Each Pathview
+has its own controllers and sequence state; sidebar item series are not the
+background series. The view constructs and calls the controller;
 the controller is therefore the view's integration point, not an implementation
 detail hidden from the view. The existing views do not call
 `SutContextMenuFactory` or use `SutContextMenu` directly for the paired menus.
@@ -119,6 +124,75 @@ records whether a command was selected before invoking it; the controller
 resets the series after the popup returns. Failures also reset the controller.
 Keyboard-invoked and native fallback menus do not start a mouse-driven series.
 
+## Menu Map
+
+The following describes the custom WPF Pathview, not an independently hosted
+Windows Shell view. A menu pair is a Base Menu followed by a Content Menu, then
+one right-click with no menu. The complete layouts and filters are specified
+below; Shell and extension entries depend on the machine and target.
+
+| Target or surface | Normal right-click | Shift-right-click | Keyboard |
+| --- | --- | --- | --- |
+| ContentView file or directory row | Item pair for the selected rows | Native item menu; `.lnk` Open file location is replaced | Apps or Shift+F10 uses the selected item; with no selection it uses the background target. Shift invokes the native menu. |
+| Eligible Pathview background, including empty table space | Shared active directory context-menu sequence | Native Windows background menu | ContentView Apps with no selection opens the background Base Menu; Shift+F10 opens the native background menu. |
+| **Active path and siblings** directory item | Directory item pair for the clicked directory | Native item menu | Uses the widget's applicable item behavior. |
+| **Sub directories** directory item | Directory item pair for the clicked directory | Native item menu | Apps opens the item Base Menu; Shift+F10 opens its native item menu. |
+| Empty tree or Sub directories area | No background menu | No background menu | Sub directories without a selected item opens no menu. |
+| **Path** tree in **Active path** | No context menu, including its items | No context menu | No application item or background menu. |
+
+### Common Base Menu Layout
+
+From top to bottom the application inserts the following blocks; redundant
+separators are removed when the Shell section is empty:
+
+```text
+Properties
+---
+Copy name to clipboard
+Copy path to clipboard
+Copy item to clipboard
+---
+Abort transfer
+Mark link item
+Mark copy item
+Mark move item
+---
+[filtered Shell commands, possibly none]
+---
+Rename
+Relocate
+---
+Delete
+```
+
+These application entries stay visible when unavailable and are disabled.
+`Abort transfer` is enabled only while a Link, Copy or Move is prepared;
+marking another transfer is disabled while one is prepared. The Base Menu does
+not include clipboard Paste or the transfer execute actions. Item actions use
+the selected ContentView rows or the clicked sidebar directory; background
+actions use the active directory, regardless of the previous table selection.
+The exact Shell block varies by selection, registrations and extensions.
+
+### Content Menu Layouts
+
+The Content Menu starts with the normal Shell menu for its target, removes
+the applicable excluded and uniquely matched Base Menu commands, and adds
+application actions where appropriate:
+
+| Context | Application additions and ordering |
+| --- | --- |
+| ContentView item selection | Shell `Open`, `Open in running app...`, Shell `Open with`, then remaining eligible Shell entries. A prepared transfer targeting a directory adds the two transfer actions ahead of this group. Missing Shell Open/Open with commands have disabled placeholders. The running-app submenu is built for the selection and available windows; it is disabled when no eligible window exists or a directory is selected. |
+| Directory item with a prepared transfer | `Abort transfer` and the matching execute command precede the remaining menu, separated from it. The clicked directory is the destination. This applies to directory rows and sidebar directory items. |
+| Active directory background | The filtered Shell background commands include application-owned `New` in place of Windows New. With a prepared transfer, `Abort transfer` and the matching execute command appear first, with the active directory as destination. |
+| Selection containing a `.lnk` | Application `Open parent` replaces Shell Open file location, or is appended when Windows does not supply it; it is enabled only for one selected item. |
+
+The execute command is `Insert link to marked item`, `Insert copy of marked
+item`, or `Move marked item here`, according to the prepared workflow. The
+Content Menu does not have a fixed complete list: Windows and installed Shell
+extensions supply entries, including submenus that may be populated lazily.
+The [running-app specification](OPEN_WITH_RUNNING_APP_SPEC.md) and
+[ContentView New documentation](CONTENT_VIEW.md) describe their dynamic details.
+
 ## Selection and Menu Sequence
 
 ContentView uses the following selection rules:
@@ -194,6 +268,47 @@ button or the keyboard, but not with the right mouse button.
 
 ## Background Menus
 
+### Background Scope and Routing
+
+Background means an eligible non-interactive surface of the current Pathview,
+not an item and not necessarily a blank part of the table. Empty ContentView
+table space, free Pathview surfaces, labels and non-interactive icons all route
+to the **same active directory context-menu sequence** owned by ContentView.
+For example, opening the Base Menu on the location label and repeating the
+right-click at another eligible background point advances the same series,
+provided the normal pointer-movement and target rules have not reset it.
+Different Pathviews have independent series and active directories.
+
+The table's rows keep their item menus. Its column headers and scrollbars are
+list chrome, not background. The two tree areas and the Sub directories list,
+including their framed margins and empty space, are excluded; their directory
+item menus are unchanged. Buttons, editors, other recognized controls and
+widgets are excluded even when disabled. Thus clicking an excluded surface
+does not itself request a background menu or clear the table selection.
+
+Every accepted background request clears the ContentView table selection,
+including a request outside the table, a native Shift fallback and a pending
+no-menu step. The target is `CurrentPath`, not the old selection. Clearing the
+table selection does not clear a prepared transfer: its stored source paths
+remain available until execution or abort. Item menus keep their own selection
+and target rules.
+
+Pathview handles eligible right-clicks at its root and calls ContentView's
+background entry point. The controller also asks Pathview to hit-test screen
+coordinates when handling another right-click during an open menu, so the same
+classification applies during a series. Pathview uses a visual hit test and
+walks ancestors: this also detects disabled buttons, which an input hit test
+could skip. It excludes the named tree/list frames and recognized control
+types (`TreeView`, `ListView`, `ButtonBase`, `TextBoxBase`, `ComboBox`,
+`TabItem`, `RangeBase`, `Thumb`, `MenuItem`, `SortOrderWidget` and
+`CheckBoxWrapper`). Subclasses are covered, but this is an explicit type and
+frame list, not automatic detection of every possible interactive control.
+New custom widgets or unlisted interactive control types require checking this
+classification and its tests. The transparent Sub directories frame makes its
+padded margins hit-testable as part of the excluded area.
+
+### Shell Construction
+
 The background represents the current directory, not a selected directory item.
 The factory obtains its `IContextMenu` from a Shell view's
 `IShellView::GetItemObject(SVGIO_BACKGROUND)`. Windows decides which background
@@ -221,12 +336,22 @@ fresh native background menu and removes unique matches to the displayed Base
 Menu snapshot. `New` is in the Content Menu, not the Base Menu, and opens the
 same application-owned type and name dialog as the ContentView New button.
 The factory replaces the native New submenu with the supplied application
-action; it keeps the original Windows menu for Shift and the dialog's explicit
+action, retaining the Shell's localized label when found and otherwise appending
+the action with its `New...` fallback label. It keeps the original Windows menu for Shift and the dialog's explicit
 Windows fallback. Supported direct types and their limits are described in
 [CONTENT_VIEW.md](CONTENT_VIEW.md). Background
 commands such as Windows clipboard Paste are not subjected to the selected-item
 file-verb exclusion list; they are distinct from the application's prepared
 Link/Copy/Move workflows.
+
+For an existing active directory, Properties and the three clipboard-copy
+actions are enabled. Mark link and Mark copy additionally require that no
+transfer is prepared; Mark move also requires an editable Shell name. Rename
+requires an editable name and an available active-directory rename handler;
+Relocate requires an editable name and an available relocate handler. Delete
+requires a deletable directory and no prepared transfer. Drive roots have no
+editable Shell name and cannot be deleted. A missing or virtual target can fall
+back to the native background menu rather than the paired menus.
 
 When a Link, Copy or Move is prepared, the Content Menu for a directory item
 or the active directory background starts with `Abort transfer` and the matching
@@ -562,8 +687,9 @@ Base Menu after its popup closes, including any submenu contents populated
 while it was open. Application toolbar IDs are outside the Shell command-ID range
 and do not participate in this comparison.
 
-For ContentView item selections, the first three entries are Shell **Open**,
-**Open in running app...**, and Shell **Open with**. Shell entries are preserved
+For ContentView item selections, the first three entries, after any prepared
+transfer actions, are Shell **Open**, **Open in running app...**, and Shell
+**Open with**. Shell entries are preserved
 as native commands or submenus; unavailable entries have disabled placeholders.
 The running-app submenu contains one application action
 per matching running window, labeled `App name - Window title` and ordered by
@@ -651,6 +777,16 @@ checks movement-triggered sequence resets with both popups open and closed,
 menu command execution, a fresh Base Menu after a right-click on the same item,
 another item or the background, and ContentView unload.
 Its native popup tests temporarily display a test window and move the pointer.
+
+[Pathview.Tests.ps1](tests/Pathview.Tests.ps1) checks background classification,
+including excluded controls, a disabled button and the Sub directories margin,
+plus clearing the ContentView selection. [MultiPathview.Tests.ps1](tests/MultiPathview.Tests.ps1)
+exercises the actual right-click sequence on a Pathview label and the independent
+sidebar item series. [BaseMenuActions.Tests.ps1](tests/BaseMenuActions.Tests.ps1)
+checks active-directory action states and targets, including drive roots and
+prepared transfers. [ContentViewActionInteractions.Tests.ps1](tests/ContentViewActionInteractions.Tests.ps1)
+checks background selection clearing and transfer-menu behavior. These native UI
+tests can display windows and move the pointer.
 
 ## Follow-up
 
