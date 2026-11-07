@@ -309,7 +309,7 @@ reliably paired.
   sort changes do not. Notifications and snapshots do not guarantee an atomic
   filesystem view; Shell icon or overlay changes may not generate notifications.
 
-The focused checks in [SutShell.Tests.ps1](tests/SutShell.Tests.ps1) exercise
+The focused checks in [SutShell.Tests.ps1](../tests/SutShell.Tests.ps1) exercise
 snapshot ranges, cancellation, missing files, background completion without
 scrolling, visible-row priority, scrolling, rapid navigation, and Shell icon
 rendering in the BROWSE startup path. They also cover multiple-selection
@@ -326,14 +326,14 @@ ContentView interface or runtime behavior.
 ## Historical Scope and Relationship
 
 `ContentView` is the content component of one Pathview. Its XAML and code-behind
-live in [ContentView.xaml](./ContentView.xaml) and
-[ContentView.xaml.cs](./ContentView.xaml.cs). It owns the content filter and
+live in [ContentView.xaml](../sources/ContentView.xaml) and
+[ContentView.xaml.cs](../sources/ContentView.xaml.cs). It owns the content filter and
 operation rows, the private spike table, and the hosted Shell view. The Shell
 host is private to the component; callers do not access it directly.
 
-The [behavior specification](./SHELL_EXPLORER_BEHAVIOR_SPEC.md) remains the
+The [behavior specification](SHELL_EXPLORER_BEHAVIOR_SPEC.md) remains the
 authority for application-visible requirements and acceptance checks. The
-[application architecture](./SHELL_EXPLORER_ARCHITECTURE.md) describes how
+[application architecture](SHELL_EXPLORER_ARCHITECTURE.md) describes how
 Pathviews, navigation, trees, tabs, and content views work together. This
 document describes the component boundary and its current implementation.
 
@@ -433,7 +433,7 @@ Marking stores paths, not handles or reservations. Execute performs preflight
 checks, but paths and permissions can change afterward; a multi-item operation
 is not atomic and can partially complete before a later error. Failed preflight
 does not start a transfer and leaves the staged state available. See the
-[behavior specification](./SHELL_EXPLORER_BEHAVIOR_SPEC.md#content-listing)
+[behavior specification](SHELL_EXPLORER_BEHAVIOR_SPEC.md#content-listing)
 for the full rules, error behavior, and acceptance criteria.
 
 The app-owned workflows do not use or change the Shell clipboard. Item clipboard copy
@@ -491,7 +491,7 @@ legacy WPF list. The legacy mode has synchronous navigation controlled by
 Pathview and does not create the Shell host.
 
 Frame brushes/thickness, content button style, and the Shell icon template are
-defined once in [App.xaml](./App.xaml) and reused by ContentView and Pathview.
+defined once in [App.xaml](../sources/App.xaml) and reused by ContentView and Pathview.
 The virtual This PC path is shared through `ShellLocations`; it is not a
 filesystem path.
 
@@ -510,7 +510,7 @@ between it and the shared frame on the left. Each mapped item shows one
 
 Directories are classified first, followed by `.lnk` and `.url` files. For all other
 files, the extension is matched case-insensitively against the manually
-maintained [media-types.json](./Assets/media-types.json), which is the source
+maintained [media-types.json](../Assets/media-types.json), which is the source
 of the media type names and extension mapping. No match or no extension
 displays an empty cell. The media type name remains available as the row's
 accessibility name.
@@ -535,15 +535,15 @@ assigns each type one of the existing 16-by-16 assets:
 
 | Media type | Icon asset |
 | --- | --- |
-| `executable` | [type_exe 16.png](./Assets/type_exe%2016.png) |
-| `lines-text` | [type_lines_text 16.png](./Assets/type_lines_text%2016.png) |
-| `book` | [type_book 16.png](./Assets/type_book%2016.png) |
-| `structured-data` | [type_structured_data 16.png](./Assets/type_structured_data%2016.png) |
-| `image` | [type_image 16.png](./Assets/type_image%2016.png) |
-| `audio` | [type_audio 16.png](./Assets/type_audio%2016.png) |
-| `video` | [type_video 16.png](./Assets/type_video%2016.png) |
-| `box` | [type_box 16.png](./Assets/type_box%2016.png) |
-| `command-data` | [type_command_data 16.png](./Assets/type_command_data%2016.png) |
+| `executable` | [type_exe 16.png](../Assets/type_exe%2016.png) |
+| `lines-text` | [type_lines_text 16.png](../Assets/type_lines_text%2016.png) |
+| `book` | [type_book 16.png](../Assets/type_book%2016.png) |
+| `structured-data` | [type_structured_data 16.png](../Assets/type_structured_data%2016.png) |
+| `image` | [type_image 16.png](../Assets/type_image%2016.png) |
+| `audio` | [type_audio 16.png](../Assets/type_audio%2016.png) |
+| `video` | [type_video 16.png](../Assets/type_video%2016.png) |
+| `box` | [type_box 16.png](../Assets/type_box%2016.png) |
+| `command-data` | [type_command_data 16.png](../Assets/type_command_data%2016.png) |
 
 The enum also contains these special types, which do not need entries in the
 JSON mapping:
@@ -551,8 +551,8 @@ JSON mapping:
 | Special type | Meaning | Icon |
 | --- | --- | --- |
 | `directory` | A filesystem directory, including a directory junction. | Windows standard folder icon. |
-| `shell-link` | A `.lnk` file, including a shortcut to a directory. | [type_shell_link 16.png](./Assets/type_shell_link%2016.png). |
-| `url` | A `.url` file, providing a link to an internet resource. | [type_url 16.png](./Assets/type_url%2016.png). |
+| `shell-link` | A `.lnk` file, including a shortcut to a directory. | [type_shell_link 16.png](../Assets/type_shell_link%2016.png). |
+| `url` | A `.url` file, providing a link to an internet resource. | [type_url 16.png](../Assets/type_url%2016.png). |
 | `ambiguous` | A file extension mapped to different media type names. | Warning triangle. |
 | `None` (internal only) | No extension or no matching media type. | None; the cell is empty. |
 
@@ -621,7 +621,7 @@ well as the JSON.
 Navigation completion does not guarantee that the Shell has finished
 populating or laying out its view. In particular, a first item query can be
 empty and a vertical scrollbar can appear later. The host therefore creates a
-[`ShellViewChangeMonitor`](./ShellViewChangeMonitor.cs) for its native host
+[`ShellViewChangeMonitor`](../sources/ShellViewChangeMonitor.cs) for its native host
 window. It installs two out-of-context `SetWinEventHook` subscriptions scoped
 to the current process and filters callbacks to descendant HWNDs of that host:
 
@@ -724,10 +724,10 @@ changing virtualized item sizes or scroll extent. This is empirically derived,
 not a documented Shell metric. At 96 DPI, the latest measured alignment was
 0 px from the top through the middle and 1 px at the end; other DPI settings
 and Windows versions remain untested. See the
-[scroll-sync handoff](./SCROLL_SYNC_HANDOFF.md) for measurements and history.
+[scroll-sync handoff](SCROLL_SYNC_HANDOFF.md) for measurements and history.
 
 The visible delay between Shell rows and the private column is an open
-investigation; see [private column population latency](./CONTENT_VIEW_POPULATION_LATENCY.md)
+investigation; see [private column population latency](CONTENT_VIEW_POPULATION_LATENCY.md)
 for the current hypotheses and measurement plan.
 
 ### Transfer and selection implementation

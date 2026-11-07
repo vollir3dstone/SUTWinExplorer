@@ -55,5 +55,5 @@ the items; the accessibility-event path is not necessarily involved every time.
   loading, filtering, navigation failure handling, or scroll alignment. Do not
   assume changing dispatcher priorities alone fixes the problem.
 
-See [CONTENT_VIEW.md](./CONTENT_VIEW.md) for the current behavior, event
+See [CONTENT_VIEW.md](CONTENT_VIEW.md) for the current behavior, event
 subscriptions, synchronization details, and known limitations.

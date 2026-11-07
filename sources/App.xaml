@@ -1,12 +1,11 @@
 ﻿<Application x:Class="SUTWinExplorer.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:SUTWinExplorer">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="Styles/InputControlStyles.xaml" />
-                <ResourceDictionary Source="Styles/TabItemStyle.xaml" />
+                <ResourceDictionary Source="/sources/InputControlStyles.xaml" />
+                <ResourceDictionary Source="/sources/TabItemStyle.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <SolidColorBrush x:Key="ItemHoverBrush" Color="#E5F3FF" />
             <SolidColorBrush x:Key="ItemSelectionBrush" Color="#CCE8FF" />

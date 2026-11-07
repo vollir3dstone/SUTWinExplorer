@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <AssemblyTitle>KIS Explorer</AssemblyTitle>
     <Product>KIS Explorer</Product>
@@ -21,7 +22,7 @@
   </Target>
 
   <Target Name="ValidateMediaTypes" BeforeTargets="PrepareForBuild" Condition="'$(DesignTimeBuild)' != 'true'">
-    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ValidateMediaTypes.ps1&quot; -Path &quot;$(MSBuildProjectDirectory)\Assets\media-types.json&quot;" />
+    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\scripts\ValidateMediaTypes.ps1&quot; -Path &quot;$(MSBuildProjectDirectory)\Assets\media-types.json&quot;" />
   </Target>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">

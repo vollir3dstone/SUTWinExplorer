@@ -38,11 +38,11 @@ This specification describes the implemented behavior, not a promise that every
 installed extension or every Windows 11 compact-menu command is available. The
 separate [diagnostic spike](CONTEXT_MENU_SPIKE.md) retains the investigations,
 including unsuccessful approaches and machine-specific observations. The main
-implementation is in [ContentView.xaml.cs](ContentView.xaml.cs),
-[ExplorerTabView.xaml.cs](ExplorerTabView.xaml.cs),
-[SutContextMenuController.cs](SutContextMenuController.cs) and
-[SutContextMenuFactory.cs](SutContextMenuFactory.cs), with popup handling in
-[SutContextMenu.cs](SutContextMenu.cs).
+implementation is in [ContentView.xaml.cs](../sources/ContentView.xaml.cs),
+[ExplorerTabView.xaml.cs](../sources/ExplorerTabView.xaml.cs),
+[SutContextMenuController.cs](../sources/SutContextMenuController.cs) and
+[SutContextMenuFactory.cs](../sources/SutContextMenuFactory.cs), with popup handling in
+[SutContextMenu.cs](../sources/SutContextMenu.cs).
 
 ## Responsibilities and Lifetime
 
@@ -629,7 +629,7 @@ any available comparison stays out of the Base Menu. Neither registry overlap
 nor a menu match proves that an action is content-independent or identifies its
 provider with certainty.
 
-The embedded [directory menu whitelist](Assets/directory-menu-whitelist.json)
+The embedded [directory menu whitelist](../Assets/directory-menu-whitelist.json)
 is initially empty. Each `extensions` entry has `_type` set to `shellExtension`,
 a descriptive `name`, and `verbs` and `clsids` arrays. For example:
 
@@ -713,14 +713,14 @@ verb. The resource ID is not a documented Shell API contract; if the resource
 cannot be loaded or a Windows version represents the submenu differently, this
 exception may not match.
 
-The embedded [Shell extension blacklist](Assets/shell-extension-blacklist.json)
+The embedded [Shell extension blacklist](../Assets/shell-extension-blacklist.json)
 contains descriptive names and exact verbs, currently `ANotepad++64` for
 Notepad++. Names are informational; verbs are matched case-insensitively. The
 blacklist affects only top-level entries in file and mixed-selection Base Menus, not the directory-only
 Base Menu. It is embedded at build time, so editing it requires a rebuild. The Content Menu does not apply
 this blacklist, so those commands can appear there when Windows supplies them.
 The separate
-[diagnostic tool](tests/ContextMenuSpike.ps1) can help discover observed verbs;
+[diagnostic tool](../tests/ContextMenuSpike.ps1) can help discover observed verbs;
 its registry candidates are not proof that a particular command was supplied.
 
 ## Content Menu and Duplicate Detection
@@ -807,7 +807,7 @@ alternatives and their limitations.
 
 ## Verification
 
-[SutShell.Tests.ps1](tests/SutShell.Tests.ps1) exercises menu contents, filtering,
+[SutShell.Tests.ps1](../tests/SutShell.Tests.ps1) exercises menu contents, filtering,
 toolbar actions, Shell invocation, selection and menu switching for single,
 multiple and mixed files and directories. It also checks the independent sidebar
 menu series, target-specific actions and the absence of an Active path tree menu. It
@@ -818,19 +818,19 @@ these tests display windows and move the pointer. Manual verification in the
 actual application remains useful for installed extensions, Windows versions and
 interaction timings not represented by the test environment.
 
-[ItemClipboardActions.Tests.ps1](tests/ItemClipboardActions.Tests.ps1) also
+[ItemClipboardActions.Tests.ps1](../tests/ItemClipboardActions.Tests.ps1) also
 checks movement-triggered sequence resets with both popups open and closed,
 menu command execution, a fresh Base Menu after a right-click on the same item,
 another item or the background, and ContentView unload.
 Its native popup tests temporarily display a test window and move the pointer.
 
-[Pathview.Tests.ps1](tests/Pathview.Tests.ps1) checks background classification,
+[Pathview.Tests.ps1](../tests/Pathview.Tests.ps1) checks background classification,
 including excluded controls, a disabled button and the Sub directories margin,
-plus clearing the ContentView selection. [MultiPathview.Tests.ps1](tests/MultiPathview.Tests.ps1)
+plus clearing the ContentView selection. [MultiPathview.Tests.ps1](../tests/MultiPathview.Tests.ps1)
 exercises the actual right-click sequence on a Pathview label and the independent
-sidebar item series. [BaseMenuActions.Tests.ps1](tests/BaseMenuActions.Tests.ps1)
+sidebar item series. [BaseMenuActions.Tests.ps1](../tests/BaseMenuActions.Tests.ps1)
 checks active-directory action states and targets, including drive roots and
-prepared transfers. [ContentViewActionInteractions.Tests.ps1](tests/ContentViewActionInteractions.Tests.ps1)
+prepared transfers. [ContentViewActionInteractions.Tests.ps1](../tests/ContentViewActionInteractions.Tests.ps1)
 checks background selection clearing and transfer-menu behavior. These native UI
 tests can display windows and move the pointer.
 

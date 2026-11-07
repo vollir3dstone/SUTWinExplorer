@@ -107,7 +107,7 @@ and the event meanings in
 
 ## Test Results and Open Questions
 
-The comparison in [tests/DirectoryObservers.Tests.ps1](tests/DirectoryObservers.Tests.ps1)
+The comparison in [tests/DirectoryObservers.Tests.ps1](../tests/DirectoryObservers.Tests.ps1)
 used .NET operations on a local NTFS volume, one observed test directory per
 scenario, and a two-second observation window. With all Shell event types
 registered, the tested direct file creates, writes, date changes, renames and
@@ -123,7 +123,7 @@ either notification. Other tested nested operations produced no notification in
 that run. These observations are not a guarantee for other Windows versions,
 filesystems, providers, workloads, or timing.
 
-[tests/PathviewRefresh.Tests.ps1](tests/PathviewRefresh.Tests.ps1) passed with
+[tests/PathviewRefresh.Tests.ps1](../tests/PathviewRefresh.Tests.ps1) passed with
 the default observer. With the Shell observer, it failed at the folder metadata
 check because the enumeration-dirty flag was already set; the cache generation
 and displayed date had not yet changed. The reason for that flag was not

@@ -2,7 +2,7 @@
 param()
 
 $ErrorActionPreference = 'Stop'
-$root = $PSScriptRoot
+$root = Split-Path $PSScriptRoot -Parent
 $phase = 'preflight'
 $messagePath = $null
 
@@ -85,7 +85,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Debug build failed with exit code $LASTEXITCODE." }
 
     $phase = 'installer builds'
-    & (Join-Path $root 'installer-config\build-installer.ps1')
+    & (Join-Path $PSScriptRoot 'build-installer.ps1')
 
     $phase = 'release commit'
     & git -C $root add -- ReleaseDescription.txt
@@ -96,14 +96,14 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Could not create the release commit.' }
 
     $phase = 'first release-list update'
-    & (Join-Path $root 'create_release_notes.ps1')
+    & (Join-Path $PSScriptRoot 'create_release_notes.ps1')
     & git -C $root add -- RELEASES.html
     if ($LASTEXITCODE -ne 0) { throw 'Could not stage the release list.' }
     & git -C $root commit -m "Update release list for $version"
     if ($LASTEXITCODE -ne 0) { throw 'Could not commit the first release-list update.' }
 
     $phase = 'second release-list update'
-    & (Join-Path $root 'create_release_notes.ps1')
+    & (Join-Path $PSScriptRoot 'create_release_notes.ps1')
     & git -C $root add -- RELEASES.html
     if ($LASTEXITCODE -ne 0) { throw 'Could not stage the release list.' }
     & git -C $root commit -m "Include release list commit for $version"

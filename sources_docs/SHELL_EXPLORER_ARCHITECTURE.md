@@ -207,7 +207,7 @@ leading ellipsis prefix is omitted.
   history, success-gated tree selection, and notification-route calculation.
   Copy and Move workflow state remains shared across Pathviews. Common frame,
   button, and icon resources are defined once in `App.xaml` for both views.
-  See [CONTENT_VIEW.md](./CONTENT_VIEW.md) for the component's behavior,
+  See [CONTENT_VIEW.md](CONTENT_VIEW.md) for the component's behavior,
   interface, and implementation.
 - `Pathview.IsBrowsable` is immutable for the lifetime of a Pathview. `MainWindow`
   creates exactly one browsable Pathview as the `TabControl`'s first item; all
@@ -372,7 +372,7 @@ leading ellipsis prefix is omitted.
 - Content operations are presented by each ContentView, but Copy and Move
   prepared state is shared across tabs. `MainWindow` owns the optional
   Shell-copy integration; its interaction with the shared workflows is
-  described in [CONTENT_VIEW.md](./CONTENT_VIEW.md#transfer-and-selection-implementation).
+  described in [CONTENT_VIEW.md](CONTENT_VIEW.md#transfer-and-selection-implementation).
 - The browsable **Active path and siblings** tree has a **Top** root named with
   the localized Shell display name for **This PC** and shown with its Shell
   icon; its children are the available drives. Selecting it navigates the
@@ -567,13 +567,13 @@ WPF file list.
 
 Pathview requests navigation through ContentView and commits location and history
 only after successful Shell navigation. ContentView encapsulates the host; its
-[implementation and navigation details](./CONTENT_VIEW.md#shell-view-host) are
+[implementation and navigation details](CONTENT_VIEW.md#shell-view-host) are
 documented with the component.
 
 ## Shell Change Notifications
 
 The agreed performance and refresh requirements are specified in
-[Required refresh contract](./SUTSHELL_API.md#required-refresh-contract).
+[Required refresh contract](SUTSHELL_API.md#required-refresh-contract).
 The following describes the current implementation, which does not yet satisfy
 every rule in that contract.
 
@@ -669,7 +669,7 @@ changes can likewise be missed. Re-registering the watchers cannot replay
 missed notifications. Conversely, moving or renaming a Pathview's directory
 alone does not mark its unchanged content enumeration-dirty; its timestamp keys
 are remapped before comparison. The integration checks in
-[MultiPathviewDirectoryChanges.Tests.ps1](tests/MultiPathviewDirectoryChanges.Tests.ps1) cover real ancestor
+[MultiPathviewDirectoryChanges.Tests.ps1](../tests/MultiPathviewDirectoryChanges.Tests.ps1) cover real ancestor
 rename and relocation with multiple Pathviews, cached contents, Use Case paths,
 observer restoration after failure or cancellation, and a directory change
 during suspension.
@@ -677,7 +677,7 @@ during suspension.
 ## ContentView sizing and filtering
 
 Shell content sizing and filter internals are documented in
-[CONTENT_VIEW.md](./CONTENT_VIEW.md#shell-details-column-sizing).
+[CONTENT_VIEW.md](CONTENT_VIEW.md#shell-details-column-sizing).
 
 ## Native Context Menus and Operations
 
@@ -712,7 +712,7 @@ siblings** tree uses the same drop handler for filesystem directory items and
 its background; virtual tree items are rejected. The small **Active path**
 tree does not participate. Ordinary right-click menu
 handlers remain independent of drag-and-drop. Integration tests in
-[ShellDragDrop.Tests.ps1](tests/ShellDragDrop.Tests.ps1) exercise real gestures,
+[ShellDragDrop.Tests.ps1](../tests/ShellDragDrop.Tests.ps1) exercise real gestures,
 modifier effects, cross-process data and right-click behavior.
 
 The Pathview also uses `ListViewDropTarget` for eligible background surfaces,
@@ -729,7 +729,7 @@ and history to the returned filesystem path. The virtual **This PC** tree root
 has no rename editor.
 
 Shell keyboard routing and the corresponding spike checks are documented in
-[CONTENT_VIEW.md](./CONTENT_VIEW.md#shell-keyboard-routing).
+[CONTENT_VIEW.md](CONTENT_VIEW.md#shell-keyboard-routing).
 
 ## Build and Output
 

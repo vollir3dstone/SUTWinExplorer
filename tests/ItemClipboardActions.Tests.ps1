@@ -141,7 +141,7 @@ $assembly = [Reflection.Assembly]::LoadFrom((Join-Path $PSScriptRoot '../bin/Deb
 [System.Windows.Application].GetField('_resourceAssembly', [Reflection.BindingFlags]'Static,NonPublic').SetValue($null, $assembly)
 $application = [System.Windows.Application]::new()
 $application.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
-$resources = [System.Windows.Application]::LoadComponent([Uri]::new('/SUTWinExplorer;component/Styles/InputControlStyles.xaml', [UriKind]::Relative))
+$resources = [System.Windows.Application]::LoadComponent([Uri]::new('/SUTWinExplorer;component/sources/InputControlStyles.xaml', [UriKind]::Relative))
 $application.Resources.MergedDictionaries.Add($resources)
 $buttonStyle = [System.Windows.Style]::new([System.Windows.Controls.Button], $resources[[System.Windows.Controls.Button]])
 $buttonStyle.Setters.Add([System.Windows.Setter]::new([System.Windows.FrameworkElement]::HeightProperty, [double] 24))

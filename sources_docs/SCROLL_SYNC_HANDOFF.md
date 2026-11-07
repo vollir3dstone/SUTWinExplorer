@@ -6,7 +6,7 @@ Keep the native `IExplorerBrowser` Shell view as the real file list and mirror i
 
 ## ContentView extraction (2026-10-28)
 
-The current implementation lives in `ContentView.xaml` and `ContentView.xaml.cs`: the filter and action rows, private table, Shell host, refresh and scroll synchronization are encapsulated together. `Pathview` communicates with the content view rather than accessing the Shell host. Copy/Move state remains shared across tabs, and common frame, button and icon resources are shared through `App.xaml`. See [CONTENT_VIEW.md](./CONTENT_VIEW.md) for the component's behavior, interface, and implementation. The historical file and method locations in the sections below describe the earlier implementations.
+The current implementation lives in `ContentView.xaml` and `ContentView.xaml.cs`: the filter and action rows, private table, Shell host, refresh and scroll synchronization are encapsulated together. `Pathview` communicates with the content view rather than accessing the Shell host. Copy/Move state remains shared across tabs, and common frame, button and icon resources are shared through `App.xaml`. See [CONTENT_VIEW.md](CONTENT_VIEW.md) for the component's behavior, interface, and implementation. The historical file and method locations in the sections below describe the earlier implementations.
 
 ## Current Source State
 

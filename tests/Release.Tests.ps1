@@ -29,8 +29,10 @@ New-Item -ItemType Directory -Path $directory | Out-Null
 try {
     & git -C $directory init -q
     if ($LASTEXITCODE -ne 0) { throw 'Could not initialize test repository.' }
-    Copy-Item (Join-Path $PSScriptRoot '..\create_release_notes.ps1') $directory
-    $script = Join-Path $directory 'create_release_notes.ps1'
+    $scriptsFixture = Join-Path $directory 'scripts'
+    New-Item -ItemType Directory -Path $scriptsFixture | Out-Null
+    Copy-Item (Join-Path $PSScriptRoot '..\scripts\create_release_notes.ps1') $scriptsFixture
+    $script = Join-Path $scriptsFixture 'create_release_notes.ps1'
     $descriptionPath = Join-Path $directory 'ReleaseDescription.txt'
     $releasePath = Join-Path $directory 'RELEASES.html'
     Add-TestCommit $directory 'First & <commit>'
@@ -85,7 +87,7 @@ try {
     Assert-True ($list.SelectSingleNode("$root[1]/td[2]/table/tbody/tr[2]/td[2]").InnerText -ceq $message) 'Second publication changed the original commit message.'
 
     $buildFixture = Join-Path $directory 'build-fixture'
-    $installerFixture = Join-Path $buildFixture 'installer-config'
+    $installerFixture = Join-Path $buildFixture 'scripts'
     New-Item -ItemType Directory -Path $installerFixture -Force | Out-Null
     $buildDescription = Join-Path $buildFixture 'ReleaseDescription.txt'
     [System.IO.File]::WriteAllText($buildDescription, "9.87`r`nRelease & <notes>`r`nSecond line")
@@ -95,7 +97,7 @@ try {
         $buildVersion = (& $dotnet.Source msbuild $project '-getProperty:InformationalVersion' "-p:VersionFile=$buildDescription" | Out-String).Trim()
         Assert-True ($LASTEXITCODE -eq 0 -and $buildVersion -ceq '9.87') 'MSBuild did not use only the first description line.'
     }
-    Copy-Item (Join-Path $PSScriptRoot '..\installer-config\build-installer.ps1'), (Join-Path $PSScriptRoot '..\installer-config\installer.iss'), (Join-Path $PSScriptRoot '..\installer-config\installer.json') $installerFixture
+    Copy-Item (Join-Path $PSScriptRoot '..\scripts\build-installer.ps1'), (Join-Path $PSScriptRoot '..\scripts\installer.iss'), (Join-Path $PSScriptRoot '..\scripts\installer.json') $installerFixture
     & {
         function Get-Command {
             param([string]$Name, $ErrorAction)

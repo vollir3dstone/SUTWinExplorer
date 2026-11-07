@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$validator = Join-Path (Split-Path $PSScriptRoot -Parent) 'ValidateMediaTypes.ps1'
+$validator = Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\ValidateMediaTypes.ps1'
 $fixture = Join-Path ([System.IO.Path]::GetTempPath()) ("media-types-test-{0}.json" -f [guid]::NewGuid())
 
 try {

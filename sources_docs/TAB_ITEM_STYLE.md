@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`App.xaml` merges `Styles/TabItemStyle.xaml` into application resources. Its
+`App.xaml` merges `sources/TabItemStyle.xaml` into application resources. Its
 implicit `TabItem` style therefore applies to the application tabs and the
 Pathview's nested tabs. The style keeps WPF's `TabPanel`; it does not replace
 the `TabControl` template or implement tab placement and selection in code.

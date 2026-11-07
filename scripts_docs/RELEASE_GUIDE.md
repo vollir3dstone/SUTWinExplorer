@@ -2,11 +2,11 @@
 
 ## Requirements
 
-Use PowerShell and Git in a Git working directory with at least one commit. Run the commands from the project directory. A browser with JavaScript enabled can open [RELEASES.html](RELEASES.html) directly; no server is required.
+Use PowerShell and Git in a Git working directory with at least one commit. Run the commands from the project directory. A browser with JavaScript enabled can open [RELEASES.html](../RELEASES.html) directly; no server is required.
 
 ## Release Description
 
-Edit [ReleaseDescription.txt](ReleaseDescription.txt) by hand. The first line is the version; all following lines are the release comment:
+Edit [ReleaseDescription.txt](../ReleaseDescription.txt) by hand. The first line is the version; all following lines are the release comment:
 
 ```text
 1.2.0
@@ -20,11 +20,11 @@ Editing this file does not publish a release. Application builds and installer b
 
 ## Automated Release
 
-Edit [ReleaseDescription.txt](ReleaseDescription.txt), then run
-[release.ps1](release.ps1) from the project directory:
+Edit [ReleaseDescription.txt](../ReleaseDescription.txt), then run
+[release.ps1](../scripts/release.ps1) from the project directory:
 
 ```powershell
-.\release.ps1
+.\scripts\release.ps1
 ```
 
 The script displays the file path and asks you to confirm that its version and
@@ -55,11 +55,11 @@ ignored `installer/Release` directory.
 
 ## Manual Release
 
-1. Set the version and comment in [ReleaseDescription.txt](ReleaseDescription.txt).
+1. Set the version and comment in [ReleaseDescription.txt](../ReleaseDescription.txt).
 2. Build the application and, if needed, installers as described in [BUILD_AND_RELEASE.md](BUILD_AND_RELEASE.md). The installer script builds and publishes each selected Release profile before creating its installer, so no separate Release build or publish is needed first. The Debug build is a separate check and is not used as installer input. Commit the description and the intended build changes.
-3. Publish the release list by running `./create_release_notes.ps1` in PowerShell. The script takes no arguments and reads the current description file.
-4. Commit [RELEASES.html](RELEASES.html).
-5. Run `./create_release_notes.ps1` again with the same description. The new list commit is added to the same version.
+3. Publish the release list by running `./scripts/create_release_notes.ps1` in PowerShell. The script takes no arguments and reads the current description file.
+4. Commit [RELEASES.html](../RELEASES.html).
+5. Run `./scripts/create_release_notes.ps1` again with the same description. The new list commit is added to the same version.
 6. Commit the updated release list.
 7. Create an annotated Git tag named `v<version>` on that second release-list commit. Its message contains `Release <version>` followed by the full release comment. The tag is local; push it separately if needed.
 

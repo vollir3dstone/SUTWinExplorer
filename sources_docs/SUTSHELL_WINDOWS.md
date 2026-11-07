@@ -2,7 +2,7 @@
 
 ## Scope
 
-The initial implementation is [SutShell.cs](SutShell.cs). ContentView calls it
+The initial implementation is [SutShell.cs](../sources/SutShell.cs). ContentView calls it
 instead of directly calling the Windows Shell or enumerating the filesystem.
 The embedded `ShellExplorerBrowserHost` is no longer connected to ContentView;
 its source remains in the project for reference. It is not a switchable runtime

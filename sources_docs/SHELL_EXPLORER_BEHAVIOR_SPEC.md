@@ -170,7 +170,7 @@ through the clipboard notification. Other destinations may behave differently;
 KIS Explorer does not independently clear an external Move on a Link report.
 Neither external completion changes an application's internally prepared
 transfer. The real Explorer Link and Move paths and clipboard notifications are
-covered by [ExplorerClipboardLink.Tests.ps1](tests/ExplorerClipboardLink.Tests.ps1).
+covered by [ExplorerClipboardLink.Tests.ps1](../tests/ExplorerClipboardLink.Tests.ps1).
 
 **Prepare copying** and **Copy item to clipboard** are intentionally
 separate actions with the same technical effect: both invoke the Shell Copy verb

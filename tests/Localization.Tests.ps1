@@ -113,12 +113,12 @@ public static class ProcessLanguageProbe
         if ($LASTEXITCODE -ne 0) { throw 'Satellite resource validation failed.' }
     }
     foreach ($xaml in @('MainWindow.xaml', 'ExplorerTabView.xaml', 'ContentView.xaml', 'UseCasesView.xaml')) {
-        $text = [IO.File]::ReadAllText((Join-Path $PSScriptRoot "..\$xaml"))
+        $text = [IO.File]::ReadAllText((Join-Path $PSScriptRoot "..\sources\$xaml"))
         foreach ($match in [regex]::Matches($text, '\{local:Localized ([A-Za-z0-9_]+)\}')) {
             if ($match.Groups[1].Value -notin $keys) { throw "Missing XAML resource $($match.Groups[1].Value) in $xaml." }
         }
     }
-    foreach ($source in Get-ChildItem (Join-Path $PSScriptRoot '..\*.cs')) {
+    foreach ($source in Get-ChildItem (Join-Path $PSScriptRoot '..\sources\*.cs')) {
         foreach ($match in [regex]::Matches([IO.File]::ReadAllText($source.FullName), 'LocalizedText\.Get\("([A-Za-z0-9_]+)"\)')) {
             if ($match.Groups[1].Value -notin $keys) { throw "Missing code resource $($match.Groups[1].Value) in $($source.Name)." }
         }

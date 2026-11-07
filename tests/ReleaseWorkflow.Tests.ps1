@@ -12,8 +12,8 @@ try {
     & git -C $directory config user.email 'release-test@example.com'
     & git -C $directory config commit.gpgsign false
     & git -C $directory config tag.gpgsign false
-    Copy-Item (Join-Path $PSScriptRoot '..\release.ps1'), (Join-Path $PSScriptRoot '..\create_release_notes.ps1') $directory
-    New-Item -ItemType Directory -Path (Join-Path $directory 'installer-config'), (Join-Path $directory 'bin\Debug\net10.0-windows'), (Join-Path $directory 'bin\Release\net10.0-dependent') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $directory 'scripts'), (Join-Path $directory 'bin\Debug\net10.0-windows'), (Join-Path $directory 'bin\Release\net10.0-dependent') -Force | Out-Null
+    Copy-Item (Join-Path $PSScriptRoot '..\scripts\release.ps1'), (Join-Path $PSScriptRoot '..\scripts\create_release_notes.ps1') (Join-Path $directory 'scripts')
     [System.IO.File]::WriteAllText((Join-Path $directory 'SUTWinExplorer.csproj'), 'fixture')
     [System.IO.File]::WriteAllText((Join-Path $directory 'ReleaseDescription.txt'), "1.00`nOld release`n")
     [System.IO.File]::WriteAllText((Join-Path $directory 'bin\Debug\net10.0-windows\app.dll'), 'old debug')
@@ -23,12 +23,12 @@ if ($global:releaseTestFailInstaller) { throw 'Simulated installer failure.' }
 $output = Join-Path (Split-Path $PSScriptRoot -Parent) 'bin\Release\net10.0-dependent\app.exe'
 [System.IO.File]::WriteAllText($output, 'new release')
 '@
-    [System.IO.File]::WriteAllText((Join-Path $directory 'installer-config\build-installer.ps1'), $installerStub)
+    [System.IO.File]::WriteAllText((Join-Path $directory 'scripts\build-installer.ps1'), $installerStub)
     & git -C $directory add --all
     & git -C $directory commit -q -m 'Initial fixture'
     if ($LASTEXITCODE -ne 0) { throw 'Could not commit the test fixture.' }
     $initialHead = (& git -C $directory rev-parse HEAD).Trim()
-    $script = Join-Path $directory 'release.ps1'
+    $script = Join-Path $directory 'scripts\release.ps1'
     $descriptionPath = Join-Path $directory 'ReleaseDescription.txt'
     $global:releaseTestFailBuild = $false
     $global:releaseTestFailInstaller = $false

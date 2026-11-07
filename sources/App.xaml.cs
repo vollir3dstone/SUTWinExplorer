@@ -11,6 +11,14 @@ public partial class App : Application
 {
 	static App() => LocalizedText.ApplyProcessLanguageSelection(LanguageSelection.English);
 
+	[STAThread]
+	public static void Main()
+	{
+		var application = new App();
+		application.InitializeComponent();
+		application.Run();
+	}
+
 	private Mutex? _instanceMutex;
 	private bool _ownsInstanceMutex;
 	private IconChangeObserver? _iconChangeObserver;

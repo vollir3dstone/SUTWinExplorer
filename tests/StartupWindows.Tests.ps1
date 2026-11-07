@@ -78,7 +78,7 @@ try {
         $window
     })
     $applicationWindows | ForEach-Object { "Visible window: $($_.ClassName) | $($_.Title)" }
-    if ($applicationWindows.Count -ne 1 -or $applicationWindows[0].Title -notmatch '^KIS Explorer') {
+    if ($applicationWindows.Count -ne 1 -or $applicationWindows[0].Title -notmatch '^KIS Explorer' -or $applicationWindows[0].ClassName -eq '#32770') {
         throw "Expected one visible application window, found $($applicationWindows.Count)."
     }
     'Startup window test passed.'

@@ -11,7 +11,7 @@ application is already running and exits; its command-line path is not forwarded
 ## Opening in running applications
 
 The per-application opening methods are defined in
-[running-app-open-methods.json](Assets/running-app-open-methods.json). This JSON
+[running-app-open-methods.json](../Assets/running-app-open-methods.json). This JSON
 is embedded in the application at build time, not stored in the user
 configuration directory or reloaded at runtime. Changing it requires rebuilding
 the application. Matching, supported methods, fallback behavior, and limitations
@@ -19,7 +19,7 @@ are described in [OPEN_WITH_RUNNING_APP_SPEC.md](OPEN_WITH_RUNNING_APP_SPEC.md).
 
 ## Interface strings
 
-The application's neutral English strings are in [Assets/Strings/Strings.resx](Assets/Strings/Strings.resx).
+The application's neutral English strings are in [Assets/Strings/Strings.resx](../Assets/Strings/Strings.resx).
 Resource IDs describe the interface area and control or action; menu action IDs
 are generally used as the final part of `BaseMenu_Action_<id>` or
 `ContentMenu_Action_<id>`. The Shell-compatible `opencontaining` action uses

@@ -276,7 +276,7 @@ if ($Transfer -eq 'Menu') {
     [System.Windows.Application].GetField('_resourceAssembly', [Reflection.BindingFlags]'Static,NonPublic').SetValue($null, $assembly)
     $wpfApplication = [System.Windows.Application]::new()
     $wpfApplication.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
-    $resources = [System.Windows.Application]::LoadComponent([Uri]::new('/SUTWinExplorer;component/Styles/InputControlStyles.xaml', [UriKind]::Relative))
+    $resources = [System.Windows.Application]::LoadComponent([Uri]::new('/SUTWinExplorer;component/sources/InputControlStyles.xaml', [UriKind]::Relative))
     $wpfApplication.Resources.MergedDictionaries.Add($resources)
     $buttonStyle = [System.Windows.Style]::new([System.Windows.Controls.Button], $resources[[System.Windows.Controls.Button]])
     $buttonStyle.Setters.Add([System.Windows.Setter]::new([System.Windows.FrameworkElement]::HeightProperty, [double] 24))

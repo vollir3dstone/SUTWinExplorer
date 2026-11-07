@@ -243,7 +243,7 @@ publishing a snapshot, and checks snapshot and row-array identity before
 publishing a range. A cancellation discards the partial returned snapshot or
 range, but already completed per-item lookups can remain cached for reuse.
 
-The focused [SutShell tests](tests/SutShell.Tests.ps1) cover cache reuse across
+The focused [SutShell tests](../tests/SutShell.Tests.ps1) cover cache reuse across
 filter and sort changes, cache invalidation after filesystem changes, icon
 loading during sort, GUI reuse, cancellation and rapid navigation. These checks
 do not make filesystem notifications or Shell state changes infallible.

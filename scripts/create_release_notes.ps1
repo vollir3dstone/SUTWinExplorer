@@ -2,9 +2,10 @@
 param()
 
 $ErrorActionPreference = 'Stop'
-$descriptionPath = Join-Path $PSScriptRoot 'ReleaseDescription.txt'
-$releasePath = Join-Path $PSScriptRoot 'RELEASES.html'
-$legacyPath = Join-Path $PSScriptRoot 'RELEASES.md'
+$root = Split-Path $PSScriptRoot -Parent
+$descriptionPath = Join-Path $root 'ReleaseDescription.txt'
+$releasePath = Join-Path $root 'RELEASES.html'
+$legacyPath = Join-Path $root 'RELEASES.md'
 if (-not (Test-Path -LiteralPath $descriptionPath -PathType Leaf)) { throw 'ReleaseDescription.txt was not found.' }
 $description = [System.IO.File]::ReadAllText($descriptionPath)
 $parts = [regex]::new("\r\n|\n|\r").Split($description, 2)
@@ -21,7 +22,7 @@ catch { throw 'The comment contains characters that cannot be stored in the rele
 function Get-CommitDetails([string]$commitId) {
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = 'git'
-    $startInfo.WorkingDirectory = $PSScriptRoot
+    $startInfo.WorkingDirectory = $root
     $startInfo.Arguments = "-c i18n.logOutputEncoding=UTF-8 show --no-patch --format=format:%ct%x00%B $commitId"
     $startInfo.UseShellExecute = $false
     $startInfo.RedirectStandardOutput = $true
@@ -274,7 +275,7 @@ if (Test-Path -LiteralPath $releasePath) {
     if (-not $previousCommitCell) { throw 'The latest release does not contain a commit ID.' }
     $previousCommit = $previousCommitCell.InnerText
     if ($previousCommit -cnotmatch '^([0-9a-f]{40}|[0-9a-f]{64})$') { throw 'The latest release does not contain a valid full commit ID.' }
-    & git -C $PSScriptRoot merge-base --is-ancestor $previousCommit HEAD
+    & git -C $root merge-base --is-ancestor $previousCommit HEAD
     if ($LASTEXITCODE -ne 0) { throw 'The latest release commit is not an ancestor of HEAD.' }
     $range = "$previousCommit..HEAD"
 } else {
@@ -284,7 +285,7 @@ if (Test-Path -LiteralPath $releasePath) {
     $range = 'HEAD'
 }
 
-$lines = @(& git -C $PSScriptRoot log --topo-order '--format=%H' $range)
+$lines = @(& git -C $root log --topo-order '--format=%H' $range)
 if ($LASTEXITCODE -ne 0) { throw 'Could not read the Git history.' }
 if ($lines.Count -eq 0) {
     if (-not $existingRelease -or $existingRelease.GetAttribute('data-release-comment') -ceq $Comment) {
@@ -316,7 +317,7 @@ $output = [System.Text.StringBuilder]::new()
 $writer = [System.Xml.XmlWriter]::Create($output, $writerSettings)
 try { $document.Save($writer) } finally { $writer.Dispose() }
 $encoding = [System.Text.UTF8Encoding]::new($false)
-$temporaryRelease = Join-Path $PSScriptRoot ('.releases-' + [guid]::NewGuid().ToString('N') + '.tmp')
+$temporaryRelease = Join-Path $root ('.releases-' + [guid]::NewGuid().ToString('N') + '.tmp')
 $releaseBackup = $temporaryRelease + '.bak'
 try {
     [System.IO.File]::WriteAllText($temporaryRelease, $output.ToString() + "`n", $encoding)

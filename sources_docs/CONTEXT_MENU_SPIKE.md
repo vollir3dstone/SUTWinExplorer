@@ -6,7 +6,7 @@ menu pair is [File Context Menu Pair](CONTEXT_MENU_SPEC.md).
 
 ## Purpose
 
-The diagnostic in [ContextMenuSpike.ps1](tests/ContextMenuSpike.ps1) inspects
+The diagnostic in [ContextMenuSpike.ps1](../tests/ContextMenuSpike.ps1) inspects
 the classic Shell context menu for a real selection and lists possible registry
 registrations separately. It does not show a menu, invoke a command, change the
 registry, or change ContentView. Shell extensions are nevertheless loaded and
@@ -207,7 +207,7 @@ Windows menu and accept the limitations of verb-based filtering.
 
 ### Maintaining the Blacklist
 
-The embedded [Shell extension blacklist](Assets/shell-extension-blacklist.json)
+The embedded [Shell extension blacklist](../Assets/shell-extension-blacklist.json)
 stores descriptive names and exact Shell command verbs. It currently removes
 `ANotepad++64`; the unrelated `view SUTTextViewer` command is not blacklisted.
 For example, another entry has this shape:

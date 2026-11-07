@@ -114,6 +114,30 @@ extensions may use different languages.
   contain visited filesystem paths. Filesystem change notifications are
   best-effort; external moves cannot always be identified reliably.
 
+## Repository structure
+
+- `sources/`: C# application code, WPF views, and XAML styles.
+- `sources_docs/`: application specifications, architecture notes, and
+  development and test documentation.
+- `scripts/`: build and release scripts, media-type validation, and installer
+  configuration and template.
+- `scripts_docs/`: build, installer, and release guides.
+- `Assets/`: application icons, localized strings, and embedded JSON mappings
+  for media types, Shell menus, and running applications.
+- `Properties/`: publish profiles for included and framework-dependent builds.
+- `tests/`: automated tests, integration and manual probes, benchmarks, test
+  resources, and experimental tests.
+- `devResources/`: icon source materials used during development.
+- `bin/` and `obj/`: build and publish outputs and intermediate build files.
+- `installer/`: generated installer packages in `Release/` and temporary
+  installer scripts and build files in `Temp/`.
+- `artifacts/`: local diagnostic outputs such as screenshots and test builds.
+- `.git/`: local Git repository metadata.
+
+The project file, this README, the release description, and the release list
+remain at the repository root. Generated and local directories may vary between
+workspaces.
+
 ## Build
 
 Development requires Windows x64 and the .NET 10 SDK. From the project root:
@@ -125,7 +149,7 @@ dotnet build .\SUTWinExplorer.csproj -c Debug
 The executable is `bin\Debug\net10.0-windows\KIS Explorer.exe`. For
 distribution, the Included publish profile bundles the runtime; the Dependent
 profile requires the .NET 10 Desktop Runtime for Windows x64. See
-[Build and Release](BUILD_AND_RELEASE.md) for publishing and installers.
+[Build and Release](scripts_docs/BUILD_AND_RELEASE.md) for publishing and installers.
 Older SUTWinExplorer installations are not automatically migrated or upgraded;
 uninstall them before installing KIS Explorer.
 
@@ -133,19 +157,19 @@ uninstall them before installing KIS Explorer.
 
 Start with these specifications, in this order:
 
-1. [Shell Explorer Behavior Specification](SHELL_EXPLORER_BEHAVIOR_SPEC.md):
+1. [Shell Explorer Behavior Specification](sources_docs/SHELL_EXPLORER_BEHAVIOR_SPEC.md):
    navigation, Pathviews, file operations, and acceptance criteria. Its Shell-host
    implementation status includes historical material; check the transition note.
-2. [Configuration](Configuration.md): settings, storage, startup, and use case
+2. [Configuration](sources_docs/Configuration.md): settings, storage, startup, and use case
    persistence.
-3. [UseCasesView](UseCasesView.md): managing and activating use cases.
-4. [Context Menu Specification](CONTEXT_MENU_SPEC.md): menu composition,
+3. [UseCasesView](sources_docs/UseCasesView.md): managing and activating use cases.
+4. [Context Menu Specification](sources_docs/CONTEXT_MENU_SPEC.md): menu composition,
    interaction, Shell integration, and limitations.
-5. [ContentView](CONTENT_VIEW.md): current table, columns, filtering, sorting,
+5. [ContentView](sources_docs/CONTENT_VIEW.md): current table, columns, filtering, sorting,
    and loading. Its lower historical Shell-host section is not current behavior.
 
-For specific topics, see [Open with Running App](OPEN_WITH_RUNNING_APP_SPEC.md),
-[SutShell API](SUTSHELL_API.md), [Directory Observation](DIRECTORY_OBSERVATION.md),
-[Icon Cache](ICON_CACHE_SPEC.md), and [Test Specification](TEST_SPEC.md).
+For specific topics, see [Open with Running App](sources_docs/OPEN_WITH_RUNNING_APP_SPEC.md),
+[SutShell API](sources_docs/SUTSHELL_API.md), [Directory Observation](sources_docs/DIRECTORY_OBSERVATION.md),
+[Icon Cache](sources_docs/ICON_CACHE_SPEC.md), and [Test Specification](sources_docs/TEST_SPEC.md).
 The architecture and spike documents contain historical investigations; their
 transition notes distinguish them from the current implementation.

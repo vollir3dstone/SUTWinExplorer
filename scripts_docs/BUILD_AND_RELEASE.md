@@ -8,7 +8,7 @@
 The application targets `net10.0-windows` and uses WPF. The publish profiles target `win-x64`.
 The user-facing product name is `KIS Explorer`, and its publisher is `SUT`.
 The project and internal assembly retain the `SUTWinExplorer` name.
-The product version is read from the first line of [ReleaseDescription.txt](ReleaseDescription.txt). Edit the file before building; see [RELEASE_GUIDE.md](RELEASE_GUIDE.md).
+The product version is read from the first line of [ReleaseDescription.txt](../ReleaseDescription.txt). Edit the file before building; see [RELEASE_GUIDE.md](RELEASE_GUIDE.md).
 
 ## Build
 
@@ -20,7 +20,7 @@ dotnet build .\SUTWinExplorer.csproj -c Debug
 
 The Debug application is `bin\Debug\net10.0-windows\KIS Explorer.exe`.
 
-Builds validate [media-types.json](Assets/media-types.json) and fail on invalid JSON or conflicting extension assignments, including conflicts between subtypes. Extension matching is case-insensitive; repeated assignments to the same type and subtype are allowed.
+Builds validate [media-types.json](../Assets/media-types.json) and fail on invalid JSON or conflicting extension assignments, including conflicts between subtypes. Extension matching is case-insensitive; repeated assignments to the same type and subtype are allowed.
 
 Do not run a standard Release build with `dotnet build -c Release`. The only Release builds are the `Included` and `Dependent` publish profiles below.
 
@@ -58,7 +58,7 @@ Both profiles enable native-library self-extraction. The publish output includes
 ## Release Checklist
 
 For the complete local release, including commits, release notes, and Git tag,
-use [release.ps1](release.ps1) as described in [RELEASE_GUIDE.md](RELEASE_GUIDE.md).
+use [release.ps1](../scripts/release.ps1) as described in [RELEASE_GUIDE.md](RELEASE_GUIDE.md).
 The following checklist covers building and distributing application files only.
 
 1. Build the application with `dotnet build .\SUTWinExplorer.csproj -c Debug`.
@@ -73,9 +73,9 @@ Running `dotnet publish` directly creates application builds only. It does not c
 
 - Windows x64, the .NET 10 SDK, and Inno Setup 6.
 - `ISCC.exe` must be available on `PATH` or installed in the standard Inno Setup 6 directory under `Program Files`.
-- `installer-config\installer.json` is the versioned configuration: it contains shared product metadata and a list of installer profiles. The version comes from the first line of `ReleaseDescription.txt`.
-- `installer-config\installer.iss` is the versioned Inno Setup template. It contains the installer behavior and layout, such as the destination directory, application files, Start Menu shortcut, and optional shell integration. It is not generated from the JSON.
-- `installer-config\build-installer.ps1` orchestrates publishing, creates one complete temporary ISS script per selected profile, and invokes `ISCC.exe`.
+- `scripts\installer.json` is the versioned configuration: it contains shared product metadata and a list of installer profiles. The version comes from the first line of `ReleaseDescription.txt`.
+- `scripts\installer.iss` is the versioned Inno Setup template. It contains the installer behavior and layout, such as the destination directory, application files, Start Menu shortcut, and optional shell integration. It is not generated from the JSON.
+- `scripts\build-installer.ps1` orchestrates publishing, creates one complete temporary ISS script per selected profile, and invokes `ISCC.exe`.
 
 The JSON and ISS have different responsibilities. The JSON supplies values that vary between builds; the ISS template defines what the installer does. For each profile, the PowerShell script prepends Inno Setup `#define` directives to the template and writes the resulting complete script to `installer\Temp\<profileId>.iss`. Inno Setup compiles that generated script, not the template file directly. The temporary ISS file for each selected profile is regenerated on every script run and should not be edited manually. Files for profiles not selected in a filtered run are left untouched.
 
@@ -121,19 +121,19 @@ Example:
 The installer script is not automatically run by `dotnet build` or `dotnet publish`. Run it explicitly from the repository root. It runs `dotnet publish` for each selected profile, building the Release application and publishing it before compiling the installer. You do not need to run a separate Release build or publish first; a Debug build is a separate check and is not used as installer input. With no filter the script processes every entry in the JSON profile list:
 
 ```powershell
-.\installer-config\build-installer.ps1
+.\scripts\build-installer.ps1
 ```
 
 To process only one or more selected profiles, pass their IDs:
 
 ```powershell
-.\installer-config\build-installer.ps1 -ProfileId net-included
+.\scripts\build-installer.ps1 -ProfileId net-included
 ```
 
 To select multiple profiles in one run:
 
 ```powershell
-.\installer-config\build-installer.ps1 -ProfileId net-included,net-dependent
+.\scripts\build-installer.ps1 -ProfileId net-included,net-dependent
 ```
 
 For each selected profile, the script performs these steps:

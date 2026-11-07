@@ -42,7 +42,7 @@ $unknownApp = [Activator]::CreateInstance($registeredAppType, [object[]] @('not-
 $missingPath = [string] (Join-Path ([IO.Path]::GetTempPath()) ('kis-missing-' + [guid]::NewGuid().ToString('N') + '.docx'))
 $shellResult = $accessor.GetMethod('OpenByShellOpen').Invoke($null, [object[]] @($unknownApp, $missingPath))
 if ($shellResult.Dispatched -or -not $shellResult.Error) { throw 'Shell Open must reject a missing file.' }
-$existingPath = [string] (Join-Path $PSScriptRoot '../Configuration.md')
+$existingPath = [string] (Join-Path $PSScriptRoot '../sources_docs/Configuration.md')
 $shellResult = $accessor.GetMethod('OpenByShellOpen').Invoke($null, [object[]] @($unknownApp, $existingPath))
 if ($shellResult.Dispatched -or -not $shellResult.Error) { throw 'Shell Open must reject an unregistered application.' }
 $privateStatic = [Reflection.BindingFlags]'Static,NonPublic'

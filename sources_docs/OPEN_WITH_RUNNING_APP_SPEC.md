@@ -125,7 +125,7 @@ the file as a separate document.
 
 ### Combined operation
 
-- The embedded [running-app-open-methods.json](Assets/running-app-open-methods.json)
+- The embedded [running-app-open-methods.json](../Assets/running-app-open-methods.json)
   selects a single method for known applications. The selected window's process
   is matched case-insensitively by executable filename and Windows file-version
   company name, independently of installation path and version. These metadata
@@ -369,10 +369,10 @@ A blocked or skipped test leaves the minimum gate incomplete.
 
 ## References
 
-- [RunningAppsAccessor.cs](RunningAppsAccessor.cs)
-- [RunningAppsAccessor.Tests.ps1](tests/RunningAppsAccessor.Tests.ps1)
-- [RunningAppsAssociations.Tests.ps1](tests/RunningAppsAssociations.Tests.ps1)
-- [ResourcefulOpen.Tests.ps1](tests/ResourcefulOpen.Tests.ps1)
-- [CompareOpenWithApps.ps1](tests/CompareOpenWithApps.ps1)
-- [OpenInRunningAppInteraction.Tests.ps1](tests/OpenInRunningAppInteraction.Tests.ps1)
-- [OpenInRunningApp.Integration.ps1](tests/OpenInRunningApp.Integration.ps1)
+- [RunningAppsAccessor.cs](../sources/RunningAppsAccessor.cs)
+- [RunningAppsAccessor.Tests.ps1](../tests/RunningAppsAccessor.Tests.ps1)
+- [RunningAppsAssociations.Tests.ps1](../tests/RunningAppsAssociations.Tests.ps1)
+- [ResourcefulOpen.Tests.ps1](../tests/ResourcefulOpen.Tests.ps1)
+- [CompareOpenWithApps.ps1](../tests/CompareOpenWithApps.ps1)
+- [OpenInRunningAppInteraction.Tests.ps1](../tests/OpenInRunningAppInteraction.Tests.ps1)
+- [OpenInRunningApp.Integration.ps1](../tests/OpenInRunningApp.Integration.ps1)
