@@ -1355,7 +1355,7 @@ public partial class Pathview : UserControl
             (entry, _) => ShowNativeMenu(this, entry.Path, !entry.IsTop ? () => BeginTreeRename(entry) : null),
             () => { if (!tree) ShowNativeBackgroundMenu(this, CurrentPath); },
             () => CurrentPath, CreateBackgroundMenuActions,
-            DirectoryContent.ShowNewItemDialog);
+            DirectoryContent.ShowNewItemDialog, transferActions: DirectoryContent.CreateContentTransferActions);
     }
 
     private void SelectDirectoryMenuTarget(TreeEntry? entry, bool tree)

@@ -64,10 +64,15 @@ internal static class SutContextMenuFactory
         background ? GetBackgroundContentMenu(paths[0], owner, baseCommands, newAction) :
             CreateCore(paths, owner, background: false, rename: null, excludedCommands: baseCommands, openLocationAction: openLocation, runningApps: runningApps);
 
+    internal static SutContextMenu GetContentMenuWithTransferActions(IReadOnlyList<string> paths, IntPtr owner, IReadOnlyDictionary<string, int> baseCommands,
+        bool background, ShellMenuAction? newAction, ShellMenuAction? openLocation, IReadOnlyList<ShellMenuAction>? runningApps, IReadOnlyList<ShellMenuAction> transferActions) =>
+        CreateCore(paths, owner, background, rename: null, excludedCommands: baseCommands, backgroundNewAction: newAction,
+            openLocationAction: openLocation, runningApps: runningApps, contentActions: transferActions);
+
     private static SutContextMenu CreateCore(IReadOnlyList<string> paths, IntPtr owner, bool background, Action? rename,
         IReadOnlyList<ShellMenuAction>? actions = null, IReadOnlyDictionary<string, int>? excludedCommands = null,
         IReadOnlyDictionary<string, int>? backgroundBaseCommands = null, ShellMenuAction? backgroundNewAction = null,
-        ShellMenuAction? openLocationAction = null, IReadOnlyList<ShellMenuAction>? runningApps = null)
+        ShellMenuAction? openLocationAction = null, IReadOnlyList<ShellMenuAction>? runningApps = null, IReadOnlyList<ShellMenuAction>? contentActions = null)
     {
         var isBaseMenu = actions is not null;
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
@@ -267,6 +272,23 @@ internal static class SutContextMenuFactory
                     runningAppsSubmenu = IntPtr.Zero;
                     throw;
                 }
+                actions = existingActions;
+            }
+            if (contentActions is { Count: > 0 })
+            {
+                var existingActions = actions?.ToList() ?? [];
+                for (var index = 0; index < contentActions.Count; index++)
+                {
+                    var action = contentActions[index];
+                    if (existingActions.Count >= 0x8000 || !InsertMenu(menu, (uint)index, MenuByPosition | (action.IsEnabled ? 0u : MenuDisabled),
+                            (UIntPtr)(BaseMenuCommandFirst + (uint)existingActions.Count), action.Label))
+                        throw new InvalidOperationException("Could not insert a content menu action.");
+                    existingActions.Add(action);
+                }
+                if (GetMenuItemCount(menu) > contentActions.Count &&
+                    !InsertMenu(menu, (uint)contentActions.Count, MenuByPosition | MenuSeparator, UIntPtr.Zero, null))
+                    throw new InvalidOperationException("Could not insert the content menu separator.");
+                ShellMenuIcons.Apply(menu, existingActions, BaseMenuCommandFirst, menuBitmaps);
                 actions = existingActions;
             }
             return new SutContextMenu(owner, menu, contextMenu, actions, rename,

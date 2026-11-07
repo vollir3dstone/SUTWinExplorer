@@ -107,6 +107,33 @@ try {
                     -not $workflow.IsPrepared) "The sidebar background $operation action did not match the workflow state."
             } finally { $menuProbe.Dispose(); $workflow.Abort() }
         }
+        $sidebarSource = Join-Path $directory 'sidebar-transfer.txt'
+        [IO.File]::WriteAllText($sidebarSource, 'sidebar transfer')
+        $workflow = $assembly.GetType('SUTWinExplorer.CopyWorkflowState', $true).GetProperty('Shared').GetValue($null)
+        $workflow.Prepare([string[]] @($sidebarSource))
+        $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
+        $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
+        try { $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $true)) }
+        finally { $menuProbe.Dispose() }
+        $newProbe = Start-NewDialogProbe 'CancelFolder'
+        $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
+        $menuProbe.SelectCommandId = Get-ActionCommandId 'New' @('New')
+        try {
+            $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $true))
+            Assert-True ($newProbe.Seen -and $null -eq $newProbe.Error -and $workflow.IsPrepared) 'The New command was displaced by the active transfer actions.'
+        } finally { $newProbe.Timer.Stop(); $menuProbe.Dispose() }
+        $fixedPathview.GetType().GetMethod('SelectDirectoryMenuTarget', $viewFlags).Invoke($fixedPathview, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $false))
+        $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
+        $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
+        try { $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true)) }
+        finally { $menuProbe.Dispose() }
+        $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
+        $menuProbe.SelectLabel = 'Insert copy of marked item'
+        try {
+            $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true))
+            Assert-True ($menuProbe.SelectIndex -eq 1 -and $menuProbe.Items[0] -ceq 'Abort transfer' -and
+                [IO.File]::Exists((Join-Path $subdirectoryEntry.Path 'sidebar-transfer.txt')) -and -not $workflow.IsPrepared) 'Sidebar directory content menu copied to the wrong destination.'
+        } finally { $menuProbe.Dispose(); $workflow.Abort() }
         $activeTree = $fixedPathview.FindName('ActivePathTree')
         $treeItem = $activeTree.ItemContainerGenerator.ContainerFromIndex(0)
         Assert-True ($null -ne $treeItem) 'The fixed Active path tree was not realized.'

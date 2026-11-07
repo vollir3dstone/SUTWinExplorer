@@ -225,6 +225,14 @@ commands such as Windows clipboard Paste are not subjected to the selected-item
 file-verb exclusion list; they are distinct from the application's prepared
 Link/Copy/Move workflows.
 
+When a Link, Copy or Move is prepared, the Content Menu for a directory item
+or the active directory background starts with `Abort transfer` and the matching
+execute action (`Insert link to marked item`, `Insert copy of marked item`, or
+`Move marked item here`), followed by a separator. The clicked directory is the
+destination for an item menu; the active directory is the destination for a
+background menu. With no prepared transfer, or for a file item, these entries
+are absent. Existing Shell and `New` commands retain their behavior.
+
 Both paired background menus exclude the Shell commands `refresh` and
 `viewcustomwizard` (Refresh and Customize this folder). The original native
 background menu, including these commands, remains available with Shift.

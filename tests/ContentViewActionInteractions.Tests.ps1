@@ -251,6 +251,124 @@ try {
         Assert-True $view.FindName('ItemClipboardPasteButton').IsEnabled 'Item clipboard paste did not become available in the destination.'
         $view.FindName('ItemClipboardPasteButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         Assert-True ([System.IO.File]::Exists((Join-Path $clipboardDestination 'notes.txt'))) 'Item clipboard paste did not execute from the toolbar.'
+        $targetDirectory = Join-Path $clipboardDestination 'target'
+        [IO.Directory]::CreateDirectory($targetDirectory) | Out-Null
+        $view.GetType().GetMethod('RevealInsertedItems', $viewFlags).Invoke($view, [object[]] @(,[string[]] @($targetDirectory)))
+        $frame = [System.Windows.Threading.DispatcherFrame]::new()
+        $probe = [SutShellUiProbe]::new()
+        $probe.List = $list
+        $probe.AwaitAll = $true
+        $probe.Frame = $frame
+        $timer = [System.Windows.Threading.DispatcherTimer]::new()
+        $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+        $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
+        $timer.Start()
+        try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+        $targetRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq $targetDirectory })[0]
+        Assert-True ($probe.Ready -and $null -ne $targetRow) 'Transfer destination row did not load.'
+        $controller = $view.GetType().GetField('_contextMenu', $viewFlags).GetValue($view)
+        $controllerShow = $controller.GetType().GetMethod('Show', $viewFlags)
+        $controllerReset = $controller.GetType().GetMethod('Reset', $viewFlags)
+        $createTransfers = $view.GetType().GetMethod('CreateContentTransferActions', $viewFlags)
+        Assert-True (@($createTransfers.Invoke($view, [object[]] @([string] $targetDirectory))).Count -eq 0) 'Transfer actions appeared without a prepared transfer.'
+        foreach ($operation in @('Link', 'Copy', 'Move')) {
+            foreach ($background in @($false, $true)) {
+                $sourceFile = Join-Path $directory ("content-$operation-$background.txt")
+                [IO.File]::WriteAllText($sourceFile, 'content transfer')
+                $workflow = $assembly.GetType("SUTWinExplorer.${operation}WorkflowState", $true).GetProperty('Shared').GetValue($null)
+                $workflow.Prepare([string[]] @($sourceFile))
+                $destination = if ($background) { $clipboardDestination } else { $targetDirectory }
+                $target = $null
+                if (-not $background) {
+                    $null = $view.GetType().GetMethod('RevealInsertedItems', $viewFlags).Invoke($view, [object[]] @(,[string[]] @($targetDirectory)))
+                    $frame = [System.Windows.Threading.DispatcherFrame]::new()
+                    $probe = [SutShellUiProbe]::new()
+                    $probe.List = $list
+                    $probe.AwaitAll = $true
+                    $probe.Frame = $frame
+                    $timer = [System.Windows.Threading.DispatcherTimer]::new()
+                    $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+                    $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
+                    $timer.Start()
+                    try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+                    $targetRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq $targetDirectory })[0]
+                    Assert-True ($probe.Ready -and $null -ne $targetRow) 'Transfer destination row did not reload.'
+                    $target = $targetRow.PSObject.BaseObject
+                    $list.SelectedItem = $target
+                    Assert-True ($list.SelectedItems.Count -eq 1) 'Transfer destination was not selected.'
+                }
+                $null = $controllerReset.Invoke($controller, @())
+                $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+                try { $null = $controllerShow.Invoke($controller, [object[]] @($target, $ownerHandle, $true)) }
+                finally { $menuProbe.Dispose() }
+                $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+                $menuProbe.SelectLabel = switch ($operation) {
+                    'Link' { 'Insert link to marked item' }
+                    'Copy' { 'Insert copy of marked item' }
+                    'Move' { 'Move marked item here' }
+                }
+                try {
+                    $null = $controllerShow.Invoke($controller, [object[]] @($target, $ownerHandle, $true))
+                    Assert-True ($menuProbe.Items[0] -ceq 'Abort transfer' -and $menuProbe.Items[1] -ceq $menuProbe.SelectLabel -and
+                        ($menuProbe.States[2] -band 0x800) -ne 0 -and $menuProbe.SelectIndex -eq 1) "Incorrect $operation content menu for background=$background."
+                } finally { $menuProbe.Dispose() }
+                $name = [IO.Path]::GetFileName($sourceFile)
+                if ($operation -eq 'Link') { $name += ' - Shortcut.lnk' }
+                Assert-True ([IO.File]::Exists((Join-Path $destination $name)) -and -not $workflow.IsPrepared -and
+                    ([IO.File]::Exists($sourceFile) -eq ($operation -ne 'Move'))) "$operation used the wrong content-menu destination or did not complete."
+            }
+        }
+        $abortSource = Join-Path $directory 'abort-content.txt'
+        [IO.File]::WriteAllText($abortSource, 'abort')
+        $null = $view.GetType().GetMethod('RevealInsertedItems', $viewFlags).Invoke($view, [object[]] @(,[string[]] @($targetDirectory)))
+        $frame = [System.Windows.Threading.DispatcherFrame]::new()
+        $probe = [SutShellUiProbe]::new()
+        $probe.List = $list
+        $probe.AwaitAll = $true
+        $probe.Frame = $frame
+        $timer = [System.Windows.Threading.DispatcherTimer]::new()
+        $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+        $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
+        $timer.Start()
+        try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+        Assert-True $probe.Ready 'Content view did not settle before testing abort.'
+        $workflow = $assembly.GetType('SUTWinExplorer.CopyWorkflowState', $true).GetProperty('Shared').GetValue($null)
+        $workflow.Prepare([string[]] @($abortSource))
+        $null = $controllerReset.Invoke($controller, @())
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        try { $null = $controllerShow.Invoke($controller, [object[]] @($null, $ownerHandle, $true)) }
+        finally { $menuProbe.Dispose() }
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        $menuProbe.SelectLabel = 'Abort transfer'
+        try {
+            $null = $controllerShow.Invoke($controller, [object[]] @($null, $ownerHandle, $true))
+            Assert-True ($menuProbe.SelectIndex -eq 0 -and -not $workflow.IsPrepared -and [IO.File]::Exists($abortSource)) 'Content menu abort did not clear the prepared transfer.'
+        } finally { $menuProbe.Dispose() }
+        $notesPath = Join-Path $clipboardDestination 'notes.txt'
+        $null = $view.GetType().GetMethod('RevealInsertedItems', $viewFlags).Invoke($view, [object[]] @(,[string[]] @($notesPath)))
+        $frame = [System.Windows.Threading.DispatcherFrame]::new()
+        $probe = [SutShellUiProbe]::new()
+        $probe.List = $list
+        $probe.AwaitAll = $true
+        $probe.Frame = $frame
+        $timer = [System.Windows.Threading.DispatcherTimer]::new()
+        $timer.Interval = [TimeSpan]::FromMilliseconds(25)
+        $timer.add_Tick([Delegate]::CreateDelegate([EventHandler], $probe, 'Tick'))
+        $timer.Start()
+        try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+        $fileRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq $notesPath })[0]
+        Assert-True ($probe.Ready -and $null -ne $fileRow) 'File context-menu fixture did not load.'
+        $workflow.Prepare([string[]] @($abortSource))
+        $list.SelectedItem = $fileRow.PSObject.BaseObject
+        $null = $controllerReset.Invoke($controller, @())
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        try { $null = $controllerShow.Invoke($controller, [object[]] @($fileRow.PSObject.BaseObject, $ownerHandle, $true)) }
+        finally { $menuProbe.Dispose() }
+        $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+        try {
+            $null = $controllerShow.Invoke($controller, [object[]] @($fileRow.PSObject.BaseObject, $ownerHandle, $true))
+            Assert-True ('Abort transfer' -notin $menuProbe.Items -and 'Insert copy of marked item' -notin $menuProbe.Items -and $workflow.IsPrepared) 'File content menu unexpectedly offered directory transfer actions.'
+        } finally { $menuProbe.Dispose(); $workflow.Abort() }
     } finally { $window.Close() }
     'ContentView action interaction tests passed.'
 } finally {

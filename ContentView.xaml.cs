@@ -90,7 +90,7 @@ public partial class ContentView : UserControl
                 CreateOpenLocationAction(paths)),
             () => SutShell.ShowBackgroundMenu(CurrentPath, new WindowInteropHelper(Window.GetWindow(this)!).Handle),
             () => CurrentPath, () => CreateContextMenuActionsForContext(true),
-            ShowNewItemDialog, CreateOpenLocationAction, CreateRunningAppActions);
+            ShowNewItemDialog, CreateOpenLocationAction, CreateRunningAppActions, CreateContentTransferActions);
         HideDirectoriesCheckBox.GetCheckBox().Checked += FiltersChanged;
         HideDirectoriesCheckBox.GetCheckBox().Unchecked += FiltersChanged;
         HideInternalContentCheckBox.GetCheckBox().Checked += FiltersChanged;
@@ -112,6 +112,35 @@ public partial class ContentView : UserControl
     }
 
     private IReadOnlyList<ShellMenuAction> CreateContextMenuActions() => CreateContextMenuActionsForContext(false);
+
+    internal IReadOnlyList<ShellMenuAction> CreateContentTransferActions(string destination)
+    {
+        var link = LinkWorkflowState.Shared.IsPrepared;
+        var copy = CopyWorkflowState.Shared.IsPrepared;
+        var move = MoveWorkflowState.Shared.IsPrepared;
+        if (!link && !copy && !move)
+            return [];
+
+        void Execute(string action)
+        {
+            try { ExecuteTransfer(action, destination); }
+            catch (OperationCanceledException) { }
+            catch (Exception exception)
+            {
+                MessageBox.Show(Window.GetWindow(this), exception.Message, "Operation failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        var execute = link ? new ShellMenuAction("LinkExecute", "Insert link to marked item", true, () => Execute("LinkExecute")) { IconSource = LinkExecuteButton } :
+            copy ? new ShellMenuAction("CopyExecute", "Insert copy of marked item", true, () => Execute("CopyExecute")) { IconSource = CopyExecuteButton } :
+            new ShellMenuAction("MoveExecute", "Move marked item here", true, () => Execute("MoveExecute")) { IconSource = MoveExecuteButton };
+        return
+        [
+            new ShellMenuAction("AbortTransfer", "Abort transfer", true,
+                () => { LinkWorkflowState.Shared.Abort(); CopyWorkflowState.Shared.Abort(); MoveWorkflowState.Shared.Abort(); }),
+            execute
+        ];
+    }
 
     private IReadOnlyList<ShellMenuAction> CreateContextMenuActionsForContext(bool background)
     {
@@ -989,13 +1018,7 @@ public partial class ContentView : UserControl
                     LinkWorkflowState.Shared.Prepare(selectedPaths);
                     break;
                 case "LinkExecute":
-                    var linked = new List<string>();
-                    try
-                    {
-                        SutShell.Link(LinkWorkflowState.Shared.PreparedPaths, CurrentPath, linked);
-                        LinkWorkflowState.Shared.CompleteExecute();
-                    }
-                    finally { RevealInsertedItems(linked); }
+                    ExecuteTransfer(action, CurrentPath);
                     break;
                 case "LinkAbort":
                     LinkWorkflowState.Shared.Abort();
@@ -1006,13 +1029,7 @@ public partial class ContentView : UserControl
                     CopyWorkflowState.Shared.Prepare(selectedPaths);
                     break;
                 case "CopyExecute":
-                    var copied = new List<string>();
-                    try
-                    {
-                        SutShell.Copy(CopyWorkflowState.Shared.PreparedPaths, CurrentPath, owner, copied);
-                        CopyWorkflowState.Shared.CompleteExecute();
-                    }
-                    finally { RevealInsertedItems(copied); }
+                    ExecuteTransfer(action, CurrentPath);
                     break;
                 case "CopyAbort":
                     CopyWorkflowState.Shared.Abort();
@@ -1023,28 +1040,7 @@ public partial class ContentView : UserControl
                     MoveWorkflowState.Shared.Prepare(selectedPaths);
                     break;
                 case "MoveExecute":
-                    var moved = new List<string>();
-                    var movedDirectories = new List<(string OldPath, string NewPath)>();
-                    try
-                    {
-                        RunDirectoryOperation(() =>
-                        {
-                            try
-                            {
-                                SutShell.MoveWithDirectoryChanges(MoveWorkflowState.Shared.PreparedPaths, CurrentPath, owner, moved, movedDirectories);
-                                MoveWorkflowState.Shared.CompleteExecute();
-                            }
-                            finally
-                            {
-                                foreach (var (oldPath, newPath) in movedDirectories)
-                                    DirectoryRenamed?.Invoke(oldPath, newPath);
-                            }
-                        });
-                    }
-                    finally
-                    {
-                        RevealInsertedItems(moved);
-                    }
+                    ExecuteTransfer(action, CurrentPath);
                     break;
                 case "MoveAbort":
                     MoveWorkflowState.Shared.Abort();
@@ -1073,6 +1069,43 @@ public partial class ContentView : UserControl
             MessageBox.Show(Window.GetWindow(this), exception.Message, "Operation failed",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private void ExecuteTransfer(string action, string destination)
+    {
+        var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
+        var inserted = new List<string>();
+        try
+        {
+            switch (action)
+            {
+                case "LinkExecute":
+                    SutShell.Link(LinkWorkflowState.Shared.PreparedPaths, destination, inserted);
+                    LinkWorkflowState.Shared.CompleteExecute();
+                    break;
+                case "CopyExecute":
+                    SutShell.Copy(CopyWorkflowState.Shared.PreparedPaths, destination, owner, inserted);
+                    CopyWorkflowState.Shared.CompleteExecute();
+                    break;
+                case "MoveExecute":
+                    var movedDirectories = new List<(string OldPath, string NewPath)>();
+                    RunDirectoryOperation(() =>
+                    {
+                        try
+                        {
+                            SutShell.MoveWithDirectoryChanges(MoveWorkflowState.Shared.PreparedPaths, destination, owner, inserted, movedDirectories);
+                            MoveWorkflowState.Shared.CompleteExecute();
+                        }
+                        finally
+                        {
+                            foreach (var (oldPath, newPath) in movedDirectories)
+                                DirectoryRenamed?.Invoke(oldPath, newPath);
+                        }
+                    });
+                    break;
+            }
+        }
+        finally { RevealInsertedItems(inserted); }
     }
 
     private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
