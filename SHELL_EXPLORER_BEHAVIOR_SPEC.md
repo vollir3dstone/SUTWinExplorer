@@ -49,8 +49,47 @@ already have completed some items.
 ### Clipboard actions and transfer functions
 
 Clipboard actions use the Windows clipboard and are completely independent of
-the application's prepared Link, Copy and Move transfers. The full action names
-appear in tooltips and Base Menus; the buttons use these compact labels and symbols:
+the application's prepared Link, Copy and Move transfers.
+
+#### Transfer overview
+
+The application distinguishes **internal transfers** from **Shell transfers**
+(also called **external transfers**). Internal transfers use the application's
+own prepared state; Shell transfers use the Windows clipboard and can cross an
+application boundary. KIS Explorer can also both prepare and execute a Shell
+transfer itself. Preparing or completing one kind does not change the prepared
+state of the other.
+
+For all internal operations, one preparation permits one complete successful
+execution, after which the preparation is cleared. Abort clears it without an
+execution. This one-to-one relationship concerns a transfer, not individual
+files: a preparation can contain several sources. If execution fails, the
+preparation remains available, although some items may already have been
+transferred; retrying after a partial failure is therefore not guaranteed to
+produce exactly one result per item.
+
+The same one-preparation-to-one-successful-execution behavior is desirable for
+Shell transfers, but KIS Explorer does not control every participant or its
+clipboard behavior. For Move and Link, Shell completion feedback provides a way
+to encourage one-shot behavior, subject to the source and destination honoring
+it and, for KIS-prepared Links, clipboard clearing succeeding. For Copy, KIS
+Explorer does not enforce one-shot use: the Shell Copy clipboard can be pasted
+repeatedly. No direction provides an unconditional exactly-once guarantee.
+
+| Shell operation | KIS prepares; external application executes | External application prepares; KIS executes |
+| --- | --- | --- |
+| **Copy** | KIS places the selected sources on the clipboard with Shell Copy. A compatible destination pastes them; KIS does not consume the clipboard or prevent subsequent pastes. | KIS reads the clipboard's file list and Copy effect and copies the sources to the destination. It does not clear the clipboard or send a completion notification; the clipboard remains available unless the source or another participant changes it. |
+| **Move** | KIS uses Shell Cut. The destination moves the sources and interacts with the native Shell clipboard object; the tested Windows Explorer clears the clipboard after success, but other destinations may behave differently. | KIS moves all sources and, after complete success, reports `Paste Succeeded` with Move effect to the clipboard source. The source's reaction determines whether the clipboard is consumed. If notification fails, KIS reports that the move completed but notification failed; no success is reported on an incomplete move. |
+| **Link** | KIS prepares a Shell data object with Link effect. A compatible destination creates shortcuts; on a reported logical Link success, KIS attempts to clear its own still-current prepared clipboard. Missing feedback or an unavailable or replaced clipboard prevents that automatic clear. | KIS creates shortcuts for the sources, then reports logical Link success to the clipboard source. The source decides how to react; if it rejects the notification, the successful shortcut creation remains successful. A KIS-prepared Link pasted in KIS uses the same guarded clear as an externally completed Link. |
+
+Shell transfers use the current clipboard content, which can contain multiple
+source items under one requested effect. They are not a queue of independently
+prepared operations. Clipboard Move and Link can also be aborted in KIS by
+clearing the unchanged current clipboard without executing them; this does not
+abort an internal transfer.
+
+The full clipboard action names appear in tooltips and Base Menus; the buttons
+use these compact labels and symbols:
 
 | Action | Button | Effect |
 | --- | --- | --- |
