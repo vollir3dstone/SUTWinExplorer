@@ -122,6 +122,7 @@ public partial class Pathview : UserControl
         _fileSystemRefreshTimer.Tick += FileSystemRefreshTimer_Tick;
         DirectoryContent.DirectoryOpenRequested += ContentView_DirectoryOpenRequested;
         DirectoryContent.DirectoryRenamed += NotifyDirectoryRenamed;
+        DirectoryContent.RelocateRequested += ShowRelocateDialog;
         DirectoryContent.DirectoryOperation = RunDirectoryOperation;
         DirectoryContent.FileSystemChanged += ContentView_FileSystemChanged;
         DirectoryContent.Initialize(IsBrowsable);
@@ -541,17 +542,23 @@ public partial class Pathview : UserControl
 
     private void RelocateCurrentDirectoryButton_Click(object sender, RoutedEventArgs e)
     {
-        var parent = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(CurrentPath));
+        ShowRelocateDialog(CurrentPath);
+    }
+
+    private void ShowRelocateDialog(string path)
+    {
+        var parent = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(path));
         if (parent is null)
             return;
-        var dialog = new DirectoryLocationDialog(true, parent, Window.GetWindow(this), SutShell.GetEditName(CurrentPath));
+        var isFile = !Directory.Exists(path);
+        var dialog = new DirectoryLocationDialog(true, parent, Window.GetWindow(this), SutShell.GetEditName(path), isFile);
         if (dialog.ShowDialog() != true)
             return;
-        try { RelocateCurrentDirectory(dialog.Value, dialog.DestinationIncludesName); }
+        try { RelocateItem(path, dialog.Value, dialog.DestinationIncludesName); }
         catch (OperationCanceledException) { }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot relocate directory", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(Window.GetWindow(this), exception.Message, isFile ? "Cannot relocate file" : "Cannot relocate directory", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -567,10 +574,14 @@ public partial class Pathview : UserControl
     }
 
     internal void RelocateCurrentDirectory(string destination, bool destinationIncludesName)
+        => RelocateItem(CurrentPath, destination, destinationIncludesName);
+
+    internal void RelocateItem(string path, string destination, bool destinationIncludesName)
     {
         if (!Path.IsPathFullyQualified(destination))
             throw new ArgumentException("Enter an absolute destination directory path.");
-        var oldPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(CurrentPath));
+        var oldPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        var isDirectory = Directory.Exists(oldPath);
         var enteredPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(destination));
         var parent = Path.GetDirectoryName(oldPath);
         if (parent is null)
@@ -589,11 +600,15 @@ public partial class Pathview : UserControl
             throw new IOException("An item with that name already exists in the destination directory.");
         if (string.Equals(parent, target, StringComparison.OrdinalIgnoreCase))
         {
-            RenameCurrentDirectory(newName);
+            RunDirectoryOperation(() =>
+            {
+                var renamed = SutShell.Rename(oldPath, newName, Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero);
+                if (isDirectory) NotifyDirectoryRenamed(oldPath, renamed);
+            });
             return;
         }
         var relative = Path.GetRelativePath(oldPath, target);
-        if (relative == "." || (!Path.IsPathRooted(relative) && relative != ".." && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)))
+        if (isDirectory && (relative == "." || (!Path.IsPathRooted(relative) && relative != ".." && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))))
             throw new InvalidOperationException("A directory cannot be relocated into itself or one of its subdirectories.");
         var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
         var relocatedPaths = new List<string>();
@@ -613,8 +628,8 @@ public partial class Pathview : UserControl
                     NotifyDirectoryRenamed(source, result);
             }
         });
-        if (relocatedDirectories.Count == 0)
-            throw new IOException("The Shell did not report a completed directory relocation.");
+        if (isDirectory ? relocatedDirectories.Count == 0 : relocatedPaths.Count == 0)
+            throw new IOException("The Shell did not report a completed relocation.");
     }
 
     private void NotifyDirectoryRenamed(string oldPath, string newPath)
@@ -1378,13 +1393,15 @@ public partial class Pathview : UserControl
             ("Rename", !entry.IsTop && Directory.Exists(entry.Path)),
             ("Delete", canStart && ShellFileOperations.CanDelete(entry.Path))
         };
-        return actions.Select(action => new ShellMenuAction(
+        var menuActions = actions.Select(action => new ShellMenuAction(
             action.Name,
             System.Windows.Automation.AutomationProperties.GetName((Button)DirectoryContent.FindName(action.Name + "Button")),
             action.Enabled, () => ExecuteDirectoryMenuAction(action.Name, entry),
             IsTransfer: action.Name.StartsWith("Link", StringComparison.Ordinal) || action.Name.StartsWith("Copy", StringComparison.Ordinal) || action.Name.StartsWith("Move", StringComparison.Ordinal),
             SeparatorBefore: action.Name is "NameClipboardCopy" or "ItemClipboardPaste" or "Delete")
             { IconSource = (Button)DirectoryContent.FindName(action.Name + "Button") }).ToArray();
+        return SutContextMenuFactory.CreateBaseActions(menuActions,
+            new ShellMenuAction("Relocate", "Relocate", !entry.IsTop && Directory.Exists(entry.Path), () => ShowRelocateDialog(entry.Path)));
     }
 
     private IReadOnlyList<ShellMenuAction> CreateBackgroundMenuActions()
@@ -1400,13 +1417,14 @@ public partial class Pathview : UserControl
             ("CopyAbort", copyPrepared), ("CopyExecute", copyPrepared), ("MoveMarkItem", false),
             ("MoveAbort", movePrepared), ("MoveExecute", movePrepared), ("Rename", false), ("Delete", false)
         };
-        return actions.Select(action => new ShellMenuAction(
+        var menuActions = actions.Select(action => new ShellMenuAction(
             action.Name,
             System.Windows.Automation.AutomationProperties.GetName((Button)DirectoryContent.FindName(action.Name + "Button")),
             action.Enabled, () => ExecuteDirectoryMenuAction(action.Name, null),
             IsTransfer: action.Name.StartsWith("Link", StringComparison.Ordinal) || action.Name.StartsWith("Copy", StringComparison.Ordinal) || action.Name.StartsWith("Move", StringComparison.Ordinal),
             SeparatorBefore: action.Name is "NameClipboardCopy" or "ItemClipboardPaste" or "Delete")
             { IconSource = (Button)DirectoryContent.FindName(action.Name + "Button") }).ToArray();
+        return SutContextMenuFactory.CreateBaseActions(menuActions, new ShellMenuAction("Relocate", "Relocate", false, () => { }));
     }
 
     private void ExecuteDirectoryMenuAction(string action, TreeEntry? entry)

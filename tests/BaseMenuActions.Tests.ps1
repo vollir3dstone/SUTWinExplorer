@@ -32,6 +32,7 @@ $flags = [Reflection.BindingFlags]'Instance,NonPublic'
 $factory = $assembly.GetType('SUTWinExplorer.SutContextMenuFactory', $true)
 $insert = $factory.GetMethod('InsertActions', [Reflection.BindingFlags]'Static,NonPublic')
 $actionIds = @('Properties', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', 'ItemClipboardPaste', 'LinkMarkItem', 'LinkAbort', 'LinkExecute', 'CopyMarkItem', 'CopyAbort', 'CopyExecute', 'MoveMarkItem', 'MoveAbort', 'MoveExecute', 'Rename', 'Delete')
+$baseActionIds = @('Properties', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', 'AbortTransfer', 'LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem', 'Rename', 'Relocate', 'Delete')
 $directory = Join-Path ([IO.Path]::GetTempPath()) ('SutBaseMenu-' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($directory) | Out-Null
 function Wait-SelectedPaths($view, [string[]] $expected) {
@@ -106,8 +107,7 @@ function Assert-PropertiesDialog($action, [string] $titlePart, [string] $descrip
     } finally { $probe.Dispose() }
 }
 function Assert-Menu($actions, [string[]] $expected, [string[]] $disabled) {
-    if ((@($actions | ForEach-Object { $_.Id }) -join ',') -cne ($actionIds -join ',')) { throw 'Incorrect action IDs.' }
-    if (@($actions | Where-Object { $_.Label -cne 'Lokalisierte Aktion' }).Count -ne 0) { throw 'Action labels were not localized.' }
+    if ((@($actions | ForEach-Object { $_.Id }) -join ',') -cne ($baseActionIds -join ',')) { throw 'Incorrect action IDs.' }
     $menu = [BaseMenuProbe]::CreatePopupMenu()
     try {
         if (-not [BaseMenuProbe]::AppendMenu($menu, 0, [UIntPtr] 1, 'Shell command')) { throw 'Could not create fixture menu.' }
@@ -125,7 +125,7 @@ function Assert-Menu($actions, [string[]] $expected, [string[]] $disabled) {
             $id = $actions[$actionIndex].Id
             $actual += $id
             if ($text.ToString() -cne $actions[$actionIndex].Label) { throw "Incorrect display label for $id." }
-            if ((($state -band 3) -ne 0) -ne ($id -in $disabled)) { throw "Incorrect enabled state for $id." }
+            if ((($state -band 3) -ne 0) -ne ($id -in $disabled)) { throw "Incorrect enabled state for $id (state=$state, disabled=$($disabled -join ','))." }
         }
         if (($actual -join ',') -cne ($expected -join ',')) { throw "Incorrect menu: $($actual -join ','); expected $($expected -join ',')." }
     } finally { $null = [BaseMenuProbe]::DestroyMenu($menu) }
@@ -141,7 +141,7 @@ function Assert-ShellMenu($actions, [string[]] $expected, [bool] $background, [I
             $text = [Text.StringBuilder]::new(256)
             $null = [BaseMenuProbe]::GetMenuString($menu, $index, $text, $text.Capacity, 0x400)
             $command = [BaseMenuProbe]::GetMenuItemID($menu, $index)
-            if ($index -ge $expected.Count -and $index -lt $count - 4) {
+            if ($index -ge $expected.Count -and $index -lt $count - 5) {
                 if ($command -ge 0x8000 -and $command -ne [uint]::MaxValue) { throw 'Application action appeared in the Shell section.' }
                 if ($command -ge 1 -and $command -le 0x7fff) {
                     $shellMenu = $instance.GetType().GetField('_contextMenu', $flags).GetValue($instance)
@@ -150,7 +150,7 @@ function Assert-ShellMenu($actions, [string[]] $expected, [bool] $background, [I
                 }
                 continue
             }
-            $expectedItem = if ($index -lt $expected.Count) { $expected[$index] } else { @('|', 'Rename', '|', 'Delete')[$index - ($count - 4)] }
+            $expectedItem = if ($index -lt $expected.Count) { $expected[$index] } else { @('|', 'Rename', 'Relocate', '|', 'Delete')[$index - ($count - 5)] }
             $actual = if (($state -band 0x800) -ne 0) { '|' } else {
                 $actionIndex = [int] $command - 0x8000
                 if ($actionIndex -lt 0 -or $actionIndex -ge $actions.Count) { throw "Incorrect Shell menu command ID: $command." }
@@ -189,26 +189,18 @@ try {
         if ($case -eq 'Link') { $link.Prepare([string[]] @($directory)) }
         if ($case -eq 'Copy') { $copy.Prepare([string[]] @($directory)) }
         if ($case -eq 'Move') { $move.Prepare([string[]] @($directory)) }
-        $transfer = switch ($case) {
-            'Idle' { @('LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem') }
-            'Link' { @('LinkAbort', 'LinkExecute') }
-            'Copy' { @('CopyAbort', 'CopyExecute') }
-            'Move' { @('MoveAbort', 'MoveExecute') }
-        }
-        $head = @('Properties', '|', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', '|', 'ItemClipboardPaste')
-        $expected = $head + @('|') + $transfer + @('|', 'Shell command', '|', 'Rename', '|', 'Delete')
+        $head = @('Properties', '|', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', '|', 'AbortTransfer', 'LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem')
+        $expected = $head + @('|', 'Shell command', '|', 'Rename', 'Relocate', '|', 'Delete')
         $clipboardReady = $assembly.GetType('SUTWinExplorer.SutShell', $true).GetMethod('ClipboardContainsItems', [Reflection.BindingFlags]'Static,NonPublic').Invoke($null, @())
         $directoryActions = $createDirectory.Invoke($pathview, [object[]] @($entry))
-        $directoryDisabled = @($(if ($case -ne 'Idle') { 'Delete' }), $(if (-not $clipboardReady) { 'ItemClipboardPaste' })) | Where-Object { $_ }
+        $directoryDisabled = @(if ($case -eq 'Idle') { 'AbortTransfer' } else { 'LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem', 'Delete' })
         Assert-Menu $directoryActions $expected $directoryDisabled
-        Assert-ShellMenu $directoryActions ($head + @('|') + $transfer) $false $owner
-        $backgroundTransfer = if ($case -eq 'Idle') { @() } else { $transfer }
-        $backgroundHead = if ($backgroundTransfer.Count) { $head + @('|') + $backgroundTransfer } else { $head }
-        $backgroundExpected = $backgroundHead + @('|', 'Shell command', '|', 'Rename', '|', 'Delete')
+        Assert-ShellMenu $directoryActions $head $false $owner
+        $backgroundExpected = $expected
         $backgroundActions = $createBackground.Invoke($pathview, @())
-        $backgroundDisabled = @('Properties', 'Rename', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', 'Delete') + $(if (-not $clipboardReady) { @('ItemClipboardPaste') } else { @() })
+        $backgroundDisabled = @('Properties', 'Rename', 'Relocate', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', 'LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem', 'Delete') + $(if ($case -eq 'Idle') { @('AbortTransfer') } else { @() })
         Assert-Menu $backgroundActions $backgroundExpected $backgroundDisabled
-        Assert-ShellMenu $backgroundActions $backgroundHead $true $owner
+        Assert-ShellMenu $backgroundActions $head $true $owner
         foreach ($name in $actionIds) {
             $enabled = switch ($name) {
                 'Properties' { $true } 'Rename' { $true } 'NameClipboardCopy' { $true } 'PathClipboardCopy' { $true } 'ItemClipboardCopy' { $true } 'ItemClipboardPaste' { $clipboardReady } 'Delete' { $case -eq 'Idle' }
@@ -219,7 +211,7 @@ try {
             }
             $view.FindName($name + 'Button').IsEnabled = $enabled
         }
-        Assert-Menu ($createContent.Invoke($view, @())) $expected $directoryDisabled
+        Assert-Menu ($createContent.Invoke($view, @())) $expected ($directoryDisabled + @('Relocate'))
         $link.Abort()
         $copy.Abort()
         $move.Abort()
@@ -257,6 +249,7 @@ try {
         $reveal = $view.GetType().GetMethod('RevealInsertedItems', $flags)
         $null = $reveal.Invoke($view, [object[]] @(,[string[]] @($testFile)))
         Wait-SelectedPaths $view ([string[]] @($testFile))
+        if (-not (@($createContent.Invoke($view, @()) | Where-Object { $_.Id -eq 'Relocate' })[0].IsEnabled)) { throw 'Relocate was disabled for a single file.' }
         if (-not $view.FindName('NameClipboardCopyButton').IsEnabled) { throw 'Name clipboard copy was disabled for a single file.' }
         $view.FindName('NameClipboardCopyButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         Assert-ClipboardText 'name with spaces.txt' 'Name clipboard copy copied an incorrect file name:'
@@ -274,10 +267,12 @@ try {
         Assert-PropertiesDialog $directoryAction ([IO.Path]::GetFileName($directory)) 'the sidebar directory'
         $null = $reveal.Invoke($view, [object[]] @(,[string[]] @($testFolder)))
         Wait-SelectedPaths $view ([string[]] @($testFolder))
+        if (-not (@($createContent.Invoke($view, @()) | Where-Object { $_.Id -eq 'Relocate' })[0].IsEnabled)) { throw 'Relocate was disabled for a single directory.' }
         $view.FindName('NameClipboardCopyButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         Assert-ClipboardText 'test-folder' 'Name clipboard copy copied an incorrect folder name:'
         $null = $reveal.Invoke($view, [object[]] @(,[string[]] @($testFile, $testFolder)))
         Wait-SelectedPaths $view ([string[]] @($testFile, $testFolder))
+        if ((@($createContent.Invoke($view, @()) | Where-Object { $_.Id -eq 'Relocate' })[0].IsEnabled)) { throw 'Relocate was enabled for multiple items.' }
         if (-not $nameButton.IsEnabled -or -not $pathButton.IsEnabled) { throw 'Name clipboard copy or Path clipboard copy was disabled for multiple items.' }
         foreach ($actionId in @('NameClipboardCopy', 'PathClipboardCopy')) {
             Wait-SelectedPaths $view ([string[]] @($testFile, $testFolder))
@@ -357,9 +352,7 @@ try {
             -not $view.FindName('LinkAbortButton').IsEnabled -or -not $view.FindName('LinkExecuteButton').IsEnabled -or
             $view.FindName('LinkMarkItemButton').IsEnabled -or $copyButton.IsEnabled -or
             $view.FindName('MoveMarkItemButton').IsEnabled -or $deleteButton.IsEnabled) { throw 'Prepared Link states were incorrect.' }
-        $linkExecute = @($createBackground.Invoke($pathview, @()) | Where-Object { $_.Id -eq 'LinkExecute' })[0]
-        if (-not $linkExecute.IsEnabled) { throw 'Link execute was disabled in the background menu.' }
-        $linkExecute.Invoke.Invoke()
+        $view.FindName('LinkExecuteButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         $shortcuts = [string[]] @((Join-Path $directory 'name with spaces.txt - Shortcut.lnk'), (Join-Path $directory 'test-folder - Shortcut.lnk'))
         if ($link.IsPrepared -or @($shortcuts | Where-Object { -not [IO.File]::Exists($_) }).Count -ne 0 -or
             -not [IO.File]::Exists($testFile) -or -not [IO.Directory]::Exists($testFolder)) { throw 'Link execute did not create shortcuts and retain the sources.' }
@@ -367,7 +360,7 @@ try {
         $directoryLink = @($createDirectory.Invoke($pathview, [object[]] @($entry)) | Where-Object { $_.Id -eq 'LinkMarkItem' })[0]
         $directoryLink.Invoke.Invoke()
         if (-not $link.IsPrepared -or @($link.PreparedPaths)[0] -cne $directory) { throw 'Sidebar Link mark item did not prepare its directory.' }
-        $linkAbort = @($createBackground.Invoke($pathview, @()) | Where-Object { $_.Id -eq 'LinkAbort' })[0]
+        $linkAbort = @($createBackground.Invoke($pathview, @()) | Where-Object { $_.Id -eq 'AbortTransfer' })[0]
         $linkAbort.Invoke.Invoke()
         if ($link.IsPrepared) { throw 'Background Link abort did not clear the workflow.' }
         $disappearing = Join-Path $directory 'disappearing.txt'

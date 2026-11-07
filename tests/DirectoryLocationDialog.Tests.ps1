@@ -10,7 +10,7 @@ $root = Join-Path ([IO.Path]::GetTempPath()) ('kis-location-dialog-' + [guid]::N
 $destination = Join-Path $root 'destination'
 try {
     $dialogType = $assembly.GetType('SUTWinExplorer.DirectoryLocationDialog', $true)
-    $dialog = $dialogType.GetConstructors($flags)[0].Invoke([object[]] @($true, [string] $root, $null, [string] 'operation-parent'))
+    $dialog = $dialogType.GetConstructors($flags)[0].Invoke([object[]] @($true, [string] $root, $null, [string] 'operation-parent', $false))
     try {
         $choices = $dialog.Content.Children[0].Children
         Assert-True ($dialog.Title -ceq 'Relocate directory' -and $choices[0].Content -ceq 'Destination (parent)' -and $choices[0].IsChecked -eq $true -and $choices[1].Content -ceq 'Destination and new name' -and $choices[1].IsChecked -ne $true -and $dialog.Content.Children[2].Children[1].Content -ceq 'Relocate') 'The relocation dialog has incorrect labels or default mode.'
@@ -25,7 +25,13 @@ try {
         $choices[1].IsChecked = $true
         Assert-True ($dialog.Content.Children[1].Text -ceq (Join-Path $destination 'operation-parent')) 'Switching back did not append the current directory name to the edited parent.'
     } finally { $dialog.Close() }
-    $dialog = $dialogType.GetConstructors($flags)[0].Invoke([object[]] @($false, [string] 'example', $null, $null))
+    $dialog = $dialogType.GetConstructors($flags)[0].Invoke([object[]] @($true, [string] $root, $null, [string] 'example.txt', $true))
+    try {
+        Assert-True ($dialog.Title -ceq 'Relocate file' -and $dialog.Content.Children[2].Children[1].Content -ceq 'Relocate') 'The file relocation dialog has incorrect labels.'
+        $dialog.Content.Children[0].Children[1].IsChecked = $true
+        Assert-True ($dialog.Content.Children[1].Text -ceq (Join-Path $root 'example.txt')) 'The file relocation dialog did not retain the extension.'
+    } finally { $dialog.Close() }
+    $dialog = $dialogType.GetConstructors($flags)[0].Invoke([object[]] @($false, [string] 'example', $null, $null, $false))
     try {
         Assert-True ($dialog.Title -ceq 'Rename directory' -and $dialog.Content.Children[0].Text -ceq 'Directory name' -and $dialog.Content.Children[2].Children[1].Content -ceq 'Rename') 'The rename dialog has incorrect labels.'
     } finally { $dialog.Close() }

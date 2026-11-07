@@ -63,12 +63,17 @@ internal static class ShellMenuIcons
             icon = new Image { Source = imageSource, Width = 16, Height = 16, Stretch = Stretch.Uniform };
         else if (button?.Content is StackPanel panel && panel.Children.OfType<Control>().FirstOrDefault() is { Template: not null } source)
             icon = new Control { Template = source.Template, Width = 14, Height = 14, Foreground = SystemColors.MenuTextBrush };
-        else if ((action.IsTransfer || action.Id == "Delete") && button?.Content is string text)
+        else if ((action.Id is "LinkMarkItem" or "CopyMarkItem" or "MoveMarkItem" or "Delete") && button?.Content is string text)
         {
             var prefixLength = action.Id == "Delete" ? 3 : action.Id.StartsWith("Link", StringComparison.Ordinal) || action.Id.StartsWith("Copy", StringComparison.Ordinal) || action.Id.StartsWith("Move", StringComparison.Ordinal) ? 4 : text.Length;
             if (text.Length <= prefixLength)
                 return IntPtr.Zero;
             icon = new TextBlock { Text = text[prefixLength..], FontFamily = button.FontFamily, FontSize = button.FontSize, Foreground = SystemColors.MenuTextBrush };
+        }
+        else if (action.Id is "Properties" or "Rename" or "Relocate" or "AbortTransfer")
+        {
+            var glyph = action.Id switch { "Properties" => "\uE946", "Rename" => "\uE70F", "Relocate" => "\uE8DE", _ => "\uE711" };
+            icon = new TextBlock { Text = glyph, FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = 14, Foreground = SystemColors.MenuTextBrush };
         }
         else
             return IntPtr.Zero;

@@ -10,9 +10,9 @@ internal sealed class DirectoryLocationDialog : Window
     private readonly TextBox _editor;
     private readonly RadioButton? _destinationAndName;
 
-    internal DirectoryLocationDialog(bool relocate, string value, Window? owner, string? currentDirectoryName = null)
+    internal DirectoryLocationDialog(bool relocate, string value, Window? owner, string? currentDirectoryName = null, bool isFile = false)
     {
-        Title = relocate ? "Relocate directory" : "Rename directory";
+        Title = relocate ? (isFile ? "Relocate file" : "Relocate directory") : "Rename directory";
         Owner = owner;
         Width = relocate ? Math.Max(480, (owner?.ActualWidth ?? 800) - 40) : 420;
         MaxWidth = SystemParameters.WorkArea.Width;

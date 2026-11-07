@@ -41,6 +41,20 @@ try {
     $sameParent = Join-Path $root 'renamed-in-place'
     $null = $relocate.Invoke($view, [object[]] @([string] $sameParent, $true))
     Assert-True ($view.CurrentPath -ceq $sameParent -and -not [IO.Directory]::Exists($named) -and [IO.File]::Exists((Join-Path $sameParent 'child\file.txt'))) 'Relocation within the same parent did not rename the directory.'
+    $relocateItem = $view.GetType().GetMethod('RelocateItem', $flags)
+    $file = Join-Path $sameParent 'child\file.txt'
+    $null = $relocateItem.Invoke($view, [object[]] @([string] $file, [string] $destination, $false))
+    $movedFile = Join-Path $destination 'file.txt'
+    Assert-True ([IO.File]::Exists($movedFile) -and -not [IO.File]::Exists($file)) 'File relocation to a parent failed.'
+    $namedFile = Join-Path $sameParent 'new-name.txt'
+    $null = $relocateItem.Invoke($view, [object[]] @([string] $movedFile, [string] $namedFile, $true))
+    Assert-True ([IO.File]::Exists($namedFile) -and -not [IO.File]::Exists($movedFile)) 'File relocation with a new name failed.'
+    $renamedFile = Join-Path $sameParent 'renamed-in-place.txt'
+    $null = $relocateItem.Invoke($view, [object[]] @([string] $namedFile, [string] $renamedFile, $true))
+    Assert-True ([IO.File]::Exists($renamedFile) -and -not [IO.File]::Exists($namedFile)) 'File relocation within the same parent failed.'
+    $failed = $false
+    try { $null = $relocateItem.Invoke($view, [object[]] @([string] $renamedFile, [string] (Join-Path $sameParent 'child'), $true)) } catch { $failed = $true }
+    Assert-True ($failed -and [IO.File]::Exists($renamedFile)) 'File relocation did not reject an existing destination.'
     'Relocate action tests passed.'
 } finally {
     if ($null -ne $view) { $view.GetType().GetMethod('Close', $flags).Invoke($view, @()) }

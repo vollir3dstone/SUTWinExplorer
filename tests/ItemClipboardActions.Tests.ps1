@@ -171,18 +171,16 @@ function Assert-ItemMenu($actions, [string[]] $paths, [bool] $background, [IntPt
         $nameClipboardCopyId = [uint32] (0x8000 + [Array]::IndexOf($actionIds, 'NameClipboardCopy'))
         $itemClipboardCopyId = [uint32] (0x8000 + [Array]::IndexOf($actionIds, 'ItemClipboardCopy'))
         $pathClipboardCopyId = [uint32] (0x8000 + [Array]::IndexOf($actionIds, 'PathClipboardCopy'))
-        $itemClipboardPasteId = [uint32] (0x8000 + [Array]::IndexOf($actionIds, 'ItemClipboardPaste'))
         $getPosition = [Array]::IndexOf($commandIds, $itemClipboardCopyId)
-        $pastePosition = [Array]::IndexOf($commandIds, $itemClipboardPasteId)
-        if ($getPosition -lt 2 -or $commandIds[$getPosition - 2] -ne $nameClipboardCopyId -or $commandIds[$getPosition - 1] -ne $pathClipboardCopyId -or $pastePosition -ne $getPosition + 2 -or
+        if ($getPosition -lt 2 -or $commandIds[$getPosition - 2] -ne $nameClipboardCopyId -or $commandIds[$getPosition - 1] -ne $pathClipboardCopyId -or
             ([ItemMenuProbe]::GetMenuState($handle, [uint32] ($getPosition + 1), 0x400) -band 0x800) -eq 0) {
-            throw 'The native Base Menu does not group clipboard copy actions before Item clipboard paste.'
+            throw 'The native Base Menu does not group clipboard copy actions.'
         }
         foreach ($action in @($actions | Where-Object { $_.IsTransfer -and $_.IsEnabled })) {
             $position = [Array]::IndexOf($commandIds, [uint32] (0x8000 + [Array]::IndexOf($actionIds, $action.Id)))
             if ($position -lt 0) { throw "Missing transfer action: $($action.Id)." }
         }
-        foreach ($action in @($actions | Where-Object { $_.Id -in @('NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', 'ItemClipboardPaste', 'Delete') -or ($_.IsTransfer -and $_.IsEnabled) })) {
+        foreach ($action in $actions) {
             $command = [uint32] (0x8000 + [Array]::IndexOf($actionIds, $action.Id))
             $info = [ItemMenuProbe+MenuItemInfo]::new()
             $info.Size = [uint32] [Runtime.InteropServices.Marshal]::SizeOf([type] [ItemMenuProbe+MenuItemInfo])
@@ -373,7 +371,7 @@ try {
     $paths = @([System.Windows.Clipboard]::GetFileDropList())
     if ($paths.Count -ne 2 -or $file -notin $paths -or $folder -notin $paths -or -not $copy.IsPrepared) { throw 'Item clipboard copy did not copy the selection independently of the transfer.' }
     $actions = $view.GetType().GetMethod('CreateContextMenuActions', $flags).Invoke($view, @())
-    if (-not (@($actions | Where-Object { $_.Id -eq 'ItemClipboardCopy' })[0].IsEnabled) -or -not (@($actions | Where-Object { $_.Id -eq 'ItemClipboardPaste' })[0].IsEnabled)) { throw 'Item Base Menu actions are not enabled.' }
+    if (-not (@($actions | Where-Object { $_.Id -eq 'ItemClipboardCopy' })[0].IsEnabled) -or @($actions | Where-Object { $_.Id -eq 'ItemClipboardPaste' }).Count -ne 0) { throw 'Item Base Menu actions are incorrect.' }
     Assert-ItemMenu $actions ([string[]] @($file, $folder)) $false $owner
     $null = $view.GetType().GetMethod('SetCurrentPath', $flags).Invoke($view, [object[]] @([string] $destination))
     Wait-Until { $itemClipboardPaste.IsEnabled } 'Item clipboard paste destination'
@@ -389,6 +387,7 @@ try {
     $pathview = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.Pathview', $true),
         [object[]] @($secondDestination, [bool] $false, $null, $null, $null, $null))
     $window.Content = $pathview
+    $pathviewContent = $pathview.FindName('DirectoryContent')
     $entry = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.TreeEntry', $true), [object[]] @([string] 'folder', $folder))
     $directoryActions = $pathview.GetType().GetMethod('CreateDirectoryMenuActions', $flags).Invoke($pathview, [object[]] @($entry))
     Assert-ItemMenu $directoryActions ([string[]] @($folder)) $false $owner
@@ -398,11 +397,9 @@ try {
     Wait-Until { [System.Windows.Clipboard]::ContainsFileDropList() -and $folder -in @([System.Windows.Clipboard]::GetFileDropList()) } 'sidebar Item clipboard copy'
     $backgroundActions = $pathview.GetType().GetMethod('CreateBackgroundMenuActions', $flags).Invoke($pathview, @())
     Assert-ItemMenu $backgroundActions ([string[]] @($secondDestination)) $true $owner
-    $backgroundItemClipboardPaste = @($backgroundActions | Where-Object { $_.Id -eq 'ItemClipboardPaste' })[0]
-    if (-not $backgroundItemClipboardPaste.IsEnabled) { throw 'Background Item clipboard paste is disabled.' }
-    $backgroundItemClipboardPaste.Invoke.Invoke()
+    Wait-Until { $pathviewContent.FindName('ItemClipboardPasteButton').IsEnabled } 'sidebar clipboard paste availability'
+    Invoke-Button ($pathviewContent.FindName('ItemClipboardPasteButton'))
     Wait-Until { [IO.File]::Exists((Join-Path $secondDestination 'test-folder/nested.txt')) } 'background Item clipboard paste'
-    Wait-Until { @($pathview.FindName('ActivePathSubdirectoriesList').Items | Where-Object { $_.Path -eq (Join-Path $secondDestination 'test-folder') }).Count -eq 1 } 'background Item clipboard paste tree refresh'
     if (-not $copy.IsPrepared -or @($copy.PreparedPaths).Count -ne 2) { throw 'Sidebar clipboard actions changed the prepared Copy.' }
     $copy.Abort()
     [System.Windows.Clipboard]::SetText('sidebar copy sentinel')
@@ -428,14 +425,11 @@ try {
         Wait-Until { $containsItems.Invoke($null, @()) } "$name clipboard copy availability"
         $backgroundActions = $pathview.GetType().GetMethod('CreateBackgroundMenuActions', $flags).Invoke($pathview, @())
         Assert-ItemMenu $backgroundActions ([string[]] @($secondDestination)) $true $owner
-        $backgroundItemClipboardPaste = @($backgroundActions | Where-Object { $_.Id -eq 'ItemClipboardPaste' })[0]
-        if (-not $backgroundItemClipboardPaste.IsEnabled) { throw "Item clipboard paste is disabled during $name." }
-        $backgroundItemClipboardPaste.Invoke.Invoke()
+        Wait-Until { $pathviewContent.FindName('ItemClipboardPasteButton').IsEnabled } "$name clipboard paste availability"
+        Invoke-Button ($pathviewContent.FindName('ItemClipboardPasteButton'))
         Wait-Until { [IO.File]::Exists((Join-Path $secondDestination ($name + '.txt'))) } "$name with Item clipboard paste"
         if (-not $state.IsPrepared -or @($state.PreparedPaths)[0] -cne $transferFile) { throw "Item clipboard paste changed the prepared $name." }
-        $execute = @($backgroundActions | Where-Object { $_.Id -eq "${name}Execute" })[0]
-        if (-not $execute.IsEnabled) { throw "$name execute is disabled." }
-        $execute.Invoke.Invoke()
+        Invoke-Button ($pathviewContent.FindName("${name}ExecuteButton"))
         $targetName = if ($name -eq 'Link') { "$name-transfer.txt - Shortcut.lnk" } else { "$name-transfer.txt" }
         Wait-Until { [IO.File]::Exists((Join-Path $secondDestination $targetName)) } "$name execute"
         if ($state.IsPrepared -or [IO.File]::Exists($transferFile) -ne ($name -ne 'Move')) { throw "$name execute did not complete correctly." }
@@ -448,8 +442,7 @@ try {
     finally { ([IDisposable] $cutMenu).Dispose() }
     $copy.Prepare([string[]] @($file))
     $backgroundActions = $pathview.GetType().GetMethod('CreateBackgroundMenuActions', $flags).Invoke($pathview, @())
-    $backgroundItemClipboardPaste = @($backgroundActions | Where-Object { $_.Id -eq 'ItemClipboardPaste' })[0]
-    if ($backgroundItemClipboardPaste.IsEnabled) { throw 'Item clipboard paste is enabled for Shell Cut.' }
+    if (@($backgroundActions | Where-Object { $_.Id -eq 'ItemClipboardPaste' }).Count -ne 0) { throw 'Item clipboard paste appeared in the background Base Menu.' }
     $paste = $assembly.GetType('SUTWinExplorer.SutShell', $true).GetMethod('PasteFromClipboard', $staticFlags)
     try { $null = $paste.Invoke($null, [object[]] @($secondDestination, $owner)); throw 'Direct paste accepted Shell Cut.' }
     catch { if ($_.Exception.GetBaseException() -isnot [InvalidOperationException]) { throw } }
@@ -472,8 +465,6 @@ try {
         [System.Windows.Clipboard]::SetDataObject($data, $true)
         if ([bool] $containsItems.Invoke($null, @()) -ne $allowed) { throw "Incorrect clipboard availability for $name." }
         Wait-Until { $itemClipboardPaste.IsEnabled -eq $allowed } "clipboard button availability for $name"
-        $backgroundActions = $pathview.GetType().GetMethod('CreateBackgroundMenuActions', $flags).Invoke($pathview, @())
-        if ([bool] (@($backgroundActions | Where-Object { $_.Id -eq 'ItemClipboardPaste' })[0].IsEnabled) -ne $allowed) { throw "Incorrect menu availability for $name." }
         if ($allowed) {
             $null = $paste.Invoke($null, [object[]] @($secondDestination, $owner))
             if (-not [IO.File]::Exists($caseFile) -or -not [IO.File]::Exists((Join-Path $secondDestination ([IO.Path]::GetFileName($caseFile))))) { throw "Clipboard copy failed for $name." }

@@ -99,11 +99,11 @@ try {
             $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
             $sidebarOwner = [System.Windows.Interop.WindowInteropHelper]::new($fixedWindow).Handle
             $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
-            $menuProbe.SelectCommandId = Get-ActionCommandId "${operation}Abort"
+            $menuProbe.SelectCommandId = Get-ActionCommandId 'AbortTransfer'
             try {
                 $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $true))
                 Assert-True (($menuProbe.States[0] -band 3) -ne 0 -and ($menuProbe.States[2] -band 3) -ne 0 -and ($menuProbe.States[3] -band 3) -ne 0 -and
-                    (Get-MenuActionIndex $menuProbe 'CopyMarkItem') -lt 0 -and (Get-MenuActionIndex $menuProbe 'MoveMarkItem') -lt 0 -and ($menuProbe.States[$menuProbe.SelectIndex] -band 3) -eq 0 -and
+                    ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'CopyMarkItem')] -band 3) -ne 0 -and ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'MoveMarkItem')] -band 3) -ne 0 -and ($menuProbe.States[$menuProbe.SelectIndex] -band 3) -eq 0 -and
                     -not $workflow.IsPrepared) "The sidebar background $operation action did not match the workflow state."
             } finally { $menuProbe.Dispose(); $workflow.Abort() }
         }

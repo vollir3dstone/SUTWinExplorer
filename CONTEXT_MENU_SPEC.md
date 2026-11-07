@@ -212,10 +212,8 @@ ambiguous commands and provider-specific differences can prevent a match; the
 presence of a registration alone is not proof of an identical command.
 
 The Base Menu includes the application's common actions. With no selected
-item, Properties, Rename, Name clipboard copy, Path clipboard copy and Delete are disabled; unavailable Link/Copy/Move actions
-are omitted, while prepared abort and execute actions remain available according
-to workflow state.
-Execute targets the current directory. The background Content Menu starts with a
+item, item actions are disabled; Abort transfer remains available when a transfer
+is prepared. The background Content Menu starts with a
 fresh native background menu and removes unique matches to the displayed Base
 Menu snapshot. `New` is in the Content Menu, not the Base Menu, and opens the
 same application-owned type and name dialog as the ContentView New button.
@@ -243,18 +241,17 @@ Shift background menu is not filtered.
 
 ## Base Menu
 
-The Base Menu starts with `Properties`, a separator, `Name clipboard copy`, `Path clipboard copy`,
-`Item clipboard copy`, another separator, `Item clipboard paste`, and a separator before the
-available Link, Copy and Move actions. The Shell section follows, then a separator,
-`Rename`, another separator, and `Delete`. Disabled transfer actions are
-omitted rather than grayed out; other unavailable actions remain visible and
-disabled. In the idle state with an eligible selection, Link mark item, Copy mark item and Move mark item
-are shown. A prepared transfer shows its abort and execute actions instead. Each entry uses the corresponding
-toolbar button's current label, enabled state and click handler in ContentView.
-In the sidebar, the same labels are used; item-targeted actions operate on the
-clicked directory rather than the ContentView selection. Rename uses the sidebar
-inline editor. Item clipboard paste, Link execute, Copy execute and Move execute use the current
-Pathview directory as their destination, not necessarily the clicked directory.
+The Base Menu contains `Properties`, a separator, `Copy name to clipboard`,
+`Copy path to clipboard`, `Copy item to clipboard`, a separator, `Abort transfer`,
+`Mark link item`, `Mark copy item`, `Mark move item`, a separator, the Shell
+entries, a separator, `Rename`, `Relocate`, a separator, and `Delete`. Unavailable
+application actions remain visible and disabled. Abort transfer clears any
+prepared Link, Copy and Move workflows; the individual execute and clipboard
+paste actions remain available on the toolbar. In the sidebar, item-targeted
+actions operate on the clicked directory rather than the ContentView selection.
+Rename uses the sidebar inline editor. Relocate requires one file or directory and
+offers either a destination parent or a full destination including the new name.
+Its Shell operation updates tracked directory paths when moving a directory.
 Properties invokes the Shell properties command for one or more loaded selected
 items. Rename requires one loaded item with an editable Shell name; Name clipboard copy and Path
 clipboard copy require one or more loaded items. Name clipboard copy copies their filesystem leaf names,
@@ -271,7 +268,7 @@ also permits Link is accepted but cannot create a link. These actions
 and external clipboard operations do not change the internal workflows. Link execute
 creates Shell shortcuts without changing the sources.
 The application-owned New, Link execute, Copy execute and Move execute
-actions use the same ContentView insertion completion as the toolbar: they
+toolbar actions use ContentView insertion completion: they
 reset filters that hide inserted items, select the inserted items and scroll the
 first into view. This includes items transferred before a later failure. Native
 Windows menu and extension actions do not use that completion. Delete uses the

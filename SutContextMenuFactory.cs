@@ -605,6 +605,30 @@ internal static class SutContextMenuFactory
         RemoveRedundantSeparators(menu);
     }
 
+    internal static IReadOnlyList<ShellMenuAction> CreateBaseActions(IReadOnlyList<ShellMenuAction> actions, ShellMenuAction relocate)
+    {
+        ShellMenuAction Existing(string id, string label, bool separator = false) =>
+            actions.Single(action => action.Id == id) with { Label = label, IsTransfer = false, SeparatorBefore = separator };
+
+        return new ShellMenuAction[]
+        {
+            Existing("Properties", "Properties"),
+            Existing("NameClipboardCopy", "Copy name to clipboard", true),
+            Existing("PathClipboardCopy", "Copy path to clipboard"),
+            Existing("ItemClipboardCopy", "Copy item to clipboard"),
+            new ShellMenuAction("AbortTransfer", "Abort transfer",
+                LinkWorkflowState.Shared.IsPrepared || CopyWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared,
+                () => { LinkWorkflowState.Shared.Abort(); CopyWorkflowState.Shared.Abort(); MoveWorkflowState.Shared.Abort(); },
+                SeparatorBefore: true),
+            Existing("LinkMarkItem", "Mark link item"),
+            Existing("CopyMarkItem", "Mark copy item"),
+            Existing("MoveMarkItem", "Mark move item"),
+            Existing("Rename", "Rename"),
+            relocate,
+            Existing("Delete", "Delete")
+        };
+    }
+
     private static void InsertActions(IntPtr menu, IReadOnlyList<ShellMenuAction> actions)
     {
         var position = 0u;
@@ -612,7 +636,7 @@ internal static class SutContextMenuFactory
         for (var index = 0; index < actions.Count; index++)
         {
             var action = actions[index];
-            if (action.Id is "Rename" or "Delete" || (action.IsTransfer && !action.IsEnabled))
+            if (action.Id is "Rename" or "Relocate" or "Delete" || (action.IsTransfer && !action.IsEnabled))
                 continue;
             var separator = action.SeparatorBefore || (action.IsTransfer && !insertedTransfer);
             if (action.IsTransfer) insertedTransfer = true;
@@ -627,9 +651,9 @@ internal static class SutContextMenuFactory
         for (var index = 0; index < actions.Count; index++)
         {
             var action = actions[index];
-            if (action.Id is not ("Rename" or "Delete"))
+            if (action.Id is not ("Rename" or "Relocate" or "Delete"))
                 continue;
-            if (!InsertMenu(menu, (uint)GetMenuItemCount(menu), MenuByPosition | MenuSeparator, UIntPtr.Zero, null) ||
+            if ((action.Id != "Relocate" && !InsertMenu(menu, (uint)GetMenuItemCount(menu), MenuByPosition | MenuSeparator, UIntPtr.Zero, null)) ||
                 !InsertMenu(menu, (uint)GetMenuItemCount(menu), MenuByPosition | (action.IsEnabled ? 0u : MenuDisabled),
                     (UIntPtr)(BaseMenuCommandFirst + (uint)index), action.Label))
                 throw new InvalidOperationException("Could not insert the menu separator.");

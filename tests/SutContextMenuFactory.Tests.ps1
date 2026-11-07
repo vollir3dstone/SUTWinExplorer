@@ -38,4 +38,51 @@ try {
     $remainingLabels = $menuType.GetMethod('CollectMenuLabels', $flags).Invoke($null, @($lazyBackgroundMenu))
     Assert-True ($remainingLabels.Count -eq 1) 'Lazy Sort and Group submenus were not removed or the New submenu was removed.'
 } finally { [void] [SutShellMenuProbe]::DestroyMenu($lazyBackgroundMenu) }
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class BaseMenuLayoutProbe
+{
+    [DllImport("user32.dll")] public static extern IntPtr CreatePopupMenu();
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern bool AppendMenu(IntPtr menu, uint flags, UIntPtr id, string text);
+    [DllImport("user32.dll")] public static extern uint GetMenuState(IntPtr menu, uint position, uint flags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetMenuString(IntPtr menu, uint position, StringBuilder text, int length, uint flags);
+}
+'@
+$actionType = $assembly.GetType('SUTWinExplorer.ShellMenuAction', $true)
+$ids = @('Properties', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', 'LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem', 'Rename', 'Delete')
+$sourceActions = [Array]::CreateInstance($actionType, $ids.Count)
+$noop = [Action] { }
+for ($index = 0; $index -lt $ids.Count; $index++) {
+    $sourceActions.SetValue([Activator]::CreateInstance($actionType, [object[]] @([string] $ids[$index], 'old', $true, $noop, $false, $false)), $index)
+}
+$relocate = [Activator]::CreateInstance($actionType, [object[]] @('Relocate', 'Relocate', $true, $noop, $false, $false))
+$states = @('Link', 'Copy', 'Move') | ForEach-Object { $assembly.GetType("SUTWinExplorer.${_}WorkflowState", $true).GetProperty('Shared').GetValue($null) }
+try {
+    foreach ($state in $states) { $state.Prepare([string[]] @('C:\test')) }
+    $actions = $menuType.GetMethod('CreateBaseActions', $flags).Invoke($null, [object[]] @($sourceActions, $relocate))
+    $abort = @($actions | Where-Object Id -eq 'AbortTransfer')[0]
+    Assert-True ($abort.IsEnabled) 'Abort transfer was not enabled for prepared transfers.'
+    $menu = [BaseMenuLayoutProbe]::CreatePopupMenu()
+    try {
+        [void] [BaseMenuLayoutProbe]::AppendMenu($menu, 0, [UIntPtr] 1, 'Shell command')
+        $null = $menuType.GetMethod('InsertActions', $flags).Invoke($null, [object[]] @($menu, $actions))
+        $actual = @(for ($index = 0; $index -lt [SutShellMenuProbe]::GetMenuItemCount($menu); $index++) {
+            if (([BaseMenuLayoutProbe]::GetMenuState($menu, $index, 0x400) -band 0x800) -ne 0) { '|' }
+            else {
+                $text = [Text.StringBuilder]::new(256)
+                [void] [BaseMenuLayoutProbe]::GetMenuString($menu, $index, $text, $text.Capacity, 0x400)
+                $text.ToString()
+            }
+        })
+        $expected = @('Properties', '|', 'Copy name to clipboard', 'Copy path to clipboard', 'Copy item to clipboard', '|',
+            'Abort transfer', 'Mark link item', 'Mark copy item', 'Mark move item', '|', 'Shell command', '|', 'Rename', 'Relocate', '|', 'Delete')
+        Assert-True (($actual -join ',') -ceq ($expected -join ',')) "Incorrect base menu layout: $($actual -join ',')"
+    } finally { [void] [SutShellMenuProbe]::DestroyMenu($menu) }
+    $abort.Invoke.Invoke()
+    Assert-True (@($states | Where-Object IsPrepared).Count -eq 0) 'Abort transfer did not clear all prepared transfers.'
+    $idleActions = $menuType.GetMethod('CreateBaseActions', $flags).Invoke($null, [object[]] @($sourceActions, $relocate))
+    Assert-True (-not @($idleActions | Where-Object Id -eq 'AbortTransfer')[0].IsEnabled) 'Abort transfer was enabled without a prepared transfer.'
+} finally { foreach ($state in $states) { $state.Abort() } }
 'SutContextMenuFactory tests passed.'

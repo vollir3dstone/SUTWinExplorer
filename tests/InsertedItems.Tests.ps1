@@ -120,13 +120,9 @@ try {
         $sidebarController = $pathview.GetType().GetField('_subdirectoryContextMenu', $viewFlags).GetValue($pathview)
         $sidebarOwner = [System.Windows.Interop.WindowInteropHelper]::new($window).Handle
         function Invoke-PathviewBackgroundTransfer([string] $operation) {
-            $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
-            $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
-            $menuProbe.SelectCommandId = Get-ActionCommandId "${operation}Execute"
-            try {
-                $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $false))
-                if ($menuProbe.SelectIndex -lt 0 -or ($menuProbe.States[$menuProbe.SelectIndex] -band 3) -ne 0) { throw "Pathview background $operation execute was not available." }
-            } finally { $menuProbe.Dispose() }
+            $button = $directoryContent.FindName("${operation}ExecuteButton")
+            if (-not $button.IsEnabled) { throw "Pathview toolbar $operation execute was not available." }
+            $button.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         }
         $directoryContent.FindName('NamePatternTextBox').Text = 'unrelated*'
         $menuCopy = Join-Path $source 'menu-copy.txt'

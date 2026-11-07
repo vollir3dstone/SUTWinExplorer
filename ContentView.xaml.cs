@@ -89,7 +89,7 @@ public partial class ContentView : UserControl
                 paths.Count == 1 && row.Entry is not null && SutShell.GetEditName(row.FullPath) is not null ? BeginRename : null,
                 CreateOpenLocationAction(paths)),
             () => SutShell.ShowBackgroundMenu(CurrentPath, new WindowInteropHelper(Window.GetWindow(this)!).Handle),
-            () => CurrentPath, CreateContextMenuActions,
+            () => CurrentPath, () => CreateContextMenuActionsForContext(true),
             ShowNewItemDialog, CreateOpenLocationAction, CreateRunningAppActions);
         HideDirectoriesCheckBox.GetCheckBox().Checked += FiltersChanged;
         HideDirectoriesCheckBox.GetCheckBox().Unchecked += FiltersChanged;
@@ -111,13 +111,23 @@ public partial class ContentView : UserControl
         Unloaded += ContentView_Unloaded;
     }
 
-    private IReadOnlyList<ShellMenuAction> CreateContextMenuActions() =>
-        new[] { PropertiesButton, NameClipboardCopyButton, PathClipboardCopyButton, ItemClipboardCopyButton, ItemClipboardPasteButton, LinkMarkItemButton, LinkAbortButton, LinkExecuteButton, CopyMarkItemButton, CopyAbortButton, CopyExecuteButton,
-            MoveMarkItemButton, MoveAbortButton, MoveExecuteButton, RenameButton, DeleteButton }.Select(button => new ShellMenuAction(
+    private IReadOnlyList<ShellMenuAction> CreateContextMenuActions() => CreateContextMenuActionsForContext(false);
+
+    private IReadOnlyList<ShellMenuAction> CreateContextMenuActionsForContext(bool background)
+    {
+        var actions = new[] { PropertiesButton, NameClipboardCopyButton, PathClipboardCopyButton, ItemClipboardCopyButton, LinkMarkItemButton, CopyMarkItemButton,
+            MoveMarkItemButton, RenameButton, DeleteButton }.Select(button => new ShellMenuAction(
                 (string)button.Tag, System.Windows.Automation.AutomationProperties.GetName(button), button.IsEnabled,
                 () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)),
                 IsTransfer: button.Tag is string action && (action.StartsWith("Link", StringComparison.Ordinal) || action.StartsWith("Copy", StringComparison.Ordinal) || action.StartsWith("Move", StringComparison.Ordinal)),
-                SeparatorBefore: button == NameClipboardCopyButton || button == ItemClipboardPasteButton || button == DeleteButton) { IconSource = button }).ToArray();
+                SeparatorBefore: button == NameClipboardCopyButton || button == DeleteButton) { IconSource = button }).ToArray();
+        if (background)
+            actions = actions.Select(action => action with { IsEnabled = false }).ToArray();
+        var selected = FileList.SelectedItems.OfType<DirectoryRow>().ToArray();
+        var relocate = new ShellMenuAction("Relocate", "Relocate", !background && selected.Length == 1 && RenameButton.IsEnabled && RelocateRequested is not null,
+            () => RelocateRequested?.Invoke(selected[0].FullPath));
+        return SutContextMenuFactory.CreateBaseActions(actions, relocate);
+    }
 
     private IReadOnlyList<ShellMenuAction> CreateRunningAppActions(IReadOnlyList<string> paths)
     {
@@ -258,6 +268,7 @@ public partial class ContentView : UserControl
     private string CurrentPath { get; set; } = string.Empty;
     internal event EventHandler<string>? DirectoryOpenRequested;
     internal event Action<string, string>? DirectoryRenamed;
+    internal event Action<string>? RelocateRequested;
     internal event EventHandler<DirectoryNotification>? FileSystemChanged;
     internal Action<Action>? DirectoryOperation { get; set; }
 
