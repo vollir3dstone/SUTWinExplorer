@@ -372,6 +372,8 @@ internal static class SutShell
                 break;
             case ClipboardOperation.Link:
                 ShellFileOperations.Link(paths, path, insertedPaths);
+                try { ShellDragDrop.ReportLinkCompleted(source); }
+                catch (Exception exception) when (exception is ExternalException or NotImplementedException) { }
                 break;
             case ClipboardOperation.Move:
                 ShellFileOperations.Move(paths, path, owner, insertedPaths, movedDirectories, requireComplete: true);

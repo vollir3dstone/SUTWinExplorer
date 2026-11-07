@@ -191,6 +191,14 @@ Link effect. Preparing does not execute a transfer or change the application's
 prepared transfers. External destinations must support the requested Link effect;
 in Windows Explorer, `Paste shortcut` is available for this effect and creates a
 shortcut to the source.
+When an external destination reports a completed Link prepared by KIS Explorer,
+the application clears the unchanged prepared clipboard object, causing the
+clipboard actions to update. This intentionally makes that preparation one-shot,
+even though the tested Explorer leaves Link data available for repeated shortcut
+creation. A late report cannot clear a replacement clipboard; destinations that
+do not report completion cannot trigger this update. The tested Explorer clears
+its Shell Cut clipboard after Move. Details and limitations are in
+[Completion of external operations](SHELL_EXPLORER_BEHAVIOR_SPEC.md#completion-of-external-operations).
 
 `Prepare copy to external` and `Copy item to clipboard` deliberately appear as
 two entries in different groups. Both invoke the same Shell Copy verb; the former

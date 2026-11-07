@@ -11,22 +11,39 @@ public sealed class ClipboardFeedbackSource : IDataObject
     private readonly IDataObject inner;
     public int Notifications;
     public int Effect;
-    public ClipboardFeedbackSource(IDataObject inner) { this.inner = inner; }
-    public static ClipboardFeedbackSource Install(string path)
+    private readonly int preferredEffect;
+    private readonly bool supportsFeedback;
+    public ClipboardFeedbackSource(IDataObject inner, int effect, bool supportsFeedback) { this.inner = inner; preferredEffect = effect; this.supportsFeedback = supportsFeedback; }
+    public static ClipboardFeedbackSource Install(string path, int effect = 2, bool supportsFeedback = true)
     {
         var assembly = Array.Find(AppDomain.CurrentDomain.GetAssemblies(), item => item.GetName().Name == "SUTWinExplorer");
         var method = assembly.GetType("SUTWinExplorer.ShellDragDrop", true).GetMethod("CreateDataObject", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
         var data = (IDataObject)method.Invoke(null, new object[] { new string[] { path }, IntPtr.Zero });
-        var source = new ClipboardFeedbackSource(data);
+        var source = new ClipboardFeedbackSource(data, effect, supportsFeedback);
         Marshal.ThrowExceptionForHR(OleSetClipboard(source));
         return source;
+    }
+    private static IDataObject captured;
+    public static void Capture()
+    {
+        Marshal.ThrowExceptionForHR(OleGetClipboard(out captured));
+    }
+    public static void ReportLogicalEffect(int effect)
+    {
+        var memory = GlobalAlloc(0x0042, 4);
+        var pointer = GlobalLock(memory);
+        try { Marshal.WriteInt32(pointer, effect); } finally { GlobalUnlock(memory); }
+        var format = new FORMATETC { cfFormat = unchecked((short)RegisterClipboardFormat("Logical Performed DropEffect")), dwAspect = DVASPECT.DVASPECT_CONTENT, lindex = -1, tymed = TYMED.TYMED_HGLOBAL };
+        var medium = new STGMEDIUM { tymed = TYMED.TYMED_HGLOBAL, unionmember = memory };
+        try { captured.SetData(ref format, ref medium, true); }
+        catch { ReleaseStgMedium(ref medium); throw; }
     }
     public void GetData(ref FORMATETC format, out STGMEDIUM medium)
     {
         if (format.cfFormat != unchecked((short)RegisterClipboardFormat("Preferred DropEffect"))) { inner.GetData(ref format, out medium); return; }
         var memory = GlobalAlloc(0x0042, 4);
         var pointer = GlobalLock(memory);
-        try { Marshal.WriteInt32(pointer, 2); } finally { GlobalUnlock(memory); }
+        try { Marshal.WriteInt32(pointer, preferredEffect); } finally { GlobalUnlock(memory); }
         medium = new STGMEDIUM { tymed = TYMED.TYMED_HGLOBAL, unionmember = memory };
     }
     public void GetDataHere(ref FORMATETC format, ref STGMEDIUM medium) => inner.GetDataHere(ref format, ref medium);
@@ -34,7 +51,9 @@ public sealed class ClipboardFeedbackSource : IDataObject
     public int GetCanonicalFormatEtc(ref FORMATETC format, out FORMATETC result) => inner.GetCanonicalFormatEtc(ref format, out result);
     public void SetData(ref FORMATETC format, ref STGMEDIUM medium, bool release)
     {
-        if (format.cfFormat != unchecked((short)RegisterClipboardFormat("Paste Succeeded"))) throw new NotImplementedException();
+        if (!supportsFeedback) throw new NotImplementedException();
+        string expectedFormat = preferredEffect == 4 ? "Logical Performed DropEffect" : "Paste Succeeded";
+        if (format.cfFormat != unchecked((short)RegisterClipboardFormat(expectedFormat))) throw new NotImplementedException();
         IntPtr pointer = GlobalLock(medium.unionmember);
         try { Effect = Marshal.ReadInt32(pointer); Notifications++; }
         finally { GlobalUnlock(medium.unionmember); if (release) ReleaseStgMedium(ref medium); }
@@ -93,6 +112,14 @@ function Wait-ClipboardOperation($method, [object[]] $operationArgs) {
     }
     return $false
 }
+function Pump-ClipboardNotifications {
+    $frame = [System.Windows.Threading.DispatcherFrame]::new()
+    $timer = [System.Windows.Threading.DispatcherTimer]::new()
+    $timer.Interval = [TimeSpan]::FromMilliseconds(300)
+    $timer.add_Tick({ $frame.Continue = $false }.GetNewClosure())
+    $timer.Start()
+    try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+}
 $original = [System.Windows.Clipboard]::GetDataObject()
 $root = Join-Path ([IO.Path]::GetTempPath()) ('kis-clipboard-test-' + [guid]::NewGuid().ToString('N'))
 try {
@@ -104,6 +131,26 @@ try {
     [IO.File]::WriteAllText($linkSource, 'link')
     $prepareLink = $assembly.GetType('SUTWinExplorer.ShellDragDrop', $true).GetMethod('PrepareLinkToClipboard', $flags)
     $null = $prepareLink.Invoke($null, [object[]] @([string[]] @($linkSource), [IntPtr]::Zero))
+    [ClipboardFeedbackSource]::Capture()
+    [ClipboardFeedbackSource]::ReportLogicalEffect(1)
+    Pump-ClipboardNotifications
+    if (-not [System.Windows.Clipboard]::ContainsFileDropList()) { throw 'A non-Link result cleared the prepared Link.' }
+    [ClipboardFeedbackSource]::ReportLogicalEffect(4)
+    [System.Windows.Clipboard]::SetText('replacement after Link completion')
+    Pump-ClipboardNotifications
+    if ([System.Windows.Clipboard]::GetText() -cne 'replacement after Link completion') { throw 'Completed Link cleared a newer clipboard.' }
+    $null = $prepareLink.Invoke($null, [object[]] @([string[]] @($linkSource), [IntPtr]::Zero))
+    [ClipboardFeedbackSource]::Capture()
+    [System.Windows.Clipboard]::SetText('replacement before Link completion')
+    [ClipboardFeedbackSource]::ReportLogicalEffect(4)
+    Pump-ClipboardNotifications
+    if ([System.Windows.Clipboard]::GetText() -cne 'replacement before Link completion') { throw 'A late Link completion cleared a newer clipboard.' }
+    $null = $prepareLink.Invoke($null, [object[]] @([string[]] @($linkSource), [IntPtr]::Zero))
+    [ClipboardFeedbackSource]::Capture()
+    [ClipboardFeedbackSource]::ReportLogicalEffect(4)
+    $null = $prepareLink.Invoke($null, [object[]] @([string[]] @($linkSource), [IntPtr]::Zero))
+    Pump-ClipboardNotifications
+    if (-not [System.Windows.Clipboard]::ContainsFileDropList()) { throw 'Completed Link cleared an equivalent newer clipboard.' }
     $linkData = [System.Windows.Clipboard]::GetDataObject()
     $linkEffect = $linkData.GetData('Preferred DropEffect', $false)
     if ($linkEffect -isnot [IO.MemoryStream] -or [BitConverter]::ToUInt32($linkEffect.ToArray(), 0) -ne 4 -or
@@ -115,6 +162,27 @@ try {
     $shortcuts = @([IO.Directory]::GetFiles($linkTarget, '*.lnk'))
     $resolveLink = $assembly.GetType('SUTWinExplorer.ShellFileOperations', $true).GetMethod('GetLinkTarget')
     if ($shortcuts.Count -ne 1 -or $resolveLink.Invoke($null, [object[]] @($shortcuts[0])) -cne $linkSource -or -not [IO.File]::Exists($linkSource)) { throw 'Prepared Link did not create a shortcut to its source.' }
+    Pump-ClipboardNotifications
+    if ([System.Windows.Clipboard]::ContainsFileDropList()) { throw 'Successful KIS Link did not clear its prepared clipboard.' }
+    $externalLinkSource = Join-Path $source 'external-link.txt'
+    [IO.File]::WriteAllText($externalLinkSource, 'external link')
+    $linkFeedback = [ClipboardFeedbackSource]::Install($externalLinkSource, 4)
+    $null = $paste.Invoke($null, [object[]] @([string] $linkTarget, [IntPtr]::Zero))
+    if ($linkFeedback.Notifications -ne 1 -or $linkFeedback.Effect -ne 4) { throw 'External Link source did not receive logical Link completion.' }
+    $unsupportedLinkSource = Join-Path $source 'unsupported-link.txt'
+    [IO.File]::WriteAllText($unsupportedLinkSource, 'unsupported link')
+    $linkFeedback = [ClipboardFeedbackSource]::Install($unsupportedLinkSource, 4, $false)
+    $null = $paste.Invoke($null, [object[]] @([string] $linkTarget, [IntPtr]::Zero))
+    $unsupportedLinks = @([IO.Directory]::GetFiles($linkTarget, 'unsupported-link*.lnk'))
+    if ($unsupportedLinks.Count -ne 1 -or $resolveLink.Invoke($null, [object[]] @($unsupportedLinks[0])) -cne $unsupportedLinkSource -or $linkFeedback.Notifications -ne 0) { throw 'A source without Link feedback support prevented successful shortcut creation.' }
+    $missingLinkSource = Join-Path $source 'missing-link.txt'
+    [IO.File]::WriteAllText($missingLinkSource, 'missing link')
+    $linkFeedback = [ClipboardFeedbackSource]::Install($missingLinkSource, 4)
+    [IO.File]::Delete($missingLinkSource)
+    $failed = $false
+    try { $null = $paste.Invoke($null, [object[]] @([string] $linkTarget, [IntPtr]::Zero)) }
+    catch { $failed = $true }
+    if (-not $failed -or $linkFeedback.Notifications -ne 0) { throw 'A failed Link reported success.' }
     $getOperation = $shell.GetMethod('TryGetClipboardOperation', $flags)
     $abort = $shell.GetMethod('AbortClipboardOperation', $flags)
     foreach ($effect in @(2, 4)) {

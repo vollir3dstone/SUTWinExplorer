@@ -80,6 +80,51 @@ Preparation replaces the global clipboard; it does not itself copy, link,
 move or delete source items. The destination application must support the
 requested operation, including the explicit Link effect.
 
+#### Completion of external operations
+
+Windows Explorer does not treat all three clipboard operations alike. In the
+tested Explorer workflow, a successful Move clears the Shell Cut clipboard,
+whereas **Paste shortcut** reports a successful Link but leaves the source on
+the clipboard. Retaining it allows another shortcut to be created; whether this
+is the reason for Explorer's behavior is not established. Shell Copy is also
+reusable and is not consumed by an ordinary paste.
+
+KIS Explorer deliberately treats its own **Prepare linking from external** as
+a one-shot operation, rather than allowing repeated shortcut creation from that
+preparation. When a destination reports logical performed drop effect Link
+(`4`) to the prepared Shell data object, KIS Explorer schedules clearing that
+clipboard. Clearing generates a clipboard notification, updating the paste
+button and subsequent Content Menus. To make another link, the user prepares
+the source again.
+
+When KIS Explorer is the destination, it reports the same logical Link effect
+to the clipboard source after all shortcuts have been created. This also
+completes a Link prepared by KIS Explorer itself. Sources that do not accept the
+notification do not turn an otherwise successful Link into an error; in that
+case their clipboard behavior remains source-dependent. A failed Link is not
+reported as successful. For an incoming Move, KIS Explorer reports `Paste
+Succeeded` with effect Move (`2`) after the complete move; failure to deliver
+that notification is reported because the items have already been moved.
+
+The clear is conditional: the clipboard sequence must still match and the
+prepared data object must still own the clipboard when it is opened. A late
+report must not clear a newer clipboard, including a new preparation of the same
+source. If the clipboard is busy, the application retries briefly; if it cannot
+be opened or the clipboard changes, it does not clear it. An unrelated reported
+effect does not complete the Link. A destination that fails, is canceled, or
+does not report a successful Link cannot trigger this completion handling.
+These rules apply to Links prepared by KIS Explorer, not arbitrary Link data
+placed on the clipboard by another application.
+
+For **Prepare move to external**, the native Shell Cut data object remains
+responsible for Move feedback and clipboard behavior. The tested Windows Explorer
+clears the clipboard after a successful Move, which likewise updates KIS Explorer
+through the clipboard notification. Other destinations may behave differently;
+KIS Explorer does not independently clear an external Move on a Link report.
+Neither external completion changes an application's internally prepared
+transfer. The real Explorer Link and Move paths and clipboard notifications are
+covered by [ExplorerClipboardLink.Tests.ps1](tests/ExplorerClipboardLink.Tests.ps1).
+
 **Prepare copy to external** and **Copy item to clipboard** are intentionally
 separate actions with the same technical effect: both invoke the Shell Copy verb
 for their source items. They differ in presentation and purpose, not clipboard

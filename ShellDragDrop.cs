@@ -1,6 +1,7 @@
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
+using System.Windows.Threading;
 using DragDropEffects = System.Windows.DragDropEffects;
 
 namespace SUTWinExplorer;
@@ -11,7 +12,7 @@ internal static class ShellDragDrop
 
     internal static void PrepareLinkToClipboard(IReadOnlyList<string> paths, IntPtr owner)
     {
-        var data = CreateDataObject(paths, owner);
+        IDataObject? data = CreateDataObject(paths, owner);
         var memory = IntPtr.Zero;
         try
         {
@@ -27,16 +28,24 @@ internal static class ShellDragDrop
             var medium = new STGMEDIUM { tymed = TYMED.TYMED_HGLOBAL, unionmember = memory };
             data.SetData(ref format, ref medium, true);
             memory = IntPtr.Zero;
-            Marshal.ThrowExceptionForHR(OleSetClipboard(data));
+            var source = new LinkClipboardDataObject(data, Dispatcher.CurrentDispatcher);
+            Marshal.ThrowExceptionForHR(OleSetClipboard(source));
+            data = null;
         }
         finally
         {
             if (memory != IntPtr.Zero) _ = GlobalFree(memory);
-            if (Marshal.IsComObject(data)) _ = Marshal.ReleaseComObject(data);
+            if (data is not null && Marshal.IsComObject(data)) _ = Marshal.ReleaseComObject(data);
         }
     }
 
     internal static void ReportPasteSucceeded(IDataObject data)
+        => ReportClipboardEffect(data, "Paste Succeeded", 2);
+
+    internal static void ReportLinkCompleted(IDataObject data)
+        => ReportClipboardEffect(data, "Logical Performed DropEffect", 4);
+
+    private static void ReportClipboardEffect(IDataObject data, string formatName, int effect)
     {
         var memory = GlobalAlloc(0x0042, sizeof(uint));
         if (memory == IntPtr.Zero)
@@ -46,9 +55,9 @@ internal static class ShellDragDrop
             var pointer = GlobalLock(memory);
             if (pointer == IntPtr.Zero)
                 throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-            try { Marshal.WriteInt32(pointer, 2); }
+            try { Marshal.WriteInt32(pointer, effect); }
             finally { _ = GlobalUnlock(memory); }
-            var format = new FORMATETC { cfFormat = unchecked((short)RegisterClipboardFormat("Paste Succeeded")), dwAspect = DVASPECT.DVASPECT_CONTENT, lindex = -1, tymed = TYMED.TYMED_HGLOBAL };
+            var format = new FORMATETC { cfFormat = unchecked((short)RegisterClipboardFormat(formatName)), dwAspect = DVASPECT.DVASPECT_CONTENT, lindex = -1, tymed = TYMED.TYMED_HGLOBAL };
             var medium = new STGMEDIUM { tymed = TYMED.TYMED_HGLOBAL, unionmember = memory };
             data.SetData(ref format, ref medium, true);
             memory = IntPtr.Zero;
@@ -183,6 +192,75 @@ internal static class ShellDragDrop
     private static extern bool GlobalUnlock(IntPtr memory);
     [DllImport("kernel32.dll")]
     private static extern IntPtr GlobalFree(IntPtr memory);
+}
+
+[ComVisible(true), ClassInterface(ClassInterfaceType.None)]
+internal sealed class LinkClipboardDataObject(IDataObject inner, Dispatcher dispatcher) : IDataObject
+{
+    private static readonly short LogicalPerformedEffect = unchecked((short)RegisterClipboardFormat("Logical Performed DropEffect"));
+    private int _completed;
+
+    public void GetData(ref FORMATETC format, out STGMEDIUM medium) => inner.GetData(ref format, out medium);
+    public void GetDataHere(ref FORMATETC format, ref STGMEDIUM medium) => inner.GetDataHere(ref format, ref medium);
+    public int QueryGetData(ref FORMATETC format) => inner.QueryGetData(ref format);
+    public int GetCanonicalFormatEtc(ref FORMATETC format, out FORMATETC result) => inner.GetCanonicalFormatEtc(ref format, out result);
+    public IEnumFORMATETC EnumFormatEtc(DATADIR direction) => inner.EnumFormatEtc(direction);
+    public int DAdvise(ref FORMATETC format, ADVF flags, IAdviseSink sink, out int connection) => inner.DAdvise(ref format, flags, sink, out connection);
+    public void DUnadvise(int connection) => inner.DUnadvise(connection);
+    public int EnumDAdvise(out IEnumSTATDATA? data) => inner.EnumDAdvise(out data);
+
+    public void SetData(ref FORMATETC format, ref STGMEDIUM medium, bool release)
+    {
+        var linkCompleted = false;
+        if (format.cfFormat == LogicalPerformedEffect && medium.tymed == TYMED.TYMED_HGLOBAL &&
+            medium.unionmember != IntPtr.Zero && GlobalSize(medium.unionmember) >= sizeof(uint))
+        {
+            var pointer = GlobalLock(medium.unionmember);
+            if (pointer != IntPtr.Zero)
+            {
+                try { linkCompleted = Marshal.ReadInt32(pointer) == 4; }
+                finally { _ = GlobalUnlock(medium.unionmember); }
+            }
+        }
+        inner.SetData(ref format, ref medium, release);
+        if (linkCompleted && Interlocked.Exchange(ref _completed, 1) == 0)
+        {
+            var sequence = GetClipboardSequenceNumber();
+            _ = dispatcher.BeginInvoke(() => ClearCompletedClipboard(sequence, 0));
+        }
+    }
+
+    private void ClearCompletedClipboard(uint sequence, int attempt)
+    {
+        if (sequence != GetClipboardSequenceNumber())
+            return;
+        if (!OpenClipboard(IntPtr.Zero))
+        {
+            if (attempt < 19)
+            {
+                var timer = new DispatcherTimer(DispatcherPriority.Background, dispatcher) { Interval = TimeSpan.FromMilliseconds(100) };
+                timer.Tick += (_, _) => { timer.Stop(); ClearCompletedClipboard(sequence, attempt + 1); };
+                timer.Start();
+            }
+            return;
+        }
+        try
+        {
+            if (sequence == GetClipboardSequenceNumber() && OleIsCurrentClipboard(this) == 0)
+                _ = EmptyClipboard();
+        }
+        finally { _ = CloseClipboard(); }
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern uint RegisterClipboardFormat(string format);
+    [DllImport("user32.dll")] private static extern uint GetClipboardSequenceNumber();
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool OpenClipboard(IntPtr owner);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool EmptyClipboard();
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CloseClipboard();
+    [DllImport("ole32.dll")] private static extern int OleIsCurrentClipboard(IDataObject data);
+    [DllImport("kernel32.dll")] private static extern nuint GlobalSize(IntPtr memory);
+    [DllImport("kernel32.dll")] private static extern IntPtr GlobalLock(IntPtr memory);
+    [DllImport("kernel32.dll")] private static extern bool GlobalUnlock(IntPtr memory);
 }
 
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]

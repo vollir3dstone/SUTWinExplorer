@@ -35,8 +35,16 @@ $destination = Join-Path $root 'destination'
 $original = [System.Windows.Clipboard]::GetDataObject()
 $assembly = [Reflection.Assembly]::Load([IO.File]::ReadAllBytes((Join-Path $PSScriptRoot '..\bin\Debug\net10.0-windows\SUTWinExplorer.dll')))
 $flags = [Reflection.BindingFlags]'Static,NonPublic'
+[System.Windows.Application].GetField('_resourceAssembly', $flags).SetValue($null, $assembly)
+$application = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.App', $true))
+$application.InitializeComponent()
+$application.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
+$view = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
+$transferActions = $view.GetType().GetMethod('CreateContentTransferActions', [Reflection.BindingFlags]'Instance,NonPublic')
 $shell = New-Object -ComObject Shell.Application
 $explorer = $null
+$clipboardChanges = @{ Count = 0 }
+$monitor = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ClipboardChangeMonitor', $true), [object[]] @([Action] { $clipboardChanges.Count++ }.GetNewClosure()))
 $cursor = [ExplorerLinkInput+Point]::new()
 [void] [ExplorerLinkInput]::GetCursorPos([ref] $cursor)
 try {
@@ -60,6 +68,8 @@ try {
             $null = $assembly.GetType('SUTWinExplorer.SutShell', $true).GetMethod('CopyToClipboard', $flags).Invoke($null, [object[]] @([string[]] @($source), [IntPtr]::Zero))
         } else {
             $null = $assembly.GetType('SUTWinExplorer.ShellDragDrop', $true).GetMethod('PrepareLinkToClipboard', $flags).Invoke($null, [object[]] @([string[]] @($source), [IntPtr]::Zero))
+            $ids = @($transferActions.Invoke($view, [object[]] @([string] $destination)) | ForEach-Object Id)
+            if ('AbortClipboardLink' -notin $ids -or 'ClipboardItemLink' -notin $ids) { throw 'Prepared Link actions are missing from the Content Menu.' }
         }
         [void] [ExplorerLinkInput]::SetForegroundWindow([IntPtr] $explorer.HWND)
         [void] [ExplorerLinkInput]::SetCursorPos([int] ($bounds.X + $bounds.Width / 2), [int] ($bounds.Y + $bounds.Height / 2))
@@ -80,6 +90,7 @@ try {
                     $found = $true
                     if (([ExplorerLinkInput]::GetMenuState($menu, $index, 0x400) -band 3) -ne 0) { throw "Explorer Paste shortcut is disabled for $mode." }
                     if ($mode -eq 'link') {
+                        $changesBeforePaste = $clipboardChanges.Count
                         $rect = [ExplorerLinkInput+Rect]::new()
                         if (-not [ExplorerLinkInput]::GetMenuItemRect($menuWindow, $menu, $index, [ref] $rect)) { throw 'Could not locate Explorer Paste shortcut.' }
                         [void] [ExplorerLinkInput]::SetCursorPos([int] (($rect.Left + $rect.Right) / 2), [int] (($rect.Top + $rect.Bottom) / 2))
@@ -100,8 +111,38 @@ try {
     $shortcuts = @([IO.Directory]::GetFiles($destination, '*.lnk'))
     $resolve = $assembly.GetType('SUTWinExplorer.ShellFileOperations', $true).GetMethod('GetLinkTarget')
     if ($shortcuts.Count -ne 1 -or $resolve.Invoke($null, [object[]] @($shortcuts[0])) -cne $source -or -not [IO.File]::Exists($source)) { throw 'Explorer did not create the expected shortcut.' }
+    for ($attempt = 0; $attempt -lt 50 -and [System.Windows.Clipboard]::ContainsFileDropList(); $attempt++) { Wait-Dispatcher 100 }
+    $operationArgs = [object[]] @($null, [uint32] 0)
+    $getOperation = $assembly.GetType('SUTWinExplorer.SutShell', $true).GetMethod('TryGetClipboardOperation', $flags)
+    if ([System.Windows.Clipboard]::ContainsFileDropList() -or $getOperation.Invoke($null, $operationArgs)) { throw 'Completed Explorer Link remains on the clipboard.' }
+    $ids = @($transferActions.Invoke($view, [object[]] @([string] $destination)) | ForEach-Object Id)
+    if ('AbortClipboardLink' -in $ids -or 'ClipboardItemLink' -in $ids) { throw 'Completed Link actions remain in the Content Menu.' }
+    for ($attempt = 0; $attempt -lt 20 -and $clipboardChanges.Count -le $changesBeforePaste; $attempt++) { Wait-Dispatcher 100 }
+    if ($clipboardChanges.Count -le $changesBeforePaste) { throw 'Completed Explorer Link did not notify clipboard listeners.' }
+    $moveSource = Join-Path $root 'move-source.txt'
+    $moveTarget = Join-Path $destination 'move-source.txt'
+    [IO.File]::WriteAllText($moveSource, 'move')
+    $move = [Enum]::Parse($assembly.GetType('SUTWinExplorer.ClipboardOperation', $true), 'Move')
+    $null = $assembly.GetType('SUTWinExplorer.SutShell', $true).GetMethod('PrepareExternalTransfer', $flags).Invoke($null, [object[]] @([string[]] @($moveSource), [IntPtr]::Zero, $move))
+    Wait-Dispatcher 300
+    $changesBeforeMove = $clipboardChanges.Count
+    [void] [ExplorerLinkInput]::SetForegroundWindow([IntPtr] $explorer.HWND)
+    [void] [ExplorerLinkInput]::SetCursorPos([int] ($bounds.X + $bounds.Width / 2), [int] ($bounds.Y + $bounds.Height / 2))
+    [ExplorerLinkInput]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero)
+    [ExplorerLinkInput]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
+    [ExplorerLinkInput]::keybd_event(0x11, 0, 0, [UIntPtr]::Zero)
+    [ExplorerLinkInput]::keybd_event(0x56, 0, 0, [UIntPtr]::Zero)
+    [ExplorerLinkInput]::keybd_event(0x56, 0, 2, [UIntPtr]::Zero)
+    [ExplorerLinkInput]::keybd_event(0x11, 0, 2, [UIntPtr]::Zero)
+    for ($attempt = 0; $attempt -lt 50 -and -not [IO.File]::Exists($moveTarget); $attempt++) { Wait-Dispatcher 100 }
+    for ($attempt = 0; $attempt -lt 50 -and [System.Windows.Clipboard]::ContainsFileDropList(); $attempt++) { Wait-Dispatcher 100 }
+    if ([IO.File]::Exists($moveSource) -or -not [IO.File]::Exists($moveTarget) -or
+        [System.Windows.Clipboard]::ContainsFileDropList() -or $getOperation.Invoke($null, $operationArgs)) { throw 'Completed Explorer Move did not clear the clipboard operation.' }
+    for ($attempt = 0; $attempt -lt 20 -and $clipboardChanges.Count -le $changesBeforeMove; $attempt++) { Wait-Dispatcher 100 }
+    if ($clipboardChanges.Count -le $changesBeforeMove) { throw 'Completed Explorer Move did not notify clipboard listeners.' }
 } finally {
     if ($null -ne $explorer) { $explorer.Quit() }
+    $monitor.Dispose()
     [void] [ExplorerLinkInput]::SetCursorPos($cursor.X, $cursor.Y)
     for ($attempt = 0; ; $attempt++) {
         try {
@@ -113,6 +154,7 @@ try {
             Wait-Dispatcher 100
         }
     }
+    $application.Shutdown()
     Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
 }
-'Explorer clipboard Link test passed.'
+'Explorer clipboard Link and Move tests passed.'
