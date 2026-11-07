@@ -115,7 +115,7 @@ internal sealed class SutContextMenuController<T> where T : class
                 var shift = false;
                 T? newTarget = null;
                 var newBackground = false;
-                var newAction = background ? new ShellMenuAction("New", SutContextMenuFactory.GetActionLabel("New"), true, () => _showNew(targetPath)) : null;
+                var newAction = background ? new ShellMenuAction("New", SutContextMenuFactory.GetContentActionLabel("New"), true, () => _showNew(targetPath)) : null;
                 var transferActions = Directory.Exists(targetPath) ? _transferActions?.Invoke(targetPath) : null;
                 using var contentMenu = transferActions is { Count: > 0 }
                     ? SutContextMenuFactory.GetContentMenuWithTransferActions(selectedPaths, owner, baseCommands, background, newAction,

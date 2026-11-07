@@ -163,7 +163,7 @@ public partial class ContentView : UserControl
             if (clipboardOperation is ClipboardOperation.Move or ClipboardOperation.Link)
             {
                 var abortId = clipboardOperation == ClipboardOperation.Move ? "AbortClipboardMove" : "AbortClipboardLink";
-                actions.Add(new ShellMenuAction(abortId, SutContextMenuFactory.GetActionLabel(abortId), true, () =>
+                actions.Add(new ShellMenuAction(abortId, SutContextMenuFactory.GetContentActionLabel(abortId), true, () =>
                 {
                     try { SutShell.AbortClipboardOperation(clipboardOperation, clipboardSequence); }
                     catch (Exception exception)
@@ -199,10 +199,10 @@ public partial class ContentView : UserControl
             }
         }
 
-        var execute = link ? new ShellMenuAction("LinkExecute", SutContextMenuFactory.GetActionLabel("LinkExecute"), true, () => Execute("LinkExecute")) { IconSource = LinkExecuteButton } :
-            copy ? new ShellMenuAction("CopyExecute", SutContextMenuFactory.GetActionLabel("CopyExecute"), true, () => Execute("CopyExecute")) { IconSource = CopyExecuteButton } :
-            new ShellMenuAction("MoveExecute", SutContextMenuFactory.GetActionLabel("MoveExecute"), true, () => Execute("MoveExecute")) { IconSource = MoveExecuteButton };
-        actions.Add(new ShellMenuAction("AbortTransfer", SutContextMenuFactory.GetActionLabel("AbortTransfer"), true,
+        var execute = link ? new ShellMenuAction("LinkExecute", SutContextMenuFactory.GetContentActionLabel("LinkExecute"), true, () => Execute("LinkExecute")) { IconSource = LinkExecuteButton } :
+            copy ? new ShellMenuAction("CopyExecute", SutContextMenuFactory.GetContentActionLabel("CopyExecute"), true, () => Execute("CopyExecute")) { IconSource = CopyExecuteButton } :
+            new ShellMenuAction("MoveExecute", SutContextMenuFactory.GetContentActionLabel("MoveExecute"), true, () => Execute("MoveExecute")) { IconSource = MoveExecuteButton };
+        actions.Add(new ShellMenuAction("AbortTransfer", SutContextMenuFactory.GetContentActionLabel("AbortTransfer"), true,
             () => { LinkWorkflowState.Shared.Abort(); CopyWorkflowState.Shared.Abort(); MoveWorkflowState.Shared.Abort(); },
             SeparatorBefore: actions.Count > 0));
         actions.Add(execute);
@@ -218,7 +218,7 @@ public partial class ContentView : UserControl
             ClipboardOperation.Link => "ClipboardItemLink",
             _ => throw new ArgumentOutOfRangeException(nameof(operation))
         };
-        return (id, SutContextMenuFactory.GetActionLabel(id));
+        return (id, SutContextMenuFactory.GetContentActionLabel(id));
     }
 
     private void ExecuteClipboardTransfer(string destination, ClipboardOperation? expected = null, uint? sequence = null)
@@ -247,12 +247,12 @@ public partial class ContentView : UserControl
             return CreateActiveDirectoryMenuActions();
         var actions = new[] { PropertiesButton, NameClipboardCopyButton, PathClipboardCopyButton, ItemClipboardCopyButton, LinkMarkItemButton, CopyMarkItemButton,
             MoveMarkItemButton, RenameButton, DeleteButton }.Select(button => new ShellMenuAction(
-                (string)button.Tag, SutContextMenuFactory.GetActionLabel((string)button.Tag), button.IsEnabled,
+                (string)button.Tag, SutContextMenuFactory.GetBaseActionLabel((string)button.Tag), button.IsEnabled,
                 () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)),
                 IsTransfer: button.Tag is string action && (action.StartsWith("Link", StringComparison.Ordinal) || action.StartsWith("Copy", StringComparison.Ordinal) || action.StartsWith("Move", StringComparison.Ordinal)),
                 SeparatorBefore: button == NameClipboardCopyButton || button == DeleteButton) { IconSource = button }).ToArray();
         var selected = FileList.SelectedItems.OfType<DirectoryRow>().ToArray();
-        var relocate = new ShellMenuAction("Relocate", SutContextMenuFactory.GetActionLabel("Relocate"), selected.Length == 1 && RenameButton.IsEnabled && RelocateRequested is not null,
+        var relocate = new ShellMenuAction("Relocate", SutContextMenuFactory.GetBaseActionLabel("Relocate"), selected.Length == 1 && RenameButton.IsEnabled && RelocateRequested is not null,
             () => RelocateRequested?.Invoke(selected[0].FullPath));
         var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
         return SutContextMenuFactory.CreateBaseActions(actions, relocate, selected.Select(row => row.FullPath).ToArray(), owner, EnableInternalItemTransfers);
@@ -277,12 +277,12 @@ public partial class ContentView : UserControl
                 "Delete" => exists && canStart && ShellFileOperations.CanDelete(path),
                 _ => exists
             };
-            return new ShellMenuAction(id, SutContextMenuFactory.GetActionLabel(id), enabled,
+            return new ShellMenuAction(id, SutContextMenuFactory.GetBaseActionLabel(id), enabled,
                 () => ExecuteActiveDirectoryMenuAction(id, path)) { IconSource = button };
         }).ToArray();
         var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
         return SutContextMenuFactory.CreateBaseActions(actions,
-            new ShellMenuAction("Relocate", SutContextMenuFactory.GetActionLabel("Relocate"), editable && RelocateRequested is not null, () => RelocateRequested?.Invoke(path)), [path], owner, EnableInternalItemTransfers);
+            new ShellMenuAction("Relocate", SutContextMenuFactory.GetBaseActionLabel("Relocate"), editable && RelocateRequested is not null, () => RelocateRequested?.Invoke(path)), [path], owner, EnableInternalItemTransfers);
     }
 
     private void ExecuteActiveDirectoryMenuAction(string action, string path)
@@ -368,7 +368,7 @@ public partial class ContentView : UserControl
             return null;
 
         var shortcutPath = paths[0];
-        return new ShellMenuAction("opencontaining", SutContextMenuFactory.GetActionLabel("opencontaining"), paths.Count == 1, () =>
+        return new ShellMenuAction("opencontaining", LocalizedText.Get("ContentMenu_Action_OpenContainingDirectory"), paths.Count == 1, () =>
         {
             try
             {
@@ -1311,7 +1311,7 @@ public partial class ContentView : UserControl
     {
         var available = SutShell.TryGetClipboardOperationForUpdate(out var operation, out var retry);
         ItemClipboardPasteButton.IsEnabled = Directory.Exists(CurrentPath) && available;
-        var label = available ? ClipboardAction(operation).Label : SutContextMenuFactory.GetActionLabel("ItemClipboardPaste");
+        var label = available ? ClipboardAction(operation).Label : LocalizedText.Get("PathviewSidebarColumn_Button_ItemClipboardPaste_Tooltip");
         ItemClipboardPasteButton.ToolTip = label;
         System.Windows.Automation.AutomationProperties.SetName(ItemClipboardPasteButton, label);
         if (!retry)

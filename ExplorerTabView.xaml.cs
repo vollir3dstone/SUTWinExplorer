@@ -1422,23 +1422,21 @@ public partial class Pathview : UserControl
             ("Properties", Directory.Exists(entry.Path)),
             ("NameClipboardCopy", Directory.Exists(entry.Path)),
             ("PathClipboardCopy", Directory.Exists(entry.Path)),
-            ("ItemClipboardCopy", Directory.Exists(entry.Path)), ("ItemClipboardPaste", Directory.Exists(CurrentPath) && SutShell.ClipboardContainsItems()),
-            ("LinkMarkItem", canStart), ("LinkAbort", linkPrepared), ("LinkExecute", linkPrepared),
-            ("CopyMarkItem", canStart), ("CopyAbort", copyPrepared), ("CopyExecute", copyPrepared),
-            ("MoveMarkItem", canStart), ("MoveAbort", movePrepared), ("MoveExecute", movePrepared),
+            ("ItemClipboardCopy", Directory.Exists(entry.Path)),
+            ("LinkMarkItem", canStart), ("CopyMarkItem", canStart), ("MoveMarkItem", canStart),
             ("Rename", !entry.IsTop && Directory.Exists(entry.Path)),
             ("Delete", canStart && ShellFileOperations.CanDelete(entry.Path))
         };
         var menuActions = actions.Select(action => new ShellMenuAction(
             action.Name,
-            SutContextMenuFactory.GetActionLabel(action.Name),
+            SutContextMenuFactory.GetBaseActionLabel(action.Name),
             action.Enabled, () => ExecuteDirectoryMenuAction(action.Name, entry),
             IsTransfer: action.Name.StartsWith("Link", StringComparison.Ordinal) || action.Name.StartsWith("Copy", StringComparison.Ordinal) || action.Name.StartsWith("Move", StringComparison.Ordinal),
-            SeparatorBefore: action.Name is "NameClipboardCopy" or "ItemClipboardPaste" or "Delete")
+            SeparatorBefore: action.Name is "NameClipboardCopy" or "Delete")
             { IconSource = (Button)DirectoryContent.FindName(action.Name + "Button") }).ToArray();
         var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
         return SutContextMenuFactory.CreateBaseActions(menuActions,
-            new ShellMenuAction("Relocate", SutContextMenuFactory.GetActionLabel("Relocate"), !entry.IsTop && Directory.Exists(entry.Path), () => ShowRelocateDialog(entry.Path)), [entry.Path], owner, EnableInternalItemTransfers);
+            new ShellMenuAction("Relocate", SutContextMenuFactory.GetBaseActionLabel("Relocate"), !entry.IsTop && Directory.Exists(entry.Path), () => ShowRelocateDialog(entry.Path)), [entry.Path], owner, EnableInternalItemTransfers);
     }
 
     private IReadOnlyList<ShellMenuAction> CreateBackgroundMenuActions()

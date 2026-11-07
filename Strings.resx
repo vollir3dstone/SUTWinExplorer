@@ -4,35 +4,36 @@
   <resheader name="version"><value>2.0</value></resheader>
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms</value></resheader>
-  <data name="Menu_Action_Properties" xml:space="preserve"><value>Properties</value></data>
-  <data name="Menu_Action_PrepareCopyToExternal" xml:space="preserve"><value>Prepare copying</value></data>
-  <data name="Menu_Action_PrepareLinkingFromExternal" xml:space="preserve"><value>Prepare linking</value></data>
-  <data name="Menu_Action_PrepareMoveToExternal" xml:space="preserve"><value>Prepare moving</value></data>
-  <data name="Menu_Action_NameClipboardCopy" xml:space="preserve"><value>Copy name to clipboard</value></data>
-  <data name="Menu_Action_PathClipboardCopy" xml:space="preserve"><value>Copy path to clipboard</value></data>
-  <data name="Menu_Action_ItemClipboardCopy" xml:space="preserve"><value>Copy item to clipboard</value></data>
-  <data name="Menu_Action_ItemClipboardPaste" xml:space="preserve"><value>Item clipboard paste</value></data>
-  <data name="Menu_Action_AbortTransfer" xml:space="preserve"><value>Abort transfer</value></data>
-  <data name="Menu_Action_LinkMarkItem" xml:space="preserve"><value>Mark link item</value></data>
-  <data name="Menu_Action_CopyMarkItem" xml:space="preserve"><value>Mark copy item</value></data>
-  <data name="Menu_Action_MoveMarkItem" xml:space="preserve"><value>Mark move item</value></data>
-  <data name="Menu_Action_LinkAbort" xml:space="preserve"><value>Link abort</value></data>
-  <data name="Menu_Action_CopyAbort" xml:space="preserve"><value>Copy abort</value></data>
-  <data name="Menu_Action_MoveAbort" xml:space="preserve"><value>Move abort</value></data>
-  <data name="Menu_Action_Rename" xml:space="preserve"><value>Rename</value></data>
-  <data name="Menu_Action_Relocate" xml:space="preserve"><value>Relocate</value></data>
-  <data name="Menu_Action_Delete" xml:space="preserve"><value>Delete</value></data>
-  <data name="Menu_Action_AbortClipboardMove" xml:space="preserve"><value>Abort clipboard move</value></data>
-  <data name="Menu_Action_AbortClipboardLink" xml:space="preserve"><value>Abort clipboard link</value></data>
-  <data name="Menu_Action_ClipboardItemCopy" xml:space="preserve"><value>Copy clipboard item here</value></data>
-  <data name="Menu_Action_ClipboardItemMove" xml:space="preserve"><value>Move cut item here</value></data>
-  <data name="Menu_Action_ClipboardItemLink" xml:space="preserve"><value>Link to externally selected item</value></data>
-  <data name="Menu_Action_LinkExecute" xml:space="preserve"><value>Insert link to marked item</value></data>
-  <data name="Menu_Action_CopyExecute" xml:space="preserve"><value>Insert copy of marked item</value></data>
-  <data name="Menu_Action_MoveExecute" xml:space="preserve"><value>Move marked item here</value></data>
-  <data name="Menu_Action_New" xml:space="preserve"><value>New…</value></data>
-  <data name="Menu_Action_opencontaining" xml:space="preserve"><value>Open parent</value></data>
-  <data name="Menu_Action_OpenInRunningApp" xml:space="preserve"><value>Open in running app...</value></data>
+  <data name="BaseMenu_Action_Properties" xml:space="preserve"><value>Properties</value></data>
+  <data name="BaseMenu_Action_PrepareCopyToExternal" xml:space="preserve"><value>Prepare copying</value></data>
+  <data name="BaseMenu_Action_PrepareLinkingFromExternal" xml:space="preserve"><value>Prepare linking</value></data>
+  <data name="BaseMenu_Action_PrepareMoveToExternal" xml:space="preserve"><value>Prepare moving</value></data>
+  <data name="BaseMenu_Action_NameClipboardCopy" xml:space="preserve"><value>Copy name to clipboard</value></data>
+  <data name="BaseMenu_Action_PathClipboardCopy" xml:space="preserve"><value>Copy path to clipboard</value></data>
+  <data name="BaseMenu_Action_ItemClipboardCopy" xml:space="preserve"><value>Copy item to clipboard</value></data>
+  <data name="BaseMenu_Action_AbortTransfer" xml:space="preserve"><value>Abort transfer</value></data>
+  <data name="BaseMenu_Action_LinkMarkItem" xml:space="preserve"><value>Mark link item</value></data>
+  <data name="BaseMenu_Action_CopyMarkItem" xml:space="preserve"><value>Mark copy item</value></data>
+  <data name="BaseMenu_Action_MoveMarkItem" xml:space="preserve"><value>Mark move item</value></data>
+  <data name="BaseMenu_Action_Rename" xml:space="preserve"><value>Rename</value></data>
+  <data name="BaseMenu_Action_Relocate" xml:space="preserve"><value>Relocate</value></data>
+  <data name="BaseMenu_Action_Delete" xml:space="preserve"><value>Delete</value></data>
+  <data name="ContentMenu_Action_AbortTransfer" xml:space="preserve"><value>Abort transfer</value></data>
+  <data name="ContentMenu_Action_AbortClipboardMove" xml:space="preserve"><value>Abort clipboard move</value></data>
+  <data name="ContentMenu_Action_AbortClipboardLink" xml:space="preserve"><value>Abort clipboard link</value></data>
+  <data name="ContentMenu_Action_ClipboardItemCopy" xml:space="preserve"><value>Copy clipboard item here</value></data>
+  <data name="ContentMenu_Action_ClipboardItemMove" xml:space="preserve"><value>Move cut item here</value></data>
+  <data name="ContentMenu_Action_ClipboardItemLink" xml:space="preserve"><value>Link to externally selected item</value></data>
+  <data name="ContentMenu_Action_LinkExecute" xml:space="preserve"><value>Insert link to marked item</value></data>
+  <data name="ContentMenu_Action_CopyExecute" xml:space="preserve"><value>Insert copy of marked item</value></data>
+  <data name="ContentMenu_Action_MoveExecute" xml:space="preserve"><value>Move marked item here</value></data>
+  <data name="ContentMenu_Action_New" xml:space="preserve"><value>New…</value></data>
+  <data name="ContentMenu_Action_OpenContainingDirectory" xml:space="preserve"><value>Open parent</value></data>
+  <data name="ContentMenu_Action_OpenInRunningApp" xml:space="preserve"><value>Open in running app...</value></data>
+  <data name="PathviewSidebarColumn_Button_ItemClipboardPaste_Tooltip" xml:space="preserve"><value>Item clipboard paste</value></data>
+  <data name="PathviewSidebarColumn_Button_LinkAbort_Tooltip" xml:space="preserve"><value>Link abort</value></data>
+  <data name="PathviewSidebarColumn_Button_CopyAbort_Tooltip" xml:space="preserve"><value>Copy abort</value></data>
+  <data name="PathviewSidebarColumn_Button_MoveAbort_Tooltip" xml:space="preserve"><value>Move abort</value></data>
   <data name="PathviewHeaderRow_Button_Browse" xml:space="preserve"><value>Browse</value></data>
   <data name="PathviewHeaderRow_Button_Pin" xml:space="preserve"><value>Pin</value></data>
   <data name="PathviewHeaderRow_Button_OpenInExplorer_Tooltip" xml:space="preserve"><value>Open in Windows Explorer</value></data>

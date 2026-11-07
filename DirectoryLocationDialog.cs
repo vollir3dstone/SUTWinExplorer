@@ -60,7 +60,7 @@ internal sealed class DirectoryLocationDialog : Window
 
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
         buttons.Children.Add(new Button { Content = LocalizedText.Get("Common_Button_Cancel"), MinWidth = 76, Margin = new Thickness(0, 0, 8, 0), IsCancel = true });
-        var apply = new Button { Content = SutContextMenuFactory.GetActionLabel(relocate ? "Relocate" : "Rename"), MinWidth = 76, IsDefault = true };
+        var apply = new Button { Content = SutContextMenuFactory.GetBaseActionLabel(relocate ? "Relocate" : "Rename"), MinWidth = 76, IsDefault = true };
         apply.Click += (_, _) => DialogResult = true;
         buttons.Children.Add(apply);
         Grid.SetRow(buttons, 2);

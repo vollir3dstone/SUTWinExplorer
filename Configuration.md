@@ -21,7 +21,10 @@ are described in [OPEN_WITH_RUNNING_APP_SPEC.md](OPEN_WITH_RUNNING_APP_SPEC.md).
 
 The application's neutral English strings are in [Strings.resx](Strings.resx).
 Resource IDs describe the interface area and control or action; menu action IDs
-are used as the final part of `Menu_Action_<id>`. A localized resource file,
+are generally used as the final part of `BaseMenu_Action_<id>` or
+`ContentMenu_Action_<id>`. The Shell-compatible `opencontaining` action uses
+the descriptive resource ID `ContentMenu_Action_OpenContainingDirectory`.
+A localized resource file,
 such as `Strings.de.resx`, can provide values for the same IDs. .NET selects
 resources using `CurrentUICulture` and falls back to the neutral file for
 missing translations. Currently only the neutral English file is supplied.
