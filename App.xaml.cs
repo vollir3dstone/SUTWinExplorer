@@ -40,6 +40,7 @@ public partial class App : Application
 			var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KIS Explorer");
 			ConfigurationStore = new ExplorerConfigurationStore(directory);
 			Configuration = ConfigurationStore.LoadOrCreate();
+			LocalizedText.ApplyLanguageSelection(Configuration.Interface.LanguageSelection, System.Globalization.CultureInfo.CurrentUICulture);
 			var cacheDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KIS Explorer");
 			ShellIconProvider.InitializeCache(Path.Combine(cacheDirectory, "IconCache.json"));
 			_iconChangeObserver = new IconChangeObserver(ShellIconProvider.Cache!, Dispatcher);

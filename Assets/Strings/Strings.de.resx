@@ -131,6 +131,10 @@
   <data name="Common_Button_Apply" xml:space="preserve"><value>Übernehmen</value></data>
   <data name="ConfigurationDialog_Title" xml:space="preserve"><value>Konfiguration</value></data>
   <data name="ConfigurationDialog_Label_Interface" xml:space="preserve"><value>Oberfläche</value></data>
+  <data name="ConfigurationDialog_Label_LanguageSelection" xml:space="preserve"><value>Sprachauswahl</value></data>
+  <data name="ConfigurationDialog_Language_English" xml:space="preserve"><value>Englisch</value></data>
+  <data name="ConfigurationDialog_Language_SystemDefault" xml:space="preserve"><value>Systemstandard</value></data>
+  <data name="ConfigurationDialog_Language_RestartRequired" xml:space="preserve"><value>Starten Sie KIS Explorer neu, um die Sprachänderung anzuwenden.</value></data>
   <data name="ConfigurationDialog_CheckBox_DirectoryRowActions" xml:space="preserve"><value>Aktionsbuttons in der Verzeichniszeile anzeigen</value></data>
   <data name="ConfigurationDialog_CheckBox_DirectoryColumnActions" xml:space="preserve"><value>Aktionsbuttons in der Verzeichnisspalte anzeigen</value></data>
   <data name="ConfigurationDialog_CheckBox_SelectedItemsActions" xml:space="preserve"><value>Aktionsbuttons für ausgewählte Elemente anzeigen</value></data>

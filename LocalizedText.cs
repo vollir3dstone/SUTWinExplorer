@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Resources;
 using System.Windows.Markup;
 
@@ -9,6 +10,18 @@ internal static class LocalizedText
 
     internal static string Get(string id) => Resources.GetString(id) ??
         throw new InvalidOperationException($"Missing string resource: {id}");
+
+    internal static void ApplyLanguageSelection(LanguageSelection selection, CultureInfo systemCulture)
+    {
+        var culture = selection switch
+        {
+            LanguageSelection.English => CultureInfo.GetCultureInfo("en"),
+            LanguageSelection.SystemDefault => systemCulture,
+            _ => throw new ArgumentOutOfRangeException(nameof(selection))
+        };
+        CultureInfo.DefaultThreadCurrentUICulture = culture;
+        CultureInfo.CurrentUICulture = culture;
+    }
 }
 
 [MarkupExtensionReturnType(typeof(string))]

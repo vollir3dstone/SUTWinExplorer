@@ -131,6 +131,10 @@
   <data name="Common_Button_Apply" xml:space="preserve"><value>Apply</value></data>
   <data name="ConfigurationDialog_Title" xml:space="preserve"><value>Configuration</value></data>
   <data name="ConfigurationDialog_Label_Interface" xml:space="preserve"><value>Interface</value></data>
+  <data name="ConfigurationDialog_Label_LanguageSelection" xml:space="preserve"><value>Language selection</value></data>
+  <data name="ConfigurationDialog_Language_English" xml:space="preserve"><value>English</value></data>
+  <data name="ConfigurationDialog_Language_SystemDefault" xml:space="preserve"><value>System default</value></data>
+  <data name="ConfigurationDialog_Language_RestartRequired" xml:space="preserve"><value>Restart KIS Explorer to apply the language change.</value></data>
   <data name="ConfigurationDialog_CheckBox_DirectoryRowActions" xml:space="preserve"><value>Show directory row action buttons</value></data>
   <data name="ConfigurationDialog_CheckBox_DirectoryColumnActions" xml:space="preserve"><value>Show directory column action buttons</value></data>
   <data name="ConfigurationDialog_CheckBox_SelectedItemsActions" xml:space="preserve"><value>Show selected items action buttons</value></data>

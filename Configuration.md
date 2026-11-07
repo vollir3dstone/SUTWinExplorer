@@ -27,9 +27,11 @@ the descriptive resource ID `ContentMenu_Action_OpenContainingDirectory`.
 A localized resource file,
 such as `Assets/Strings/Strings.de.resx`, can provide values for the same IDs. .NET selects
 resources using `CurrentUICulture` and falls back to the neutral file for
-missing translations. English and German resource files are supplied.
+missing translations. English and German resource files are supplied. The
+Interface setting `LanguageSelection` selects English or the system UI language;
+a changed selection takes effect when the application is restarted.
 
-There is no language selector or live language switching. XAML strings are
+There is no live language switching. XAML strings are
 resolved when controls are created; menu and dialog strings are resolved when
 those are created. Windows Shell labels and operating-system error messages
 come from Windows. Some lower-level technical error messages remain in English.
@@ -54,7 +56,8 @@ On first startup the file is created with all flags set to `false`:
     "ShowDirectoryRowActionButtons": false,
     "ShowDirectoryColumnActionButtons": false,
     "ShowSelectedItemsActionButtons": false,
-    "EnableInternalItemTransfers": false
+    "EnableInternalItemTransfers": false,
+    "LanguageSelection": "English"
   }
 }
 ```
@@ -62,6 +65,8 @@ On first startup the file is created with all flags set to `false`:
 The three action-group flags, the type, version and Interface object are required.
 An existing configuration without `EnableInternalItemTransfers` loads with it
 set to `false`; the next save writes the flag. When present it must be a Boolean.
+An absent `LanguageSelection` defaults to `English` and is written on the next
+save. The permitted values are `English` and `System default`.
 Invalid,
 unreadable or unsupported configuration is reported at startup and left
 untouched. Unknown properties are retained when saving. Saving uses a temporary
@@ -75,6 +80,9 @@ external changes during a session.
 | `ShowDirectoryColumnActionButtons` | Shows the New, clipboard paste and transfer buttons under DIRECTORY. The sidebar, heading, counts and status remain visible when false. |
 | `ShowSelectedItemsActionButtons` | Shows the FOR SELECTED row above the content table. When false, the row and its spacing are collapsed. Internal transfer buttons in the row also require `EnableInternalItemTransfers`. |
 | `EnableInternalItemTransfers` | Offers internal Link, Copy and Move actions in context menus and action-button groups. When false, those actions are hidden; Shell clipboard transfers and other actions remain available. |
+
+The Language radio buttons select `English` or `System default`; the selection
+is saved on Apply and takes effect on the next application start.
 
 The action-group checkboxes do not affect one another or context-menu actions.
 Disabling internal transfers preserves a prepared internal transfer; it becomes

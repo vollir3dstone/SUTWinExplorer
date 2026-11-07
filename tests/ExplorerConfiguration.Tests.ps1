@@ -16,24 +16,31 @@ try {
     $json = Get-Content -LiteralPath $filePath -Raw | ConvertFrom-Json -AsHashtable
     Assert-True ($json._type -ceq 'KIS Explorer Configuration' -and $json._version -ceq '1.01' -and
         -not $json.Interface.ShowDirectoryRowActionButtons -and -not $json.Interface.ShowSelectedItemsActionButtons -and
-        -not $json.Interface.ShowDirectoryColumnActionButtons -and -not $json.Interface.EnableInternalItemTransfers) 'Default configuration is incorrect.'
+        -not $json.Interface.ShowDirectoryColumnActionButtons -and -not $json.Interface.EnableInternalItemTransfers -and
+        $json.Interface.LanguageSelection -ceq 'English') 'Default configuration is incorrect.'
     Assert-True (@($json.Keys)[0] -ceq '_type' -and @($json.Keys)[1] -ceq '_version') 'Configuration header order is incorrect.'
-    Assert-True (($json.Interface.Keys -join '|') -ceq 'ShowDirectoryRowActionButtons|ShowDirectoryColumnActionButtons|ShowSelectedItemsActionButtons|EnableInternalItemTransfers') 'Interface property names or order are incorrect.'
+    Assert-True (($json.Interface.Keys -join '|') -ceq 'ShowDirectoryRowActionButtons|ShowDirectoryColumnActionButtons|ShowSelectedItemsActionButtons|EnableInternalItemTransfers|LanguageSelection') 'Interface property names or order are incorrect.'
 
     $json.Interface.Remove('EnableInternalItemTransfers')
+    $json.Interface.Remove('LanguageSelection')
     $json | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $filePath -Encoding utf8
     $configuration = $store.Load()
     Assert-True (-not $configuration.Interface.EnableInternalItemTransfers) 'A missing transfer setting did not default to false.'
+    Assert-True ($configuration.Interface.LanguageSelection.ToString() -ceq 'English' -and
+        -not (Get-Content -LiteralPath $filePath -Raw | ConvertFrom-Json -AsHashtable).Interface.ContainsKey('LanguageSelection')) 'A missing language did not default to English without rewriting the file.'
 
     $configuration.Interface.ShowDirectoryRowActionButtons = $true
     $configuration.Interface.ShowDirectoryColumnActionButtons = $true
     $configuration.Interface.EnableInternalItemTransfers = $true
+    $configuration.Interface.LanguageSelection = [Enum]::Parse($assembly.GetType('SUTWinExplorer.LanguageSelection', $true), 'SystemDefault')
     $store.Save($configuration)
     $configuration = $store.Load()
     Assert-True ($configuration.Interface.ShowDirectoryRowActionButtons -and -not $configuration.Interface.ShowSelectedItemsActionButtons -and
-        $configuration.Interface.ShowDirectoryColumnActionButtons -and $configuration.Interface.EnableInternalItemTransfers) 'Configuration did not round-trip.'
+        $configuration.Interface.ShowDirectoryColumnActionButtons -and $configuration.Interface.EnableInternalItemTransfers -and
+        $configuration.Interface.LanguageSelection.ToString() -ceq 'SystemDefault') 'Configuration did not round-trip.'
 
     $json = Get-Content -LiteralPath $filePath -Raw | ConvertFrom-Json -AsHashtable
+    Assert-True ($json.Interface.LanguageSelection -ceq 'System default') 'System language value was not serialized as requested.'
     $json.FutureSetting = @{ Value = 42 }
     $json.Interface.FutureSetting = 'retained'
     $json | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $filePath -Encoding utf8
@@ -50,7 +57,7 @@ try {
     } finally { $locked.Dispose() }
     Assert-True ($store.Load().Interface.ShowDirectoryRowActionButtons) 'A failed save damaged the existing configuration.'
 
-    foreach ($case in @('version', 'type', 'missing', 'wrong-type', 'wrong-transfer-type', 'null-interface')) {
+    foreach ($case in @('version', 'type', 'missing', 'wrong-type', 'wrong-transfer-type', 'invalid-language', 'numeric-language', 'null-language', 'null-interface')) {
         $invalid = Get-Content -LiteralPath $filePath -Raw | ConvertFrom-Json -AsHashtable
         switch ($case) {
             'version' { $invalid._version = '2.0' }
@@ -58,6 +65,9 @@ try {
             'missing' { $invalid.Interface.Remove('ShowSelectedItemsActionButtons') }
             'wrong-type' { $invalid.Interface.ShowSelectedItemsActionButtons = 'false' }
             'wrong-transfer-type' { $invalid.Interface.EnableInternalItemTransfers = 'false' }
+            'invalid-language' { $invalid.Interface.LanguageSelection = 'German' }
+            'numeric-language' { $invalid.Interface.LanguageSelection = 1 }
+            'null-language' { $invalid.Interface.LanguageSelection = $null }
             'null-interface' { $invalid.Interface = $null }
         }
         $invalid | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $filePath -Encoding utf8

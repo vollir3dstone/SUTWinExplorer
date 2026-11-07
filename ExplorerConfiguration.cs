@@ -36,14 +36,26 @@ internal sealed class InterfaceConfiguration
     public required bool ShowDirectoryColumnActionButtons { get; set; }
     public required bool ShowSelectedItemsActionButtons { get; set; }
     public bool EnableInternalItemTransfers { get; set; }
+    public LanguageSelection LanguageSelection { get; set; } = LanguageSelection.English;
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? AdditionalProperties { get; set; }
 
 }
 
+internal enum LanguageSelection
+{
+    English,
+    [JsonStringEnumMemberName("System default")]
+    SystemDefault
+}
+
 internal sealed class ExplorerConfigurationStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter<LanguageSelection>(allowIntegerValues: false) }
+    };
     private readonly string _filePath;
 
     public ExplorerConfigurationStore(string directory) =>
@@ -73,7 +85,8 @@ internal sealed class ExplorerConfigurationStore
 
     private static void Validate(ExplorerConfiguration configuration)
     {
-        if (configuration.Type != "KIS Explorer Configuration" || configuration.Version != "1.01" || configuration.Interface is null)
+        if (configuration.Type != "KIS Explorer Configuration" || configuration.Version != "1.01" || configuration.Interface is null ||
+            !Enum.IsDefined(configuration.Interface.LanguageSelection))
             throw new InvalidDataException(LocalizedText.Get("Configuration_Error_Invalid"));
     }
 

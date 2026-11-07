@@ -90,10 +90,14 @@ public partial class MainWindow : Window
         };
         try
         {
+            var languageChanged = configuration.Interface.LanguageSelection != application.Configuration.Interface.LanguageSelection;
             application.ConfigurationStore.Save(configuration);
             application.Configuration = configuration;
             foreach (var view in _tabsByPathview.Keys)
                 ApplyInterfaceConfiguration(view, configuration.Interface);
+            if (languageChanged)
+                MessageBox.Show(this, LocalizedText.Get("ConfigurationDialog_Language_RestartRequired"),
+                    LocalizedText.Get("ConfigurationDialog_Title"), MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception exception)
         {
