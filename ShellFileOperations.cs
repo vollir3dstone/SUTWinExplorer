@@ -122,7 +122,7 @@ internal static class ShellFileOperations
     public static void Link(IReadOnlyList<string> sourcePaths, string destinationPath, IList<string> insertedPaths)
     {
         if (sourcePaths.Count == 0)
-            throw new InvalidOperationException("Select one or more items to link.");
+            throw new InvalidOperationException(LocalizedText.Get("ShellTransfer_Error_LinkNoSelection"));
 
         ValidateTransferPaths(sourcePaths, destinationPath, "link");
         foreach (var sourcePath in sourcePaths)
@@ -181,16 +181,16 @@ internal static class ShellFileOperations
     public static void Delete(IReadOnlyList<string> sourcePaths, IntPtr ownerWindow)
     {
         if (sourcePaths.Count == 0)
-            throw new InvalidOperationException("Select one or more items to delete.");
+            throw new InvalidOperationException(LocalizedText.Get("ShellTransfer_Error_DeleteNoSelection"));
 
         foreach (var sourcePath in sourcePaths)
         {
             if (!CanDelete(sourcePath))
-                throw new InvalidOperationException($"Cannot delete this location: {sourcePath}");
+                throw new InvalidOperationException(string.Format(LocalizedText.Get("ShellTransfer_Error_DeleteLocation"), sourcePath));
             try { _ = File.GetAttributes(sourcePath); }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
             {
-                throw new InvalidOperationException($"Cannot delete because this source no longer exists or cannot be accessed: {sourcePath}", exception);
+                throw new InvalidOperationException(string.Format(LocalizedText.Get("ShellTransfer_Error_DeleteSourceUnavailable"), sourcePath), exception);
             }
         }
 
@@ -239,7 +239,7 @@ internal static class ShellFileOperations
         bool requireComplete = false)
     {
         if (sourcePaths.Count == 0)
-            throw new InvalidOperationException($"Select one or more items to {operationName}.");
+            throw new InvalidOperationException(LocalizedText.Get(operationName == "copy" ? "ShellTransfer_Error_CopyNoSelection" : "ShellTransfer_Error_MoveNoSelection"));
 
         ValidateTransferPaths(sourcePaths, destinationPath, operationName);
 
@@ -289,7 +289,7 @@ internal static class ShellFileOperations
                 throw new OperationCanceledException("The Shell move operation was canceled.");
             if (requireComplete && (insertedPaths.Count - initialInsertedCount != sourcePaths.Count ||
                 sourcePaths.Any(path => File.Exists(path) || Directory.Exists(path))))
-                throw new InvalidOperationException("The Shell move operation did not complete for every item.");
+                throw new InvalidOperationException(LocalizedText.Get("ShellTransfer_Error_MoveIncomplete"));
         }
         finally
         {
@@ -315,12 +315,12 @@ internal static class ShellFileOperations
         try
         {
             if ((File.GetAttributes(destinationPath) & FileAttributes.Directory) == 0)
-                throw new InvalidOperationException($"The destination is not a directory: {destinationPath}");
+                throw new InvalidOperationException(string.Format(LocalizedText.Get("ShellTransfer_Error_DestinationNotDirectory"), destinationPath));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
         {
             throw new InvalidOperationException(
-                $"The destination directory no longer exists or cannot be accessed: {destinationPath}", exception);
+                string.Format(LocalizedText.Get("ShellTransfer_Error_DestinationUnavailable"), destinationPath), exception);
         }
 
         foreach (var sourcePath in sourcePaths)
@@ -331,8 +331,15 @@ internal static class ShellFileOperations
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
             {
+                var resourceId = operationName switch
+                {
+                    "copy" => "ShellTransfer_Error_CopySourceUnavailable",
+                    "move" => "ShellTransfer_Error_MoveSourceUnavailable",
+                    "link" => "ShellTransfer_Error_LinkSourceUnavailable",
+                    _ => throw new ArgumentOutOfRangeException(nameof(operationName))
+                };
                 throw new InvalidOperationException(
-                    $"Cannot {operationName} because this source no longer exists or cannot be accessed: {sourcePath}",
+                    string.Format(LocalizedText.Get(resourceId), sourcePath),
                     exception);
             }
         }

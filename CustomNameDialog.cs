@@ -11,7 +11,7 @@ internal sealed class CustomNameDialog : Window
 
     internal CustomNameDialog(string? customName, TextBlock styleSource)
     {
-        Title = "Custom Pathview name";
+        Title = LocalizedText.Get("CustomNameDialog_Title");
         Width = 420;
         SizeToContent = SizeToContent.Height;
         MinWidth = 340;
@@ -23,7 +23,7 @@ internal sealed class CustomNameDialog : Window
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        var label = new TextBlock { Text = "Custom name", Margin = new Thickness(0, 0, 0, 4) };
+        var label = new TextBlock { Text = LocalizedText.Get("CustomNameDialog_Label_Name"), Margin = new Thickness(0, 0, 0, 4) };
         root.Children.Add(label);
 
         var editorContainer = new Grid { Margin = new Thickness(0, 0, 0, 14) };
@@ -40,12 +40,12 @@ internal sealed class CustomNameDialog : Window
             FontStretch = styleSource.FontStretch,
             Foreground = styleSource.Foreground
         };
-        AutomationProperties.SetName(_nameEditor, "Custom Pathview name");
+        AutomationProperties.SetName(_nameEditor, LocalizedText.Get("CustomNameDialog_Title"));
         editorContainer.Children.Add(_nameEditor);
 
         var placeholder = new TextBlock
         {
-            Text = "(Undefined custom name)",
+            Text = LocalizedText.Get("CustomNameDialog_Label_Undefined"),
             Margin = new Thickness(5, 0, 5, 0),
             VerticalAlignment = VerticalAlignment.Center,
             FontFamily = _nameEditor.FontFamily,
@@ -70,13 +70,13 @@ internal sealed class CustomNameDialog : Window
         };
         var cancel = new Button
         {
-            Content = "Cancel",
+            Content = LocalizedText.Get("Common_Button_Cancel"),
             MinWidth = 76,
             Margin = new Thickness(0, 0, 8, 0),
             IsCancel = true
         };
         buttons.Children.Add(cancel);
-        var apply = new Button { Content = "Apply", MinWidth = 76, IsDefault = true };
+        var apply = new Button { Content = LocalizedText.Get("Common_Button_Apply"), MinWidth = 76, IsDefault = true };
         apply.Click += (_, _) => DialogResult = true;
         buttons.Children.Add(apply);
         Grid.SetRow(buttons, 2);

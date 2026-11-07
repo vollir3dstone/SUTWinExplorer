@@ -80,12 +80,15 @@ internal static class ShellMenuIcons
             icon = new Image { Source = ExternalTransferIcon.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
         else if (button?.Content is StackPanel panel && panel.Children.OfType<Control>().FirstOrDefault() is { Template: not null } source)
             icon = new Control { Template = source.Template, Width = 14, Height = 14, Foreground = SystemColors.MenuTextBrush };
-        else if ((action.Id is "LinkMarkItem" or "CopyMarkItem" or "MoveMarkItem" or "LinkExecute" or "CopyExecute" or "MoveExecute" or "Delete") && button?.Content is string text)
+        else if ((action.Id is "LinkMarkItem" or "CopyMarkItem" or "MoveMarkItem" or "LinkExecute" or "CopyExecute" or "MoveExecute" or "Delete") && button is not null)
         {
-            var prefixLength = action.Id == "Delete" ? 3 : 4;
-            if (text.Length <= prefixLength)
-                return IntPtr.Zero;
-            icon = new TextBlock { Text = text[prefixLength..], FontFamily = button.FontFamily, FontSize = button.FontSize, Foreground = SystemColors.MenuTextBrush };
+            var glyph = action.Id switch
+            {
+                "LinkMarkItem" or "CopyMarkItem" or "MoveMarkItem" => "\U0001F81D",
+                "LinkExecute" or "CopyExecute" or "MoveExecute" => "\U0001F81F",
+                _ => "\U0001F5D1\uFE0F"
+            };
+            icon = new TextBlock { Text = glyph, FontFamily = button.FontFamily, FontSize = button.FontSize, Foreground = SystemColors.MenuTextBrush };
         }
         else if (action.Id is "Properties" or "Rename" or "Relocate" or "AbortTransfer" or "AbortClipboardMove" or "AbortClipboardLink")
         {

@@ -32,7 +32,7 @@ public partial class App : Application
 			_instanceMutex = new Mutex(true, @"Global\KIS Explorer", out _ownsInstanceMutex);
 			if (!_ownsInstanceMutex)
 			{
-				MessageBox.Show("KIS Explorer is already running.", "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Information);
+				MessageBox.Show(LocalizedText.Get("App_Error_AlreadyRunning"), LocalizedText.Get("MainWindow_Title"), MessageBoxButton.OK, MessageBoxImage.Information);
 				Shutdown();
 				return;
 			}
@@ -51,7 +51,7 @@ public partial class App : Application
 		}
 		catch (Exception exception)
 		{
-			MessageBox.Show($"Cannot start KIS Explorer: {exception.Message}", "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+			MessageBox.Show(string.Format(LocalizedText.Get("App_Error_CannotStart"), exception.Message), LocalizedText.Get("MainWindow_Title"), MessageBoxButton.OK, MessageBoxImage.Error);
 			Shutdown(1);
 		}
 	}

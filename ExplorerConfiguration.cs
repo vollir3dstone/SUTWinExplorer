@@ -64,7 +64,7 @@ internal sealed class ExplorerConfigurationStore
     {
         using var stream = File.OpenRead(_filePath);
         var configuration = JsonSerializer.Deserialize<ExplorerConfiguration>(stream, JsonOptions)
-            ?? throw new InvalidDataException("The configuration is empty.");
+            ?? throw new InvalidDataException(LocalizedText.Get("Configuration_Error_Empty"));
         Validate(configuration);
         return configuration;
     }
@@ -74,7 +74,7 @@ internal sealed class ExplorerConfigurationStore
     private static void Validate(ExplorerConfiguration configuration)
     {
         if (configuration.Type != "KIS Explorer Configuration" || configuration.Version != "1.01" || configuration.Interface is null)
-            throw new InvalidDataException("The configuration has an invalid type, version, or Interface.");
+            throw new InvalidDataException(LocalizedText.Get("Configuration_Error_Invalid"));
     }
 
     private void Write(ExplorerConfiguration configuration, bool overwrite)

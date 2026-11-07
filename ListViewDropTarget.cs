@@ -176,7 +176,7 @@ internal sealed class ListViewDropTarget
         catch (Exception exception)
         {
             e.Effects = DragDropEffects.None;
-            MessageBox.Show(Window.GetWindow(_surface), exception.Message, "Drop failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(Window.GetWindow(_surface), exception.Message, LocalizedText.Get("Shell_Error_DropFailed"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally
         {

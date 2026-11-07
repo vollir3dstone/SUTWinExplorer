@@ -148,8 +148,8 @@ public partial class Pathview : UserControl
         BrowsePathviewButton.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
         PinPathviewButton.Visibility = IsBrowsable ? Visibility.Visible : Visibility.Collapsed;
         PaneColorButton.Visibility = IsBrowsable ? Visibility.Collapsed : Visibility.Visible;
-        BrowsePathviewButton.ToolTip = "Open this location in the browsable Pathview";
-        PinPathviewButton.ToolTip = "Keep this location open in a non-browsable Pathview";
+        BrowsePathviewButton.ToolTip = LocalizedText.Get("PathviewHeaderRow_Button_Browse_Tooltip");
+        PinPathviewButton.ToolTip = LocalizedText.Get("PathviewHeaderRow_Button_Pin_Tooltip");
         _fileSystemRefreshTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
         {
             Interval = TimeSpan.FromMilliseconds(200)
@@ -432,7 +432,7 @@ public partial class Pathview : UserControl
         }
 
         if (!IsTopPath(fullPath) && !Directory.Exists(fullPath))
-            throw new DirectoryNotFoundException($"The directory does not exist or is not accessible: {fullPath}");
+            throw new DirectoryNotFoundException(string.Format(LocalizedText.Get("Pathview_Error_DirectoryUnavailable"), fullPath));
 
         if (string.Equals(CurrentPath, fullPath, StringComparison.OrdinalIgnoreCase))
         {
@@ -572,7 +572,7 @@ public partial class Pathview : UserControl
         try { RenameCurrentDirectory(dialog.Value); }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot rename directory", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(Window.GetWindow(this), exception.Message, LocalizedText.Get("Pathview_Error_CannotRenameDirectory"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -594,7 +594,7 @@ public partial class Pathview : UserControl
         catch (OperationCanceledException) { }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, isFile ? "Cannot relocate file" : "Cannot relocate directory", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(Window.GetWindow(this), exception.Message, LocalizedText.Get(isFile ? "Pathview_Error_CannotRelocateFile" : "Pathview_Error_CannotRelocateDirectory"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -615,25 +615,25 @@ public partial class Pathview : UserControl
     internal void RelocateItem(string path, string destination, bool destinationIncludesName)
     {
         if (!Path.IsPathFullyQualified(destination))
-            throw new ArgumentException("Enter an absolute destination directory path.");
+            throw new ArgumentException(LocalizedText.Get("Pathview_Error_AbsoluteDestination"));
         var oldPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         var isDirectory = Directory.Exists(oldPath);
         var enteredPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(destination));
         var parent = Path.GetDirectoryName(oldPath);
         if (parent is null)
-            throw new InvalidOperationException("A drive cannot be relocated.");
+            throw new InvalidOperationException(LocalizedText.Get("Pathview_Error_CannotRelocateDrive"));
         var target = destinationIncludesName ? Path.GetDirectoryName(enteredPath) : enteredPath;
         var newName = destinationIncludesName ? Path.GetFileName(enteredPath) : Path.GetFileName(oldPath);
         if (target is null || string.IsNullOrWhiteSpace(newName) || newName is "." or ".." || newName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-            throw new ArgumentException("Enter a valid destination directory path.");
+            throw new ArgumentException(LocalizedText.Get("Pathview_Error_InvalidDestination"));
         if (!Directory.Exists(target))
-            throw new DirectoryNotFoundException("The destination directory does not exist.");
+            throw new DirectoryNotFoundException(LocalizedText.Get("Pathview_Error_DestinationMissing"));
         var targetPath = Path.Combine(target, newName);
         if (string.Equals(parent, target, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(Path.GetFileName(oldPath), newName, StringComparison.Ordinal))
             return;
         if (!string.Equals(oldPath, targetPath, StringComparison.OrdinalIgnoreCase) && (Directory.Exists(targetPath) || File.Exists(targetPath)))
-            throw new IOException("An item with that name already exists in the destination directory.");
+            throw new IOException(LocalizedText.Get("Pathview_Error_DestinationExists"));
         if (string.Equals(parent, target, StringComparison.OrdinalIgnoreCase))
         {
             RunDirectoryOperation(() =>
@@ -645,7 +645,7 @@ public partial class Pathview : UserControl
         }
         var relative = Path.GetRelativePath(oldPath, target);
         if (isDirectory && (relative == "." || (!Path.IsPathRooted(relative) && relative != ".." && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))))
-            throw new InvalidOperationException("A directory cannot be relocated into itself or one of its subdirectories.");
+            throw new InvalidOperationException(LocalizedText.Get("Pathview_Error_DestinationInsideSource"));
         var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
         var relocatedPaths = new List<string>();
         var relocatedDirectories = new List<(string OldPath, string NewPath)>();
@@ -665,7 +665,7 @@ public partial class Pathview : UserControl
             }
         });
         if (isDirectory ? relocatedDirectories.Count == 0 : relocatedPaths.Count == 0)
-            throw new IOException("The Shell did not report a completed relocation.");
+            throw new IOException(LocalizedText.Get("Pathview_Error_RelocationIncomplete"));
     }
 
     private void NotifyDirectoryRenamed(string oldPath, string newPath)
@@ -692,7 +692,7 @@ public partial class Pathview : UserControl
         }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot open Windows Explorer", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(Window.GetWindow(this), exception.Message, LocalizedText.Get("Pathview_Error_CannotOpenExplorer"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -1431,14 +1431,14 @@ public partial class Pathview : UserControl
         };
         var menuActions = actions.Select(action => new ShellMenuAction(
             action.Name,
-            System.Windows.Automation.AutomationProperties.GetName((Button)DirectoryContent.FindName(action.Name + "Button")),
+            SutContextMenuFactory.GetActionLabel(action.Name),
             action.Enabled, () => ExecuteDirectoryMenuAction(action.Name, entry),
             IsTransfer: action.Name.StartsWith("Link", StringComparison.Ordinal) || action.Name.StartsWith("Copy", StringComparison.Ordinal) || action.Name.StartsWith("Move", StringComparison.Ordinal),
             SeparatorBefore: action.Name is "NameClipboardCopy" or "ItemClipboardPaste" or "Delete")
             { IconSource = (Button)DirectoryContent.FindName(action.Name + "Button") }).ToArray();
         var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
         return SutContextMenuFactory.CreateBaseActions(menuActions,
-            new ShellMenuAction("Relocate", "Relocate", !entry.IsTop && Directory.Exists(entry.Path), () => ShowRelocateDialog(entry.Path)), [entry.Path], owner, EnableInternalItemTransfers);
+            new ShellMenuAction("Relocate", SutContextMenuFactory.GetActionLabel("Relocate"), !entry.IsTop && Directory.Exists(entry.Path), () => ShowRelocateDialog(entry.Path)), [entry.Path], owner, EnableInternalItemTransfers);
     }
 
     private IReadOnlyList<ShellMenuAction> CreateBackgroundMenuActions()
@@ -1462,7 +1462,7 @@ public partial class Pathview : UserControl
                     break;
                 case "LinkMarkItem":
                     if (CopyWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared)
-                        throw new InvalidOperationException("Abort or complete the prepared transfer before starting a Link.");
+                        throw new InvalidOperationException(LocalizedText.Get("Transfer_Error_LinkAlreadyPrepared"));
                     LinkWorkflowState.Shared.Prepare([entry!.Path]);
                     break;
                 case "LinkAbort": LinkWorkflowState.Shared.Abort(); break;
@@ -1482,7 +1482,7 @@ public partial class Pathview : UserControl
                     break;
                 case "CopyMarkItem":
                     if (LinkWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared)
-                        throw new InvalidOperationException("Abort or complete the prepared transfer before starting a Copy.");
+                        throw new InvalidOperationException(LocalizedText.Get("Transfer_Error_CopyAlreadyPrepared"));
                     CopyWorkflowState.Shared.Prepare([entry!.Path]);
                     break;
                 case "CopyAbort": CopyWorkflowState.Shared.Abort(); break;
@@ -1502,7 +1502,7 @@ public partial class Pathview : UserControl
                     break;
                 case "MoveMarkItem":
                     if (LinkWorkflowState.Shared.IsPrepared || CopyWorkflowState.Shared.IsPrepared)
-                        throw new InvalidOperationException("Abort or complete the prepared transfer before starting a Move.");
+                        throw new InvalidOperationException(LocalizedText.Get("Transfer_Error_MoveAlreadyPrepared"));
                     MoveWorkflowState.Shared.Prepare([entry!.Path]);
                     break;
                 case "MoveAbort": MoveWorkflowState.Shared.Abort(); break;
@@ -1541,7 +1541,7 @@ public partial class Pathview : UserControl
         catch (OperationCanceledException) when (action == "Delete") { }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Operation failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(Window.GetWindow(this), exception.Message, LocalizedText.Get("Common_Error_OperationFailed"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -1555,7 +1555,7 @@ public partial class Pathview : UserControl
         }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Context menu failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(Window.GetWindow(this), exception.Message, LocalizedText.Get("Common_Error_ContextMenuFailed"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -1779,7 +1779,7 @@ public partial class Pathview : UserControl
         {
             if (ReferenceEquals(_pendingTreeNavigationEntry, entry))
                 ClearPendingTreeNavigation();
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot open directory", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(Window.GetWindow(this), exception.Message, LocalizedText.Get("Pathview_Error_CannotOpenDirectory"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -1883,7 +1883,7 @@ public partial class Pathview : UserControl
             {
                 if (string.IsNullOrWhiteSpace(entry.EditName) || entry.EditName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
                     entry.EditName is "." or "..")
-                    throw new ArgumentException("Enter a valid directory name.");
+                    throw new ArgumentException(LocalizedText.Get("Pathview_Error_InvalidDirectoryName"));
 
                 var owner = new WindowInteropHelper(Window.GetWindow(this)!).Handle;
                 var oldPath = entry.Path;
@@ -1907,7 +1907,7 @@ public partial class Pathview : UserControl
         }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot rename directory", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(Window.GetWindow(this), exception.Message, LocalizedText.Get("Pathview_Error_CannotRenameDirectory"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -1980,7 +1980,7 @@ public sealed class TreeEntry : INotifyPropertyChanged
     public ObservableCollection<TreeEntry> Children { get; } = new();
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public static TreeEntry Placeholder() => new("Loading", string.Empty, true);
+    public static TreeEntry Placeholder() => new(LocalizedText.Get("PathviewSidebar_Label_Loading"), string.Empty, true);
     public static TreeEntry Top() => new(string.Empty, ShellLocations.TopPath, false, true);
 
     internal void RemapPaths(string oldPath, string newPath)

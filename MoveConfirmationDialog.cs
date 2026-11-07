@@ -8,7 +8,7 @@ internal sealed class MoveConfirmationDialog : Window
 {
     public MoveConfirmationDialog(IReadOnlyList<string> itemNames)
     {
-        Title = "Confirm move";
+        Title = LocalizedText.Get("MoveConfirmationDialog_Title");
         Width = 440;
         Height = 400;
         MinWidth = 340;
@@ -24,7 +24,7 @@ internal sealed class MoveConfirmationDialog : Window
 
         var prompt = new TextBlock
         {
-            Text = "Move these selected items?",
+            Text = LocalizedText.Get("MoveConfirmationDialog_Prompt"),
             FontSize = 15,
             FontWeight = FontWeights.SemiBold,
             Foreground = new SolidColorBrush(Color.FromRgb(38, 52, 67)),
@@ -56,13 +56,13 @@ internal sealed class MoveConfirmationDialog : Window
         };
         var cancelButton = new Button
         {
-            Content = "Cancel",
+            Content = LocalizedText.Get("Common_Button_Cancel"),
             MinWidth = 84,
             Margin = new Thickness(0, 0, 8, 0),
             IsCancel = true,
             IsDefault = true
         };
-        var moveButton = new Button { Content = "Move", MinWidth = 84 };
+        var moveButton = new Button { Content = LocalizedText.Get("MoveConfirmationDialog_Button_Move"), MinWidth = 84 };
         moveButton.Click += (_, _) => DialogResult = true;
         buttons.Children.Add(cancelButton);
         buttons.Children.Add(moveButton);

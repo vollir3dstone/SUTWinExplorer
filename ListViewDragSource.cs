@@ -52,7 +52,7 @@ internal sealed class ListViewDragSource<T> where T : class
         }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(_list), exception.Message, "Drag failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(Window.GetWindow(_list), exception.Message, LocalizedText.Get("Shell_Error_DragFailed"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         e.Handled = true;
     }

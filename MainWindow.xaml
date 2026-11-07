@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:SUTWinExplorer"
-        Title="KIS Explorer" Icon="Assets/app.ico" Height="900" Width="1500"
+        Title="{local:Localized MainWindow_Title}" Icon="Assets/app.ico" Height="900" Width="1500"
         MinHeight="520" MinWidth="820" Background="#F3F5F7">
     <Window.Resources>
         <Style x:Key="TabCloseButtonStyle" TargetType="{x:Type Button}">
@@ -50,12 +50,12 @@
             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0">
                 <Button x:Name="ConfigurationButton" Style="{StaticResource TabCloseButtonStyle}"
                         Width="24" Height="24" Margin="0,0,10,0" Click="ConfigurationButton_Click"
-                        ToolTip="Configuration" AutomationProperties.Name="Configuration">
+                        ToolTip="{local:Localized MainToolbar_Button_Configuration}" AutomationProperties.Name="{local:Localized MainToolbar_Button_Configuration}">
                     <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="18" />
                 </Button>
                 <Button x:Name="UseCasesButton" Style="{StaticResource TabCloseButtonStyle}"
                         Width="24" Height="24" Margin="0,0,6,0" Click="UseCasesButton_Click"
-                        ToolTip="Use cases" AutomationProperties.Name="Use cases">
+                        ToolTip="{local:Localized MainToolbar_Button_UseCases}" AutomationProperties.Name="{local:Localized MainToolbar_Button_UseCases}">
                     <Image Width="24" Height="24" Source="/Assets/usecase 24.png" />
                 </Button>
                 <TextBlock x:Name="UseCaseNameLabel" Style="{StaticResource PathHeaderDisplayStyle}"
@@ -66,21 +66,21 @@
                 <Button Grid.Column="2" Click="Back_Click" Padding="0" Margin="0,0,12,0"
                     Width="24" Height="24" UseLayoutRounding="True" SnapsToDevicePixels="True"
                     IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}"
-                    ToolTip="Back" AutomationProperties.Name="Back">
+                    ToolTip="{local:Localized MainToolbar_Button_Back}" AutomationProperties.Name="{local:Localized MainToolbar_Button_Back}">
                 <Image Width="16" Height="16" SnapsToDevicePixels="True"
                        Source="/Assets/ic_fluent_arrow_left_16_regular.png" />
             </Button>
                 <Button Grid.Column="3" Click="Forward_Click" Padding="0" Margin="0,0,12,0"
                     Width="24" Height="24" UseLayoutRounding="True" SnapsToDevicePixels="True"
                     IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}"
-                    ToolTip="Forward" AutomationProperties.Name="Forward">
+                    ToolTip="{local:Localized MainToolbar_Button_Forward}" AutomationProperties.Name="{local:Localized MainToolbar_Button_Forward}">
                 <Image Width="16" Height="16" SnapsToDevicePixels="True"
                        Source="/Assets/ic_fluent_arrow_right_16_regular.png" />
             </Button>
                 <Button Grid.Column="4" Click="Up_Click" Padding="0" Margin="0,0,12,0"
                     Width="24" Height="24" UseLayoutRounding="True" SnapsToDevicePixels="True"
                     IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}"
-                    ToolTip="Up" AutomationProperties.Name="Up">
+                    ToolTip="{local:Localized MainToolbar_Button_Up}" AutomationProperties.Name="{local:Localized MainToolbar_Button_Up}">
                 <Image Width="16" Height="16" SnapsToDevicePixels="True"
                        Source="/Assets/ic_fluent_arrow_up_16_regular.png" />
             </Button>
@@ -88,12 +88,12 @@
               <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center">
                   <Button x:Name="AddressClipboardPasteButton" Width="24" Height="24" Padding="0" Margin="0,0,4,0"
                           Click="AddressClipboardPaste_Click" IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}"
-                          ToolTip="Paste path and navigate" AutomationProperties.Name="Paste path and navigate">
+                          ToolTip="{local:Localized MainToolbar_Button_AddressClipboardPaste}" AutomationProperties.Name="{local:Localized MainToolbar_Button_AddressClipboardPaste}">
                       <Control Width="14" Height="14" Template="{StaticResource ClipboardPasteIconTemplate}" />
                   </Button>
                   <Button x:Name="AddressClipboardCopyButton" Width="24" Height="24" Padding="0"
                           Click="AddressClipboardCopy_Click" IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}"
-                          ToolTip="Copy path to clipboard" AutomationProperties.Name="Copy path to clipboard">
+                          ToolTip="{local:Localized MainToolbar_Button_AddressClipboardCopy}" AutomationProperties.Name="{local:Localized MainToolbar_Button_AddressClipboardCopy}">
                       <Control Width="14" Height="14" Template="{StaticResource ClipboardCopyIconTemplate}" />
                   </Button>
               </StackPanel>
@@ -102,7 +102,7 @@
                       StaysOpenOnEdit="True" DisplayMemberPath="DisplayPath" SelectedValuePath="TabIndex"
                       VerticalAlignment="Center" VerticalContentAlignment="Center" KeyDown="AddressBox_KeyDown"
                       SelectionChanged="AddressBox_SelectionChanged" Margin="6,0" />
-            <Button Grid.Column="8" Content="Go" Click="Go_Click" Padding="12,4"
+            <Button Grid.Column="8" Content="{local:Localized MainToolbar_Button_Go}" Click="Go_Click" Padding="12,4"
                     IsEnabled="{Binding IsVisible, ElementName=ExplorerTabs}" />
         </Grid>
         <Grid>

@@ -11,16 +11,16 @@ internal sealed class MoveWorkflowState
     public bool IsPrepared => _preparedPaths is not null;
 
     public IReadOnlyList<string> PreparedPaths => _preparedPaths ??
-        throw new InvalidOperationException("There is no prepared move to execute.");
+        throw new InvalidOperationException(LocalizedText.Get("Transfer_Error_MoveNotPrepared"));
 
     public void Prepare(IEnumerable<string> paths)
     {
         if (IsPrepared)
-            throw new InvalidOperationException("A move is already prepared.");
+            throw new InvalidOperationException(LocalizedText.Get("Transfer_Error_MovePrepared"));
 
         var selectedPaths = paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (selectedPaths.Length == 0)
-            throw new InvalidOperationException("Select one or more items before using Move mark item.");
+            throw new InvalidOperationException(LocalizedText.Get("Transfer_Error_MoveNoSelection"));
 
         _preparedPaths = selectedPaths;
         Changed?.Invoke(this, EventArgs.Empty);

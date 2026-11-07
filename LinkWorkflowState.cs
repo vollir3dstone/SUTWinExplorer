@@ -11,16 +11,16 @@ internal sealed class LinkWorkflowState
     public bool IsPrepared => _preparedPaths is not null;
 
     public IReadOnlyList<string> PreparedPaths => _preparedPaths ??
-        throw new InvalidOperationException("There is no prepared link to execute.");
+        throw new InvalidOperationException(LocalizedText.Get("Transfer_Error_LinkNotPrepared"));
 
     public void Prepare(IEnumerable<string> paths)
     {
         if (IsPrepared)
-            throw new InvalidOperationException("A link is already prepared.");
+            throw new InvalidOperationException(LocalizedText.Get("Transfer_Error_LinkPrepared"));
 
         var selectedPaths = paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (selectedPaths.Length == 0)
-            throw new InvalidOperationException("Select one or more items before using Link mark item.");
+            throw new InvalidOperationException(LocalizedText.Get("Transfer_Error_LinkNoSelection"));
 
         _preparedPaths = selectedPaths;
         Changed?.Invoke(this, EventArgs.Empty);

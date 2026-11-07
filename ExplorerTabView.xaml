@@ -24,8 +24,8 @@
         <DataTemplate x:Key="PaneColorSwatchTemplate">
             <Button Width="26" Height="26" Margin="3" Padding="2"
                     Background="{Binding}" BorderBrush="#A6A6A6"
-                    Tag="{Binding}" ToolTip="Select this color"
-                    AutomationProperties.Name="Set pane background color"
+                    Tag="{Binding}" ToolTip="{local:Localized PathviewHeaderRow_Color_Select_Tooltip}"
+                    AutomationProperties.Name="{local:Localized PathviewHeaderRow_Color_Select_Accessibility}"
                     Click="PaneColorSwatch_Click" />
         </DataTemplate>
         <Style x:Key="HeaderLineGroupBoxStyle" TargetType="{x:Type GroupBox}">
@@ -204,24 +204,24 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <Button x:Name="BrowsePathviewButton" Grid.Column="0" Content="Browse"
+                                <Button x:Name="BrowsePathviewButton" Grid.Column="0" Content="{local:Localized PathviewHeaderRow_Button_Browse}"
                                     Style="{StaticResource ContentPaneButtonStyle}" Padding="10,1"
                                     VerticalAlignment="Center" Visibility="Collapsed"
                                     IsEnabled="False" Click="PathviewActionButton_Click" />
-                                <Button x:Name="PinPathviewButton" Grid.Column="0" Content="Pin"
+                                <Button x:Name="PinPathviewButton" Grid.Column="0" Content="{local:Localized PathviewHeaderRow_Button_Pin}"
                                     Style="{StaticResource ContentPaneButtonStyle}" Padding="10,1"
                                     VerticalAlignment="Center" Visibility="Collapsed"
                                     IsEnabled="False" Click="PathviewActionButton_Click" />
                                 <Button x:Name="OpenInExplorerButton" Grid.Column="2" Width="28"
                                     Height="{StaticResource ContentPaneControlHeight}" Padding="0" VerticalAlignment="Center"
-                                    ToolTip="Open in Windows Explorer"
-                                    AutomationProperties.Name="Open current path in a new Windows Explorer window"
+                                    ToolTip="{local:Localized PathviewHeaderRow_Button_OpenInExplorer_Tooltip}"
+                                    AutomationProperties.Name="{local:Localized PathviewHeaderRow_Button_OpenInExplorer_Accessibility}"
                                     IsEnabled="False" Click="OpenInExplorerButton_Click">
                                     <Image x:Name="OpenInExplorerIcon" Width="16" Height="16" Stretch="Uniform" />
                                 </Button>
                                 <Border x:Name="FixedPathBadge" Grid.Column="4" Style="{StaticResource BadgeStyle}"
                                     VerticalAlignment="Center" Visibility="Collapsed">
-                                <TextBlock Text="FIXED" FontWeight="Bold" Foreground="#4E5963" VerticalAlignment="Center" />
+                                <TextBlock Text="{local:Localized PathviewHeaderRow_Label_Fixed}" FontWeight="Bold" Foreground="#4E5963" VerticalAlignment="Center" />
                             </Border>
                             </Grid>
                     </Grid>
@@ -252,28 +252,28 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                     <StackPanel Orientation="Horizontal">
                         <Button x:Name="EditCustomNameButton" Width="28" Height="28" Padding="0"
-                                ToolTip="Edit custom Pathview name"
-                                AutomationProperties.Name="Edit custom Pathview name"
+                                ToolTip="{local:Localized PathviewHeaderRow_Button_EditCustomName}"
+                                AutomationProperties.Name="{local:Localized PathviewHeaderRow_Button_EditCustomName}"
                                 Visibility="Collapsed" Click="EditCustomNameButton_Click">
                             <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" FontSize="14"
                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Button>
                         <Button x:Name="PaneColorButton" Width="28" Height="28" Padding="0"
-                                ToolTip="Choose pane background color"
-                                AutomationProperties.Name="Choose pane background color"
+                                ToolTip="{local:Localized PathviewHeaderRow_Button_PaneColor}"
+                                AutomationProperties.Name="{local:Localized PathviewHeaderRow_Button_PaneColor}"
                                 Click="PaneColorButton_Click">
                             <Image Width="16" Height="16" Source="/Assets/ic_fluent_color_32_regular.png" />
                         </Button>
                     </StackPanel>
                     <StackPanel x:Name="PathActionButtons" Orientation="Horizontal" Visibility="Collapsed">
-                        <Button x:Name="MoveMarkCurrentDirectoryButton" Content="Move🠝"
+                        <Button x:Name="MoveMarkCurrentDirectoryButton" Content="{local:Localized PathviewHeaderRow_Button_MoveMarkItem}"
                             Style="{StaticResource ContentPaneButtonStyle}" Width="48" Padding="0"
-                            Margin="4,0,0,0" IsEnabled="False" Visibility="Collapsed" ToolTip="Move mark item"
-                            AutomationProperties.Name="Move mark item" Click="MoveMarkCurrentDirectoryButton_Click" />
-                        <Button x:Name="RenameCurrentDirectoryButton" Content="Rename..."
+                            Margin="4,0,0,0" IsEnabled="False" Visibility="Collapsed" ToolTip="{local:Localized PathviewHeaderRow_Button_MoveMarkItem_Tooltip}"
+                            AutomationProperties.Name="{local:Localized PathviewHeaderRow_Button_MoveMarkItem_Tooltip}" Click="MoveMarkCurrentDirectoryButton_Click" />
+                        <Button x:Name="RenameCurrentDirectoryButton" Content="{local:Localized PathviewHeaderRow_Button_Rename}"
                             Style="{StaticResource ContentPaneButtonStyle}" Padding="10,1"
                             Margin="4,0,0,0" IsEnabled="False" Click="RenameCurrentDirectoryButton_Click" />
-                        <Button x:Name="RelocateCurrentDirectoryButton" Content="Relocate..."
+                        <Button x:Name="RelocateCurrentDirectoryButton" Content="{local:Localized PathviewHeaderRow_Button_Relocate}"
                             Style="{StaticResource ContentPaneButtonStyle}" Padding="10,1"
                             Margin="4,0,0,0" IsEnabled="False" Click="RelocateCurrentDirectoryButton_Click" />
                     </StackPanel>
@@ -283,7 +283,7 @@
                        PopupAnimation="Fade">
                     <Border Background="White" BorderBrush="#A6A6A6" BorderThickness="1" Padding="8">
                         <StackPanel>
-                            <TextBlock Text="Pane color" FontWeight="SemiBold" Margin="2,0,2,6" />
+                            <TextBlock Text="{local:Localized PathviewHeaderRow_Label_PaneColor}" FontWeight="SemiBold" Margin="2,0,2,6" />
                             <ItemsControl ItemsSource="{StaticResource PaneColorPalette}"
                                           ItemTemplate="{StaticResource PaneColorSwatchTemplate}">
                                 <ItemsControl.ItemsPanel>
@@ -304,13 +304,13 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <TabControl Grid.Column="0" x:Name="SidebarTabs" Background="White" Margin="0,0,4,0">
-            <TabItem x:Name="ActivePathTab" Header="Active path">
+            <TabItem x:Name="ActivePathTab" Header="{local:Localized PathviewSidebar_Tab_ActivePath}">
                 <Grid Margin="8">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <GroupBox Grid.Row="0" Header="Path"
+                    <GroupBox Grid.Row="0" Header="{local:Localized PathviewSidebar_Group_Path}"
                               Style="{StaticResource HeaderLineGroupBoxStyle}"
                               Margin="0,0,0,4" Padding="0">
                         <Border x:Name="ActivePathTreeFrame" BorderBrush="{StaticResource ViewFrameBrush}"
@@ -323,7 +323,7 @@
                                       PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp" />
                         </Border>
                     </GroupBox>
-                    <GroupBox Grid.Row="1" Header="Sub directories"
+                    <GroupBox Grid.Row="1" Header="{local:Localized PathviewSidebar_Group_Subdirectories}"
                               Style="{StaticResource HeaderLineGroupBoxStyle}"
                               Margin="0,4,0,0" Padding="0">
                         <Grid>
@@ -339,13 +339,13 @@
                                 </Grid.ColumnDefinitions>
                                 <Border Grid.Column="0" Style="{StaticResource BadgeStyle}"
                                         Margin="0,0,8,0" VerticalAlignment="Center">
-                                    <TextBlock Text="VIEW:" FontWeight="Bold" Foreground="#4E5963"
+                                    <TextBlock Text="{local:Localized PathviewSidebar_Label_View}" FontWeight="Bold" Foreground="#4E5963"
                                                VerticalAlignment="Center" />
                                 </Border>
                                 <TextBlock Grid.Column="1" TextWrapping="NoWrap">
                                     <InlineUIContainer BaselineAlignment="Baseline">
                                         <local:CheckBoxWrapper x:Name="HideInternalSubdirectoriesCheckBox"
-                                                               Label="Hide internal" Margin="0,0,16,0" />
+                                                               Label="{local:Localized PathviewSidebar_CheckBox_HideInternal}" Margin="0,0,16,0" />
                                     </InlineUIContainer>
                                 </TextBlock>
                             </Grid>
@@ -430,7 +430,7 @@
                     </GroupBox>
                 </Grid>
             </TabItem>
-            <TabItem x:Name="ActivePathAndSiblingsTab" Header="Active path and siblings">
+            <TabItem x:Name="ActivePathAndSiblingsTab" Header="{local:Localized PathviewSidebar_Tab_ActivePathAndSiblings}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -440,14 +440,14 @@
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="4,2,4,0">
                         <Border Style="{StaticResource BadgeStyle}"
                                 Margin="0,0,8,0" VerticalAlignment="Center">
-                            <TextBlock Text="VIEW:" FontWeight="Bold" Foreground="#4E5963"
+                            <TextBlock Text="{local:Localized PathviewSidebar_Label_View}" FontWeight="Bold" Foreground="#4E5963"
                                        VerticalAlignment="Center" />
                         </Border>
-                        <CheckBox x:Name="HideSiblingsCheckBox" Content="Hide siblings"
+                        <CheckBox x:Name="HideSiblingsCheckBox" Content="{local:Localized PathviewSidebar_CheckBox_HideSiblings}"
                                   IsChecked="True" Margin="0,6,8,4"
                                   Checked="HideSiblingsCheckBox_StateChanged"
                                   Unchecked="HideSiblingsCheckBox_StateChanged" />
-                        <CheckBox x:Name="HideInternalCheckBox" Content="Hide internal"
+                        <CheckBox x:Name="HideInternalCheckBox" Content="{local:Localized PathviewSidebar_CheckBox_HideInternal}"
                                   IsChecked="True" Margin="8,6,8,4"
                                   Checked="HideInternalCheckBox_StateChanged"
                                   Unchecked="HideInternalCheckBox_StateChanged" />

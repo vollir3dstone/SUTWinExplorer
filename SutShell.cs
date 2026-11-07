@@ -286,11 +286,11 @@ internal static class SutShell
     {
         if (GetEditName(path) is null || string.IsNullOrWhiteSpace(name) || name is "." or ".." ||
             name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-            throw new ArgumentException("Enter a valid file or directory name.", nameof(name));
+            throw new ArgumentException(LocalizedText.Get("NewItem_Error_InvalidName"), nameof(name));
         var target = Path.Combine(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(path))!, name);
         if (!string.Equals(path, target, StringComparison.OrdinalIgnoreCase) &&
             (File.Exists(target) || Directory.Exists(target)))
-            throw new IOException("An item with that name already exists.");
+            throw new IOException(LocalizedText.Get("Shell_Error_ItemAlreadyExists"));
         return ShellItemOperations.Rename(path, name, owner);
     }
 
@@ -357,9 +357,9 @@ internal static class SutShell
     internal static void AbortClipboardOperation(ClipboardOperation operation, uint sequence)
     {
         if (operation is not (ClipboardOperation.Move or ClipboardOperation.Link))
-            throw new InvalidOperationException("Only clipboard move or link operations can be aborted.");
+            throw new InvalidOperationException(LocalizedText.Get("Clipboard_Error_AbortUnsupported"));
         if (!ClearClipboardIfSequenceMatches(sequence))
-            throw new InvalidOperationException("The clipboard operation is no longer available.");
+            throw new InvalidOperationException(LocalizedText.Get("Clipboard_Error_OperationUnavailable"));
     }
 
     private static bool ClearClipboardIfSequenceMatches(uint sequence)
@@ -384,7 +384,7 @@ internal static class SutShell
         Marshal.ThrowExceptionForHR(OleGetClipboard(out var source));
         if (!TryGetClipboardData(out var operation, out var paths, out _) || sequence != GetClipboardSequenceNumber() ||
             (expected is not null && operation != expected) || (expectedSequence is not null && sequence != expectedSequence))
-            throw new InvalidOperationException("The clipboard operation is no longer available.");
+            throw new InvalidOperationException(LocalizedText.Get("Clipboard_Error_OperationUnavailable"));
 
         switch (operation)
         {
@@ -398,7 +398,7 @@ internal static class SutShell
                 try { _ = ClearClipboardIfSequenceMatches(sequence); }
                 catch (System.ComponentModel.Win32Exception exception)
                 {
-                    throw new InvalidOperationException("The shortcuts were created, but the clipboard could not be cleared.", exception);
+                    throw new InvalidOperationException(LocalizedText.Get("Clipboard_Error_LinkClearFailed"), exception);
                 }
                 break;
             case ClipboardOperation.Move:
@@ -406,7 +406,7 @@ internal static class SutShell
                 try { ShellDragDrop.ReportPasteSucceeded(source); }
                 catch (Exception exception) when (exception is ExternalException or NotImplementedException)
                 {
-                    throw new InvalidOperationException("The items were moved, but the clipboard source did not accept the completion notification.", exception);
+                    throw new InvalidOperationException(LocalizedText.Get("Clipboard_Error_MoveNotificationFailed"), exception);
                 }
                 break;
         }

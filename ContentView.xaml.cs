@@ -95,7 +95,9 @@ public partial class ContentView : UserControl
     {
         InitializeComponent();
         ResetViewButton.LayoutUpdated += ResetViewButton_LayoutUpdated;
-        SortOrderEditor.Configure(["Name", "MT", "TA1", "TA2", "Date", "Size"]);
+        SortOrderEditor.Configure([LocalizedText.Get("ContentView_Selected_Button_NameClipboardCopy"), LocalizedText.Get("ContentView_Column_MediaType"),
+            LocalizedText.Get("ContentView_Column_TypeApp1"), LocalizedText.Get("ContentView_Column_TypeApp2"),
+            LocalizedText.Get("ContentView_Sort_Date"), LocalizedText.Get("ContentView_Column_Size")]);
         _sorting.Update(GetWidgetSortPairs());
         SortOrderEditor.Changed += SortOrderChanged;
         UpdateSortDisplay();
@@ -161,13 +163,12 @@ public partial class ContentView : UserControl
             if (clipboardOperation is ClipboardOperation.Move or ClipboardOperation.Link)
             {
                 var abortId = clipboardOperation == ClipboardOperation.Move ? "AbortClipboardMove" : "AbortClipboardLink";
-                var abortLabel = clipboardOperation == ClipboardOperation.Move ? "Abort clipboard move" : "Abort clipboard link";
-                actions.Add(new ShellMenuAction(abortId, abortLabel, true, () =>
+                actions.Add(new ShellMenuAction(abortId, SutContextMenuFactory.GetActionLabel(abortId), true, () =>
                 {
                     try { SutShell.AbortClipboardOperation(clipboardOperation, clipboardSequence); }
                     catch (Exception exception)
                     {
-                        MessageBox.Show(Window.GetWindow(this), exception.Message, "Operation failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        MessageBox.Show(Window.GetWindow(this), exception.Message, LocalizedText.Get("Common_Error_OperationFailed"), MessageBoxButton.OK, MessageBoxImage.Warning);
                     }
                 }));
             }
@@ -181,7 +182,7 @@ public partial class ContentView : UserControl
                 catch (OperationCanceledException) { }
                 catch (Exception exception)
                 {
-                    MessageBox.Show(Window.GetWindow(this), exception.Message, "Operation failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    MessageBox.Show(Window.GetWindow(this), exception.Message, LocalizedText.Get("Common_Error_OperationFailed"), MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
             }) { IconSource = ItemClipboardPasteButton });
         }
@@ -194,27 +195,31 @@ public partial class ContentView : UserControl
             catch (OperationCanceledException) { }
             catch (Exception exception)
             {
-                MessageBox.Show(Window.GetWindow(this), exception.Message, "Operation failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Window.GetWindow(this), exception.Message, LocalizedText.Get("Common_Error_OperationFailed"), MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 
-        var execute = link ? new ShellMenuAction("LinkExecute", "Insert link to marked item", true, () => Execute("LinkExecute")) { IconSource = LinkExecuteButton } :
-            copy ? new ShellMenuAction("CopyExecute", "Insert copy of marked item", true, () => Execute("CopyExecute")) { IconSource = CopyExecuteButton } :
-            new ShellMenuAction("MoveExecute", "Move marked item here", true, () => Execute("MoveExecute")) { IconSource = MoveExecuteButton };
-        actions.Add(new ShellMenuAction("AbortTransfer", "Abort transfer", true,
+        var execute = link ? new ShellMenuAction("LinkExecute", SutContextMenuFactory.GetActionLabel("LinkExecute"), true, () => Execute("LinkExecute")) { IconSource = LinkExecuteButton } :
+            copy ? new ShellMenuAction("CopyExecute", SutContextMenuFactory.GetActionLabel("CopyExecute"), true, () => Execute("CopyExecute")) { IconSource = CopyExecuteButton } :
+            new ShellMenuAction("MoveExecute", SutContextMenuFactory.GetActionLabel("MoveExecute"), true, () => Execute("MoveExecute")) { IconSource = MoveExecuteButton };
+        actions.Add(new ShellMenuAction("AbortTransfer", SutContextMenuFactory.GetActionLabel("AbortTransfer"), true,
             () => { LinkWorkflowState.Shared.Abort(); CopyWorkflowState.Shared.Abort(); MoveWorkflowState.Shared.Abort(); },
             SeparatorBefore: actions.Count > 0));
         actions.Add(execute);
         return actions;
     }
 
-    private static (string Id, string Label) ClipboardAction(ClipboardOperation operation) => operation switch
+    private static (string Id, string Label) ClipboardAction(ClipboardOperation operation)
     {
-        ClipboardOperation.Copy => ("ClipboardItemCopy", "Copy clipboard item here"),
-        ClipboardOperation.Move => ("ClipboardItemMove", "Move cut item here"),
-        ClipboardOperation.Link => ("ClipboardItemLink", "Link to externally selected item"),
-        _ => throw new ArgumentOutOfRangeException(nameof(operation))
-    };
+        var id = operation switch
+        {
+            ClipboardOperation.Copy => "ClipboardItemCopy",
+            ClipboardOperation.Move => "ClipboardItemMove",
+            ClipboardOperation.Link => "ClipboardItemLink",
+            _ => throw new ArgumentOutOfRangeException(nameof(operation))
+        };
+        return (id, SutContextMenuFactory.GetActionLabel(id));
+    }
 
     private void ExecuteClipboardTransfer(string destination, ClipboardOperation? expected = null, uint? sequence = null)
     {
@@ -242,12 +247,12 @@ public partial class ContentView : UserControl
             return CreateActiveDirectoryMenuActions();
         var actions = new[] { PropertiesButton, NameClipboardCopyButton, PathClipboardCopyButton, ItemClipboardCopyButton, LinkMarkItemButton, CopyMarkItemButton,
             MoveMarkItemButton, RenameButton, DeleteButton }.Select(button => new ShellMenuAction(
-                (string)button.Tag, System.Windows.Automation.AutomationProperties.GetName(button), button.IsEnabled,
+                (string)button.Tag, SutContextMenuFactory.GetActionLabel((string)button.Tag), button.IsEnabled,
                 () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)),
                 IsTransfer: button.Tag is string action && (action.StartsWith("Link", StringComparison.Ordinal) || action.StartsWith("Copy", StringComparison.Ordinal) || action.StartsWith("Move", StringComparison.Ordinal)),
                 SeparatorBefore: button == NameClipboardCopyButton || button == DeleteButton) { IconSource = button }).ToArray();
         var selected = FileList.SelectedItems.OfType<DirectoryRow>().ToArray();
-        var relocate = new ShellMenuAction("Relocate", "Relocate", selected.Length == 1 && RenameButton.IsEnabled && RelocateRequested is not null,
+        var relocate = new ShellMenuAction("Relocate", SutContextMenuFactory.GetActionLabel("Relocate"), selected.Length == 1 && RenameButton.IsEnabled && RelocateRequested is not null,
             () => RelocateRequested?.Invoke(selected[0].FullPath));
         var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
         return SutContextMenuFactory.CreateBaseActions(actions, relocate, selected.Select(row => row.FullPath).ToArray(), owner, EnableInternalItemTransfers);
@@ -272,12 +277,12 @@ public partial class ContentView : UserControl
                 "Delete" => exists && canStart && ShellFileOperations.CanDelete(path),
                 _ => exists
             };
-            return new ShellMenuAction(id, System.Windows.Automation.AutomationProperties.GetName(button), enabled,
+            return new ShellMenuAction(id, SutContextMenuFactory.GetActionLabel(id), enabled,
                 () => ExecuteActiveDirectoryMenuAction(id, path)) { IconSource = button };
         }).ToArray();
         var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
         return SutContextMenuFactory.CreateBaseActions(actions,
-            new ShellMenuAction("Relocate", "Relocate", editable && RelocateRequested is not null, () => RelocateRequested?.Invoke(path)), [path], owner, EnableInternalItemTransfers);
+            new ShellMenuAction("Relocate", SutContextMenuFactory.GetActionLabel("Relocate"), editable && RelocateRequested is not null, () => RelocateRequested?.Invoke(path)), [path], owner, EnableInternalItemTransfers);
     }
 
     private void ExecuteActiveDirectoryMenuAction(string action, string path)
@@ -304,7 +309,7 @@ public partial class ContentView : UserControl
         catch (OperationCanceledException) when (action == "Delete") { }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Operation failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(Window.GetWindow(this), exception.Message, LocalizedText.Get("Common_Error_OperationFailed"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -331,7 +336,7 @@ public partial class ContentView : UserControl
                     catch (Exception exception) { Trace.TraceError("Could not load application icon: {0}", exception); }
                     return app.Windows.OrderBy(window => window.Title, StringComparer.CurrentCultureIgnoreCase)
                         .ThenBy(window => window.Handle.ToInt64())
-                        .Select(window => new ShellMenuAction($"open-running-app:{app.App.Id}:{window.Handle.ToInt64()}", $"{app.App.Name} - {(string.IsNullOrWhiteSpace(window.Title) ? "Untitled window" : window.Title)}".Replace("&", "&&"), true,
+                        .Select(window => new ShellMenuAction($"open-running-app:{app.App.Id}:{window.Handle.ToInt64()}", $"{app.App.Name} - {(string.IsNullOrWhiteSpace(window.Title) ? LocalizedText.Get("ContentView_RunningApp_UntitledWindow") : window.Title)}".Replace("&", "&&"), true,
                             () => OpenInRunningApp(app.App, window, selectedPaths)) { MenuImage = icon ?? ShellMenuIcons.GetWindowIcon(window.Handle) });
                 })
                 .ToArray();
@@ -363,19 +368,19 @@ public partial class ContentView : UserControl
             return null;
 
         var shortcutPath = paths[0];
-        return new ShellMenuAction("opencontaining", "Open parent", paths.Count == 1, () =>
+        return new ShellMenuAction("opencontaining", SutContextMenuFactory.GetActionLabel("opencontaining"), paths.Count == 1, () =>
         {
             try
             {
                 var target = SutShell.GetLinkTarget(shortcutPath) ??
-                    throw new InvalidOperationException("The shortcut target is unavailable or is not a filesystem item.");
+                    throw new InvalidOperationException(LocalizedText.Get("ContentView_Error_ShortcutUnavailable"));
                 var directory = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(target)) ??
-                    throw new InvalidOperationException("The shortcut target does not have a containing directory.");
+                    throw new InvalidOperationException(LocalizedText.Get("ContentView_Error_ShortcutWithoutParent"));
                 DirectoryOpenRequested?.Invoke(this, directory);
             }
             catch (Exception exception)
             {
-                MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot open parent",
+                MessageBox.Show(Window.GetWindow(this), exception.Message, LocalizedText.Get("ContentView_Error_CannotOpenParent"),
                     MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         });
@@ -939,7 +944,7 @@ public partial class ContentView : UserControl
             .MaxBy(digit => Measure(digit.ToString()));
         var sampleDate = new DateTime(2026, 12, 28, 23, 58, 0).ToString(FileEntry.DateFormat, CultureInfo.InvariantCulture);
         sampleDate = string.Concat(sampleDate.Select(character => char.IsAsciiDigit(character) ? widestDigit : character));
-        DateColumn.Width = Math.Ceiling(Math.Max(Measure("Date modified") + 10, Measure(sampleDate)) + 16);
+        DateColumn.Width = Math.Ceiling(Math.Max(Measure(LocalizedText.Get("ContentView_Column_DateModified")) + 10, Measure(sampleDate)) + 16);
         FileList_SizeChanged(FileList, null!);
         ScheduleRangeLoad();
         LinkWorkflowState.Shared.Changed += WorkflowState_Changed;
@@ -1114,7 +1119,7 @@ public partial class ContentView : UserControl
                 for (var index = 0; index < count; index++)
                     rows[start + index].Failed = true;
                 StatusLabel.Text = "!";
-                StatusLabel.ToolTip = "Some item details could not be loaded.";
+                StatusLabel.ToolTip = LocalizedText.Get("ContentView_Status_DetailsUnavailable");
             }
         }
         finally
@@ -1151,7 +1156,7 @@ public partial class ContentView : UserControl
                     break;
                 case "Properties":
                     if (selectedPaths.Count == 0)
-                        throw new InvalidOperationException("Select one or more items before using Properties.");
+                        throw new InvalidOperationException(LocalizedText.Get("ContentView_Error_SelectForProperties"));
                     SutShell.ShowProperties(selectedPaths, owner);
                     break;
                 case "Rename":
@@ -1159,7 +1164,7 @@ public partial class ContentView : UserControl
                     break;
                 case "ItemClipboardCopy":
                     if (selectedPaths.Count == 0)
-                        throw new InvalidOperationException("Select one or more items before using Item clipboard copy.");
+                        throw new InvalidOperationException(LocalizedText.Get("ContentView_Error_SelectForItemClipboardCopy"));
                     SutShell.CopyToClipboard(selectedPaths, owner);
                     break;
                 case "ItemClipboardPaste":
@@ -1167,7 +1172,7 @@ public partial class ContentView : UserControl
                     break;
                 case "LinkMarkItem":
                     if (CopyWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared)
-                        throw new InvalidOperationException("Abort or complete the prepared transfer before starting a Link.");
+                        throw new InvalidOperationException(LocalizedText.Get("Transfer_Error_LinkAlreadyPrepared"));
                     LinkWorkflowState.Shared.Prepare(selectedPaths);
                     break;
                 case "LinkExecute":
@@ -1178,7 +1183,7 @@ public partial class ContentView : UserControl
                     break;
                 case "CopyMarkItem":
                     if (LinkWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared)
-                        throw new InvalidOperationException("Abort or complete the prepared transfer before starting a Copy.");
+                        throw new InvalidOperationException(LocalizedText.Get("Transfer_Error_CopyAlreadyPrepared"));
                     CopyWorkflowState.Shared.Prepare(selectedPaths);
                     break;
                 case "CopyExecute":
@@ -1189,7 +1194,7 @@ public partial class ContentView : UserControl
                     break;
                 case "MoveMarkItem":
                     if (LinkWorkflowState.Shared.IsPrepared || CopyWorkflowState.Shared.IsPrepared)
-                        throw new InvalidOperationException("Abort or complete the prepared transfer before starting a Move.");
+                        throw new InvalidOperationException(LocalizedText.Get("Transfer_Error_MoveAlreadyPrepared"));
                     MoveWorkflowState.Shared.Prepare(selectedPaths);
                     break;
                 case "MoveExecute":
@@ -1200,12 +1205,12 @@ public partial class ContentView : UserControl
                     break;
                 case "NameClipboardCopy":
                     if (selectedPaths.Count == 0)
-                        throw new InvalidOperationException("Select one or more items before using Name clipboard copy.");
+                        throw new InvalidOperationException(LocalizedText.Get("ContentView_Error_SelectForNameClipboardCopy"));
                     Clipboard.SetText(string.Join(Environment.NewLine, selectedPaths.Select(SutShell.GetFileSystemName)));
                     break;
                 case "PathClipboardCopy":
                     if (selectedPaths.Count == 0)
-                        throw new InvalidOperationException("Select one or more items before using Path clipboard copy.");
+                        throw new InvalidOperationException(LocalizedText.Get("ContentView_Error_SelectForPathClipboardCopy"));
                     Clipboard.SetText(string.Join(Environment.NewLine, selectedPaths));
                     break;
                 case "Delete":
@@ -1219,7 +1224,7 @@ public partial class ContentView : UserControl
         }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Operation failed",
+            MessageBox.Show(Window.GetWindow(this), exception.Message, LocalizedText.Get("Common_Error_OperationFailed"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
@@ -1306,7 +1311,7 @@ public partial class ContentView : UserControl
     {
         var available = SutShell.TryGetClipboardOperationForUpdate(out var operation, out var retry);
         ItemClipboardPasteButton.IsEnabled = Directory.Exists(CurrentPath) && available;
-        var label = available ? ClipboardAction(operation).Label : "Item clipboard paste";
+        var label = available ? ClipboardAction(operation).Label : SutContextMenuFactory.GetActionLabel("ItemClipboardPaste");
         ItemClipboardPasteButton.ToolTip = label;
         System.Windows.Automation.AutomationProperties.SetName(ItemClipboardPasteButton, label);
         if (!retry)
@@ -1452,9 +1457,9 @@ public partial class ContentView : UserControl
             return;
         _rightColumnsHidden = hidden;
         RightColumnsToggleSymbol.Text = hidden ? "\u2026" : "\u25B8";
-        RightColumnsToggleHeader.ToolTip = hidden ? "Show right columns" : "Hide right columns";
+        RightColumnsToggleHeader.ToolTip = LocalizedText.Get(hidden ? "ContentView_Column_ShowRight" : "ContentView_Column_HideRight");
         System.Windows.Automation.AutomationProperties.SetName(RightColumnsToggleHeader,
-            hidden ? "Show right columns" : "Hide right columns");
+            LocalizedText.Get(hidden ? "ContentView_Column_ShowRight" : "ContentView_Column_HideRight"));
         if (hidden)
         {
             gridView.Columns.Remove(TypeApp2Name);
@@ -1487,7 +1492,7 @@ public partial class ContentView : UserControl
         }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot open item", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(Window.GetWindow(this), exception.Message, LocalizedText.Get("ContentView_Error_CannotOpenItem"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -1501,7 +1506,7 @@ public partial class ContentView : UserControl
         }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Context menu failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(Window.GetWindow(this), exception.Message, LocalizedText.Get("Common_Error_ContextMenuFailed"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -1671,7 +1676,7 @@ public partial class ContentView : UserControl
         }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Cannot rename item", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(Window.GetWindow(this), exception.Message, LocalizedText.Get("ContentView_Error_CannotRenameItem"), MessageBoxButton.OK, MessageBoxImage.Error);
             _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
             {
                 if (FileList.ItemContainerGenerator.ContainerFromItem(row) is DependencyObject container &&

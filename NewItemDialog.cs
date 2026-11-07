@@ -20,7 +20,7 @@ internal sealed class NewItemDialog : Window
     private NewItemDialog(string directory)
     {
         _directory = directory;
-        Title = "New item";
+        Title = LocalizedText.Get("NewItemDialog_Title");
         Width = 480;
         SizeToContent = SizeToContent.Height;
         MinWidth = 360;
@@ -30,7 +30,7 @@ internal sealed class NewItemDialog : Window
 
         var root = new Grid { Margin = new Thickness(16) };
         for (var index = 0; index < 5; index++) root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        var typeLabel = new TextBlock { Text = "Type", Margin = new Thickness(0, 0, 0, 4) };
+        var typeLabel = new TextBlock { Text = LocalizedText.Get("NewItemDialog_Label_Type"), Margin = new Thickness(0, 0, 0, 4) };
         root.Children.Add(typeLabel);
         var typeRow = new FrameworkElementFactory(typeof(DockPanel));
         var icon = new FrameworkElementFactory(typeof(Image));
@@ -62,7 +62,7 @@ internal sealed class NewItemDialog : Window
         ScrollViewer.SetHorizontalScrollBarVisibility(_typePicker, ScrollBarVisibility.Disabled);
         Grid.SetRow(_typePicker, 1);
         root.Children.Add(_typePicker);
-        var nameLabel = new TextBlock { Text = "Name", Margin = new Thickness(0, 0, 0, 4) };
+        var nameLabel = new TextBlock { Text = LocalizedText.Get("NewItemDialog_Label_Name"), Margin = new Thickness(0, 0, 0, 4) };
         Grid.SetRow(nameLabel, 2);
         root.Children.Add(nameLabel);
         _nameEditor = new TextBox { Name = "NameEditor", MinHeight = 26, VerticalContentAlignment = VerticalAlignment.Center };
@@ -73,7 +73,7 @@ internal sealed class NewItemDialog : Window
         buttons.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         buttons.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         buttons.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var windowsButton = new Button { Name = "WindowsButton", Content = "More types via Windows…", ToolTip = "Windows chooses the initial name and may open its own wizard.", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 3, 8, 3) };
+        var windowsButton = new Button { Name = "WindowsButton", Content = LocalizedText.Get("NewItemDialog_Button_Windows"), ToolTip = LocalizedText.Get("NewItemDialog_Button_Windows_Tooltip"), HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 3, 8, 3) };
         windowsButton.Click += (_, _) =>
         {
             _windowsMenuPoint = windowsButton.PointToScreen(new Point(0, windowsButton.ActualHeight));
@@ -81,10 +81,10 @@ internal sealed class NewItemDialog : Window
             DialogResult = false;
         };
         buttons.Children.Add(windowsButton);
-        var cancel = new Button { Name = "CancelButton", Content = "Cancel", MinWidth = 72, Margin = new Thickness(8, 0, 0, 0), IsCancel = true };
+        var cancel = new Button { Name = "CancelButton", Content = LocalizedText.Get("Common_Button_Cancel"), MinWidth = 72, Margin = new Thickness(8, 0, 0, 0), IsCancel = true };
         Grid.SetColumn(cancel, 1);
         buttons.Children.Add(cancel);
-        var create = new Button { Name = "CreateButton", Content = "Create", MinWidth = 72, Margin = new Thickness(8, 0, 0, 0), IsDefault = true };
+        var create = new Button { Name = "CreateButton", Content = LocalizedText.Get("NewItemDialog_Button_Create"), MinWidth = 72, Margin = new Thickness(8, 0, 0, 0), IsDefault = true };
         create.Click += Create_Click;
         Grid.SetColumn(create, 2);
         buttons.Children.Add(create);
@@ -135,7 +135,7 @@ internal sealed class NewItemDialog : Window
         if (_typePicker.SelectedItem is not NewItemType type) return;
         var name = _nameEditor.Text;
         if (type.Extension.Length > 0 && !name.EndsWith(type.Extension, StringComparison.OrdinalIgnoreCase) &&
-            MessageBox.Show(this, $"The name does not end in {type.Extension}. Create it anyway?", "File extension",
+            MessageBox.Show(this, string.Format(LocalizedText.Get("NewItemDialog_ConfirmExtension"), type.Extension), LocalizedText.Get("NewItemDialog_ConfirmExtension_Title"),
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return;
         try
@@ -146,7 +146,7 @@ internal sealed class NewItemDialog : Window
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            MessageBox.Show(this, exception.Message, "Could not create item", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, exception.Message, LocalizedText.Get("NewItemDialog_CreateError_Title"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 

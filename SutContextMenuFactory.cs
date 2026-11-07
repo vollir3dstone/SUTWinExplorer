@@ -263,7 +263,7 @@ internal static class SutContextMenuFactory
                     ShellMenuIcons.Apply(runningAppsSubmenu, existingActions, BaseMenuCommandFirst, menuBitmaps,
                         System.Windows.Interop.HwndSource.FromHwnd(owner)?.RootVisual);
                     if (!InsertMenu(menu, 1, MenuByPosition | MenuPopup | (runningApps.Count == 0 ? MenuDisabled : 0u),
-                            (UIntPtr)(nuint)runningAppsSubmenu, "Open in running app..."))
+                            (UIntPtr)(nuint)runningAppsSubmenu, GetActionLabel("OpenInRunningApp")))
                         throw new InvalidOperationException("Could not insert the running applications submenu.");
                 }
                 catch
@@ -630,19 +630,21 @@ internal static class SutContextMenuFactory
         RemoveRedundantSeparators(menu);
     }
 
+    internal static string GetActionLabel(string id) => LocalizedText.Get("Menu_Action_" + id);
+
     internal static IReadOnlyList<ShellMenuAction> CreateBaseActions(IReadOnlyList<ShellMenuAction> actions, ShellMenuAction relocate,
         IReadOnlyList<string> paths, IntPtr owner, bool enableInternalItemTransfers)
     {
-        ShellMenuAction Existing(string id, string label, bool separator = false) =>
-            actions.Single(action => action.Id == id) with { Label = label, IsTransfer = false, SeparatorBefore = separator };
-        ShellMenuAction Prepare(string id, string label, ClipboardOperation operation, bool separator = false) =>
-            new(id, label, paths.Count > 0 && paths.All(path => File.Exists(path) || Directory.Exists(path)) &&
+        ShellMenuAction Existing(string id, bool separator = false) =>
+            actions.Single(action => action.Id == id) with { Label = GetActionLabel(id), IsTransfer = false, SeparatorBefore = separator };
+        ShellMenuAction Prepare(string id, ClipboardOperation operation, bool separator = false) =>
+            new(id, GetActionLabel(id), paths.Count > 0 && paths.All(path => File.Exists(path) || Directory.Exists(path)) &&
                 (operation != ClipboardOperation.Move || paths.All(ShellFileOperations.CanDelete)), () =>
             {
                 try { SutShell.PrepareExternalTransfer(paths, owner, operation); }
                 catch (Exception exception)
                 {
-                    System.Windows.MessageBox.Show(exception.Message, "Operation failed", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                    System.Windows.MessageBox.Show(exception.Message, LocalizedText.Get("Common_Error_OperationFailed"), System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
                 }
             }, SeparatorBefore: separator)
             { IconSource = actions.Single(action => action.Id == (operation switch
@@ -650,23 +652,23 @@ internal static class SutContextMenuFactory
 
         var result = new ShellMenuAction[]
         {
-            Existing("Properties", "Properties"),
-            Prepare("PrepareCopyToExternal", "Prepare copying", ClipboardOperation.Copy, true),
-            Prepare("PrepareLinkingFromExternal", "Prepare linking", ClipboardOperation.Link),
-            Prepare("PrepareMoveToExternal", "Prepare moving", ClipboardOperation.Move),
-            Existing("NameClipboardCopy", "Copy name to clipboard", true),
-            Existing("PathClipboardCopy", "Copy path to clipboard"),
-            Existing("ItemClipboardCopy", "Copy item to clipboard"),
-            new ShellMenuAction("AbortTransfer", "Abort transfer",
+            Existing("Properties"),
+            Prepare("PrepareCopyToExternal", ClipboardOperation.Copy, true),
+            Prepare("PrepareLinkingFromExternal", ClipboardOperation.Link),
+            Prepare("PrepareMoveToExternal", ClipboardOperation.Move),
+            Existing("NameClipboardCopy", true),
+            Existing("PathClipboardCopy"),
+            Existing("ItemClipboardCopy"),
+            new ShellMenuAction("AbortTransfer", GetActionLabel("AbortTransfer"),
                 LinkWorkflowState.Shared.IsPrepared || CopyWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared,
                 () => { LinkWorkflowState.Shared.Abort(); CopyWorkflowState.Shared.Abort(); MoveWorkflowState.Shared.Abort(); },
                 SeparatorBefore: true),
-            Existing("LinkMarkItem", "Mark link item"),
-            Existing("CopyMarkItem", "Mark copy item"),
-            Existing("MoveMarkItem", "Mark move item"),
-            Existing("Rename", "Rename"),
-            relocate,
-            Existing("Delete", "Delete")
+            Existing("LinkMarkItem"),
+            Existing("CopyMarkItem"),
+            Existing("MoveMarkItem"),
+            Existing("Rename"),
+            relocate with { Label = GetActionLabel("Relocate") },
+            Existing("Delete")
         };
         return enableInternalItemTransfers ? result : result.Where(action => action.Id is not
             ("AbortTransfer" or "LinkMarkItem" or "CopyMarkItem" or "MoveMarkItem")).ToArray();

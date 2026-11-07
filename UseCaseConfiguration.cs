@@ -38,7 +38,7 @@ internal sealed class UseCaseStore
     public UseCaseStore(string directory, string useCaseName)
     {
         if (string.IsNullOrWhiteSpace(useCaseName) || useCaseName.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0)
-            throw new ArgumentException("The use case name cannot be used in a filename.", nameof(useCaseName));
+            throw new ArgumentException(LocalizedText.Get("UseCaseStore_Error_InvalidFilename"), nameof(useCaseName));
         _directory = directory;
         _useCaseName = useCaseName;
         _filePath = System.IO.Path.Combine(directory, $"Use case \u201e{useCaseName}\u201c.kisexplorer.json");
@@ -68,7 +68,7 @@ internal sealed class UseCaseStore
         UseCaseConfiguration loaded;
         using (var stream = File.OpenRead(_filePath))
             loaded = JsonSerializer.Deserialize<UseCaseConfiguration>(stream, JsonOptions)
-                ?? throw new InvalidDataException("The use case is empty.");
+                ?? throw new InvalidDataException(LocalizedText.Get("UseCaseStore_Error_Empty"));
         Validate(loaded, _useCaseName);
         return loaded;
     }
@@ -76,7 +76,7 @@ internal sealed class UseCaseStore
     private static void Validate(UseCaseConfiguration loaded, string useCaseName)
     {
         if (loaded.Type != "KIS Explorer use case" || loaded.UseCaseName != useCaseName || loaded.Pathviews is null)
-            throw new InvalidDataException("The use case has an invalid type, name, or Pathviews list.");
+            throw new InvalidDataException(LocalizedText.Get("UseCaseStore_Error_Invalid"));
 
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var view in loaded.Pathviews)
@@ -87,7 +87,7 @@ internal sealed class UseCaseStore
                 (view.TabColor is not null &&
                  (view.TabColor.Length != 9 || view.TabColor[0] != '#' || !view.TabColor[1..].All(Uri.IsHexDigit))) ||
                 !paths.Add(System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(view.Path))))
-                throw new InvalidDataException("The use case contains an invalid or duplicate Pathview.");
+                throw new InvalidDataException(LocalizedText.Get("UseCaseStore_Error_InvalidPathview"));
         }
     }
 
@@ -111,18 +111,18 @@ internal sealed class UseCaseStore
     public void Create(UseCaseConfiguration useCase)
     {
         if (string.Equals(_useCaseName, "new", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("The name 'new' is reserved.");
+            throw new InvalidOperationException(LocalizedText.Get("UseCaseStore_Error_ReservedName"));
         Write(useCase, overwrite: false);
     }
 
     public UseCaseStore Rename(UseCaseConfiguration useCase, string newName)
     {
         if (string.Equals(_useCaseName, "default", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("The default use case cannot be renamed.");
+            throw new InvalidOperationException(LocalizedText.Get("UseCaseStore_Error_RenameDefault"));
         if (string.Equals(newName, "new", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("The name 'new' is reserved.", nameof(newName));
+            throw new ArgumentException(LocalizedText.Get("UseCaseStore_Error_ReservedName"), nameof(newName));
         if (useCase.UseCaseName != _useCaseName)
-            throw new InvalidDataException("The use case name does not match its filename.");
+            throw new InvalidDataException(LocalizedText.Get("UseCaseStore_Error_NameMismatch"));
 
         var target = ForUseCase(newName);
         if (string.Equals(_useCaseName, newName, StringComparison.Ordinal))
@@ -180,7 +180,7 @@ internal sealed class UseCaseStore
     public void Delete()
     {
         if (string.Equals(_useCaseName, "default", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("The default use case cannot be deleted.");
+            throw new InvalidOperationException(LocalizedText.Get("UseCaseStore_Error_DeleteDefault"));
         using (File.OpenRead(_filePath)) { }
         File.Delete(_filePath);
     }
@@ -188,7 +188,7 @@ internal sealed class UseCaseStore
     private void Write(UseCaseConfiguration useCase, bool overwrite)
     {
         if (useCase.UseCaseName != _useCaseName)
-            throw new InvalidDataException("The use case name does not match its filename.");
+            throw new InvalidDataException(LocalizedText.Get("UseCaseStore_Error_NameMismatch"));
         var directory = System.IO.Path.GetDirectoryName(_filePath)!;
         Directory.CreateDirectory(directory);
         var temporaryPath = System.IO.Path.Combine(directory, $".{Guid.NewGuid():N}.tmp");

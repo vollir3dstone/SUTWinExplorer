@@ -16,7 +16,7 @@ internal static class NewItemOperations
 {
     internal static IReadOnlyList<NewItemType> GetTypes()
     {
-        var types = new List<NewItemType> { new("Directory", "", NewItemKind.Directory) };
+        var types = new List<NewItemType> { new(LocalizedText.Get("NewItem_Type_Directory"), "", NewItemKind.Directory) };
         foreach (var extension in Registry.ClassesRoot.GetSubKeyNames().Where(name => name.StartsWith('.') && name.Length > 1))
         {
             try
@@ -50,7 +50,7 @@ internal static class NewItemOperations
 
                 using var programKey = string.IsNullOrEmpty(programId) ? null : Registry.ClassesRoot.OpenSubKey(programId);
                 var name = programKey?.GetValue(null) as string;
-                if (string.IsNullOrWhiteSpace(name)) name = extension + " file";
+                if (string.IsNullOrWhiteSpace(name)) name = string.Format(LocalizedText.Get("NewItem_Type_GenericFile"), extension);
                 types.Add(new NewItemType($"{name} ({extension})", extension, kind, data, template));
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Security.SecurityException)
@@ -59,9 +59,9 @@ internal static class NewItemOperations
             }
         }
         if (!types.Any(type => type.Extension.Equals(".txt", StringComparison.OrdinalIgnoreCase)))
-            types.Add(new NewItemType("Textfile", ".txt", NewItemKind.EmptyFile));
+            types.Add(new NewItemType(LocalizedText.Get("NewItem_Type_TextFile"), ".txt", NewItemKind.EmptyFile));
         return types.Select(type => type.Extension.Equals(".txt", StringComparison.OrdinalIgnoreCase)
-                ? type with { Name = "Textfile" } : type)
+                ? type with { Name = LocalizedText.Get("NewItem_Type_TextFile") } : type)
             .OrderBy(type => type.Kind == NewItemKind.Directory ? 0 :
                 type.Extension.Equals(".txt", StringComparison.OrdinalIgnoreCase) ? 1 : 2)
             .ThenBy(type => type.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
@@ -83,16 +83,16 @@ internal static class NewItemOperations
 
     internal static string Create(string directory, string name, NewItemType type)
     {
-        if (!Directory.Exists(directory)) throw new DirectoryNotFoundException("The destination directory is unavailable.");
+        if (!Directory.Exists(directory)) throw new DirectoryNotFoundException(LocalizedText.Get("NewItem_Error_DestinationUnavailable"));
         if (string.IsNullOrWhiteSpace(name) || name is "." or ".." || name != name.TrimEnd(' ', '.') ||
             name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-            throw new ArgumentException("Enter a valid file or directory name.");
+            throw new ArgumentException(LocalizedText.Get("NewItem_Error_InvalidName"));
         var deviceName = name.Split('.')[0];
         if (deviceName.Equals("CON", StringComparison.OrdinalIgnoreCase) || deviceName.Equals("PRN", StringComparison.OrdinalIgnoreCase) ||
             deviceName.Equals("AUX", StringComparison.OrdinalIgnoreCase) || deviceName.Equals("NUL", StringComparison.OrdinalIgnoreCase) ||
             (deviceName.Length == 4 && (deviceName.StartsWith("COM", StringComparison.OrdinalIgnoreCase) ||
              deviceName.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) && deviceName[3] is >= '1' and <= '9'))
-            throw new ArgumentException("This name is reserved by Windows.");
+            throw new ArgumentException(LocalizedText.Get("NewItem_Error_ReservedName"));
 
         var path = Path.Combine(directory, name);
         if (type.Kind == NewItemKind.Directory)
@@ -101,7 +101,7 @@ internal static class NewItemOperations
             return path;
         }
         using var source = type.Kind == NewItemKind.Template
-            ? File.OpenRead(type.Template ?? throw new InvalidOperationException("The template is unavailable.")) : null;
+            ? File.OpenRead(type.Template ?? throw new InvalidOperationException(LocalizedText.Get("NewItem_Error_TemplateUnavailable"))) : null;
         using var destination = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
         try
         {

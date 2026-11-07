@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms</value></resheader>
+  <data name="Menu_Action_Properties" xml:space="preserve"><value>Properties</value></data>
+  <data name="Menu_Action_PrepareCopyToExternal" xml:space="preserve"><value>Prepare copying</value></data>
+  <data name="Menu_Action_PrepareLinkingFromExternal" xml:space="preserve"><value>Prepare linking</value></data>
+  <data name="Menu_Action_PrepareMoveToExternal" xml:space="preserve"><value>Prepare moving</value></data>
+  <data name="Menu_Action_NameClipboardCopy" xml:space="preserve"><value>Copy name to clipboard</value></data>
+  <data name="Menu_Action_PathClipboardCopy" xml:space="preserve"><value>Copy path to clipboard</value></data>
+  <data name="Menu_Action_ItemClipboardCopy" xml:space="preserve"><value>Copy item to clipboard</value></data>
+  <data name="Menu_Action_ItemClipboardPaste" xml:space="preserve"><value>Item clipboard paste</value></data>
+  <data name="Menu_Action_AbortTransfer" xml:space="preserve"><value>Abort transfer</value></data>
+  <data name="Menu_Action_LinkMarkItem" xml:space="preserve"><value>Mark link item</value></data>
+  <data name="Menu_Action_CopyMarkItem" xml:space="preserve"><value>Mark copy item</value></data>
+  <data name="Menu_Action_MoveMarkItem" xml:space="preserve"><value>Mark move item</value></data>
+  <data name="Menu_Action_LinkAbort" xml:space="preserve"><value>Link abort</value></data>
+  <data name="Menu_Action_CopyAbort" xml:space="preserve"><value>Copy abort</value></data>
+  <data name="Menu_Action_MoveAbort" xml:space="preserve"><value>Move abort</value></data>
+  <data name="Menu_Action_Rename" xml:space="preserve"><value>Rename</value></data>
+  <data name="Menu_Action_Relocate" xml:space="preserve"><value>Relocate</value></data>
+  <data name="Menu_Action_Delete" xml:space="preserve"><value>Delete</value></data>
+  <data name="Menu_Action_AbortClipboardMove" xml:space="preserve"><value>Abort clipboard move</value></data>
+  <data name="Menu_Action_AbortClipboardLink" xml:space="preserve"><value>Abort clipboard link</value></data>
+  <data name="Menu_Action_ClipboardItemCopy" xml:space="preserve"><value>Copy clipboard item here</value></data>
+  <data name="Menu_Action_ClipboardItemMove" xml:space="preserve"><value>Move cut item here</value></data>
+  <data name="Menu_Action_ClipboardItemLink" xml:space="preserve"><value>Link to externally selected item</value></data>
+  <data name="Menu_Action_LinkExecute" xml:space="preserve"><value>Insert link to marked item</value></data>
+  <data name="Menu_Action_CopyExecute" xml:space="preserve"><value>Insert copy of marked item</value></data>
+  <data name="Menu_Action_MoveExecute" xml:space="preserve"><value>Move marked item here</value></data>
+  <data name="Menu_Action_New" xml:space="preserve"><value>New…</value></data>
+  <data name="Menu_Action_opencontaining" xml:space="preserve"><value>Open parent</value></data>
+  <data name="Menu_Action_OpenInRunningApp" xml:space="preserve"><value>Open in running app...</value></data>
+  <data name="PathviewHeaderRow_Button_Browse" xml:space="preserve"><value>Browse</value></data>
+  <data name="PathviewHeaderRow_Button_Pin" xml:space="preserve"><value>Pin</value></data>
+  <data name="PathviewHeaderRow_Button_OpenInExplorer_Tooltip" xml:space="preserve"><value>Open in Windows Explorer</value></data>
+  <data name="PathviewHeaderRow_Button_OpenInExplorer_Accessibility" xml:space="preserve"><value>Open current path in a new Windows Explorer window</value></data>
+  <data name="PathviewHeaderRow_Label_Fixed" xml:space="preserve"><value>FIXED</value></data>
+  <data name="PathviewHeaderRow_Button_EditCustomName" xml:space="preserve"><value>Edit custom Pathview name</value></data>
+  <data name="PathviewHeaderRow_Button_PaneColor" xml:space="preserve"><value>Choose pane background color</value></data>
+  <data name="PathviewHeaderRow_Button_MoveMarkItem" xml:space="preserve"><value>Move🠝</value></data>
+  <data name="PathviewHeaderRow_Button_MoveMarkItem_Tooltip" xml:space="preserve"><value>Move mark item</value></data>
+  <data name="PathviewHeaderRow_Button_Rename" xml:space="preserve"><value>Rename...</value></data>
+  <data name="PathviewHeaderRow_Button_Relocate" xml:space="preserve"><value>Relocate...</value></data>
+  <data name="PathviewHeaderRow_Label_PaneColor" xml:space="preserve"><value>Pane color</value></data>
+  <data name="PathviewHeaderRow_Color_Select_Tooltip" xml:space="preserve"><value>Select this color</value></data>
+  <data name="PathviewHeaderRow_Color_Select_Accessibility" xml:space="preserve"><value>Set pane background color</value></data>
+  <data name="PathviewSidebar_Tab_ActivePath" xml:space="preserve"><value>Active path</value></data>
+  <data name="PathviewSidebar_Tab_ActivePathAndSiblings" xml:space="preserve"><value>Active path and siblings</value></data>
+  <data name="PathviewSidebar_Group_Path" xml:space="preserve"><value>Path</value></data>
+  <data name="PathviewSidebar_Group_Subdirectories" xml:space="preserve"><value>Sub directories</value></data>
+  <data name="PathviewSidebar_Label_View" xml:space="preserve"><value>VIEW:</value></data>
+  <data name="PathviewSidebar_CheckBox_HideInternal" xml:space="preserve"><value>Hide internal</value></data>
+  <data name="PathviewSidebar_CheckBox_HideSiblings" xml:space="preserve"><value>Hide siblings</value></data>
+  <data name="MainWindow_Title" xml:space="preserve"><value>KIS Explorer</value></data>
+  <data name="MainToolbar_Button_Configuration" xml:space="preserve"><value>Configuration</value></data>
+  <data name="MainToolbar_Button_UseCases" xml:space="preserve"><value>Use cases</value></data>
+  <data name="MainToolbar_Button_Back" xml:space="preserve"><value>Back</value></data>
+  <data name="MainToolbar_Button_Forward" xml:space="preserve"><value>Forward</value></data>
+  <data name="MainToolbar_Button_Up" xml:space="preserve"><value>Up</value></data>
+  <data name="MainToolbar_Button_AddressClipboardPaste" xml:space="preserve"><value>Paste path and navigate</value></data>
+  <data name="MainToolbar_Button_AddressClipboardCopy" xml:space="preserve"><value>Copy path to clipboard</value></data>
+  <data name="MainToolbar_Button_Go" xml:space="preserve"><value>Go</value></data>
+  <data name="UseCases_Label_Title" xml:space="preserve"><value>Use cases</value></data>
+  <data name="UseCases_Button_New" xml:space="preserve"><value>New</value></data>
+  <data name="UseCases_Label_ForSelected" xml:space="preserve"><value>FOR SELECTED:</value></data>
+  <data name="UseCases_Button_Edit" xml:space="preserve"><value>Edit</value></data>
+  <data name="UseCases_Button_Delete" xml:space="preserve"><value>Delete</value></data>
+  <data name="UseCases_Input_SelectedName" xml:space="preserve"><value>Selected use case name</value></data>
+  <data name="UseCases_Table_Pathviews" xml:space="preserve"><value>Use case Pathviews</value></data>
+  <data name="UseCases_Column_Name" xml:space="preserve"><value>Name</value></data>
+  <data name="UseCases_Column_Path" xml:space="preserve"><value>Path</value></data>
+  <data name="ContentView_Filter_Label_View" xml:space="preserve"><value>VIEW:</value></data>
+  <data name="ContentView_Filter_HideDirectories" xml:space="preserve"><value>Hide directories</value></data>
+  <data name="ContentView_Filter_HideInternal" xml:space="preserve"><value>Hide internal</value></data>
+  <data name="ContentView_Filter_NamePattern" xml:space="preserve"><value>Name pattern  </value></data>
+  <data name="ContentView_Filter_NamePattern_Tooltip" xml:space="preserve"><value>Use * and ? as wildcards</value></data>
+  <data name="ContentView_Filter_ClearNamePattern" xml:space="preserve"><value>Clear name pattern</value></data>
+  <data name="ContentView_Filter_SortOrder" xml:space="preserve"><value>  Sort order  </value></data>
+  <data name="ContentView_Filter_Reset_Tooltip" xml:space="preserve"><value>Reset content filters and sort order</value></data>
+  <data name="ContentView_Filter_Reset" xml:space="preserve"><value>Reset</value></data>
+  <data name="ContentView_Selected_Label" xml:space="preserve"><value>FOR SELECTED:</value></data>
+  <data name="ContentView_Selected_Button_Properties" xml:space="preserve"><value>Properties…</value></data>
+  <data name="ContentView_Selected_Button_NameClipboardCopy" xml:space="preserve"><value>Name</value></data>
+  <data name="ContentView_Selected_Button_NameClipboardCopy_Tooltip" xml:space="preserve"><value>Name clipboard copy</value></data>
+  <data name="ContentView_Selected_Button_PathClipboardCopy" xml:space="preserve"><value>Path</value></data>
+  <data name="ContentView_Selected_Button_PathClipboardCopy_Tooltip" xml:space="preserve"><value>Path clipboard copy</value></data>
+  <data name="ContentView_Selected_Button_ItemClipboardCopy_Tooltip" xml:space="preserve"><value>Item clipboard copy</value></data>
+  <data name="ContentView_Selected_Button_LinkMarkItem" xml:space="preserve"><value>Link🠝</value></data>
+  <data name="ContentView_Selected_Button_LinkMarkItem_Tooltip" xml:space="preserve"><value>Link mark item</value></data>
+  <data name="ContentView_Selected_Button_CopyMarkItem" xml:space="preserve"><value>Copy🠝</value></data>
+  <data name="ContentView_Selected_Button_CopyMarkItem_Tooltip" xml:space="preserve"><value>Copy mark item</value></data>
+  <data name="ContentView_Selected_Button_MoveMarkItem" xml:space="preserve"><value>Move🠝</value></data>
+  <data name="ContentView_Selected_Button_Rename" xml:space="preserve"><value>Rename…</value></data>
+  <data name="ContentView_Selected_Button_Delete" xml:space="preserve"><value>Del🗑️</value></data>
+  <data name="PathviewSidebarColumn_Label_Directory" xml:space="preserve"><value>DIRECTORY</value></data>
+  <data name="PathviewSidebarColumn_Count_Tooltip" xml:space="preserve"><value>Unfiltered items in this directory</value></data>
+  <data name="PathviewSidebarColumn_Count_Directories" xml:space="preserve"><value> subdir.</value></data>
+  <data name="PathviewSidebarColumn_Count_Files" xml:space="preserve"><value> files</value></data>
+  <data name="PathviewSidebarColumn_Button_New_Tooltip" xml:space="preserve"><value>New</value></data>
+  <data name="PathviewSidebarColumn_Button_Item" xml:space="preserve"><value>Item</value></data>
+  <data name="PathviewSidebarColumn_Button_LinkAbort" xml:space="preserve"><value>Link✕</value></data>
+  <data name="PathviewSidebarColumn_Button_LinkExecute" xml:space="preserve"><value>Link🠟</value></data>
+  <data name="PathviewSidebarColumn_Button_LinkExecute_Tooltip" xml:space="preserve"><value>Link execute</value></data>
+  <data name="PathviewSidebarColumn_Button_CopyAbort" xml:space="preserve"><value>Copy✕</value></data>
+  <data name="PathviewSidebarColumn_Button_CopyExecute" xml:space="preserve"><value>Copy🠟</value></data>
+  <data name="PathviewSidebarColumn_Button_CopyExecute_Tooltip" xml:space="preserve"><value>Copy execute</value></data>
+  <data name="PathviewSidebarColumn_Button_MoveAbort" xml:space="preserve"><value>Move✕</value></data>
+  <data name="PathviewSidebarColumn_Button_MoveExecute" xml:space="preserve"><value>Move🠟</value></data>
+  <data name="PathviewSidebarColumn_Button_MoveExecute_Tooltip" xml:space="preserve"><value>Move execute</value></data>
+  <data name="ContentView_Column_MediaType" xml:space="preserve"><value>MT</value></data>
+  <data name="ContentView_Column_MediaType_Tooltip" xml:space="preserve"><value>Sort by media type</value></data>
+  <data name="ContentView_Column_MediaSubType" xml:space="preserve"><value>ST</value></data>
+  <data name="ContentView_Column_MediaSubType_Tooltip" xml:space="preserve"><value>Media type sub type</value></data>
+  <data name="ContentView_Column_Modifier" xml:space="preserve"><value>MO</value></data>
+  <data name="ContentView_Column_Modifier_Tooltip" xml:space="preserve"><value>Modifier icon</value></data>
+  <data name="ContentView_Column_Name_Tooltip" xml:space="preserve"><value>Sort by name</value></data>
+  <data name="ContentView_Column_TypeApp1" xml:space="preserve"><value>TA1</value></data>
+  <data name="ContentView_Column_TypeApp1_Tooltip" xml:space="preserve"><value>Sort by TA1 (type and/or default app, coarse)</value></data>
+  <data name="ContentView_Column_HideRight" xml:space="preserve"><value>Hide right columns</value></data>
+  <data name="ContentView_Column_TypeApp2" xml:space="preserve"><value>TA2</value></data>
+  <data name="ContentView_Column_TypeApp2_Tooltip" xml:space="preserve"><value>Sort by TA2 (type and/or default app, fine)</value></data>
+  <data name="ContentView_Column_Size" xml:space="preserve"><value>Size</value></data>
+  <data name="ContentView_Column_Size_Tooltip" xml:space="preserve"><value>Sort by size</value></data>
+  <data name="ContentView_Column_DateModified" xml:space="preserve"><value>Date modified</value></data>
+  <data name="ContentView_Column_DateModified_Tooltip" xml:space="preserve"><value>Sort by date modified</value></data>
+  <data name="Common_Button_Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Common_Button_Apply" xml:space="preserve"><value>Apply</value></data>
+  <data name="ConfigurationDialog_Title" xml:space="preserve"><value>Configuration</value></data>
+  <data name="ConfigurationDialog_Label_Interface" xml:space="preserve"><value>Interface</value></data>
+  <data name="ConfigurationDialog_CheckBox_DirectoryRowActions" xml:space="preserve"><value>Show directory row action buttons</value></data>
+  <data name="ConfigurationDialog_CheckBox_DirectoryColumnActions" xml:space="preserve"><value>Show directory column action buttons</value></data>
+  <data name="ConfigurationDialog_CheckBox_SelectedItemsActions" xml:space="preserve"><value>Show selected items action buttons</value></data>
+  <data name="ConfigurationDialog_CheckBox_InternalItemTransfers" xml:space="preserve"><value>Enable internal item transfers</value></data>
+  <data name="CustomNameDialog_Title" xml:space="preserve"><value>Custom Pathview name</value></data>
+  <data name="CustomNameDialog_Label_Name" xml:space="preserve"><value>Custom name</value></data>
+  <data name="CustomNameDialog_Label_Undefined" xml:space="preserve"><value>(Undefined custom name)</value></data>
+  <data name="DirectoryLocationDialog_Title_RelocateFile" xml:space="preserve"><value>Relocate file</value></data>
+  <data name="DirectoryLocationDialog_Title_RelocateDirectory" xml:space="preserve"><value>Relocate directory</value></data>
+  <data name="DirectoryLocationDialog_Title_RenameDirectory" xml:space="preserve"><value>Rename directory</value></data>
+  <data name="DirectoryLocationDialog_Choice_DestinationParent" xml:space="preserve"><value>Destination (parent)</value></data>
+  <data name="DirectoryLocationDialog_Choice_DestinationAndName" xml:space="preserve"><value>Destination and new name</value></data>
+  <data name="DirectoryLocationDialog_Label_DirectoryName" xml:space="preserve"><value>Directory name</value></data>
+  <data name="MoveConfirmationDialog_Title" xml:space="preserve"><value>Confirm move</value></data>
+  <data name="MoveConfirmationDialog_Prompt" xml:space="preserve"><value>Move these selected items?</value></data>
+  <data name="MoveConfirmationDialog_Button_Move" xml:space="preserve"><value>Move</value></data>
+  <data name="NewItemDialog_Title" xml:space="preserve"><value>New item</value></data>
+  <data name="NewItemDialog_Label_Type" xml:space="preserve"><value>Type</value></data>
+  <data name="NewItemDialog_Label_Name" xml:space="preserve"><value>Name</value></data>
+  <data name="NewItemDialog_Button_Windows" xml:space="preserve"><value>More types via Windows…</value></data>
+  <data name="NewItemDialog_Button_Windows_Tooltip" xml:space="preserve"><value>Windows chooses the initial name and may open its own wizard.</value></data>
+  <data name="NewItemDialog_Button_Create" xml:space="preserve"><value>Create</value></data>
+  <data name="NewItemDialog_ConfirmExtension" xml:space="preserve"><value>The name does not end in {0}. Create it anyway?</value></data>
+  <data name="NewItemDialog_ConfirmExtension_Title" xml:space="preserve"><value>File extension</value></data>
+  <data name="NewItemDialog_CreateError_Title" xml:space="preserve"><value>Could not create item</value></data>
+  <data name="Common_Error_OperationFailed" xml:space="preserve"><value>Operation failed</value></data>
+  <data name="Common_Error_ContextMenuFailed" xml:space="preserve"><value>Context menu failed</value></data>
+  <data name="ContentView_Sort_Date" xml:space="preserve"><value>Date</value></data>
+  <data name="ContentView_Column_ShowRight" xml:space="preserve"><value>Show right columns</value></data>
+  <data name="ContentView_Status_DetailsUnavailable" xml:space="preserve"><value>Some item details could not be loaded.</value></data>
+  <data name="ContentView_RunningApp_UntitledWindow" xml:space="preserve"><value>Untitled window</value></data>
+  <data name="ContentView_Error_CannotOpenParent" xml:space="preserve"><value>Cannot open parent</value></data>
+  <data name="ContentView_Error_ShortcutUnavailable" xml:space="preserve"><value>The shortcut target is unavailable or is not a filesystem item.</value></data>
+  <data name="ContentView_Error_ShortcutWithoutParent" xml:space="preserve"><value>The shortcut target does not have a containing directory.</value></data>
+  <data name="ContentView_Error_CannotOpenItem" xml:space="preserve"><value>Cannot open item</value></data>
+  <data name="ContentView_Error_CannotRenameItem" xml:space="preserve"><value>Cannot rename item</value></data>
+  <data name="ContentView_Error_SelectForProperties" xml:space="preserve"><value>Select one or more items before using Properties.</value></data>
+  <data name="ContentView_Error_SelectForItemClipboardCopy" xml:space="preserve"><value>Select one or more items before using Item clipboard copy.</value></data>
+  <data name="ContentView_Error_SelectForNameClipboardCopy" xml:space="preserve"><value>Select one or more items before using Name clipboard copy.</value></data>
+  <data name="ContentView_Error_SelectForPathClipboardCopy" xml:space="preserve"><value>Select one or more items before using Path clipboard copy.</value></data>
+  <data name="Transfer_Error_LinkAlreadyPrepared" xml:space="preserve"><value>Abort or complete the prepared transfer before starting a Link.</value></data>
+  <data name="Transfer_Error_CopyAlreadyPrepared" xml:space="preserve"><value>Abort or complete the prepared transfer before starting a Copy.</value></data>
+  <data name="Transfer_Error_MoveAlreadyPrepared" xml:space="preserve"><value>Abort or complete the prepared transfer before starting a Move.</value></data>
+  <data name="PathviewHeaderRow_Button_Browse_Tooltip" xml:space="preserve"><value>Open this location in the browsable Pathview</value></data>
+  <data name="PathviewHeaderRow_Button_Pin_Tooltip" xml:space="preserve"><value>Keep this location open in a non-browsable Pathview</value></data>
+  <data name="Pathview_Error_CannotRenameDirectory" xml:space="preserve"><value>Cannot rename directory</value></data>
+  <data name="Pathview_Error_CannotRelocateFile" xml:space="preserve"><value>Cannot relocate file</value></data>
+  <data name="Pathview_Error_CannotRelocateDirectory" xml:space="preserve"><value>Cannot relocate directory</value></data>
+  <data name="Pathview_Error_AbsoluteDestination" xml:space="preserve"><value>Enter an absolute destination directory path.</value></data>
+  <data name="Pathview_Error_CannotRelocateDrive" xml:space="preserve"><value>A drive cannot be relocated.</value></data>
+  <data name="Pathview_Error_InvalidDestination" xml:space="preserve"><value>Enter a valid destination directory path.</value></data>
+  <data name="Pathview_Error_DestinationMissing" xml:space="preserve"><value>The destination directory does not exist.</value></data>
+  <data name="Pathview_Error_DestinationExists" xml:space="preserve"><value>An item with that name already exists in the destination directory.</value></data>
+  <data name="Pathview_Error_DestinationInsideSource" xml:space="preserve"><value>A directory cannot be relocated into itself or one of its subdirectories.</value></data>
+  <data name="Pathview_Error_RelocationIncomplete" xml:space="preserve"><value>The Shell did not report a completed relocation.</value></data>
+  <data name="Pathview_Error_CannotOpenExplorer" xml:space="preserve"><value>Cannot open Windows Explorer</value></data>
+  <data name="Pathview_Error_CannotOpenDirectory" xml:space="preserve"><value>Cannot open directory</value></data>
+  <data name="Pathview_Error_InvalidDirectoryName" xml:space="preserve"><value>Enter a valid directory name.</value></data>
+  <data name="PathviewSidebar_Label_Loading" xml:space="preserve"><value>Loading</value></data>
+  <data name="SortOrderWidget_Tooltip" xml:space="preserve"><value>Click to reverse; drag or use Alt+Left/Right to reorder</value></data>
+  <data name="SortOrderWidget_Accessibility" xml:space="preserve"><value>{0}, {1}, priority {2}</value></data>
+  <data name="SortOrderWidget_Direction_Ascending" xml:space="preserve"><value>Ascending</value></data>
+  <data name="SortOrderWidget_Direction_Descending" xml:space="preserve"><value>Descending</value></data>
+  <data name="App_Error_AlreadyRunning" xml:space="preserve"><value>KIS Explorer is already running.</value></data>
+  <data name="App_Error_CannotStart" xml:space="preserve"><value>Cannot start KIS Explorer: {0}</value></data>
+  <data name="MainWindow_Error_SaveConfiguration" xml:space="preserve"><value>Cannot save configuration: {0}</value></data>
+  <data name="MainWindow_Error_FinishUseCaseEdit" xml:space="preserve"><value>Finish editing the use case name or press Escape to cancel.</value></data>
+  <data name="MainWindow_Error_ListUseCases" xml:space="preserve"><value>Cannot list use cases: {0}</value></data>
+  <data name="MainWindow_Error_OpenUseCase" xml:space="preserve"><value>Cannot open use case '{0}': {1}</value></data>
+  <data name="MainWindow_Error_ActivateUseCase" xml:space="preserve"><value>Cannot activate use case '{0}': {1}</value></data>
+  <data name="MainWindow_Error_CreateUseCase" xml:space="preserve"><value>Cannot create use case '{0}': {1}</value></data>
+  <data name="MainWindow_Error_RenameUseCase" xml:space="preserve"><value>Cannot rename use case: {0}</value></data>
+  <data name="MainWindow_Error_DeleteUseCase" xml:space="preserve"><value>Cannot delete use case '{0}': {1}</value></data>
+  <data name="MainWindow_Error_SaveActiveUseCase" xml:space="preserve"><value>Cannot save the active use case: {0}</value></data>
+  <data name="MainWindow_Error_UpdateRenamedLocation" xml:space="preserve"><value>Cannot update renamed location</value></data>
+  <data name="MainWindow_Error_OpenLocation" xml:space="preserve"><value>Cannot open location</value></data>
+  <data name="MainWindow_Error_OpenLocationWithPath" xml:space="preserve"><value>Cannot open location: {0}</value></data>
+  <data name="MainWindow_Error_ClipboardPaste" xml:space="preserve"><value>Clipboard paste failed</value></data>
+  <data name="MainWindow_Error_ClipboardCopy" xml:space="preserve"><value>Clipboard copy failed</value></data>
+  <data name="MainWindow_Tab_Browse" xml:space="preserve"><value>BROWSE</value></data>
+  <data name="MainWindow_Tab_Close" xml:space="preserve"><value>Close tab</value></data>
+  <data name="UseCases_ConfirmDelete" xml:space="preserve"><value>Delete use case '{0}'?</value></data>
+  <data name="UseCases_ConfirmDelete_Title" xml:space="preserve"><value>Delete use case</value></data>
+  <data name="UseCases_Error_ReservedName" xml:space="preserve"><value>The use case name 'new' is reserved. Enter a different name, or cancel to discard the new use case.</value></data>
+  <data name="UseCases_Error_InvalidName" xml:space="preserve"><value>Enter a valid use case name other than 'new'.</value></data>
+  <data name="UseCases_Error_InvalidName_Title" xml:space="preserve"><value>Invalid use case name</value></data>
+  <data name="NewItem_Type_Directory" xml:space="preserve"><value>Directory</value></data>
+  <data name="NewItem_Type_TextFile" xml:space="preserve"><value>Textfile</value></data>
+  <data name="NewItem_Type_GenericFile" xml:space="preserve"><value>{0} file</value></data>
+  <data name="NewItem_Error_DestinationUnavailable" xml:space="preserve"><value>The destination directory is unavailable.</value></data>
+  <data name="NewItem_Error_InvalidName" xml:space="preserve"><value>Enter a valid file or directory name.</value></data>
+  <data name="NewItem_Error_ReservedName" xml:space="preserve"><value>This name is reserved by Windows.</value></data>
+  <data name="Shell_Error_DragFailed" xml:space="preserve"><value>Drag failed</value></data>
+  <data name="Shell_Error_DropFailed" xml:space="preserve"><value>Drop failed</value></data>
+  <data name="Shell_Error_ContextMenuFailed" xml:space="preserve"><value>Shell context menu failed</value></data>
+  <data name="Configuration_Error_Empty" xml:space="preserve"><value>The configuration is empty.</value></data>
+  <data name="Configuration_Error_Invalid" xml:space="preserve"><value>The configuration has an invalid type, version, or Interface.</value></data>
+  <data name="UseCaseStore_Error_InvalidFilename" xml:space="preserve"><value>The use case name cannot be used in a filename.</value></data>
+  <data name="UseCaseStore_Error_Empty" xml:space="preserve"><value>The use case is empty.</value></data>
+  <data name="UseCaseStore_Error_Invalid" xml:space="preserve"><value>The use case has an invalid type, name, or Pathviews list.</value></data>
+  <data name="UseCaseStore_Error_InvalidPathview" xml:space="preserve"><value>The use case contains an invalid or duplicate Pathview.</value></data>
+  <data name="UseCaseStore_Error_ReservedName" xml:space="preserve"><value>The name 'new' is reserved.</value></data>
+  <data name="UseCaseStore_Error_RenameDefault" xml:space="preserve"><value>The default use case cannot be renamed.</value></data>
+  <data name="UseCaseStore_Error_NameMismatch" xml:space="preserve"><value>The use case name does not match its filename.</value></data>
+  <data name="UseCaseStore_Error_DeleteDefault" xml:space="preserve"><value>The default use case cannot be deleted.</value></data>
+  <data name="Transfer_Error_LinkNotPrepared" xml:space="preserve"><value>There is no prepared link to execute.</value></data>
+  <data name="Transfer_Error_LinkPrepared" xml:space="preserve"><value>A link is already prepared.</value></data>
+  <data name="Transfer_Error_LinkNoSelection" xml:space="preserve"><value>Select one or more items before using Link mark item.</value></data>
+  <data name="Transfer_Error_CopyNotPrepared" xml:space="preserve"><value>There is no prepared copy to execute.</value></data>
+  <data name="Transfer_Error_CopyPrepared" xml:space="preserve"><value>A copy is already prepared.</value></data>
+  <data name="Transfer_Error_CopyNoSelection" xml:space="preserve"><value>Select one or more items before using Copy mark item.</value></data>
+  <data name="Transfer_Error_MoveNotPrepared" xml:space="preserve"><value>There is no prepared move to execute.</value></data>
+  <data name="Transfer_Error_MovePrepared" xml:space="preserve"><value>A move is already prepared.</value></data>
+  <data name="Transfer_Error_MoveNoSelection" xml:space="preserve"><value>Select one or more items before using Move mark item.</value></data>
+  <data name="Shell_Error_ItemAlreadyExists" xml:space="preserve"><value>An item with that name already exists.</value></data>
+  <data name="Clipboard_Error_AbortUnsupported" xml:space="preserve"><value>Only clipboard move or link operations can be aborted.</value></data>
+  <data name="Clipboard_Error_OperationUnavailable" xml:space="preserve"><value>The clipboard operation is no longer available.</value></data>
+  <data name="Clipboard_Error_LinkClearFailed" xml:space="preserve"><value>The shortcuts were created, but the clipboard could not be cleared.</value></data>
+  <data name="Clipboard_Error_MoveNotificationFailed" xml:space="preserve"><value>The items were moved, but the clipboard source did not accept the completion notification.</value></data>
+  <data name="Pathview_Error_DirectoryUnavailable" xml:space="preserve"><value>The directory does not exist or is not accessible: {0}</value></data>
+  <data name="NewItem_Error_TemplateUnavailable" xml:space="preserve"><value>The template is unavailable.</value></data>
+  <data name="ShellTransfer_Error_LinkNoSelection" xml:space="preserve"><value>Select one or more items to link.</value></data>
+  <data name="ShellTransfer_Error_CopyNoSelection" xml:space="preserve"><value>Select one or more items to copy.</value></data>
+  <data name="ShellTransfer_Error_MoveNoSelection" xml:space="preserve"><value>Select one or more items to move.</value></data>
+  <data name="ShellTransfer_Error_DeleteNoSelection" xml:space="preserve"><value>Select one or more items to delete.</value></data>
+  <data name="ShellTransfer_Error_DeleteLocation" xml:space="preserve"><value>Cannot delete this location: {0}</value></data>
+  <data name="ShellTransfer_Error_DeleteSourceUnavailable" xml:space="preserve"><value>Cannot delete because this source no longer exists or cannot be accessed: {0}</value></data>
+  <data name="ShellTransfer_Error_MoveIncomplete" xml:space="preserve"><value>The Shell move operation did not complete for every item.</value></data>
+  <data name="ShellTransfer_Error_DestinationNotDirectory" xml:space="preserve"><value>The destination is not a directory: {0}</value></data>
+  <data name="ShellTransfer_Error_DestinationUnavailable" xml:space="preserve"><value>The destination directory no longer exists or cannot be accessed: {0}</value></data>
+  <data name="ShellTransfer_Error_CopySourceUnavailable" xml:space="preserve"><value>Cannot copy because this source no longer exists or cannot be accessed: {0}</value></data>
+  <data name="ShellTransfer_Error_MoveSourceUnavailable" xml:space="preserve"><value>Cannot move because this source no longer exists or cannot be accessed: {0}</value></data>
+  <data name="ShellTransfer_Error_LinkSourceUnavailable" xml:space="preserve"><value>Cannot link because this source no longer exists or cannot be accessed: {0}</value></data>
+</root>

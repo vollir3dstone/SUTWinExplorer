@@ -68,8 +68,8 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            MessageBox.Show(this, $"Cannot start KIS Explorer: {exception.Message}",
-                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, string.Format(LocalizedText.Get("App_Error_CannotStart"), exception.Message),
+                LocalizedText.Get("MainWindow_Title"), MessageBoxButton.OK, MessageBoxImage.Error);
             Application.Current.Shutdown(1);
         }
     }
@@ -97,8 +97,8 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            MessageBox.Show(this, $"Cannot save configuration: {exception.Message}",
-                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, string.Format(LocalizedText.Get("MainWindow_Error_SaveConfiguration"), exception.Message),
+                LocalizedText.Get("MainWindow_Title"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -116,8 +116,8 @@ public partial class MainWindow : Window
         {
             if (UseCasesPane.IsEditing)
             {
-                MessageBox.Show(this, "Finish editing the use case name or press Escape to cancel.",
-                    "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(this, LocalizedText.Get("MainWindow_Error_FinishUseCaseEdit"),
+                    LocalizedText.Get("MainWindow_Title"), MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
             ShowTabsView();
@@ -132,8 +132,8 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            MessageBox.Show(this, $"Cannot list use cases: {exception.Message}",
-                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, string.Format(LocalizedText.Get("MainWindow_Error_ListUseCases"), exception.Message),
+                LocalizedText.Get("MainWindow_Title"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -155,8 +155,8 @@ public partial class MainWindow : Window
         catch (Exception exception)
         {
             UseCasesPane.DisplayUseCase(null);
-            MessageBox.Show(this, $"Cannot open use case '{useCaseName}': {exception.Message}",
-                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, string.Format(LocalizedText.Get("MainWindow_Error_OpenUseCase"), useCaseName, exception.Message),
+                LocalizedText.Get("MainWindow_Title"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -176,8 +176,8 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            MessageBox.Show(this, $"Cannot activate use case '{useCaseName}': {exception.Message}",
-                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, string.Format(LocalizedText.Get("MainWindow_Error_ActivateUseCase"), useCaseName, exception.Message),
+                LocalizedText.Get("MainWindow_Title"), MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
 
@@ -220,8 +220,8 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            MessageBox.Show(this, $"Cannot create use case '{useCase.UseCaseName}': {exception.Message}",
-                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, string.Format(LocalizedText.Get("MainWindow_Error_CreateUseCase"), useCase.UseCaseName, exception.Message),
+                LocalizedText.Get("MainWindow_Title"), MessageBoxButton.OK, MessageBoxImage.Error);
             return false;
         }
     }
@@ -246,8 +246,8 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            MessageBox.Show(this, $"Cannot rename use case: {exception.Message}",
-                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, string.Format(LocalizedText.Get("MainWindow_Error_RenameUseCase"), exception.Message),
+                LocalizedText.Get("MainWindow_Title"), MessageBoxButton.OK, MessageBoxImage.Error);
             return false;
         }
     }
@@ -266,8 +266,8 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            MessageBox.Show(this, $"Cannot delete use case '{useCaseName}': {exception.Message}",
-                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, string.Format(LocalizedText.Get("MainWindow_Error_DeleteUseCase"), useCaseName, exception.Message),
+                LocalizedText.Get("MainWindow_Title"), MessageBoxButton.OK, MessageBoxImage.Error);
             return false;
         }
     }
@@ -280,8 +280,8 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            MessageBox.Show(this, $"Cannot list use cases: {exception.Message}",
-                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, string.Format(LocalizedText.Get("MainWindow_Error_ListUseCases"), exception.Message),
+                LocalizedText.Get("MainWindow_Title"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -348,7 +348,7 @@ public partial class MainWindow : Window
         };
         updateTabTitle = () =>
         {
-            var label = view.IsBrowsable ? "BROWSE" :
+            var label = view.IsBrowsable ? LocalizedText.Get("MainWindow_Tab_Browse") :
                 string.IsNullOrEmpty(view.CustomName)
                     ? GetTabLabelFromPath(string.IsNullOrWhiteSpace(view.CurrentPath) ? path : view.CurrentPath)
                     : view.CustomName;
@@ -369,7 +369,7 @@ public partial class MainWindow : Window
             Padding = new Thickness(0),
             Margin = new Thickness(2, 0, 0, 0),
             RenderTransform = new System.Windows.Media.TranslateTransform(2, -1),
-            ToolTip = "Close tab",
+            ToolTip = LocalizedText.Get("MainWindow_Tab_Close"),
             Tag = view,
             Visibility = view.IsBrowsable ? Visibility.Collapsed : Visibility.Visible
         };
@@ -455,7 +455,7 @@ public partial class MainWindow : Window
         if (navigationFailed)
         {
             title.Foreground = Brushes.Firebrick;
-            tooltipText.Text = $"Cannot open location: {path}";
+            tooltipText.Text = string.Format(LocalizedText.Get("MainWindow_Error_OpenLocationWithPath"), path);
         }
         if (!view.IsBrowsable && hasCurrentPath)
             UpdateUseCasePathview(view, view.CurrentPath);
@@ -525,8 +525,8 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            MessageBox.Show(this, $"Cannot save the active use case: {exception.Message}",
-                "KIS Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, string.Format(LocalizedText.Get("MainWindow_Error_SaveActiveUseCase"), exception.Message),
+                LocalizedText.Get("MainWindow_Title"), MessageBoxButton.OK, MessageBoxImage.Error);
             return false;
         }
     }
@@ -567,7 +567,7 @@ public partial class MainWindow : Window
             }
             catch (Exception exception)
             {
-                MessageBox.Show(this, exception.Message, "Cannot update renamed location", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(this, exception.Message, LocalizedText.Get("MainWindow_Error_UpdateRenamedLocation"), MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
     }
@@ -648,7 +648,7 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            MessageBox.Show(this, exception.Message, "Cannot open location", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, exception.Message, LocalizedText.Get("MainWindow_Error_OpenLocation"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -911,7 +911,7 @@ public partial class MainWindow : Window
         try { text = Clipboard.ContainsText() ? Clipboard.GetText() : string.Empty; }
         catch (Exception exception)
         {
-            MessageBox.Show(this, exception.Message, "Clipboard paste failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, exception.Message, LocalizedText.Get("MainWindow_Error_ClipboardPaste"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -930,7 +930,7 @@ public partial class MainWindow : Window
         try { Clipboard.SetText(AddressBox.Text); }
         catch (Exception exception)
         {
-            MessageBox.Show(this, exception.Message, "Clipboard copy failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, exception.Message, LocalizedText.Get("MainWindow_Error_ClipboardCopy"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -953,7 +953,7 @@ public partial class MainWindow : Window
         catch (Exception exception)
         {
             RefreshPathChoices();
-            MessageBox.Show(this, exception.Message, "Cannot open location", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, exception.Message, LocalizedText.Get("MainWindow_Error_OpenLocation"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 

@@ -57,7 +57,7 @@ $noop = [Action] { }
 for ($index = 0; $index -lt $ids.Count; $index++) {
     $sourceActions.SetValue([Activator]::CreateInstance($actionType, [object[]] @([string] $ids[$index], 'old', $true, $noop, $false, $false)), $index)
 }
-$relocate = [Activator]::CreateInstance($actionType, [object[]] @('Relocate', 'Relocate', $true, $noop, $false, $false))
+$relocate = [Activator]::CreateInstance($actionType, [object[]] @('Relocate', 'old', $true, $noop, $false, $false))
 $states = @('Link', 'Copy', 'Move') | ForEach-Object { $assembly.GetType("SUTWinExplorer.${_}WorkflowState", $true).GetProperty('Shared').GetValue($null) }
 try {
     foreach ($state in $states) { $state.Prepare([string[]] @('C:\test')) }

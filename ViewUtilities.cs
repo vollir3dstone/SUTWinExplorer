@@ -47,7 +47,7 @@ internal static class ViewUtilities
         }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(element), exception.Message, "Shell context menu failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(Window.GetWindow(element), exception.Message, LocalizedText.Get("Shell_Error_ContextMenuFailed"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -60,7 +60,7 @@ internal static class ViewUtilities
         }
         catch (Exception exception)
         {
-            MessageBox.Show(Window.GetWindow(element), exception.Message, "Shell context menu failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(Window.GetWindow(element), exception.Message, LocalizedText.Get("Shell_Error_ContextMenuFailed"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 }

@@ -113,7 +113,7 @@ public partial class UseCasesView : UserControl
     {
         if (UseCaseList.SelectedItem is not UseCaseListEntry { IsDraft: false } entry || IsDefault(entry.Name))
             return;
-        if (MessageBox.Show(Window.GetWindow(this), $"Delete use case '{entry.Name}'?", "Delete use case",
+        if (MessageBox.Show(Window.GetWindow(this), string.Format(LocalizedText.Get("UseCases_ConfirmDelete"), entry.Name), LocalizedText.Get("UseCases_ConfirmDelete_Title"),
                 MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
         if (UseCaseDeleteRequested?.Invoke(entry.Name) == true)
@@ -169,8 +169,8 @@ public partial class UseCasesView : UserControl
         if (_isNewUseCase && string.Equals(name, "new", StringComparison.OrdinalIgnoreCase))
         {
             var result = MessageBox.Show(Window.GetWindow(this),
-                "The use case name 'new' is reserved. Enter a different name, or cancel to discard the new use case.",
-                "Invalid use case name", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+                LocalizedText.Get("UseCases_Error_ReservedName"),
+                LocalizedText.Get("UseCases_Error_InvalidName_Title"), MessageBoxButton.OKCancel, MessageBoxImage.Warning);
             if (result == MessageBoxResult.Cancel)
                 CancelPendingEdit();
             else
@@ -180,8 +180,8 @@ public partial class UseCasesView : UserControl
         if (string.IsNullOrWhiteSpace(name) || name.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0 ||
             string.Equals(name, "new", StringComparison.OrdinalIgnoreCase))
         {
-            MessageBox.Show(Window.GetWindow(this), "Enter a valid use case name other than 'new'.",
-                "Invalid use case name", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(Window.GetWindow(this), LocalizedText.Get("UseCases_Error_InvalidName"),
+                LocalizedText.Get("UseCases_Error_InvalidName_Title"), MessageBoxButton.OK, MessageBoxImage.Warning);
             UseCaseNameEditor.Focus();
             return;
         }

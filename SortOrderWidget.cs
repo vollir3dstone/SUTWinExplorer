@@ -118,13 +118,14 @@ public sealed class SortOrderWidget : Border
                 BorderThickness = new Thickness(1, 0, 0, 0),
                 Padding = new Thickness(4, 0, 4, 0),
                 Margin = new Thickness(0, 0, 1, 0),
-                ToolTip = "Click to reverse; drag or use Alt+Left/Right to reorder"
+                ToolTip = LocalizedText.Get("SortOrderWidget_Tooltip")
             };
             if (TryFindResource("ContentPaneButtonStyle") is Style style) button.Style = style;
             InputChrome.SetCornerRadius(button, new CornerRadius(0));
             button.SetBinding(Control.BackgroundProperty, new Binding(nameof(Background)) { Source = this });
             button.SetBinding(Control.ForegroundProperty, new Binding(nameof(Foreground)) { Source = this });
-            System.Windows.Automation.AutomationProperties.SetName(button, $"{name}, {item.Direction}, priority {_boxes.Children.Count + 1}");
+            var direction = LocalizedText.Get(item.Direction == SortOrderDirection.Ascending ? "SortOrderWidget_Direction_Ascending" : "SortOrderWidget_Direction_Descending");
+            System.Windows.Automation.AutomationProperties.SetName(button, string.Format(LocalizedText.Get("SortOrderWidget_Accessibility"), name, direction, _boxes.Children.Count + 1));
             button.Click += OnItemClick;
             button.PreviewMouseLeftButtonDown += OnItemMouseDown;
             button.PreviewMouseLeftButtonUp += OnItemMouseUp;
