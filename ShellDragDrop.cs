@@ -9,13 +9,14 @@ internal static class ShellDragDrop
 {
     private static readonly short DropDescriptionFormat = unchecked((short)RegisterClipboardFormat("DropDescription"));
 
-    internal static void SetDropDescription(IDataObject data, DragDropEffects effect)
+    internal static void SetDropDescription(IDataObject data, DragDropEffects effect, bool rejectedMove)
     {
         var (imageType, message) = effect switch
         {
             DragDropEffects.Copy => (1, "Copy"),
             DragDropEffects.Move => (2, "Move"),
             DragDropEffects.Link => (3, "Create shortcut"),
+            DragDropEffects.None when rejectedMove => (0, "Cannot move here"),
             _ => (0, "Cannot drop here")
         };
         var description = new DropDescription { Type = imageType, Message = message, Insert = string.Empty };

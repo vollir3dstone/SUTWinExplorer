@@ -707,8 +707,10 @@ obtains a Shell data object and delegates incoming drags to the native folder
 drop target. Directory rows select their own destination; backgrounds select the
 current directory. Both accept only a Shell-selected Copy effect. File rows
 reject all drops. Move and Link are rejected, not converted.
-Non-filesystem and right-button drags
-are rejected, and tree views do not participate. Ordinary right-click menu
+Non-filesystem and right-button drags are rejected. The **Active path and
+siblings** tree uses the same drop handler for filesystem directory items and
+its background; virtual tree items are rejected. The small **Active path**
+tree does not participate. Ordinary right-click menu
 handlers remain independent of drag-and-drop. Integration tests in
 [ShellDragDrop.Tests.ps1](tests/ShellDragDrop.Tests.ps1) exercise real gestures,
 modifier effects, cross-process data and right-click behavior.

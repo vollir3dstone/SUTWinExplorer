@@ -341,6 +341,7 @@ try {
                 if ($traceWriter.ToString() -match 'Drag image (update|drop|cleanup) failed') { throw "External $name drag-image manager failed: $traceWriter" }
                 if ($feedback -ne $expected) { throw "External $name feedback=$feedback, expected=$expected, drop=$effect." }
                 $expectedDescription = @{ None = '0:Cannot drop here'; Copy = '1:Copy'; Move = '2:Move'; Link = '3:Create shortcut' }[$expected]
+                if ($name -in @('folder-default', 'folder-move', 'reject-default', 'reject-move')) { $expectedDescription = '0:Cannot move here' }
                 if ($description -ne $expectedDescription) { throw "External $name description=$description, expected=$expectedDescription." }
                 $targetFile = Join-Path $folderTarget ([IO.Path]::GetFileName($feedbackFile))
                 if ($name -eq 'copy') { Wait-Until { [IO.File]::Exists($targetFile) -and [IO.File]::Exists($feedbackFile) } 'external feedback copy' }
@@ -401,7 +402,7 @@ try {
         $null = $grid.Children.Add($pathview)
         $sidebar = $pathview.FindName('ActivePathSubdirectoriesList')
         Wait-Until { $sidebar.IsVisible -and @($sidebar.Items | Where-Object { $_.Path -eq $sidebarSource }).Count -eq 1 } 'sidebar drag test view'
-        if (-not $sidebar.AllowDrop -or $pathview.FindName('ActivePathTree').AllowDrop -or $pathview.FindName('ActivePathAndSiblingsTree').AllowDrop) { throw 'Drag-and-drop was enabled on the wrong sidebar controls.' }
+        if (-not $sidebar.AllowDrop -or $pathview.FindName('ActivePathTree').AllowDrop -or -not $pathview.FindName('ActivePathAndSiblingsTree').AllowDrop) { throw 'Drag-and-drop was enabled on the wrong sidebar controls.' }
         if ($Suite -in @('All', 'Interactions')) {
         foreach ($targetName in @('LocationLabel', 'LocationBaseIcon')) {
             $backgroundFile = [string] (Join-Path $source ("pathview-$targetName.txt"))
@@ -435,6 +436,7 @@ try {
                 if ($traceWriter.ToString() -match 'Drag image (update|drop|cleanup) failed') { throw "External Pathview $name drag-image manager failed: $traceWriter" }
                 if ($feedback -ne $expected) { throw "External Pathview $name feedback=$feedback, expected=$expected." }
                 $expectedDescription = @{ None = '0:Cannot drop here'; Copy = '1:Copy'; Move = '2:Move'; Link = '3:Create shortcut' }[$expected]
+                if ($name -in @('default', 'move')) { $expectedDescription = '0:Cannot move here' }
                 if ($description -ne $expectedDescription) { throw "External Pathview $name description=$description, expected=$expectedDescription." }
                 $targetFile = Join-Path $destination ([IO.Path]::GetFileName($feedbackFile))
                 if ($name -eq 'copy') { Wait-Until { [IO.File]::Exists($targetFile) -and [IO.File]::Exists($feedbackFile) } 'external Pathview copy' }
@@ -575,6 +577,61 @@ try {
         try { Wait-Until { $probe.Done -and $navigation.Paths.Count -eq 1 } 'sidebar click navigation' }
         finally { $probe.Dispose() }
         if ($navigation.Paths[0] -ne $sidebarSource) { throw 'Sidebar click navigated to the wrong folder.' }
+        $tree = $pathview.FindName('ActivePathAndSiblingsTree')
+        $pathview.FindName('SidebarTabs').SelectedItem = $pathview.FindName('ActivePathAndSiblingsTab')
+        $treeEntryType = $assembly.GetType('SUTWinExplorer.TreeEntry', $true)
+        $treeRoot = [Activator]::CreateInstance($treeEntryType, [object[]] @('destination', [string] $destination))
+        $treeChild = [Activator]::CreateInstance($treeEntryType, [object[]] @('target-folder', [string] $folderTarget))
+        $treeRoot.IsLoaded = $true; $treeChild.IsLoaded = $true
+        $treeRoot.Children.Add($treeChild)
+        $treeRoot.HasSubdirectories = $true; $treeRoot.IsExpanded = $true
+        $treeTop = $treeEntryType.GetMethod('Top').Invoke($null, @())
+        $tree.ItemsSource = @($treeRoot, $treeTop)
+        $rootContainer = $null; $childContainer = $null; $topContainer = $null
+        Wait-Until {
+            $script:rootContainer = $tree.ItemContainerGenerator.ContainerFromItem($treeRoot)
+            $script:topContainer = $tree.ItemContainerGenerator.ContainerFromItem($treeTop)
+            $script:childContainer = if ($null -ne $script:rootContainer) { $script:rootContainer.ItemContainerGenerator.ContainerFromItem($treeChild) } else { $null }
+            $tree.IsVisible -and $null -ne $script:childContainer -and $null -ne $script:topContainer
+        } 'large tree rows'
+        $rootContainer = $script:rootContainer; $childContainer = $script:childContainer; $topContainer = $script:topContainer
+        $treePoint = $childContainer.PointToScreen([System.Windows.Point]::new(60, 10))
+        $treeFile = [string] (Join-Path $source 'tree-row.txt')
+        [IO.File]::WriteAllText($treeFile, 'tree row')
+        Invoke-MouseDrag @($treeFile) $treePoint 0x11 $false
+        Wait-Until { [IO.File]::Exists((Join-Path $folderTarget 'tree-row.txt')) } 'copy onto nested tree folder'
+        if (-not [IO.File]::Exists($treeFile) -or [IO.File]::Exists((Join-Path $destination 'tree-row.txt'))) { throw 'Tree folder copy used the wrong destination or removed its source.' }
+        Assert-BackgroundRejectsMoveAndLink 'tree-row' $treePoint $folderTarget
+        $treeBackground = $tree.PointToScreen([System.Windows.Point]::new(60, $tree.ActualHeight - 20))
+        $treeBackgroundFile = [string] (Join-Path $source 'tree-background.txt')
+        [IO.File]::WriteAllText($treeBackgroundFile, 'tree background')
+        Invoke-MouseDrag @($treeBackgroundFile) $treeBackground 0x11 $false
+        Wait-Until { [IO.File]::Exists((Join-Path $destination 'tree-background.txt')) } 'copy onto tree background'
+        if (-not [IO.File]::Exists($treeBackgroundFile)) { throw 'Tree background copy removed its source.' }
+        Assert-BackgroundRejectsMoveAndLink 'tree-background' $treeBackground
+        foreach ($case in @(@('copy', 0x11, 'Copy', '1:Copy', $treePoint), @('move', 0x10, 'None', '0:Cannot move here', $treePoint), @('link', 0xFF, 'None', '0:Cannot drop here', $treePoint), @('background-move', 0, 'None', '0:Cannot move here', $treeBackground))) {
+            $name, $modifier, $expected, $expectedDescription, $end = $case
+            $feedbackFile = [string] (Join-Path $source "tree-feedback-$name.txt")
+            [IO.File]::WriteAllText($feedbackFile, $name)
+            $result = Join-Path $root "tree-feedback-$name-result.txt"
+            $external = Start-ExternalProbe 'source-all' $feedbackFile $result
+            $process = $external[0]; $position = $external[1]
+            try {
+                $probe = [DragMouseProbe]::new($position[0], $position[1], [int] $end.X, [int] $end.Y, $modifier, $false)
+                try { Wait-Until { $probe.Done -and [IO.File]::Exists($result) } "tree feedback $name" }
+                finally { $probe.Dispose() }
+                $feedback = [IO.File]::ReadAllText($result + '.feedback')
+                $description = [IO.File]::ReadAllText($result + '.feedback.description')
+                if ($feedback -ne $expected -or $description -ne $expectedDescription) { throw "Tree $name feedback=$feedback, description=$description." }
+                if ($name -eq 'copy') { Wait-Until { [IO.File]::Exists((Join-Path $folderTarget 'tree-feedback-copy.txt')) } 'external tree copy' }
+                elseif ([IO.File]::ReadAllText($result) -ne 'None' -or -not [IO.File]::Exists($feedbackFile) -or [IO.File]::Exists((Join-Path $folderTarget ([IO.Path]::GetFileName($feedbackFile)))) -or [IO.File]::Exists((Join-Path $destination ([IO.Path]::GetFileName($feedbackFile))))) { throw "Tree $name was not rejected." }
+            } finally { Stop-ExternalProbe $process }
+        }
+        $topFile = [string] (Join-Path $source 'tree-top.txt')
+        [IO.File]::WriteAllText($topFile, 'tree top')
+        Invoke-MouseDrag @($topFile) ($topContainer.PointToScreen([System.Windows.Point]::new(60, 10))) 0x11 $false
+        if (-not [IO.File]::Exists($topFile) -or [IO.File]::Exists((Join-Path $destination 'tree-top.txt'))) { throw 'The virtual tree item accepted a drop.' }
+        if ($navigation.Paths.Count -ne 1) { throw 'Dropping on the large tree triggered navigation.' }
         }
     } finally {
         $window.Close()

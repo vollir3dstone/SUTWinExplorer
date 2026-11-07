@@ -575,8 +575,10 @@ selection and scrolling behavior, such as selecting and revealing new items.
   drag-and-drop between each other and compatible external applications. The
   table drags its selection; the list drags only the clicked folder. Directory
   items target that directory; backgrounds target the current directory. File
-  rows, right-button drags and non-filesystem data are rejected. Tree views do
-  not participate.
+  rows, right-button drags and non-filesystem data are rejected. The **Active
+  path and siblings** tree also accepts drops on filesystem directory items and
+  its background under the same rules; virtual items are rejected. The small
+  **Active path** tree does not participate.
   Eligible Pathview background surfaces also accept drops into the current
   directory, with the same exclusions as the background context menu.
   Clipboard and prepared transfers are independent.

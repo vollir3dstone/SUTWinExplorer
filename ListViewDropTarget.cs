@@ -11,7 +11,7 @@ namespace SUTWinExplorer;
 internal sealed class ListViewDropTarget
 {
     private readonly FrameworkElement _surface;
-    private readonly ListView? _list;
+    private readonly ItemsControl? _items;
     private readonly Func<object?, string?>? _itemPath;
     private readonly Func<Point, bool>? _backgroundHitTest;
     private readonly Func<string> _currentPath;
@@ -24,7 +24,17 @@ internal sealed class ListViewDropTarget
     internal ListViewDropTarget(ListView list, Func<object?, string?> itemPath, Func<string> currentPath, Func<bool> enabled)
     {
         _surface = list;
-        _list = list;
+        _items = list;
+        _itemPath = itemPath;
+        _currentPath = currentPath;
+        _enabled = enabled;
+        Attach();
+    }
+
+    internal ListViewDropTarget(TreeView tree, Func<object?, string?> itemPath, Func<string> currentPath, Func<bool> enabled)
+    {
+        _surface = tree;
+        _items = tree;
         _itemPath = itemPath;
         _currentPath = currentPath;
         _enabled = enabled;
@@ -60,6 +70,7 @@ internal sealed class ListViewDropTarget
             return;
         }
         e.Handled = true;
+        var rejectedMove = false;
         try
         {
             if (!_enabled() || e.KeyStates.HasFlag(DragDropKeyStates.RightMouseButton) ||
@@ -71,14 +82,14 @@ internal sealed class ListViewDropTarget
                 e.Effects = DragDropEffects.None;
                 return;
             }
-            var source = _list?.InputHitTest(position) as DependencyObject;
-            if (_list is not null && IsListChrome(source))
+            var source = _items?.InputHitTest(position) as DependencyObject;
+            if (_items is not null && IsListChrome(source))
             {
                 ClearTarget();
                 e.Effects = DragDropEffects.None;
                 return;
             }
-            var row = FindAncestor<ListViewItem>(source);
+            var row = _items is TreeView ? (FrameworkElement?)FindAncestor<TreeViewItem>(source) : FindAncestor<ListViewItem>(source);
             var itemPath = _itemPath?.Invoke(row?.DataContext);
             var directoryTarget = itemPath is not null && Directory.Exists(itemPath);
             if (row is not null && !directoryTarget)
@@ -105,6 +116,7 @@ internal sealed class ListViewDropTarget
                 effect = _target.Enter(data, (uint)e.KeyStates, (int)point.X, (int)point.Y, allowed);
             }
             else effect = _target.Over((uint)e.KeyStates, (int)point.X, (int)point.Y, allowed);
+            rejectedMove = effect == (uint)DragDropEffects.Move;
             e.Effects = effect == (uint)DragDropEffects.Copy ? DragDropEffects.Copy : DragDropEffects.None;
         }
         catch (Exception exception)
@@ -113,7 +125,7 @@ internal sealed class ListViewDropTarget
             ClearTarget();
             e.Effects = DragDropEffects.None;
         }
-        finally { UpdateDragImage(e, position); }
+        finally { UpdateDragImage(e, position, rejectedMove); }
     }
 
     private void DragLeave(object sender, DragEventArgs e)
@@ -140,12 +152,12 @@ internal sealed class ListViewDropTarget
                 e.Effects = DragDropEffects.None;
                 return;
             }
-            var source = _list?.InputHitTest(position) as DependencyObject;
-            var row = FindAncestor<ListViewItem>(source);
+            var source = _items?.InputHitTest(position) as DependencyObject;
+            var row = _items is TreeView ? (FrameworkElement?)FindAncestor<TreeViewItem>(source) : FindAncestor<ListViewItem>(source);
             var itemPath = _itemPath?.Invoke(row?.DataContext);
             var directoryTarget = itemPath is not null && Directory.Exists(itemPath);
             var destination = directoryTarget ? itemPath! : _currentPath();
-            if ((row is not null && !directoryTarget) || (_list is not null && IsListChrome(source)) ||
+            if ((row is not null && !directoryTarget) || (_items is not null && IsListChrome(source)) ||
                 !string.Equals(_targetPath, destination, StringComparison.OrdinalIgnoreCase))
             {
                 e.Effects = DragDropEffects.None;
@@ -182,13 +194,13 @@ internal sealed class ListViewDropTarget
         }
     }
 
-    private void UpdateDragImage(DragEventArgs e, Point position)
+    private void UpdateDragImage(DragEventArgs e, Point position, bool rejectedMove)
     {
         if (_dragImageUnavailable || e.Data is not System.Runtime.InteropServices.ComTypes.IDataObject data)
             return;
         try
         {
-            ShellDragDrop.SetDropDescription(data, e.Effects);
+            ShellDragDrop.SetDropDescription(data, e.Effects, rejectedMove);
             var screen = _surface.PointToScreen(position);
             var point = new DropPoint((int)screen.X, (int)screen.Y);
             if (_dragImage is null)

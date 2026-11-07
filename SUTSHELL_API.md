@@ -293,7 +293,9 @@ supports multiple selection, its own inline rename editor, Shell-backed Delete,
 clipboard Copy and copy-only Paste, and left-button filesystem drag-and-drop.
 The Sub directories list also supports drag-and-drop, using the clicked folder
 as its source rather than a persistent selection. Its menu or keyboard selection
-is temporary; tree views do not support drag-and-drop. Eligible Pathview
+is temporary. The **Active path and siblings** tree accepts drops on filesystem
+directory items and its background, but not on virtual items. The small **Active
+path** tree does not support drag-and-drop. Eligible Pathview
 background surfaces accept drops into the current directory, using the same
 exclusions as the background context menu. Pathview and list backgrounds and
 directory rows accept only Copy; file rows reject all drops.

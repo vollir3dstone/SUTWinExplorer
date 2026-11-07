@@ -236,7 +236,10 @@ directories** list supports the same operations, dragging only the clicked folde
 independently of table selection. It has no persistent, user-managed selection or
 multiple selection like the table; any selection used for its menu or keyboard
 interaction is temporary. Its folder rows target the corresponding folder and
-its background targets the current directory. Tree views do not participate.
+its background targets the current directory. The **Active path and siblings**
+tree accepts drops on filesystem directory items and its background under the
+same rules; its virtual items are not drop targets. The small **Active path**
+tree does not participate.
 Dropping on a directory row targets that directory; empty table space targets the
 current directory. File rows reject all drops. Non-filesystem data and
 right-button drags into the table are rejected.
@@ -245,7 +248,7 @@ directory, using the same exclusions as the background context menu. Tree views,
 interactive controls and list frames are not treated as Pathview background.
 
 The Windows Shell chooses Copy, Move or Link with the usual modifier keys.
-Directory rows and Pathview, table and list backgrounds accept Copy only,
+Directory items and Pathview, table, list and large-tree backgrounds accept Copy only,
 rejecting Move and Link rather than converting them. A default drag that the
 Shell chooses to move is therefore also rejected.
 Drag-and-drop does not use or change the Windows clipboard or the

@@ -454,7 +454,7 @@
                     </StackPanel>
                     <Border x:Name="ActivePathAndSiblingsTreeFrame" Grid.Row="2" BorderBrush="{StaticResource ViewFrameBrush}"
                             BorderThickness="{StaticResource ViewFrameThickness}" Margin="4,0,4,0">
-                        <TreeView x:Name="ActivePathAndSiblingsTree" AllowDrop="False"
+                        <TreeView x:Name="ActivePathAndSiblingsTree"
                                   BorderThickness="0" Padding="0"
                                   ItemContainerStyle="{StaticResource DirectoryTreeItemStyle}"
                                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"

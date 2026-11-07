@@ -104,6 +104,9 @@ public partial class Pathview : UserControl
         _ = new ListViewDropTarget(ActivePathSubdirectoriesList,
             item => item is TreeEntry { IsPlaceholder: false } entry ? entry.Path : null,
             () => CurrentPath, () => _editingTreeEntry is null);
+        _ = new ListViewDropTarget(ActivePathAndSiblingsTree,
+            item => item is TreeEntry { IsPlaceholder: false, IsTop: false } entry ? entry.Path : null,
+            () => CurrentPath, () => _editingTreeEntry is null);
         _subdirectoryDragSource = new ListViewDragSource<TreeEntry>(ActivePathSubdirectoriesList, entry => [entry.Path],
             () => _editingTreeEntry is null, () => { _subdirectoryContextMenu.Reset(); _subdirectoryMenuTarget = null; });
         ActivePathAndSiblingsTree.SelectedItemChanged += (_, args) =>
