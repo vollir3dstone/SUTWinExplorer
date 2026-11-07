@@ -332,6 +332,38 @@ try {
         $emptyContent = $menuType.GetMethod('GetContentMenuForContext', $factoryFlags).Invoke($null, [object[]] @([string[]] @($clipboardDestination), $ownerHandle, $snapshot, $true, $null, $null))
         try { Assert-True ('paste' -notin @(Get-ShellMenuVerbs $emptyContent)) 'Native background paste appeared without supported clipboard data.' }
         finally { ([IDisposable] $emptyContent).Dispose() }
+        foreach ($abortCase in @(@('move', 2, 'Move cut item here'), @('link', 4, 'Link to externally selected item'))) {
+            $abortName, $abortEffect, $executeLabel = $abortCase
+            foreach ($background in @($false, $true)) {
+                $data = [System.Windows.DataObject]::new()
+                $paths = [System.Collections.Specialized.StringCollection]::new()
+                $null = $paths.Add($menuClipboardFile)
+                $data.SetFileDropList($paths)
+                $data.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] $abortEffect)))
+                [System.Windows.Clipboard]::SetDataObject($data, $true)
+                $clipboardWorkflow.Prepare([string[]] @($menuClipboardFile))
+                if (-not $background) {
+                    $targetRow = @($list.Items | Where-Object { $_.Entry.FullPath -eq $targetDirectory })[0]
+                    Assert-True ($null -ne $targetRow) 'Clipboard abort destination row was not loaded.'
+                }
+                $target = if ($background) { $null } else { $targetRow.PSObject.BaseObject }
+                if (-not $background) { $list.SelectedItem = $target }
+                $null = $controllerReset.Invoke($controller, @())
+                $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+                try { $null = $controllerShow.Invoke($controller, [object[]] @($target, $ownerHandle, $true)) }
+                finally { $menuProbe.Dispose() }
+                $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
+                $menuProbe.SelectLabel = "Abort clipboard $abortName"
+                try {
+                    $null = $controllerShow.Invoke($controller, [object[]] @($target, $ownerHandle, $true))
+                    Assert-True ($menuProbe.SelectIndex -eq 0 -and $menuProbe.Items[0] -ceq "Abort clipboard $abortName" -and
+                        $menuProbe.Items[1] -ceq $executeLabel -and ($menuProbe.States[2] -band 0x800) -ne 0 -and
+                        $menuProbe.Items[3] -ceq 'Abort transfer' -and $menuProbe.Items[4] -ceq 'Insert copy of marked item') "Incorrect clipboard abort menu for $abortName background=$background."
+                } finally { $menuProbe.Dispose() }
+                Assert-True (-not [System.Windows.Clipboard]::ContainsFileDropList() -and [IO.File]::Exists($menuClipboardFile) -and $clipboardWorkflow.IsPrepared) "Clipboard abort changed the source or prepared transfer for $abortName background=$background."
+                $clipboardWorkflow.Abort()
+            }
+        }
         $cutData = [System.Windows.DataObject]::new()
         $cutPaths = [System.Collections.Specialized.StringCollection]::new()
         $null = $cutPaths.Add($menuClipboardFile)
@@ -339,7 +371,7 @@ try {
         $cutData.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] 2)))
         [System.Windows.Clipboard]::SetDataObject($cutData, $true)
         $cutActions = @($createTransfers.Invoke($view, [object[]] @([string] $targetDirectory)))
-        Assert-True ($cutActions.Count -eq 1 -and $cutActions[0].Id -ceq 'ClipboardItemMove' -and $cutActions[0].Label -ceq 'Move cut item here') 'Clipboard Cut did not offer the Move action.'
+        Assert-True ($cutActions.Count -eq 2 -and $cutActions[0].Label -ceq 'Abort clipboard move' -and $cutActions[1].Id -ceq 'ClipboardItemMove' -and $cutActions[1].Label -ceq 'Move cut item here') 'Clipboard Cut did not offer the Abort and Move actions.'
         $shellType = $assembly.GetType('SUTWinExplorer.SutShell', $true)
         $pasteClipboard = $shellType.GetMethod('PasteFromClipboard', $factoryFlags)
         $getClipboardOperation = $shellType.GetMethod('TryGetClipboardOperation', $factoryFlags)
@@ -364,7 +396,9 @@ try {
                 Assert-True ($actions.Count -eq 0) "Unsupported $name clipboard effect exposed an action."
                 continue
             }
-            Assert-True ($actions.Count -eq 1 -and $actions[0].Id -ceq $expectedId -and $actions[0].Label -ceq $expectedLabel) "Incorrect action for $name."
+            $expectedCount = if ($name -in @('move', 'link')) { 2 } else { 1 }
+            Assert-True ($actions.Count -eq $expectedCount -and $actions[-1].Id -ceq $expectedId -and $actions[-1].Label -ceq $expectedLabel) "Incorrect action for $name."
+            if ($name -in @('move', 'link')) { Assert-True ($actions[0].Label -ceq "Abort clipboard $name") "Incorrect abort action for $name." }
             try { $null = $pasteClipboard.Invoke($null, [object[]] @([string] $targetDirectory, $ownerHandle)) }
             catch {
                 if ($name -ne 'move' -or -not $_.Exception.ToString().Contains('The items were moved, but the clipboard source did not accept')) { throw "Clipboard $name failed: $($_.Exception)" }

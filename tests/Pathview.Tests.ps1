@@ -236,6 +236,23 @@ try {
             Assert-True ($menuProbe.SelectIndex -eq 0 -and ($menuProbe.States[1] -band 0x800) -ne 0 -and
                 [IO.File]::Exists((Join-Path $subdirectoryEntry.Path 'sidebar-clipboard.txt')) -and [IO.File]::Exists($sidebarClipboardFile)) 'Sidebar clipboard paste used the wrong menu position or destination.'
         } finally { $menuProbe.Dispose() }
+        foreach ($abortCase in @(@('move', 2, 'Move cut item here'), @('link', 4, 'Link to externally selected item'))) {
+            $abortName, $effect, $executeLabel = $abortCase
+            $clipboardData.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] $effect)))
+            [System.Windows.Clipboard]::SetDataObject($clipboardData, $true)
+            $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
+            $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
+            try { $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true)) }
+            finally { $menuProbe.Dispose() }
+            $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
+            $menuProbe.SelectLabel = "Abort clipboard $abortName"
+            try {
+                $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true))
+                Assert-True ($menuProbe.SelectIndex -eq 0 -and $menuProbe.Items[1] -ceq $executeLabel -and
+                    ($menuProbe.States[2] -band 0x800) -ne 0 -and -not [System.Windows.Clipboard]::ContainsFileDropList() -and
+                    [IO.File]::Exists($sidebarClipboardFile)) "Incorrect sidebar clipboard abort for $abortName."
+            } finally { $menuProbe.Dispose() }
+        }
         [System.Windows.Clipboard]::SetText('pathview test')
         $activeTree = $fixedPathview.FindName('ActivePathTree')
         $treeItem = $activeTree.ItemContainerGenerator.ContainerFromIndex(0)

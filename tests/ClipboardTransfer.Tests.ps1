@@ -1,3 +1,4 @@
+$ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
 Add-Type -TypeDefinition @'
 using System;
@@ -80,6 +81,18 @@ $assembly = [Reflection.Assembly]::Load([IO.File]::ReadAllBytes((Join-Path $PSSc
 $shell = $assembly.GetType('SUTWinExplorer.SutShell', $true)
 $flags = [Reflection.BindingFlags]'Static,NonPublic'
 $paste = $shell.GetMethod('PasteFromClipboard', $flags)
+function Wait-ClipboardOperation($method, [object[]] $operationArgs) {
+    for ($attempt = 0; $attempt -lt 20; $attempt++) {
+        if ($method.Invoke($null, $operationArgs)) { return $true }
+        $frame = [System.Windows.Threading.DispatcherFrame]::new()
+        $timer = [System.Windows.Threading.DispatcherTimer]::new()
+        $timer.Interval = [TimeSpan]::FromMilliseconds(100)
+        $timer.add_Tick({ $frame.Continue = $false }.GetNewClosure())
+        $timer.Start()
+        try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+    }
+    return $false
+}
 $original = [System.Windows.Clipboard]::GetDataObject()
 $root = Join-Path ([IO.Path]::GetTempPath()) ('kis-clipboard-test-' + [guid]::NewGuid().ToString('N'))
 try {
@@ -87,6 +100,53 @@ try {
     $destination = Join-Path $root 'destination'
     [IO.Directory]::CreateDirectory($source) | Out-Null
     [IO.Directory]::CreateDirectory($destination) | Out-Null
+    $getOperation = $shell.GetMethod('TryGetClipboardOperation', $flags)
+    $abort = $shell.GetMethod('AbortClipboardOperation', $flags)
+    foreach ($effect in @(2, 4)) {
+        $path = Join-Path $source "abort-$effect.txt"
+        [IO.File]::WriteAllText($path, 'abort')
+        $data = [System.Windows.DataObject]::new()
+        $paths = [System.Collections.Specialized.StringCollection]::new()
+        $null = $paths.Add($path)
+        $data.SetFileDropList($paths)
+        $data.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] $effect)))
+        [System.Windows.Clipboard]::SetDataObject($data, $true)
+        $operationArgs = [object[]] @($null, [uint32] 0)
+        if (-not (Wait-ClipboardOperation $getOperation $operationArgs)) { throw "Could not capture clipboard effect $effect." }
+        $null = $abort.Invoke($null, [object[]] @($operationArgs[0], $operationArgs[1]))
+        if ([System.Windows.Clipboard]::ContainsFileDropList() -or -not [IO.File]::Exists($path)) { throw "Abort for effect $effect did not clear the clipboard without changing the source." }
+        [System.Windows.Clipboard]::SetDataObject($data, $true)
+        $operationArgs = [object[]] @($null, [uint32] 0)
+        if (-not (Wait-ClipboardOperation $getOperation $operationArgs)) { throw "Could not capture stale clipboard effect $effect." }
+        [System.Windows.Clipboard]::SetText('replacement clipboard content')
+        $rejected = $false
+        try { $null = $abort.Invoke($null, [object[]] @($operationArgs[0], $operationArgs[1])) }
+        catch { if ($_.Exception.GetBaseException() -isnot [InvalidOperationException]) { throw }; $rejected = $true }
+        if (-not $rejected -or [System.Windows.Clipboard]::GetText() -cne 'replacement clipboard content') { throw "Stale abort for effect $effect changed the clipboard." }
+        [System.Windows.Clipboard]::SetDataObject($data, $true)
+        $operationArgs = [object[]] @($null, [uint32] 0)
+        if (-not (Wait-ClipboardOperation $getOperation $operationArgs)) { throw "Could not capture clipboard effect $effect for replacement." }
+        [System.Windows.Clipboard]::SetDataObject($data, $true)
+        $rejected = $false
+        try { $null = $abort.Invoke($null, [object[]] @($operationArgs[0], $operationArgs[1])) }
+        catch { if ($_.Exception.GetBaseException() -isnot [InvalidOperationException]) { throw }; $rejected = $true }
+        if (-not $rejected -or -not [System.Windows.Clipboard]::ContainsFileDropList()) { throw "Stale abort for effect $effect cleared an equivalent replacement." }
+    }
+    $data.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] 1)))
+    [System.Windows.Clipboard]::SetDataObject($data, $true)
+    $operationArgs = [object[]] @($null, [uint32] 0)
+    if (-not (Wait-ClipboardOperation $getOperation $operationArgs)) { throw 'Could not capture clipboard Copy.' }
+    $rejected = $false
+    try { $null = $abort.Invoke($null, [object[]] @($operationArgs[0], $operationArgs[1])) }
+    catch { if ($_.Exception.GetBaseException() -isnot [InvalidOperationException]) { throw }; $rejected = $true }
+    if (-not $rejected -or -not [System.Windows.Clipboard]::ContainsFileDropList()) { throw 'Clipboard Copy was cleared by abort.' }
+    $path = Join-Path $source 'abort-feedback.txt'
+    [IO.File]::WriteAllText($path, 'abort')
+    $feedback = [ClipboardFeedbackSource]::Install($path)
+    $operationArgs = [object[]] @($null, [uint32] 0)
+    if (-not (Wait-ClipboardOperation $getOperation $operationArgs)) { throw 'Could not capture the Shell move to abort.' }
+    $null = $abort.Invoke($null, [object[]] @($operationArgs[0], $operationArgs[1]))
+    if ($feedback.Notifications -ne 0 -or -not [IO.File]::Exists($path)) { throw 'Aborted move reported success or changed its source.' }
     foreach ($supportsFeedback in @($true, $false)) {
         $path = Join-Path $source "move-$supportsFeedback.txt"
         [IO.File]::WriteAllText($path, 'move')
@@ -138,9 +198,31 @@ try {
     finally { ([IDisposable] $menu).Dispose() }
     $null = $paste.Invoke($null, [object[]] @([string] $destination, [IntPtr]::Zero))
     if ([IO.File]::Exists($shellCut) -or -not [IO.File]::Exists((Join-Path $destination 'shell-cut.txt'))) { throw 'Shell Cut did not complete.' }
+    $shellAbort = Join-Path $source 'shell-abort.txt'
+    [IO.File]::WriteAllText($shellAbort, 'cut')
+    $menu = $factory.GetMethod('GetItemMenu', $flags).Invoke($null, [object[]] @([string[]] @($shellAbort), [IntPtr]::Zero, $null))
+    try { $null = $menu.GetType().GetMethod('InvokeVerb', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($menu, [object[]] @('cut')) }
+    finally { ([IDisposable] $menu).Dispose() }
+    $operationArgs = [object[]] @($null, [uint32] 0)
+    if (-not (Wait-ClipboardOperation $getOperation $operationArgs)) { throw 'Could not capture native Shell Cut for abort.' }
+    $null = $abort.Invoke($null, [object[]] @($operationArgs[0], $operationArgs[1]))
+    if (-not [IO.File]::Exists($shellAbort) -or [System.Windows.Clipboard]::ContainsFileDropList()) { throw 'Native Shell Cut abort changed the source or retained the clipboard.' }
     Write-Output 'Clipboard transfer tests passed.'
 } finally {
-    if ($null -eq $original) { [System.Windows.Clipboard]::Clear() }
-    else { [System.Windows.Clipboard]::SetDataObject($original, $true) }
+    for ($attempt = 0; ; $attempt++) {
+        try {
+            if ($null -eq $original) { [System.Windows.Clipboard]::Clear() }
+            else { [System.Windows.Clipboard]::SetDataObject($original, $true) }
+            break
+        } catch {
+            if ($attempt -ge 19 -or $_.Exception.GetBaseException() -isnot [Runtime.InteropServices.ExternalException]) { throw }
+            $frame = [System.Windows.Threading.DispatcherFrame]::new()
+            $timer = [System.Windows.Threading.DispatcherTimer]::new()
+            $timer.Interval = [TimeSpan]::FromMilliseconds(100)
+            $timer.add_Tick({ $frame.Continue = $false }.GetNewClosure())
+            $timer.Start()
+            try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
+        }
+    }
     if ([IO.Directory]::Exists($root)) { [IO.Directory]::Delete($root, $true) }
 }

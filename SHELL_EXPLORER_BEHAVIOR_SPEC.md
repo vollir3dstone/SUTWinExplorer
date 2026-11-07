@@ -433,8 +433,9 @@ may show its requested row in light gray without changing the active selection.
   **Item clipboard copy** copies selected files and directories to the Windows clipboard;
   **Item clipboard paste** performs the supported clipboard operation in the current directory.
   When supported clipboard data is available, directory-item and background Content
-  Menus offer **Copy clipboard item here**, **Move cut item here**, or **Link to
-  externally selected item** first, followed by a separator. It targets the
+  Menus offer **Copy clipboard item here**, **Abort clipboard move** followed by
+  **Move cut item here**, or **Abort clipboard link** followed by **Link to
+  externally selected item**, followed by a separator. The execute action targets the
   clicked directory or the current directory respectively. Native Paste is
   excluded from these Content Menus.
   Item clipboard copy is in the selection-row group with Name and Path clipboard copy; Item clipboard paste is in the directory
@@ -443,6 +444,8 @@ may show its requested row in light gray without changing the active selection.
   Copy with Link also permitted is treated as Copy; other combined or missing effects
   are rejected. After a complete Move, the original clipboard source is notified;
   a notification failure is reported as occurring after the move.
+  Clipboard Abort clears the global clipboard without changing source items or reporting
+  success, and refuses to clear an entry that has changed since the menu was opened.
   These actions are independent of all prepared transfers. Internal Mark item, Execute
   and Abort do not change the clipboard, and external clipboard operations do not
   change any internal transfer state. Staging records paths only: it does not keep

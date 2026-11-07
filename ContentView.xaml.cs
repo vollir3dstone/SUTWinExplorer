@@ -142,6 +142,19 @@ public partial class ContentView : UserControl
         var actions = new List<ShellMenuAction>();
         if (Directory.Exists(destination) && SutShell.TryGetClipboardOperation(out var clipboardOperation, out var clipboardSequence))
         {
+            if (clipboardOperation is ClipboardOperation.Move or ClipboardOperation.Link)
+            {
+                var abortId = clipboardOperation == ClipboardOperation.Move ? "AbortClipboardMove" : "AbortClipboardLink";
+                var abortLabel = clipboardOperation == ClipboardOperation.Move ? "Abort clipboard move" : "Abort clipboard link";
+                actions.Add(new ShellMenuAction(abortId, abortLabel, true, () =>
+                {
+                    try { SutShell.AbortClipboardOperation(clipboardOperation, clipboardSequence); }
+                    catch (Exception exception)
+                    {
+                        MessageBox.Show(Window.GetWindow(this), exception.Message, "Operation failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+                }));
+            }
             var (id, label) = ClipboardAction(clipboardOperation);
             actions.Add(new ShellMenuAction(id, label, true, () =>
             {

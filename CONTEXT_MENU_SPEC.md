@@ -190,7 +190,7 @@ application actions where appropriate:
 | Context | Application additions and ordering |
 | --- | --- |
 | ContentView item selection | Shell `Open`, `Open in running app...`, Shell `Open with`, then remaining eligible Shell entries. Clipboard paste and prepared transfer actions for a directory precede this group when available. Missing Shell Open/Open with commands have disabled placeholders. The running-app submenu is built for the selection and available windows; it is disabled when no eligible window exists or a directory is selected. |
-| Directory item | Supported clipboard data adds its Copy, Move or explicit Link action first, followed by a separator. A prepared transfer adds `Abort transfer` and the matching execute command before the remaining menu. The clicked directory is the destination. This applies to directory rows and sidebar directory items. |
+| Directory item | Supported clipboard data adds its Copy, Move or explicit Link action first; Move and Link are preceded by their clipboard Abort action. A separator follows. A prepared transfer adds `Abort transfer` and the matching execute command before the remaining menu. The clicked directory is the destination. This applies to directory rows and sidebar directory items. |
 | Active directory background | The same clipboard paste and prepared transfer actions appear in the same order, targeting the active directory. The filtered Shell background commands include application-owned `New` in place of Windows New. |
 | Selection containing a `.lnk` | Application `Open parent` replaces Shell Open file location, or is appended when Windows does not supply it; it is enabled only for one selected item. |
 
@@ -361,9 +361,12 @@ back to the native background menu rather than the paired menus.
 
 When supported filesystem data is available on the clipboard, the Content Menu
 for a directory item or active directory background starts with `Copy clipboard
-item here`, `Move cut item here`, or `Link to externally selected item`, followed
-by a separator. The action revalidates the clipboard when invoked and rejects a
-changed clipboard. When a Link, Copy or Move is prepared, `Abort transfer`
+item here`, `Abort clipboard move` and `Move cut item here`, or `Abort clipboard
+link` and `Link to externally selected item`, followed by a separator. Clipboard
+Abort clears the global clipboard without changing the source items or reporting a
+successful transfer. Both actions reject a clipboard changed since the menu was
+built; the abort check and clear are performed while the clipboard is locked.
+When a Link, Copy or Move is prepared, `Abort transfer`
 and the matching execute action (`Insert link to marked item`, `Insert copy of
 marked item`, or `Move marked item here`) follow, with their own separator. The
 clicked directory is the destination for an item menu; the active directory is

@@ -324,6 +324,22 @@ internal static class SutShell
         return TryGetClipboardData(out operation, out _) && sequence == GetClipboardSequenceNumber();
     }
 
+    internal static void AbortClipboardOperation(ClipboardOperation operation, uint sequence)
+    {
+        if (operation is not (ClipboardOperation.Move or ClipboardOperation.Link))
+            throw new InvalidOperationException("Only clipboard move or link operations can be aborted.");
+        if (!OpenClipboard(IntPtr.Zero))
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        try
+        {
+            if (sequence != GetClipboardSequenceNumber())
+                throw new InvalidOperationException("The clipboard operation is no longer available.");
+            if (!EmptyClipboard())
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        }
+        finally { _ = CloseClipboard(); }
+    }
+
     internal static void ExecuteClipboardTransfer(string path, IntPtr owner, ClipboardOperation? expected, uint? expectedSequence,
         IList<string> insertedPaths, IList<(string OldPath, string NewPath)> movedDirectories)
     {
@@ -386,6 +402,18 @@ internal static class SutShell
 
     [DllImport("user32.dll")]
     private static extern uint GetClipboardSequenceNumber();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool OpenClipboard(IntPtr owner);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EmptyClipboard();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CloseClipboard();
 
     internal static void Move(IReadOnlyList<string> paths, string destination, IntPtr owner, IList<string> insertedPaths) =>
         ShellFileOperations.Move(paths, destination, owner, insertedPaths);

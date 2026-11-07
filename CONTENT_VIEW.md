@@ -747,8 +747,11 @@ It does not invoke the Shell Paste verb. Clipboard changes update Item clipboard
 paste availability but do not prepare, cancel, or replace internal transfers.
 When supported clipboard data is available, directory-item and background Content
 Menus offer the matching operation at the top, targeting the clicked or current
-directory respectively. The menu rejects an action if the clipboard changed after
-it was built. Native Paste is excluded from those menus.
+directory respectively. Move and Link are preceded by an Abort action that clears
+the global clipboard without modifying the source items or reporting success.
+The menu rejects an action if the clipboard changed after it was built; Abort
+checks and clears it while holding the clipboard open. Native Paste is excluded
+from those menus.
 
 Rename is enabled for exactly one selected filesystem item and starts the
 Shell inline editor. Do not invoke the selection `IContextMenu` with the
