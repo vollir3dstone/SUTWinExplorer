@@ -189,7 +189,15 @@ filesystem items, the clicked directory, or the active directory for a backgroun
 Copy and Move use the Shell Copy and Cut verbs; Link requests the explicit Shell
 Link effect. Preparing does not execute a transfer or change the application's
 prepared transfers. External destinations must support the requested Link effect;
-the tested native Shell background menu did not enable Paste for it.
+in Windows Explorer, `Paste shortcut` is available for this effect and creates a
+shortcut to the source.
+
+`Prepare copy to external` and `Copy item to clipboard` deliberately appear as
+two entries in different groups. Both invoke the same Shell Copy verb; the former
+is presented as the start of an external transfer, while the latter is presented
+with the clipboard actions and also has a toolbar button. Neither limits where
+the resulting clipboard data can be pasted. For details and availability, see
+[Clipboard actions and transfer functions](SHELL_EXPLORER_BEHAVIOR_SPEC.md#clipboard-actions-and-transfer-functions).
 
 ### Content Menu Layouts
 

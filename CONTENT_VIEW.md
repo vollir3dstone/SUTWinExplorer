@@ -738,16 +738,23 @@ operation errors and clears the prepared state only after the operation
 returns successfully. Preflight cannot prevent subsequent changes and no
 rollback is performed after a partial transfer.
 
-Toolbar and Base Menu Item clipboard copy invoke the Shell Copy verb. Item clipboard
-copy is also available as `Prepare copy to external` in the Base Menu, followed
-by `Prepare linking from external` and `Prepare move to external`. They prepare
-the selected items, clicked sidebar directory, or active directory for a
-background menu on the global Shell clipboard without changing an internal
-prepared transfer. Move uses Shell Cut; Link requests the explicit Link effect,
-which requires destination support. In a native Shell background-menu probe,
-Paste and Paste shortcut were not enabled for that Link effect.
-Item clipboard
-paste validates the clipboard's file paths and preferred drop effect again at
+The Item clipboard copy button and its `Copy item to clipboard` Base Menu entry
+invoke the Shell Copy verb. The separate `Prepare copy to external` Base Menu
+action invokes the same verb for the same source, but is presented in the
+external initiation group rather than the clipboard-copy group. Both place
+equivalent Shell Copy data on the global clipboard, usable by this application
+or another compatible target; neither starts the internal Copy workflow.
+
+The external initiation group also contains `Prepare linking from external` and
+`Prepare move to external`. These actions use the selected items, clicked sidebar
+directory, or active directory for a background menu. They replace the global
+clipboard without changing an internal prepared transfer or transferring the
+source immediately. Move uses Shell Cut; Link requests the explicit Link effect,
+which requires destination support. Windows Explorer offers Paste shortcut for
+this effect and creates a shortcut to the source. See the [behavior specification](SHELL_EXPLORER_BEHAVIOR_SPEC.md#clipboard-actions-and-transfer-functions)
+for the complete initiation rules.
+
+Item clipboard paste validates the clipboard's file paths and preferred drop effect again at
 execution, then performs Copy, Move or explicit Link. A completed Move reports
 success to the original clipboard source; a rejected notification is reported
 after the move. Partial or canceled moves do not report success.

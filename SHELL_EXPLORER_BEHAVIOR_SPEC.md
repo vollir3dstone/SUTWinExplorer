@@ -63,13 +63,35 @@ The three Clipboard copy buttons are grouped in the selection row. Item clipboar
 paste is in the directory column before the transfer buttons. These actions are
 also available in the applicable Base Menus, using the same icons as their buttons.
 
-Each Base Menu also groups **Prepare copy to external**, **Prepare linking from
-external**, and **Prepare move to external** immediately after Properties. They
-replace the global Shell clipboard with the selected items, clicked directory,
-or active directory for a background; they do not execute or change internal
-transfers. Copy and Move use Shell Copy and Cut, while Link requests an explicit
-Link effect. External targets must support that effect: a native Shell background
-menu probe did not enable Paste or Paste shortcut for it.
+Each Base Menu groups three external initiation actions after Properties and a
+separator, before the existing clipboard-copy group:
+
+| Base Menu action | Shell clipboard preparation | Intended external action |
+| --- | --- | --- |
+| **Prepare copy to external** | Shell Copy verb | Paste a copy. |
+| **Prepare linking from external** | Shell data object with explicit Link preferred drop effect | Paste a shortcut; Windows Explorer offers **Paste shortcut**. |
+| **Prepare move to external** | Shell Cut verb | Paste to move the source. |
+
+For ContentView selections, these actions use all selected filesystem items. For
+a directory item they use that directory; for a background they use the active
+directory, not the previous selection. All source paths must exist; Move also
+requires deletable sources. Unavailable actions remain visible but disabled.
+Preparation replaces the global clipboard; it does not itself copy, link,
+move or delete source items. The destination application must support the
+requested operation, including the explicit Link effect.
+
+**Prepare copy to external** and **Copy item to clipboard** are intentionally
+separate actions with the same technical effect: both invoke the Shell Copy verb
+for their source items. They differ in presentation and purpose, not clipboard
+format or access restrictions. The former appears in the external initiation
+group of each Base Menu; the latter remains in the clipboard-copy group and is
+also available as the Item clipboard copy button. Either result is on the global
+clipboard and can be consumed by KIS Explorer or another compatible application.
+Neither action starts the application's internal Copy transfer.
+
+All three external initiation actions are independent of the application's
+prepared Link, Copy and Move transfers. They neither prepare nor execute, abort
+or replace those internal transfers, even when one is already prepared.
 
 The application-owned transfers have separate controls and do not use clipboard
 icons:
