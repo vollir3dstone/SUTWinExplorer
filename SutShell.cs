@@ -335,9 +335,23 @@ internal static class SutShell
     }
 
     internal static bool TryGetClipboardOperation(out ClipboardOperation operation, out uint sequence)
+        => TryGetClipboardOperationCore(out operation, out sequence, out _);
+
+    internal static bool TryGetClipboardOperationForUpdate(out ClipboardOperation operation, out bool retry)
+    {
+        var available = TryGetClipboardOperationCore(out operation, out _, out retry);
+        retry |= !available;
+        return available;
+    }
+
+    private static bool TryGetClipboardOperationCore(out ClipboardOperation operation, out uint sequence, out bool retry)
     {
         sequence = GetClipboardSequenceNumber();
-        return TryGetClipboardData(out operation, out _) && sequence == GetClipboardSequenceNumber();
+        var available = TryGetClipboardData(out operation, out _, out retry);
+        if (sequence == GetClipboardSequenceNumber())
+            return available;
+        retry = true;
+        return false;
     }
 
     internal static void AbortClipboardOperation(ClipboardOperation operation, uint sequence)
@@ -361,7 +375,7 @@ internal static class SutShell
     {
         var sequence = GetClipboardSequenceNumber();
         Marshal.ThrowExceptionForHR(OleGetClipboard(out var source));
-        if (!TryGetClipboardData(out var operation, out var paths) || sequence != GetClipboardSequenceNumber() ||
+        if (!TryGetClipboardData(out var operation, out var paths, out _) || sequence != GetClipboardSequenceNumber() ||
             (expected is not null && operation != expected) || (expectedSequence is not null && sequence != expectedSequence))
             throw new InvalidOperationException("The clipboard operation is no longer available.");
 
@@ -386,10 +400,11 @@ internal static class SutShell
         }
     }
 
-    private static bool TryGetClipboardData(out ClipboardOperation operation, out string[] paths)
+    private static bool TryGetClipboardData(out ClipboardOperation operation, out string[] paths, out bool retry)
     {
         operation = default;
         paths = [];
+        retry = false;
         try
         {
             var data = System.Windows.Clipboard.GetDataObject();
@@ -412,7 +427,7 @@ internal static class SutShell
             paths = items;
             return true;
         }
-        catch (ExternalException) { return false; }
+        catch (ExternalException) { retry = true; return false; }
     }
 
     [DllImport("ole32.dll", PreserveSig = true)]

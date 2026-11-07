@@ -18,11 +18,11 @@ function Show-Configuration($window, [bool] $apply, [bool[]] $values) {
         try {
             $result.Seen = $true
             $checkboxes = @($dialog.Content.Children | Where-Object { $_ -is [System.Windows.Controls.CheckBox] })
-            Assert-True ($checkboxes.Count -eq 3) 'Configuration dialog does not contain three checkboxes.'
-            Assert-True (($checkboxes.Name -join '|') -ceq 'DirectoryRowActionButtonsCheckBox|DirectoryColumnActionButtonsCheckBox|SelectedItemsActionButtonsCheckBox' -and
-                ($checkboxes.Content -join '|') -ceq 'Show directory row action buttons|Show directory column action buttons|Show selected items action buttons') 'Configuration labels or checkbox order are incorrect.'
+            Assert-True ($checkboxes.Count -eq 4) 'Configuration dialog does not contain four checkboxes.'
+            Assert-True (($checkboxes.Name -join '|') -ceq 'DirectoryRowActionButtonsCheckBox|DirectoryColumnActionButtonsCheckBox|SelectedItemsActionButtonsCheckBox|InternalItemTransfersCheckBox' -and
+                ($checkboxes.Content -join '|') -ceq 'Show directory row action buttons|Show directory column action buttons|Show selected items action buttons|Enable internal item transfers') 'Configuration labels or checkbox order are incorrect.'
             $result.Initial = @($checkboxes | ForEach-Object { $_.IsChecked })
-            for ($index = 0; $index -lt 3; $index++) { $checkboxes[$index].IsChecked = $values[$index] }
+            for ($index = 0; $index -lt 4; $index++) { $checkboxes[$index].IsChecked = $values[$index] }
             if ($apply) {
                 $button = @($dialog.Content.Children[-1].Children | Where-Object { $_.Name -eq 'ApplyButton' })[0]
                 $button.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
@@ -80,22 +80,28 @@ try {
     $useCases = $window.FindName('UseCasesButton')
     Assert-True ($gear.TranslatePoint([System.Windows.Point]::new(0, 0), $window).X -lt $useCases.TranslatePoint([System.Windows.Point]::new(0, 0), $window).X) 'Configuration button is not before Use cases.'
 
-    $initial = Show-Configuration $window $false @($true, $true, $true)
-    Assert-True (-not $initial[0] -and -not $initial[1] -and -not $initial[2] -and
-        -not $browse.ShowDirectoryRowActionButtons -and -not $configurationStore.Load().Interface.ShowDirectoryRowActionButtons) 'Cancel changed the configuration.'
-    $initial = Show-Configuration $window $true @($true, $false, $true)
-    Assert-True (-not $initial[0] -and -not $initial[1] -and -not $initial[2]) "Dialog did not load the saved values: $($initial -join ',')."
+    $initial = Show-Configuration $window $false @($true, $true, $true, $true)
+    Assert-True (-not $initial[0] -and -not $initial[1] -and -not $initial[2] -and -not $initial[3] -and
+        -not $browse.ShowDirectoryRowActionButtons -and -not $browse.EnableInternalItemTransfers -and -not $configurationStore.Load().Interface.ShowDirectoryRowActionButtons) 'Cancel changed the configuration.'
+    $initial = Show-Configuration $window $true @($true, $false, $true, $true)
+    Assert-True (-not $initial[0] -and -not $initial[1] -and -not $initial[2] -and -not $initial[3]) "Dialog did not load the saved values: $($initial -join ',')."
     foreach ($view in @($browse, $fixed)) {
-        Assert-True ($view.ShowDirectoryRowActionButtons -and -not $view.ShowDirectoryColumnActionButtons -and $view.ShowSelectedItemsActionButtons) 'Saved configuration was not applied to an open Pathview.'
+        Assert-True ($view.ShowDirectoryRowActionButtons -and -not $view.ShowDirectoryColumnActionButtons -and $view.ShowSelectedItemsActionButtons -and $view.EnableInternalItemTransfers) 'Saved configuration was not applied to an open Pathview.'
     }
     $saved = $configurationStore.Load()
-    Assert-True ($saved.Interface.ShowDirectoryRowActionButtons -and -not $saved.Interface.ShowDirectoryColumnActionButtons -and $saved.Interface.ShowSelectedItemsActionButtons) 'Dialog values were not persisted.'
+    Assert-True ($saved.Interface.ShowDirectoryRowActionButtons -and -not $saved.Interface.ShowDirectoryColumnActionButtons -and $saved.Interface.ShowSelectedItemsActionButtons -and $saved.Interface.EnableInternalItemTransfers) 'Dialog values were not persisted.'
     $application.GetType().GetProperty('Configuration', $flags).SetValue($application, $configurationStore.Load())
     $add.Invoke($window, [object[]] @([string] $secondPath, $false, $null, $false))
     $newView = $tabs.Items[2].Content
-    Assert-True ($newView.ShowDirectoryRowActionButtons -and -not $newView.ShowDirectoryColumnActionButtons -and $newView.ShowSelectedItemsActionButtons) 'New Pathview did not receive saved settings.'
-    $initial = Show-Configuration $window $false @($false, $true, $false)
-    Assert-True ($initial[0] -and -not $initial[1] -and $initial[2] -and $configurationStore.Load().Interface.ShowDirectoryRowActionButtons) 'Reopened dialog or Cancel did not preserve saved settings.'
+    Assert-True ($newView.ShowDirectoryRowActionButtons -and -not $newView.ShowDirectoryColumnActionButtons -and $newView.ShowSelectedItemsActionButtons -and $newView.EnableInternalItemTransfers) 'New Pathview did not receive saved settings.'
+    $initial = Show-Configuration $window $false @($false, $true, $false, $false)
+    Assert-True ($initial[0] -and -not $initial[1] -and $initial[2] -and $initial[3] -and $configurationStore.Load().Interface.ShowDirectoryRowActionButtons) 'Reopened dialog or Cancel did not preserve saved settings.'
+    $null = Show-Configuration $window $true @($true, $false, $true, $false)
+    foreach ($view in @($browse, $fixed, $newView)) {
+        Assert-True (-not $view.EnableInternalItemTransfers -and $view.FindName('MoveMarkCurrentDirectoryButton').Visibility -eq 'Collapsed' -and
+            $view.FindName('DirectoryContent').FindName('TransferMarkItemButtons').Visibility -eq 'Collapsed') 'Disabling internal transfers was not applied to an open Pathview.'
+    }
+    Assert-True (-not $configurationStore.Load().Interface.EnableInternalItemTransfers) 'Disabled transfer setting was not persisted.'
     'Configuration dialog tests passed.'
 } finally {
     if ($null -ne $window) { $window.Close() }

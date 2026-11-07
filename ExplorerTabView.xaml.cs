@@ -38,6 +38,16 @@ public partial class Pathview : UserControl
         set => DirectoryContent.ShowDirectoryColumnActionButtons = value;
     }
 
+    public bool EnableInternalItemTransfers
+    {
+        get => DirectoryContent.EnableInternalItemTransfers;
+        set
+        {
+            DirectoryContent.EnableInternalItemTransfers = value;
+            MoveMarkCurrentDirectoryButton.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
     public static readonly DependencyProperty PaneBackgroundProperty =
         DependencyProperty.Register(
             nameof(PaneBackground),
@@ -1406,7 +1416,7 @@ public partial class Pathview : UserControl
         var linkPrepared = LinkWorkflowState.Shared.IsPrepared;
         var copyPrepared = CopyWorkflowState.Shared.IsPrepared;
         var movePrepared = MoveWorkflowState.Shared.IsPrepared;
-        var canStart = !linkPrepared && !copyPrepared && !movePrepared;
+        var canStart = !EnableInternalItemTransfers || (!linkPrepared && !copyPrepared && !movePrepared);
         var actions = new (string Name, bool Enabled)[]
         {
             ("Properties", Directory.Exists(entry.Path)),
@@ -1428,7 +1438,7 @@ public partial class Pathview : UserControl
             { IconSource = (Button)DirectoryContent.FindName(action.Name + "Button") }).ToArray();
         var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
         return SutContextMenuFactory.CreateBaseActions(menuActions,
-            new ShellMenuAction("Relocate", "Relocate", !entry.IsTop && Directory.Exists(entry.Path), () => ShowRelocateDialog(entry.Path)), [entry.Path], owner);
+            new ShellMenuAction("Relocate", "Relocate", !entry.IsTop && Directory.Exists(entry.Path), () => ShowRelocateDialog(entry.Path)), [entry.Path], owner, EnableInternalItemTransfers);
     }
 
     private IReadOnlyList<ShellMenuAction> CreateBackgroundMenuActions()

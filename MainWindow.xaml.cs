@@ -107,6 +107,7 @@ public partial class MainWindow : Window
         view.ShowDirectoryRowActionButtons = configuration.ShowDirectoryRowActionButtons;
         view.ShowDirectoryColumnActionButtons = configuration.ShowDirectoryColumnActionButtons;
         view.ShowSelectedItemsActionButtons = configuration.ShowSelectedItemsActionButtons;
+        view.EnableInternalItemTransfers = configuration.EnableInternalItemTransfers;
     }
 
     private void UseCasesButton_Click(object sender, RoutedEventArgs e)

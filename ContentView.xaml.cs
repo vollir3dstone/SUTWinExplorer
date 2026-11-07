@@ -28,9 +28,25 @@ public partial class ContentView : UserControl
         set => DirectoryButtonGroup.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    public bool EnableInternalItemTransfers
+    {
+        get => TransferMarkItemButtons.Visibility == Visibility.Visible;
+        set
+        {
+            var visibility = value ? Visibility.Visible : Visibility.Collapsed;
+            TransferMarkItemButtons.Visibility = visibility;
+            LinkTransferButtons.Visibility = visibility;
+            CopyTransferButtons.Visibility = visibility;
+            MoveTransferButtons.Visibility = visibility;
+            UpdateToolbarOperationButtons();
+        }
+    }
+
     private bool _initialized;
     private IDisposable? _directoryObserver;
     private ClipboardChangeMonitor? _clipboardMonitor;
+    private DispatcherTimer? _clipboardRetryTimer;
+    private int _clipboardRetryAttempts;
     private CancellationTokenSource? _refreshCancellation;
     private CancellationTokenSource? _rangeCancellation;
     private CancellationTokenSource? _overlayWaitCancellation;
@@ -169,7 +185,7 @@ public partial class ContentView : UserControl
                 }
             }) { IconSource = ItemClipboardPasteButton });
         }
-        if (!link && !copy && !move)
+        if (!EnableInternalItemTransfers || (!link && !copy && !move))
             return actions;
 
         void Execute(string action)
@@ -234,7 +250,7 @@ public partial class ContentView : UserControl
         var relocate = new ShellMenuAction("Relocate", "Relocate", selected.Length == 1 && RenameButton.IsEnabled && RelocateRequested is not null,
             () => RelocateRequested?.Invoke(selected[0].FullPath));
         var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
-        return SutContextMenuFactory.CreateBaseActions(actions, relocate, selected.Select(row => row.FullPath).ToArray(), owner);
+        return SutContextMenuFactory.CreateBaseActions(actions, relocate, selected.Select(row => row.FullPath).ToArray(), owner, EnableInternalItemTransfers);
     }
 
     internal IReadOnlyList<ShellMenuAction> CreateActiveDirectoryMenuActions()
@@ -242,7 +258,7 @@ public partial class ContentView : UserControl
         var path = CurrentPath;
         var exists = Directory.Exists(path);
         var editable = exists && SutShell.GetEditName(path) is not null;
-        var canStart = !LinkWorkflowState.Shared.IsPrepared && !CopyWorkflowState.Shared.IsPrepared && !MoveWorkflowState.Shared.IsPrepared;
+        var canStart = !EnableInternalItemTransfers || (!LinkWorkflowState.Shared.IsPrepared && !CopyWorkflowState.Shared.IsPrepared && !MoveWorkflowState.Shared.IsPrepared);
         var buttons = new[] { PropertiesButton, NameClipboardCopyButton, PathClipboardCopyButton, ItemClipboardCopyButton,
             LinkMarkItemButton, CopyMarkItemButton, MoveMarkItemButton, RenameButton, DeleteButton };
         var actions = buttons.Select(button =>
@@ -261,7 +277,7 @@ public partial class ContentView : UserControl
         }).ToArray();
         var owner = Window.GetWindow(this) is { } window ? new WindowInteropHelper(window).Handle : IntPtr.Zero;
         return SutContextMenuFactory.CreateBaseActions(actions,
-            new ShellMenuAction("Relocate", "Relocate", editable && RelocateRequested is not null, () => RelocateRequested?.Invoke(path)), [path], owner);
+            new ShellMenuAction("Relocate", "Relocate", editable && RelocateRequested is not null, () => RelocateRequested?.Invoke(path)), [path], owner, EnableInternalItemTransfers);
     }
 
     private void ExecuteActiveDirectoryMenuAction(string action, string path)
@@ -929,7 +945,7 @@ public partial class ContentView : UserControl
         LinkWorkflowState.Shared.Changed += WorkflowState_Changed;
         CopyWorkflowState.Shared.Changed += WorkflowState_Changed;
         MoveWorkflowState.Shared.Changed += WorkflowState_Changed;
-        _clipboardMonitor = new ClipboardChangeMonitor(UpdateClipboardButton);
+        _clipboardMonitor = new ClipboardChangeMonitor(() => { _clipboardRetryAttempts = 0; UpdateClipboardButton(); });
         UpdateToolbarOperationButtons();
     }
 
@@ -945,6 +961,9 @@ public partial class ContentView : UserControl
         MoveWorkflowState.Shared.Changed -= WorkflowState_Changed;
         _clipboardMonitor?.Dispose();
         _clipboardMonitor = null;
+        _clipboardRetryTimer?.Stop();
+        _clipboardRetryTimer = null;
+        _clipboardRetryAttempts = 0;
     }
 
     private void FiltersChanged(object sender, RoutedEventArgs e)
@@ -1270,7 +1289,7 @@ public partial class ContentView : UserControl
         var linkPrepared = LinkWorkflowState.Shared.IsPrepared;
         var copyPrepared = CopyWorkflowState.Shared.IsPrepared;
         var movePrepared = MoveWorkflowState.Shared.IsPrepared;
-        var canStartOperation = !linkPrepared && !copyPrepared && !movePrepared;
+        var canStartOperation = !EnableInternalItemTransfers || (!linkPrepared && !copyPrepared && !movePrepared);
         DeleteButton.IsEnabled = hasSelection && canStartOperation && selectedRows.All(row => ShellFileOperations.CanDelete(row.FullPath));
         LinkMarkItemButton.IsEnabled = hasSelection && canStartOperation;
         LinkExecuteButton.IsEnabled = linkPrepared;
@@ -1285,11 +1304,28 @@ public partial class ContentView : UserControl
 
     private void UpdateClipboardButton()
     {
-        var available = SutShell.TryGetClipboardOperation(out var operation, out _);
+        var available = SutShell.TryGetClipboardOperationForUpdate(out var operation, out var retry);
         ItemClipboardPasteButton.IsEnabled = Directory.Exists(CurrentPath) && available;
         var label = available ? ClipboardAction(operation).Label : "Item clipboard paste";
         ItemClipboardPasteButton.ToolTip = label;
         System.Windows.Automation.AutomationProperties.SetName(ItemClipboardPasteButton, label);
+        if (!retry)
+        {
+            _clipboardRetryTimer?.Stop();
+            _clipboardRetryTimer = null;
+            _clipboardRetryAttempts = 0;
+        }
+        else if (_clipboardMonitor is not null && _clipboardRetryTimer is null && _clipboardRetryAttempts++ < 50)
+        {
+            _clipboardRetryTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher) { Interval = TimeSpan.FromMilliseconds(200) };
+            _clipboardRetryTimer.Tick += (_, _) =>
+            {
+                _clipboardRetryTimer!.Stop();
+                _clipboardRetryTimer = null;
+                UpdateClipboardButton();
+            };
+            _clipboardRetryTimer.Start();
+        }
     }
 
     private void FileList_SizeChanged(object sender, SizeChangedEventArgs e)

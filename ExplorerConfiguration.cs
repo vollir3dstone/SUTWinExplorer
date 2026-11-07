@@ -24,7 +24,8 @@ internal sealed class ExplorerConfiguration
         {
             ShowDirectoryRowActionButtons = false,
             ShowDirectoryColumnActionButtons = false,
-            ShowSelectedItemsActionButtons = false
+            ShowSelectedItemsActionButtons = false,
+            EnableInternalItemTransfers = false
         }
     };
 }
@@ -34,6 +35,7 @@ internal sealed class InterfaceConfiguration
     public required bool ShowDirectoryRowActionButtons { get; set; }
     public required bool ShowDirectoryColumnActionButtons { get; set; }
     public required bool ShowSelectedItemsActionButtons { get; set; }
+    public bool EnableInternalItemTransfers { get; set; }
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? AdditionalProperties { get; set; }
 

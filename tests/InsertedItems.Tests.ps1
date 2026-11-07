@@ -44,6 +44,7 @@ try {
     [System.Threading.SynchronizationContext]::SetSynchronizationContext(
         [System.Windows.Threading.DispatcherSynchronizationContext]::new([System.Windows.Threading.Dispatcher]::CurrentDispatcher))
     $view = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
+    $view.EnableInternalItemTransfers = $true
     $view.GetType().GetMethod('Initialize', $viewFlags).Invoke($view, [object[]] @([bool] $false))
     $view.GetType().GetMethod('SetCurrentPath', $viewFlags).Invoke($view, [object[]] @([string] ($destination + [IO.Path]::DirectorySeparatorChar)))
     $window = [System.Windows.Window]::new()
@@ -113,6 +114,7 @@ try {
 
         $pathview = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.Pathview', $true),
             [object[]] @([string] $destination, [bool] $false, $null, $null, $null, $null))
+        $pathview.EnableInternalItemTransfers = $true
         $window.Content = $pathview
         [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([action] {}, [System.Windows.Threading.DispatcherPriority]::ApplicationIdle)
         $directoryContent = $pathview.FindName('DirectoryContent')
@@ -147,6 +149,7 @@ try {
             throw 'Directory menu Link execute did not complete and reveal its shortcut.'
         }
         $sourceView = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
+        $sourceView.EnableInternalItemTransfers = $true
         $null = $sourceView.GetType().GetMethod('Initialize', $viewFlags).Invoke($sourceView, [object[]] @([bool] $false))
         $null = $sourceView.GetType().GetMethod('SetCurrentPath', $viewFlags).Invoke($sourceView, [object[]] @([string] $source))
         $sourceWindow = [System.Windows.Window]::new()

@@ -442,7 +442,11 @@ the requested Copy, Cut/Move or explicit Link in the current directory. Copy wit
 also permitted is treated as Copy; other combined, missing or unsupported effects are rejected.
 Item clipboard copy is in the same selection-row group as Name and Path clipboard copy;
 Item clipboard paste is in the DIRECTORY column before the Link group. Item clipboard paste is enabled for supported filesystem clipboard data
-and an existing destination directory. These clipboard actions and
+and an existing destination directory. If clipboard data cannot be read or is
+not recognized, the button remains disabled and the view retries periodically
+for up to ten seconds; a later clipboard change starts a fresh check. This
+allows the button to recover when another application briefly holds the
+clipboard. These clipboard actions and
 external clipboard operations do not alter any prepared workflow.
 
 ## Historical Interface to Pathview

@@ -6,6 +6,8 @@ using System.Runtime.InteropServices;
 public static class ItemMenuProbe
 {
     [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();
+    [DllImport("user32.dll")] public static extern bool OpenClipboard(IntPtr owner);
+    [DllImport("user32.dll")] public static extern bool CloseClipboard();
     [DllImport("user32.dll")] public static extern int GetMenuItemCount(IntPtr menu);
     [DllImport("user32.dll")] public static extern uint GetMenuItemID(IntPtr menu, int index);
     [DllImport("user32.dll")] public static extern uint GetMenuState(IntPtr menu, uint index, uint flags);
@@ -25,6 +27,27 @@ public static class ItemMenuProbe
     }
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern bool GetMenuItemInfo(IntPtr menu, uint item, bool byPosition, ref MenuItemInfo info);
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] public static extern int GetObject(IntPtr handle, int size, out BitmapInfo info);
+}
+public sealed class ClipboardLock : IDisposable
+{
+    private readonly System.Threading.ManualResetEventSlim ready = new(false);
+    private readonly System.Threading.ManualResetEventSlim release = new(false);
+    private readonly System.Threading.Thread thread;
+    private bool locked;
+    public ClipboardLock()
+    {
+        thread = new System.Threading.Thread(() =>
+        {
+            locked = ItemMenuProbe.OpenClipboard(IntPtr.Zero);
+            ready.Set();
+            if (!locked) return;
+            try { release.Wait(); } finally { ItemMenuProbe.CloseClipboard(); }
+        });
+        thread.Start();
+        ready.Wait();
+        if (!locked) { thread.Join(); throw new InvalidOperationException("Could not lock the clipboard for the contention test."); }
+    }
+    public void Dispose() { release.Set(); thread.Join(); ready.Dispose(); release.Dispose(); }
 }
 public sealed class SequenceMenuProbe : IDisposable
 {
@@ -51,6 +74,7 @@ public sealed class SequenceMenuProbe : IDisposable
     public string ClickWindow;
     public static Func<int, int, (T, bool)> Target<T>(T target) => (x, y) => (target, false);
     public static Func<int, int, (T, bool)> Background<T>() => (x, y) => (default(T), true);
+    private static bool IsBaseMenu(IntPtr menu) => GetMenuItemID(menu, 0) == 0x8000 && GetMenuItemID(menu, 6) == 0x8004;
     public SequenceMenuProbe(IntPtr owner, string mode)
     {
         this.owner = owner; this.mode = mode;
@@ -68,7 +92,7 @@ public sealed class SequenceMenuProbe : IDisposable
                 GetClassName(window, name, name.Capacity);
                 if (name.ToString() != "#32768") return true;
                 var menu = SendMessage(window, 0x01E1, IntPtr.Zero, IntPtr.Zero);
-                if (!Seen) { Seen = true; IsBase = GetMenuItemID(menu, 0) == 0x8000; }
+                if (!Seen) { Seen = true; IsBase = IsBaseMenu(menu); }
                 if (mode == "move-right" && phase == 0)
                 {
                     phase = 1;
@@ -92,7 +116,7 @@ public sealed class SequenceMenuProbe : IDisposable
                 else if (mode == "move-right")
                 {
                     SecondSeen = true;
-                    SecondIsBase = GetMenuItemID(menu, 0) == 0x8000;
+                    SecondIsBase = IsBaseMenu(menu);
                     PostMessage(owner, 0x001F, IntPtr.Zero, IntPtr.Zero);
                 }
                 else if (mode == "move" && phase++ == 0)
@@ -241,6 +265,7 @@ $window.Width = 1000
 $window.Height = 500
 try {
     $view = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
+    $view.EnableInternalItemTransfers = $true
     $view.ShowSelectedItemsActionButtons = $true
     $view.ShowDirectoryColumnActionButtons = $true
     $null = $view.GetType().GetMethod('Initialize', $flags).Invoke($view, [object[]] @([bool] $false))
@@ -406,6 +431,7 @@ try {
     [IO.Directory]::CreateDirectory($secondDestination) | Out-Null
     $pathview = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.Pathview', $true),
         [object[]] @($secondDestination, [bool] $false, $null, $null, $null, $null))
+    $pathview.EnableInternalItemTransfers = $true
     $window.Content = $pathview
     $pathviewContent = $pathview.FindName('DirectoryContent')
     $entry = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.TreeEntry', $true), [object[]] @([string] 'folder', $folder))
@@ -470,6 +496,26 @@ try {
     $window.Content = $view
     $clipboardMonitor = $view.GetType().GetField('_clipboardMonitor', $flags)
     Wait-Until { $view.IsLoaded -and $null -ne $clipboardMonitor.GetValue($view) } 'ContentView and clipboard monitor load after Shell Cut'
+    $busyData = [System.Windows.DataObject]::new()
+    $busyPaths = [System.Collections.Specialized.StringCollection]::new()
+    [void] $busyPaths.Add($file)
+    $busyData.SetFileDropList($busyPaths)
+    $busyData.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] 1)))
+    Wait-Until {
+        try { [System.Windows.Clipboard]::SetDataObject($busyData, $true); $true }
+        catch { if ($_.Exception.GetBaseException() -isnot [Runtime.InteropServices.ExternalException]) { throw }; $false }
+    } 'set clipboard for contention test'
+    Wait-Until { $itemClipboardPaste.IsEnabled -and [bool] $containsItems.Invoke($null, @()) } 'clipboard button before contention'
+    $clipboardLock = [ClipboardLock]::new()
+    try {
+        $read = $assembly.GetType('SUTWinExplorer.SutShell', $true).GetMethod('TryGetClipboardOperationForUpdate', $staticFlags)
+        $readArgs = [object[]] @($null, $false)
+        $readAvailable = $read.Invoke($null, $readArgs)
+        if ($readAvailable -or -not $readArgs[1]) { throw "Clipboard contention was not classified for retry: available=$readAvailable, retry=$($readArgs[1])." }
+        $null = $view.GetType().GetMethod('UpdateClipboardButton', $flags).Invoke($view, @())
+    }
+    finally { $clipboardLock.Dispose() }
+    Wait-Until { $itemClipboardPaste.IsEnabled } 'clipboard button after contention'
     foreach ($case in @(@('copy-only', 1, $true), @('copy-and-link', 5, $true), @('cut', 2, $true),
         @('link', 4, $true), @('copy-and-cut', 3, $false), @('all-effects', 7, $false),
         @('none', 0, $false), @('missing', -1, $false), @('short', -2, $false))) {
@@ -482,7 +528,10 @@ try {
         $data.SetFileDropList($fileList)
         if ($effect -ge 0) { $data.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] $effect))) }
         elseif ($effect -eq -2) { $data.SetData('Preferred DropEffect', [IO.MemoryStream]::new([byte[]] @(1))) }
-        [System.Windows.Clipboard]::SetDataObject($data, $true)
+        Wait-Until {
+            try { [System.Windows.Clipboard]::SetDataObject($data, $true); $true }
+            catch { if ($_.Exception.GetBaseException() -isnot [Runtime.InteropServices.ExternalException]) { throw }; $false }
+        } "set clipboard for $name"
         $sequenceBefore = [ItemMenuProbe]::GetClipboardSequenceNumber()
         $available = $false
         try { Wait-Until { $available = [bool] $containsItems.Invoke($null, @()); $available -eq $allowed } "clipboard availability for $name" }
@@ -498,7 +547,9 @@ try {
         catch {
             $currentPath = $view.GetType().GetProperty('CurrentPath', $flags).GetValue($view)
             $monitor = $view.GetType().GetField('_clipboardMonitor', $flags).GetValue($view)
-            throw "Clipboard button for $name`: expected=$allowed, enabled=$($itemClipboardPaste.IsEnabled), loaded=$($view.IsLoaded), monitor=$($null -ne $monitor), path=$currentPath."
+            $availableNow = [bool] $containsItems.Invoke($null, @())
+            $null = $view.GetType().GetMethod('UpdateClipboardButton', $flags).Invoke($view, @())
+            throw "Clipboard button for $name`: expected=$allowed, availableNow=$availableNow, enabledAfterRefresh=$($itemClipboardPaste.IsEnabled), loaded=$($view.IsLoaded), monitor=$($null -ne $monitor), path=$currentPath."
         }
         if ($allowed) {
             try { $null = $paste.Invoke($null, [object[]] @($secondDestination, $owner)) }
@@ -538,9 +589,20 @@ try {
     Write-Output 'Item clipboard action tests passed.'
 } finally {
     $copy.Abort(); $link.Abort(); $move.Abort()
-    if ($null -eq $original) { [System.Windows.Clipboard]::Clear() }
-    else { [System.Windows.Clipboard]::SetDataObject($original, $true) }
-    $window.Close()
-    [IO.Directory]::Delete($root, $true)
-    [System.Threading.SynchronizationContext]::SetSynchronizationContext($previousContext)
+    try {
+        Wait-Until {
+            try {
+                if ($null -eq $original) { [System.Windows.Clipboard]::Clear() }
+                else { [System.Windows.Clipboard]::SetDataObject($original, $true) }
+                $true
+            } catch {
+                if ($_.Exception.GetBaseException() -isnot [Runtime.InteropServices.ExternalException]) { throw }
+                $false
+            }
+        } 'restore clipboard'
+    } finally {
+        $window.Close()
+        [IO.Directory]::Delete($root, $true)
+        [System.Threading.SynchronizationContext]::SetSynchronizationContext($previousContext)
+    }
 }

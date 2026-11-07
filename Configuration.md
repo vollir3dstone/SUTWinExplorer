@@ -20,7 +20,7 @@ are described in [OPEN_WITH_RUNNING_APP_SPEC.md](OPEN_WITH_RUNNING_APP_SPEC.md).
 ## Pathview action groups
 
 The gear button at the far left of the top toolbar opens the Configuration
-dialog. Its three checkboxes change independent settings for all Pathviews.
+dialog. Its checkboxes change independent settings for all Pathviews.
 Apply saves the settings and immediately updates open Pathviews; newly opened
 Pathviews use the same settings. Cancel or closing the dialog makes no changes.
 
@@ -34,12 +34,16 @@ On first startup the file is created with all flags set to `false`:
   "Interface": {
     "ShowDirectoryRowActionButtons": false,
     "ShowDirectoryColumnActionButtons": false,
-    "ShowSelectedItemsActionButtons": false
+    "ShowSelectedItemsActionButtons": false,
+    "EnableInternalItemTransfers": false
   }
 }
 ```
 
-All three flags, the type, version and Interface object are required. Invalid,
+The three action-group flags, the type, version and Interface object are required.
+An existing configuration without `EnableInternalItemTransfers` loads with it
+set to `false`; the next save writes the flag. When present it must be a Boolean.
+Invalid,
 unreadable or unsupported configuration is reported at startup and left
 untouched. Unknown properties are retained when saving. Saving uses a temporary
 file followed by replacement; on failure the previous settings remain active
@@ -50,10 +54,14 @@ external changes during a session.
 | --- | --- |
 | `ShowDirectoryRowActionButtons` | Shows Move mark item, Rename and Relocate on the right of the path header. Other header controls, including the color picker, retain their normal visibility. |
 | `ShowDirectoryColumnActionButtons` | Shows the New, clipboard paste and transfer buttons under DIRECTORY. The sidebar, heading, counts and status remain visible when false. |
-| `ShowSelectedItemsActionButtons` | Shows the complete FOR SELECTED row above the content table. When false, the row and its spacing are collapsed. |
+| `ShowSelectedItemsActionButtons` | Shows the FOR SELECTED row above the content table. When false, the row and its spacing are collapsed. Internal transfer buttons in the row also require `EnableInternalItemTransfers`. |
+| `EnableInternalItemTransfers` | Offers internal Link, Copy and Move actions in context menus and action-button groups. When false, those actions are hidden; Shell clipboard transfers and other actions remain available. |
 
-The checkboxes do not affect one another. Hidden buttons remain available
-internally for the corresponding context-menu actions.
+The action-group checkboxes do not affect one another or context-menu actions.
+Disabling internal transfers preserves a prepared internal transfer; it becomes
+available again when the setting is re-enabled. While disabled, that hidden
+preparation does not block Delete. The flag applies independently of the three
+action-group visibility settings.
 
 ## Use cases
 

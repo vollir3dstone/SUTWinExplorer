@@ -8,6 +8,7 @@ $application.InitializeComponent()
 $application.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
 $viewFlags = [System.Reflection.BindingFlags]'Instance,NonPublic'
 $testView = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
+$testView.EnableInternalItemTransfers = $true
 $menuActionOrder = @($testView.GetType().GetMethod('CreateContextMenuActions', $viewFlags).Invoke($testView, @()) | ForEach-Object { $_.Id })
 [SutShellRightClickProbe]::PropertiesCommandId = Get-ActionCommandId 'Properties'
 [SutShellRightClickProbe]::NameClipboardCopyCommandId = Get-ActionCommandId 'NameClipboardCopy'
@@ -24,6 +25,8 @@ try {
     $pathviewConstructor = $pathviewType.GetConstructors()[0]
     $fixedPathview = $pathviewConstructor.Invoke([object[]] @([string] $directory, [bool] $false, $null, $null, $null, $null))
     $browsePathview = $pathviewConstructor.Invoke([object[]] @([string] $directory, [bool] $true, $null, $null, $null, $null))
+    $fixedPathview.EnableInternalItemTransfers = $true
+    $browsePathview.EnableInternalItemTransfers = $true
     $fixedPathview.ShowDirectoryRowActionButtons = $true
     $fixedPathview.ShowSelectedItemsActionButtons = $true
     $fixedPathview.ShowDirectoryColumnActionButtons = $true

@@ -18,6 +18,7 @@ try {
     [System.Threading.SynchronizationContext]::SetSynchronizationContext(
         [System.Windows.Threading.DispatcherSynchronizationContext]::new([System.Windows.Threading.Dispatcher]::CurrentDispatcher))
     $view = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
+    $view.EnableInternalItemTransfers = $true
     $null = $view.GetType().GetMethod('Initialize', $viewFlags).Invoke($view, [object[]] @([bool] $true))
     $menuActionOrder = @($view.GetType().GetMethod('CreateContextMenuActions', $viewFlags).Invoke($view, @()) | ForEach-Object { $_.Id })
     $window = [System.Windows.Window]::new()

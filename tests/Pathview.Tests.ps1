@@ -8,6 +8,7 @@ $application.InitializeComponent()
 $application.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
 $viewFlags = [System.Reflection.BindingFlags]'Instance,NonPublic'
 $testView = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
+$testView.EnableInternalItemTransfers = $true
 $menuActionOrder = @($testView.GetType().GetMethod('CreateContextMenuActions', $viewFlags).Invoke($testView, @()) | ForEach-Object { $_.Id })
 $directory = Join-Path ([System.IO.Path]::GetTempPath()) ('kis-pathview-test-' + [guid]::NewGuid().ToString('N'))
 $previousContext = [System.Threading.SynchronizationContext]::Current
@@ -29,6 +30,7 @@ try {
         [System.Windows.Threading.DispatcherSynchronizationContext]::new([System.Windows.Threading.Dispatcher]::CurrentDispatcher))
     $pathviewType = $assembly.GetType('SUTWinExplorer.Pathview', $true)
     $fixedPathview = $pathviewType.GetConstructors()[0].Invoke([object[]] @([string] $directory, [bool] $false, $null, $null, $null, $null))
+    $fixedPathview.EnableInternalItemTransfers = $true
     $fixedWindow = [System.Windows.Window]::new()
     try {
         $fixedWindow.ShowInTaskbar = $false
@@ -226,9 +228,12 @@ try {
             try {
                 $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true))
                 Assert-True (Test-BaseMenu $menuProbe) "Sidebar $externalId did not use the Base Menu."
+                Assert-True ($menuProbe.SelectIndex -ge 0 -and ($menuProbe.States[$menuProbe.SelectIndex] -band 3) -eq 0) "Sidebar $externalId was not selected or was disabled: index=$($menuProbe.SelectIndex), items=$($menuProbe.Items -join '|')."
             } finally { $menuProbe.Dispose() }
             $clipboardData = [System.Windows.Clipboard]::GetDataObject()
-            $clipboardEffect = [BitConverter]::ToUInt32($clipboardData.GetData('Preferred DropEffect', $false).ToArray(), 0)
+            $effectData = $clipboardData.GetData('Preferred DropEffect', $false)
+            Assert-True ($effectData -is [IO.MemoryStream]) "Sidebar $externalId did not prepare a clipboard effect: formats=$($clipboardData.GetFormats($false) -join '|'), selected=$($menuProbe.SelectIndex), items=$($menuProbe.Items -join '|')."
+            $clipboardEffect = [BitConverter]::ToUInt32($effectData.ToArray(), 0)
             $clipboardPaths = @([System.Windows.Clipboard]::GetFileDropList())
             Assert-True (($clipboardEffect -eq $effect -or ($effect -eq 1 -and $clipboardEffect -eq 5)) -and
                 $clipboardPaths.Count -eq 1 -and $clipboardPaths[0] -ceq $subdirectoryEntry.Path -and

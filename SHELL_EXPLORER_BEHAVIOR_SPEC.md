@@ -46,6 +46,13 @@ time. A successful Execute or Abort returns the transfer to its idle state; if
 Execute fails, the prepared sources remain available. A failed transfer may
 already have completed some items.
 
+Internal transfer actions are offered only when the configuration setting
+`EnableInternalItemTransfers` is enabled; it defaults to false. When disabled,
+the corresponding buttons and context-menu actions are hidden, while Shell
+clipboard actions remain available. A prepared internal transfer is retained
+and becomes accessible again if the setting is re-enabled; while hidden, it does
+not block Delete. See [Configuration](Configuration.md#pathview-action-groups).
+
 ### Clipboard actions and transfer functions
 
 Clipboard actions use the Windows clipboard and are completely independent of

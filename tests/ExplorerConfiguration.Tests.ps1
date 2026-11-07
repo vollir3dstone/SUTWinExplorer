@@ -16,16 +16,22 @@ try {
     $json = Get-Content -LiteralPath $filePath -Raw | ConvertFrom-Json -AsHashtable
     Assert-True ($json._type -ceq 'KIS Explorer Configuration' -and $json._version -ceq '1.01' -and
         -not $json.Interface.ShowDirectoryRowActionButtons -and -not $json.Interface.ShowSelectedItemsActionButtons -and
-        -not $json.Interface.ShowDirectoryColumnActionButtons) 'Default configuration is incorrect.'
+        -not $json.Interface.ShowDirectoryColumnActionButtons -and -not $json.Interface.EnableInternalItemTransfers) 'Default configuration is incorrect.'
     Assert-True (@($json.Keys)[0] -ceq '_type' -and @($json.Keys)[1] -ceq '_version') 'Configuration header order is incorrect.'
-    Assert-True (($json.Interface.Keys -join '|') -ceq 'ShowDirectoryRowActionButtons|ShowDirectoryColumnActionButtons|ShowSelectedItemsActionButtons') 'Interface property names or order are incorrect.'
+    Assert-True (($json.Interface.Keys -join '|') -ceq 'ShowDirectoryRowActionButtons|ShowDirectoryColumnActionButtons|ShowSelectedItemsActionButtons|EnableInternalItemTransfers') 'Interface property names or order are incorrect.'
+
+    $json.Interface.Remove('EnableInternalItemTransfers')
+    $json | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $filePath -Encoding utf8
+    $configuration = $store.Load()
+    Assert-True (-not $configuration.Interface.EnableInternalItemTransfers) 'A missing transfer setting did not default to false.'
 
     $configuration.Interface.ShowDirectoryRowActionButtons = $true
     $configuration.Interface.ShowDirectoryColumnActionButtons = $true
+    $configuration.Interface.EnableInternalItemTransfers = $true
     $store.Save($configuration)
     $configuration = $store.Load()
     Assert-True ($configuration.Interface.ShowDirectoryRowActionButtons -and -not $configuration.Interface.ShowSelectedItemsActionButtons -and
-        $configuration.Interface.ShowDirectoryColumnActionButtons) 'Configuration did not round-trip.'
+        $configuration.Interface.ShowDirectoryColumnActionButtons -and $configuration.Interface.EnableInternalItemTransfers) 'Configuration did not round-trip.'
 
     $json = Get-Content -LiteralPath $filePath -Raw | ConvertFrom-Json -AsHashtable
     $json.FutureSetting = @{ Value = 42 }
@@ -44,13 +50,14 @@ try {
     } finally { $locked.Dispose() }
     Assert-True ($store.Load().Interface.ShowDirectoryRowActionButtons) 'A failed save damaged the existing configuration.'
 
-    foreach ($case in @('version', 'type', 'missing', 'wrong-type', 'null-interface')) {
+    foreach ($case in @('version', 'type', 'missing', 'wrong-type', 'wrong-transfer-type', 'null-interface')) {
         $invalid = Get-Content -LiteralPath $filePath -Raw | ConvertFrom-Json -AsHashtable
         switch ($case) {
             'version' { $invalid._version = '2.0' }
             'type' { $invalid._type = 'Other' }
             'missing' { $invalid.Interface.Remove('ShowSelectedItemsActionButtons') }
             'wrong-type' { $invalid.Interface.ShowSelectedItemsActionButtons = 'false' }
+            'wrong-transfer-type' { $invalid.Interface.EnableInternalItemTransfers = 'false' }
             'null-interface' { $invalid.Interface = $null }
         }
         $invalid | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $filePath -Encoding utf8

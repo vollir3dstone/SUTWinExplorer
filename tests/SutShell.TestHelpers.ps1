@@ -400,7 +400,7 @@ public sealed class SutShellRightClickProbe : System.IDisposable
                 popupFound = true;
                 var label = new System.Text.StringBuilder(512);
                 GetMenuString(menu, 2, label, label.Capacity, 0x400);
-                var isBase = GetMenuItemID(menu, 0) == PropertiesCommandId && GetMenuItemID(menu, 2) == NameClipboardCopyCommandId;
+                var isBase = GetMenuItemID(menu, 0) == PropertiesCommandId && GetMenuItemID(menu, 6) == NameClipboardCopyCommandId;
                 if (phase == 0 && ObservedFirstLabel == null) ObservedFirstLabel = label.ToString();
                 if (phase == 0 && isBase)
                 {
@@ -862,6 +862,7 @@ function Test-TransferActionExecution($assembly, [string] $operation, [string] $
                 } else {
                     $view = $assembly.GetType('SUTWinExplorer.Pathview', $true).GetConstructors()[0].Invoke([object[]] @([string] $destination, $false, $null, $null, $null, $null))
                 }
+                $view.EnableInternalItemTransfers = $true
                 $window.ShowInTaskbar = $false
                 $window.Left = -20000
                 $window.Top = -20000

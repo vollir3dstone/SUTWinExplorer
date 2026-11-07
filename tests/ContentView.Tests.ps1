@@ -47,6 +47,7 @@ try {
         $view.FindName('DirectoryButtonGroup').Visibility -eq 'Collapsed') 'ContentView action groups must default to hidden.'
     $view.ShowSelectedItemsActionButtons = $true
     $view.ShowDirectoryColumnActionButtons = $true
+    $view.EnableInternalItemTransfers = $true
     $viewFlags = [System.Reflection.BindingFlags]'Instance,NonPublic'
     $null = $view.GetType().GetMethod('Initialize', $viewFlags).Invoke($view, [object[]] @([bool] $true))
     $menuActionOrder = @($view.GetType().GetMethod('CreateContextMenuActions', $viewFlags).Invoke($view, @()) | ForEach-Object { $_.Id })

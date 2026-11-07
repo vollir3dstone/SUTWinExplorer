@@ -631,7 +631,7 @@ internal static class SutContextMenuFactory
     }
 
     internal static IReadOnlyList<ShellMenuAction> CreateBaseActions(IReadOnlyList<ShellMenuAction> actions, ShellMenuAction relocate,
-        IReadOnlyList<string> paths, IntPtr owner)
+        IReadOnlyList<string> paths, IntPtr owner, bool enableInternalItemTransfers)
     {
         ShellMenuAction Existing(string id, string label, bool separator = false) =>
             actions.Single(action => action.Id == id) with { Label = label, IsTransfer = false, SeparatorBefore = separator };
@@ -648,7 +648,7 @@ internal static class SutContextMenuFactory
             { IconSource = actions.Single(action => action.Id == (operation switch
                 { ClipboardOperation.Copy => "ItemClipboardCopy", ClipboardOperation.Link => "LinkMarkItem", _ => "MoveMarkItem" })).IconSource };
 
-        return new ShellMenuAction[]
+        var result = new ShellMenuAction[]
         {
             Existing("Properties", "Properties"),
             Prepare("PrepareCopyToExternal", "Prepare copy to external", ClipboardOperation.Copy, true),
@@ -668,6 +668,8 @@ internal static class SutContextMenuFactory
             relocate,
             Existing("Delete", "Delete")
         };
+        return enableInternalItemTransfers ? result : result.Where(action => action.Id is not
+            ("AbortTransfer" or "LinkMarkItem" or "CopyMarkItem" or "MoveMarkItem")).ToArray();
     }
 
     private static void InsertActions(IntPtr menu, IReadOnlyList<ShellMenuAction> actions)

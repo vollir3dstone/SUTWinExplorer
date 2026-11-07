@@ -32,7 +32,7 @@ $flags = [Reflection.BindingFlags]'Instance,NonPublic'
 $factory = $assembly.GetType('SUTWinExplorer.SutContextMenuFactory', $true)
 $insert = $factory.GetMethod('InsertActions', [Reflection.BindingFlags]'Static,NonPublic')
 $actionIds = @('Properties', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', 'ItemClipboardPaste', 'LinkMarkItem', 'LinkAbort', 'LinkExecute', 'CopyMarkItem', 'CopyAbort', 'CopyExecute', 'MoveMarkItem', 'MoveAbort', 'MoveExecute', 'Rename', 'Delete')
-$baseActionIds = @('Properties', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', 'AbortTransfer', 'LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem', 'Rename', 'Relocate', 'Delete')
+$baseActionIds = @('Properties', 'PrepareCopyToExternal', 'PrepareLinkingFromExternal', 'PrepareMoveToExternal', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', 'AbortTransfer', 'LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem', 'Rename', 'Relocate', 'Delete')
 $directory = Join-Path ([IO.Path]::GetTempPath()) ('SutBaseMenu-' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($directory) | Out-Null
 function Wait-SelectedPaths($view, [string[]] $expected) {
@@ -175,6 +175,9 @@ try {
     $pathview = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.Pathview', $true),
         [object[]] @([string] $directory, [bool] $false, $null, $null, $null, $null))
     $view = $pathview.FindName('DirectoryContent')
+    if ($pathview.EnableInternalItemTransfers -or $view.EnableInternalItemTransfers -or
+        $pathview.FindName('MoveMarkCurrentDirectoryButton').Visibility -ne 'Collapsed' -or
+        @('TransferMarkItemButtons', 'LinkTransferButtons', 'CopyTransferButtons', 'MoveTransferButtons' | Where-Object { $view.FindName($_).Visibility -ne 'Collapsed' }).Count -ne 0) { throw 'Internal transfer controls were not hidden by default.' }
     foreach ($name in $actionIds) {
         [System.Windows.Automation.AutomationProperties]::SetName($view.FindName($name + 'Button'), 'Lokalisierte Aktion')
     }
@@ -185,11 +188,25 @@ try {
     $link = $assembly.GetType('SUTWinExplorer.LinkWorkflowState', $true).GetProperty('Shared').GetValue($null)
     $copy = $assembly.GetType('SUTWinExplorer.CopyWorkflowState', $true).GetProperty('Shared').GetValue($null)
     $move = $assembly.GetType('SUTWinExplorer.MoveWorkflowState', $true).GetProperty('Shared').GetValue($null)
+    $copy.Prepare([string[]] @($directory))
+    foreach ($actions in @($createContent.Invoke($view, @()), $createDirectory.Invoke($pathview, [object[]] @($entry)), $createBackground.Invoke($pathview, @()))) {
+        $ids = @($actions | ForEach-Object { $_.Id })
+        if (@($ids | Where-Object { $_ -in @('AbortTransfer', 'LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem') }).Count -ne 0 -or
+            @($ids | Where-Object { $_ -in @('PrepareCopyToExternal', 'PrepareLinkingFromExternal', 'PrepareMoveToExternal') }).Count -ne 3) { throw 'Disabled internal transfers affected the wrong Base Menu actions.' }
+    }
+    $contentTransfers = $view.GetType().GetMethod('CreateContentTransferActions', $flags)
+    if (@($contentTransfers.Invoke($view, [object[]] @([string] $directory)) | Where-Object { $_.Id -in @('AbortTransfer', 'CopyExecute') }).Count -ne 0) { throw 'Disabled internal transfer appeared in the Content Menu.' }
+    if (-not $copy.IsPrepared) { throw 'Hiding internal transfers discarded the prepared transfer.' }
+    $pathview.EnableInternalItemTransfers = $true
+    if (@($contentTransfers.Invoke($view, [object[]] @([string] $directory)) | Where-Object { $_.Id -in @('AbortTransfer', 'CopyExecute') }).Count -ne 2 -or
+        $pathview.FindName('MoveMarkCurrentDirectoryButton').Visibility -ne 'Visible' -or
+        @('TransferMarkItemButtons', 'LinkTransferButtons', 'CopyTransferButtons', 'MoveTransferButtons' | Where-Object { $view.FindName($_).Visibility -ne 'Visible' }).Count -ne 0) { throw 'Enabling internal transfers did not restore their actions.' }
+    $copy.Abort()
     foreach ($case in @('Idle', 'Link', 'Copy', 'Move')) {
         if ($case -eq 'Link') { $link.Prepare([string[]] @($directory)) }
         if ($case -eq 'Copy') { $copy.Prepare([string[]] @($directory)) }
         if ($case -eq 'Move') { $move.Prepare([string[]] @($directory)) }
-        $head = @('Properties', '|', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', '|', 'AbortTransfer', 'LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem')
+        $head = @('Properties', '|', 'PrepareCopyToExternal', 'PrepareLinkingFromExternal', 'PrepareMoveToExternal', '|', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', '|', 'AbortTransfer', 'LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem')
         $expected = $head + @('|', 'Shell command', '|', 'Rename', 'Relocate', '|', 'Delete')
         $clipboardReady = $assembly.GetType('SUTWinExplorer.SutShell', $true).GetMethod('ClipboardContainsItems', [Reflection.BindingFlags]'Static,NonPublic').Invoke($null, @())
         $directoryActions = $createDirectory.Invoke($pathview, [object[]] @($entry))
@@ -213,12 +230,13 @@ try {
             }
             $view.FindName($name + 'Button').IsEnabled = $enabled
         }
-        Assert-Menu ($createContent.Invoke($view, @())) $expected ($directoryDisabled + @('Relocate'))
+        Assert-Menu ($createContent.Invoke($view, @())) $expected ($directoryDisabled + @('Relocate', 'PrepareCopyToExternal', 'PrepareLinkingFromExternal', 'PrepareMoveToExternal'))
         $link.Abort()
         $copy.Abort()
         $move.Abort()
     }
     $rootView = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
+    $rootView.EnableInternalItemTransfers = $true
     $null = $rootView.GetType().GetMethod('SetCurrentPath', $flags).Invoke($rootView, [object[]] @([string] [IO.Path]::GetPathRoot($directory)))
     $rootActions = $rootView.GetType().GetMethod('CreateActiveDirectoryMenuActions', $flags).Invoke($rootView, @())
     foreach ($id in @('MoveMarkItem', 'Rename', 'Relocate', 'Delete')) {
@@ -226,6 +244,23 @@ try {
     }
     $originalClipboard = [System.Windows.Clipboard]::GetDataObject()
     try {
+        $pathview.EnableInternalItemTransfers = $false
+        $copy.Prepare([string[]] @($testFile))
+        foreach ($effect in @(1, 2, 4)) {
+            $clipboardData = [System.Windows.DataObject]::new()
+            $clipboardPaths = [System.Collections.Specialized.StringCollection]::new()
+            [void] $clipboardPaths.Add($testFile)
+            $clipboardData.SetFileDropList($clipboardPaths)
+            $clipboardData.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] $effect)))
+            [System.Windows.Clipboard]::SetDataObject($clipboardData, $true)
+            $ids = @($contentTransfers.Invoke($view, [object[]] @([string] $directory)) | ForEach-Object Id)
+            $expectedId = switch ($effect) { 1 { 'ClipboardItemCopy' } 2 { 'ClipboardItemMove' } 4 { 'ClipboardItemLink' } }
+            if ($expectedId -notin $ids -or 'AbortTransfer' -in $ids -or 'CopyExecute' -in $ids) { throw "Clipboard effect $effect was affected by disabled internal transfers." }
+            if ($effect -in @(2, 4) -and @('AbortClipboardMove', 'AbortClipboardLink' | Where-Object { $_ -in $ids }).Count -ne 1) { throw "Clipboard effect $effect lost its abort action." }
+        }
+        if (-not $copy.IsPrepared) { throw 'Clipboard actions changed the hidden internal transfer.' }
+        $copy.Abort()
+        $pathview.EnableInternalItemTransfers = $true
         $window.Content = $pathview
         $window.Width = 800
         $window.Height = 500
