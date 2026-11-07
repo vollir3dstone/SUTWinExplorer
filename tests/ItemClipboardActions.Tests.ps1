@@ -195,6 +195,23 @@ function Assert-ItemMenu($actions, [string[]] $paths, [bool] $background, [IntPt
             $visible = $false
             for ($offset = 3; $offset -lt $pixels.Length; $offset += 4) { if ($pixels[$offset] -ne 0) { $visible = $true; break } }
             if (-not $visible) { throw "Blank menu icon: $($action.Id)." }
+            if ($action.Id -in @('PrepareCopyToExternal', 'PrepareLinkingFromExternal', 'PrepareMoveToExternal')) {
+                $icon = [System.Windows.Controls.Image]::new()
+                $icon.Source = [System.Windows.Media.Imaging.BitmapFrame]::Create([Uri]::new((Resolve-Path (Join-Path $PSScriptRoot '..\Assets\doubles 16.png')).Path))
+                $icon.Width = 16; $icon.Height = 16
+                $grid = [System.Windows.Controls.Grid]::new()
+                $grid.Width = 16; $grid.Height = 16
+                $null = $grid.Children.Add($icon)
+                $grid.Measure([System.Windows.Size]::new(16, 16))
+                $grid.Arrange([System.Windows.Rect]::new(0, 0, 16, 16))
+                $grid.UpdateLayout()
+                $dpi = [System.Windows.Media.VisualTreeHelper]::GetDpi($action.IconSource)
+                $expected = [System.Windows.Media.Imaging.RenderTargetBitmap]::new($bitmap.Width, $bitmap.Height, $dpi.PixelsPerInchX, $dpi.PixelsPerInchY, [System.Windows.Media.PixelFormats]::Pbgra32)
+                $expected.Render($grid)
+                $expectedPixels = [byte[]]::new($pixels.Length)
+                $expected.CopyPixels($expectedPixels, $bitmap.WidthBytes, 0)
+                if ([Convert]::ToBase64String($pixels) -cne [Convert]::ToBase64String($expectedPixels)) { throw "Incorrect external preparation icon: $($action.Id)." }
+            }
         }
     } finally { ([IDisposable] $menu).Dispose() }
     foreach ($bitmap in $bitmaps) {

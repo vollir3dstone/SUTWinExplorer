@@ -57,6 +57,7 @@
     <Resource Include="Assets\ic_fluent_arrow_right_16_regular.png" />
     <Resource Include="Assets\ic_fluent_arrow_up_16_regular.png" />
     <Resource Include="Assets\ic_fluent_color_32_regular.png" />
+    <Resource Include="Assets\doubles 16.png" />
     <Resource Include="Assets\usecase 24.png" />
     <Resource Include="Assets\subtype_text 16.png" />
     <Resource Include="Assets\subtype_edit 16.png" />
