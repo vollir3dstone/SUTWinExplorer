@@ -79,7 +79,7 @@ The same one-preparation-to-one-successful-execution behavior is desirable for
 Shell transfers, but KIS Explorer does not control every participant or its
 clipboard behavior. For Move and Link, Shell completion feedback provides a way
 to encourage one-shot behavior, subject to the source and destination honoring
-it and, for KIS-prepared Links, clipboard clearing succeeding. For Copy, KIS
+it and clipboard clearing succeeding. For Copy, KIS
 Explorer does not enforce one-shot use: the Shell Copy clipboard can be pasted
 repeatedly. No direction provides an unconditional exactly-once guarantee.
 
@@ -87,7 +87,7 @@ repeatedly. No direction provides an unconditional exactly-once guarantee.
 | --- | --- | --- |
 | **Copy** | KIS places the selected sources on the clipboard with Shell Copy. A compatible destination pastes them; KIS does not consume the clipboard or prevent subsequent pastes. | KIS reads the clipboard's file list and Copy effect and copies the sources to the destination. It does not clear the clipboard or send a completion notification; the clipboard remains available unless the source or another participant changes it. |
 | **Move** | KIS uses Shell Cut. The destination moves the sources and interacts with the native Shell clipboard object; the tested Windows Explorer clears the clipboard after success, but other destinations may behave differently. | KIS moves all sources and, after complete success, reports `Paste Succeeded` with Move effect to the clipboard source. The source's reaction determines whether the clipboard is consumed. If notification fails, KIS reports that the move completed but notification failed; no success is reported on an incomplete move. |
-| **Link** | KIS prepares a Shell data object with Link effect. A compatible destination creates shortcuts; on a reported logical Link success, KIS attempts to clear its own still-current prepared clipboard. Missing feedback or an unavailable or replaced clipboard prevents that automatic clear. | KIS creates shortcuts for the sources, then reports logical Link success to the clipboard source. The source decides how to react; if it rejects the notification, the successful shortcut creation remains successful. A KIS-prepared Link pasted in KIS uses the same guarded clear as an externally completed Link. |
+| **Link** | KIS prepares a Shell data object with Link effect. A compatible destination creates shortcuts; on a reported logical Link success, KIS attempts to clear its own still-current prepared clipboard. Missing feedback or an unavailable or replaced clipboard prevents that automatic clear. | KIS creates shortcuts, reports logical Link success to the clipboard source, and clears the clipboard if it has not changed. Unsupported completion feedback does not prevent clearing. A clearing error is reported after shortcut creation. |
 
 Shell transfers use the current clipboard content, which can contain multiple
 source items under one requested effect. They are not a queue of independently
@@ -114,9 +114,9 @@ separator, before the existing clipboard-copy group:
 
 | Base Menu action | Shell clipboard preparation | Intended external action |
 | --- | --- | --- |
-| **Prepare copy to external** | Shell Copy verb | Paste a copy. |
-| **Prepare linking from external** | Shell data object with explicit Link preferred drop effect | Paste a shortcut; Windows Explorer offers **Paste shortcut**. |
-| **Prepare move to external** | Shell Cut verb | Paste to move the source. |
+| **Prepare copying** | Shell Copy verb | Paste a copy. |
+| **Prepare linking** | Shell data object with explicit Link preferred drop effect | Paste a shortcut; Windows Explorer offers **Paste shortcut**. |
+| **Prepare moving** | Shell Cut verb | Paste to move the source. |
 
 For ContentView selections, these actions use all selected filesystem items. For
 a directory item they use that directory; for a background they use the active
@@ -135,7 +135,7 @@ the clipboard. Retaining it allows another shortcut to be created; whether this
 is the reason for Explorer's behavior is not established. Shell Copy is also
 reusable and is not consumed by an ordinary paste.
 
-KIS Explorer deliberately treats its own **Prepare linking from external** as
+KIS Explorer deliberately treats its own **Prepare linking** as
 a one-shot operation, rather than allowing repeated shortcut creation from that
 preparation. When a destination reports logical performed drop effect Link
 (`4`) to the prepared Shell data object, KIS Explorer schedules clearing that
@@ -144,15 +144,16 @@ button and subsequent Content Menus. To make another link, the user prepares
 the source again.
 
 When KIS Explorer is the destination, it reports the same logical Link effect
-to the clipboard source after all shortcuts have been created. This also
-completes a Link prepared by KIS Explorer itself. Sources that do not accept the
-notification do not turn an otherwise successful Link into an error; in that
-case their clipboard behavior remains source-dependent. A failed Link is not
-reported as successful. For an incoming Move, KIS Explorer reports `Paste
+to the clipboard source after all shortcuts have been created, then clears the
+clipboard only if its sequence still matches the original request. A newer
+clipboard is left untouched. Sources that do not accept the notification do not
+prevent this clear. If clearing fails, the error is reported after shortcut
+creation. A failed Link is not reported as successful and is not cleared by KIS.
+For an incoming Move, KIS Explorer reports `Paste
 Succeeded` with effect Move (`2`) after the complete move; failure to deliver
 that notification is reported because the items have already been moved.
 
-The clear is conditional: the clipboard sequence must still match and the
+For externally completed KIS-prepared Links, the clear is conditional: the clipboard sequence must still match and the
 prepared data object must still own the clipboard when it is opened. A late
 report must not clear a newer clipboard, including a new preparation of the same
 source. If the clipboard is busy, the application retries briefly; if it cannot
@@ -162,7 +163,7 @@ does not report a successful Link cannot trigger this completion handling.
 These rules apply to Links prepared by KIS Explorer, not arbitrary Link data
 placed on the clipboard by another application.
 
-For **Prepare move to external**, the native Shell Cut data object remains
+For **Prepare moving**, the native Shell Cut data object remains
 responsible for Move feedback and clipboard behavior. The tested Windows Explorer
 clears the clipboard after a successful Move, which likewise updates KIS Explorer
 through the clipboard notification. Other destinations may behave differently;
@@ -171,7 +172,7 @@ Neither external completion changes an application's internally prepared
 transfer. The real Explorer Link and Move paths and clipboard notifications are
 covered by [ExplorerClipboardLink.Tests.ps1](tests/ExplorerClipboardLink.Tests.ps1).
 
-**Prepare copy to external** and **Copy item to clipboard** are intentionally
+**Prepare copying** and **Copy item to clipboard** are intentionally
 separate actions with the same technical effect: both invoke the Shell Copy verb
 for their source items. They differ in presentation and purpose, not clipboard
 format or access restrictions. The former appears in the external initiation

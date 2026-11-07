@@ -22,6 +22,23 @@ Report which checks ran and any relevant behavior that remains unverified.
 
 ## Test Organization
 
+### User-visible Text
+
+Tests must not assert exact application display text, including menu labels,
+button captions, tooltips, and dialog messages. Identify controls and actions
+by stable IDs or other non-text properties, and test behavior, ordering, state,
+and structure independently of wording or localization. This does not prohibit
+checking user-provided data or protocol values whose contents are the behavior
+under test.
+
+Identify Shell actions by their canonical verbs when available. A test may use
+Shell-provided labels when an action or submenu exposes no usable verb,
+including when an extension supplies unrelated identifiers in the Shell contexts
+being compared. Tests driving another application's actual menu may also use
+its displayed text when the owning Shell context and its verbs are inaccessible;
+document language limitations in the test. Do not apply these exceptions to KIS
+actions.
+
 ### Purpose and Boundaries
 
 Organize tests around the behavior they establish, not just the control or file

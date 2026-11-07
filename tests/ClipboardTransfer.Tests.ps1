@@ -11,6 +11,7 @@ public sealed class ClipboardFeedbackSource : IDataObject
     private readonly IDataObject inner;
     public int Notifications;
     public int Effect;
+    public Action OnNotification;
     private readonly int preferredEffect;
     private readonly bool supportsFeedback;
     public ClipboardFeedbackSource(IDataObject inner, int effect, bool supportsFeedback) { this.inner = inner; preferredEffect = effect; this.supportsFeedback = supportsFeedback; }
@@ -57,6 +58,7 @@ public sealed class ClipboardFeedbackSource : IDataObject
         IntPtr pointer = GlobalLock(medium.unionmember);
         try { Effect = Marshal.ReadInt32(pointer); Notifications++; }
         finally { GlobalUnlock(medium.unionmember); if (release) ReleaseStgMedium(ref medium); }
+        OnNotification?.Invoke();
     }
     public IEnumFORMATETC EnumFormatEtc(DATADIR direction) => direction == DATADIR.DATADIR_GET ? new FeedbackFormats(inner.EnumFormatEtc(direction)) : inner.EnumFormatEtc(direction);
     public int DAdvise(ref FORMATETC format, ADVF flags, IAdviseSink sink, out int connection) => inner.DAdvise(ref format, flags, sink, out connection);
@@ -169,12 +171,18 @@ try {
     $linkFeedback = [ClipboardFeedbackSource]::Install($externalLinkSource, 4)
     $null = $paste.Invoke($null, [object[]] @([string] $linkTarget, [IntPtr]::Zero))
     if ($linkFeedback.Notifications -ne 1 -or $linkFeedback.Effect -ne 4) { throw 'External Link source did not receive logical Link completion.' }
+    if ([System.Windows.Clipboard]::ContainsFileDropList()) { throw 'Successful external Link did not clear its clipboard.' }
     $unsupportedLinkSource = Join-Path $source 'unsupported-link.txt'
     [IO.File]::WriteAllText($unsupportedLinkSource, 'unsupported link')
     $linkFeedback = [ClipboardFeedbackSource]::Install($unsupportedLinkSource, 4, $false)
     $null = $paste.Invoke($null, [object[]] @([string] $linkTarget, [IntPtr]::Zero))
     $unsupportedLinks = @([IO.Directory]::GetFiles($linkTarget, 'unsupported-link*.lnk'))
     if ($unsupportedLinks.Count -ne 1 -or $resolveLink.Invoke($null, [object[]] @($unsupportedLinks[0])) -cne $unsupportedLinkSource -or $linkFeedback.Notifications -ne 0) { throw 'A source without Link feedback support prevented successful shortcut creation.' }
+    if ([System.Windows.Clipboard]::ContainsFileDropList()) { throw 'Successful Link without feedback support did not clear its clipboard.' }
+    $linkFeedback = [ClipboardFeedbackSource]::Install($externalLinkSource, 4)
+    $linkFeedback.OnNotification = [Action] { [System.Windows.Clipboard]::SetText('replacement during Link completion') }
+    $null = $paste.Invoke($null, [object[]] @([string] $linkTarget, [IntPtr]::Zero))
+    if ([System.Windows.Clipboard]::GetText() -cne 'replacement during Link completion') { throw 'Successful Link cleared a newer clipboard.' }
     $missingLinkSource = Join-Path $source 'missing-link.txt'
     [IO.File]::WriteAllText($missingLinkSource, 'missing link')
     $linkFeedback = [ClipboardFeedbackSource]::Install($missingLinkSource, 4)
@@ -183,6 +191,7 @@ try {
     try { $null = $paste.Invoke($null, [object[]] @([string] $linkTarget, [IntPtr]::Zero)) }
     catch { $failed = $true }
     if (-not $failed -or $linkFeedback.Notifications -ne 0) { throw 'A failed Link reported success.' }
+    if (-not [System.Windows.Clipboard]::ContainsFileDropList()) { throw 'A failed Link cleared its clipboard.' }
     $getOperation = $shell.GetMethod('TryGetClipboardOperation', $flags)
     $abort = $shell.GetMethod('AbortClipboardOperation', $flags)
     foreach ($effect in @(2, 4)) {

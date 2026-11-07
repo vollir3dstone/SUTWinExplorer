@@ -102,7 +102,7 @@ try {
         $moveWorkflow = $assembly.GetType('SUTWinExplorer.MoveWorkflowState', $true).GetProperty('Shared').GetValue($null)
         $copyWorkflow = $assembly.GetType('SUTWinExplorer.CopyWorkflowState', $true).GetProperty('Shared').GetValue($null)
         $linkWorkflow = $assembly.GetType('SUTWinExplorer.LinkWorkflowState', $true).GetProperty('Shared').GetValue($null)
-        if (-not $moveMarkButton.IsEnabled -or $moveMarkButton.Content -cne 'Move🠝') { throw 'The current-directory Move mark item button is not available.' }
+        if (-not $moveMarkButton.IsEnabled) { throw 'The current-directory Move mark item button is not available.' }
         $moveMarkButton.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         if (-not $moveWorkflow.IsPrepared -or @($moveWorkflow.PreparedPaths).Count -ne 1 -or $moveWorkflow.PreparedPaths[0] -cne $operationParent -or $moveMarkButton.IsEnabled -or $childMoveMarkButton.IsEnabled) { throw 'The header button did not prepare the current directory or update other Pathviews.' }
         $moveWorkflow.Abort()
@@ -112,8 +112,6 @@ try {
             if ($moveMarkButton.IsEnabled -or $childMoveMarkButton.IsEnabled) { throw 'A prepared transfer did not disable the header buttons.' }
             $workflow.Abort()
         }
-        if ($parentView.FindName('RelocateCurrentDirectoryButton').Content -cne 'Relocate...') { throw 'The relocation button has an incorrect label.' }
-
         $parentView.GetType().GetMethod('RenameCurrentDirectory', $flags).Invoke($parentView, [object[]] @([string] 'renamed-parent'))
         $renamedParent = Join-Path $root 'renamed-parent'
         $renamedOperationChild = Join-Path $renamedParent 'child'
@@ -166,6 +164,7 @@ try {
         if ($parentView.GetType().GetField('_observersSuspended', $flags).GetValue($parentView) -or $childView.GetType().GetField('_observersSuspended', $flags).GetValue($childView)) { throw 'Observers were not resumed after cancellation.' }
 
         $browseView = $tabs.Items[0].Content
+        $browseView.EnableInternalItemTransfers = $true
         $browseView.Navigate($destination, $null, $null, $null)
         $moveMarkButton.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         $browseContent = $browseView.FindName('DirectoryContent')

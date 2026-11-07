@@ -16,6 +16,21 @@ try { $parsedWhitelist = $menuType.GetMethod('ParseDirectoryWhitelist', $flags).
 finally { $whitelistDocument.Dispose() }
 $directory = Join-Path ([System.IO.Path]::GetTempPath()) ('kis-content-test-' + [guid]::NewGuid().ToString('N'))
 
+function Get-FileMenuVerbSets([string[]] $paths, [IntPtr] $owner, $actions) {
+    $base = $menuType.GetMethod('GetBaseMenu', $flags).Invoke($null, [object[]] @($paths, $owner, $actions))
+    try {
+        $baseVerbs = @(Get-ShellMenuVerbs $base)
+        $baseSnapshot = $base.GetType().GetMethod('CaptureSnapshot', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($base, @())
+    } finally { ([IDisposable] $base).Dispose() }
+    $content = $menuType.GetMethod('GetContentMenu', $flags).Invoke($null, [object[]] @($paths, $owner, $baseSnapshot))
+    try { $contentVerbs = @(Get-ShellMenuVerbs $content) }
+    finally { ([IDisposable] $content).Dispose() }
+    $native = $menuType.GetMethod('GetItemMenu', $flags).Invoke($null, [object[]] @($paths, $owner, [Action] {}))
+    try { $nativeVerbs = @(Get-ShellMenuVerbs $native) }
+    finally { ([IDisposable] $native).Dispose() }
+    return @{ Base = $baseVerbs; Content = $contentVerbs; Native = $nativeVerbs }
+}
+
 try {
     [System.IO.Directory]::CreateDirectory((Join-Path $directory 'Folder')) | Out-Null
     [System.IO.File]::WriteAllText((Join-Path $directory 'notes.txt'), 'hello')
@@ -100,7 +115,7 @@ try {
         $headingPosition = $heading.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
         $dirCount = $view.FindName('DirectoryCountLabel')
         $fileCount = $view.FindName('FileCountLabel')
-        Assert-True (@($dirCount.Parent.Children | Where-Object { $_ -is [System.Windows.Controls.TextBlock] -and $_.Text -ceq ' subdir.' }).Count -eq 1) 'The subdirectory count label is incorrect.'
+        Assert-True (@($dirCount.Parent.Children | Where-Object { $_ -is [System.Windows.Controls.TextBlock] -and [System.Windows.Controls.Grid]::GetRow($_) -eq 0 -and [System.Windows.Controls.Grid]::GetColumn($_) -eq 1 }).Count -eq 1) 'The subdirectory count caption is missing.'
         $expectedDirs = @([IO.Directory]::EnumerateDirectories($directory)).Count
         $expectedFiles = @([IO.Directory]::EnumerateFiles($directory)).Count
         Assert-True ($dirCount.Text -eq "$expectedDirs" -and $fileCount.Text -eq "$expectedFiles" -and
@@ -108,7 +123,7 @@ try {
             $fileCount.TranslatePoint([System.Windows.Point]::new(0, 0), $view).Y -gt $dirCount.TranslatePoint([System.Windows.Point]::new(0, 0), $view).Y) 'The unfiltered directory and file counts were incorrect or misplaced.'
         Assert-True ($newButton.IsEnabled -and -not $propertiesButton.IsEnabled -and
             $newPosition.X + $newButton.ActualWidth -le $listPosition.X -and $propertiesPosition.Y -lt $listPosition.Y -and
-            $badge.Child.Text -eq 'DIRECTORY') 'The directory column, selection row or initial button states were incorrect.'
+            $badge.Child -is [System.Windows.Controls.TextBlock]) 'The directory column, selection row or initial button states were incorrect.'
         foreach ($buttonName in @('NewButton', 'LinkAbortButton', 'LinkExecuteButton', 'CopyAbortButton', 'CopyExecuteButton', 'MoveAbortButton', 'MoveExecuteButton')) {
             $button = $view.FindName($buttonName)
             Assert-True ([Math]::Abs($button.ActualWidth - $badge.ActualWidth) -lt 1) "$buttonName did not match the directory badge width."
@@ -139,10 +154,10 @@ try {
             $columns.IndexOf($mediaTypeSubTypeColumn) -eq $columns.IndexOf($view.FindName('MediaTypeIcon')) + 1 -and
             $mediaTypeSubTypeColumn.Width -eq 30 -and
             $nameColumn.Width -gt 80 -and $typeColumn.Width -eq 130) 'Shell column order or name-column sizing is incorrect.'
-        foreach ($headerCase in @(@('MediaTypeIcon', 'MT'), @('MediaTypeSubTypeColumn', 'ST'), @('ModifierIconColumn', 'MO'), @('TypeApp1Icon', 'TA1'), @('TypeApp2Name', 'TA2'))) {
-            $headerContent = $view.FindName($headerCase[0]).Header.Content
+        foreach ($headerId in @('MediaTypeIcon', 'MediaTypeSubTypeColumn', 'ModifierIconColumn', 'TypeApp1Icon', 'TypeApp2Name')) {
+            $headerContent = $view.FindName($headerId).Header.Content
             $headerText = if ($headerContent -is [System.Windows.Controls.TextBlock]) { $headerContent.Text } else { $headerContent.Children[0].Text }
-            Assert-True ($headerText -ceq $headerCase[1]) "Column $($headerCase[0]) has an incorrect header."
+            Assert-True (-not [string]::IsNullOrWhiteSpace($headerText)) "Column $headerId has an empty header."
         }
         $scroll = Find-VisualType $list ([System.Windows.Controls.ScrollViewer])
         $widthSum = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
@@ -412,6 +427,9 @@ try {
         $backgroundEntries = @((& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path $directory -Background | ConvertFrom-Json).Menu)
         $excludedBackgroundEntries = @($backgroundEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -in @('refresh', 'viewcustomwizard') })
         Assert-True ($excludedBackgroundEntries.Count -eq 2) 'The Shell did not expose both background commands to exclude.'
+        $nativeBackground = $menuType.GetMethod('GetBackgroundMenu', $flags).Invoke($null, [object[]] @([string] $directory, $ownerHandle))
+        try { $nativeBackgroundVerbs = @(Get-ShellMenuVerbs $nativeBackground) }
+        finally { ([IDisposable] $nativeBackground).Dispose() }
         $viewParents = @($backgroundEntries | Where-Object {
             $_.Position -match '^\d+\.\d+$' -and $_.Verb -match '^(viewlogical|arrange|sortascending|sortdescending|groupascending|groupdescending)'
         } | ForEach-Object { ($_.Position -split '\.')[0] } | Select-Object -Unique)
@@ -539,6 +557,7 @@ try {
         $showMenuCore = $view.GetType().GetMethod('ShowMenuCore', $viewFlags)
         $multiNativeEntries = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path $multiPaths | ConvertFrom-Json).Menu
         Assert-True (@($multiNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -eq 'properties' -and $_.Text }).Count -gt 0) 'The Shell did not provide a properties command for the multi-file selection.'
+        $multiVerbs = Get-FileMenuVerbSets ([string[]] $multiPaths) $ownerHandle ($view.GetType().GetMethod('CreateContextMenuActions', $viewFlags).Invoke($view, @()))
         foreach ($menuKind in @('base', 'content', 'none', 'base')) {
             $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
             try {
@@ -556,8 +575,8 @@ try {
                 if ($menuKind -eq 'content') {
                     $linkDropHereLabel = [SutShellMenuProbe]::LinkDropHereLabel()
                     Assert-True ($null -eq $linkDropHereLabel -or $linkDropHereLabel -notin $menuProbe.Items) 'A drag-and-drop-only Link Shell Extension command appeared in the multi-file menu.'
-                    foreach ($entry in $multiNativeEntries | Where-Object { $_.Verb -in @('copy', 'cut', 'paste', 'copyaspath', 'link', 'delete', 'rename') -and $_.Text }) {
-                        Assert-True ($entry.Text -notin $menuProbe.Items) "Excluded Shell command remained in the multi-file menu: $($entry.Text)."
+                    foreach ($entry in $multiNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -in @('copy', 'cut', 'paste', 'copyaspath', 'link', 'delete', 'rename') }) {
+                        Assert-True ($entry.Verb -notin $multiVerbs.Content) "Excluded Shell command remained in the multi-file menu: $($entry.Verb)."
                     }
                 }
             } finally { $menuProbe.Dispose() }
@@ -591,22 +610,20 @@ try {
                 $list.SelectedItems.Add($otherFileRow) | Out-Null
             }
         }
-        $multiProperties = @($multiNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -eq 'properties' -and $_.Text })[0]
         $list.SelectedItems.Clear()
         $list.SelectedItem = $notesMenuRow
         $unfilteredMenu = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path (Join-Path $directory 'notes.txt') -Generic | ConvertFrom-Json).Menu
         $notepadEntries = @($unfilteredMenu | Where-Object { $_.Verb -eq 'ANotepad++64' })
-        $viewerEntries = @($unfilteredMenu | Where-Object { $_.Verb -eq 'view SUTTextViewer' })
         $propertyEntries = @($unfilteredMenu | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -eq 'properties' -and $_.Text })
-        $shellRenameEntries = @($unfilteredMenu | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -eq 'rename' -and $_.Text })
         Assert-True ($propertyEntries.Count -gt 0) 'The Shell did not provide a properties command for the test file.'
         $nativeEntries = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path (Join-Path $directory 'notes.txt') | ConvertFrom-Json).Menu
+        $fileVerbs = Get-FileMenuVerbSets ([string[]] @((Join-Path $directory 'notes.txt'))) $ownerHandle ($view.GetType().GetMethod('CreateContextMenuActions', $viewFlags).Invoke($view, @()))
         $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
         try {
             $null = $showItems.Invoke($null, [object[]] @([string[]] @((Join-Path $directory 'notes.txt')), $ownerHandle, [Action] {}))
             $nativeLabels = @($menuProbe.Items)
-            foreach ($entry in $nativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -in @('properties', 'rename') -and $_.Text }) {
-                Assert-True ($entry.Text -in $nativeLabels) "The original Windows menu lost $($entry.Verb)."
+            foreach ($entry in $nativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -in @('properties', 'rename') }) {
+                Assert-True ($entry.Verb -in $fileVerbs.Native) "The original Windows menu lost $($entry.Verb)."
             }
         } finally { $menuProbe.Dispose() }
         $originalCursor = [SutShellRightClickProbe]::CursorPosition()
@@ -654,7 +671,7 @@ try {
                 [System.Windows.Threading.Dispatcher]::PushFrame($frame)
                 Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasBase) 'Shift-right-click did not open the native background menu.'
                 foreach ($entry in $excludedBackgroundEntries) {
-                    Assert-True ($entry.Text -in $rightClickProbe.SecondItems) "Shift-right-click did not preserve the native background command: $($entry.Text)."
+                    Assert-True ($entry.Verb -in $nativeBackgroundVerbs) "The native background menu did not preserve the command: $($entry.Verb)."
                 }
                 foreach ($position in $viewParents) {
                     $parent = @($backgroundEntries | Where-Object { $_.Position -eq $position })[0]
@@ -796,6 +813,7 @@ try {
                         $list.SelectedItem.Entry.FullPath -eq $expectedRow.Entry.FullPath) "Actual right-clicks failed for target=$target`: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), base=$($rightClickProbe.SecondWasBase), targetClass=$($rightClickProbe.TargetClass), selection=$($list.SelectedItems.Count)."
                 } finally { $timer.Stop(); $rightClickProbe.Dispose() }
             }
+            $otherFileVerbs = Get-FileMenuVerbSets ([string[]] @($otherMenuRow.Entry.FullPath)) $ownerHandle ($view.GetType().GetMethod('CreateContextMenuActions', $viewFlags).Invoke($view, @()))
             foreach ($target in @('same', 'other', 'double', 'delayed')) {
                 $list.SelectedItems.Clear()
                 $list.SelectedItems.Add($notesMenuRow) | Out-Null
@@ -814,10 +832,10 @@ try {
                 try {
                     [System.Windows.Threading.Dispatcher]::PushFrame($frame)
                     $expectedCount = if ($target -eq 'other') { 1 } else { 2 }
-                    $expectedProperty = if ($target -eq 'other') { $propertyEntries[0].Text } else { $multiProperties.Text }
+                    $nativeVerbs = if ($target -eq 'other') { $otherFileVerbs.Native } else { $multiVerbs.Native }
                     Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasBase -and
-                        $expectedProperty -in $rightClickProbe.SecondItems -and $list.SelectedItems.Count -eq $expectedCount -and
-                        ($target -ne 'other' -or $list.SelectedItem.Entry.FullPath -eq $otherMenuRow.Entry.FullPath)) "Shift-right-click during the Base Menu failed for target=$target`: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), properties=$($expectedProperty -in $rightClickProbe.SecondItems), selection=$($list.SelectedItems.Count)."
+                        'properties' -in $nativeVerbs -and $list.SelectedItems.Count -eq $expectedCount -and
+                        ($target -ne 'other' -or $list.SelectedItem.Entry.FullPath -eq $otherMenuRow.Entry.FullPath)) "Shift-right-click during the Base Menu failed for target=$target`: first=$($rightClickProbe.FirstMenu), second=$($rightClickProbe.SecondMenu), selection=$($list.SelectedItems.Count)."
                 } finally { $timer.Stop(); $rightClickProbe.Dispose() }
             }
             $list.SelectedItems.Clear()
@@ -898,10 +916,7 @@ try {
             $baseLabels = @($menuProbe.Items)
             $index = Get-MenuActionIndex $menuProbe 'Properties'
             Assert-True ($index -eq 0 -and ($menuProbe.States[$index] -band 3) -eq 0) 'Properties was missing or disabled in the Base Menu.'
-            foreach ($entry in $shellRenameEntries) {
-                $shellLabels = @(for ($index = 0; $index -lt $menuProbe.ItemCount; $index++) { if ($menuProbe.CommandIds[$index] -ge 1 -and $menuProbe.CommandIds[$index] -le 0x7fff) { $menuProbe.Items[$index] } })
-                Assert-True ($entry.Text -notin $shellLabels) 'The Shell rename command appeared alongside the application Rename action.'
-            }
+            Assert-True ('rename' -notin $fileVerbs.Base) 'The Shell rename command appeared alongside the application Rename action.'
         } finally { $menuProbe.Dispose() }
         $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
         try {
@@ -912,27 +927,29 @@ try {
             Assert-True ($null -eq $linkDropHereLabel -or $linkDropHereLabel -notin $contentLabels) 'A drag-and-drop-only Link Shell Extension command appeared in the Content file menu.'
             $openWithLabel = [SutShellMenuProbe]::OpenWithLabel()
             if ($openWithLabel -in $nativeLabels) { Assert-True ($openWithLabel -in $contentLabels) 'Open With was lost from the Content Menu.' }
-            foreach ($entry in $notepadEntries) {
+            foreach ($entry in $notepadEntries | Where-Object { $_.Position -notmatch '\.' }) {
                 if ($entry.Text -in $nativeLabels) { Assert-True ($entry.Text -in $contentLabels) 'Notepad++ was lost from the Content Menu.' }
             }
-            foreach ($entry in $nativeEntries | Where-Object { $_.Verb -in @('copy', 'cut', 'paste', 'copyaspath', 'link', 'delete', 'rename', 'properties') -and $_.Text }) {
-                Assert-True ($entry.Text -notin $contentLabels) "Excluded Shell command remained in the Content Menu: $($entry.Text)."
+            foreach ($entry in $nativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -in @('copy', 'cut', 'paste', 'copyaspath', 'link', 'delete', 'rename', 'properties') }) {
+                Assert-True ($entry.Verb -notin $fileVerbs.Content) "Excluded Shell command remained in the Content Menu: $($entry.Verb)."
             }
-            foreach ($label in $nativeLabels | Where-Object { $_ -and $_ -notin $baseLabels }) {
-                $excludedLabel = @($nativeEntries | Where-Object { $_.Text -ceq $label -and $_.Verb -in @('copy', 'cut', 'paste', 'copyaspath', 'link', 'delete', 'rename', 'properties') }).Count -gt 0
-                if (-not $excludedLabel) { Assert-True ($label -in $contentLabels) "A native command absent from the Base Menu was lost: $label." }
+            foreach ($entry in $nativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -and $_.Verb -notin @('copy', 'cut', 'paste', 'copyaspath', 'link', 'delete', 'rename', 'properties') }) {
+                if ($entry.Verb -notin $fileVerbs.Base) { Assert-True ($entry.Verb -in $fileVerbs.Content) "A native command absent from the Base Menu was lost: $($entry.Verb)." }
+            }
+            foreach ($entry in $nativeEntries | Where-Object { $_.Position -notmatch '\.' -and -not $_.Verb -and $_.Text -and $_.Text -notin $baseLabels }) {
+                Assert-True ($entry.Text -in $contentLabels) "A native command without a verb was lost: $($entry.Text)."
             }
             foreach ($label in @('7-Zip', 'Norton 360', '&TortoiseGit', 'Pa&th Copy')) {
-                $genericParents = @($unfilteredMenu | Where-Object { $_.Position -notmatch '\.' -and $_.Text -ceq $label -and $_.HasSubmenu })
-                $nativeParents = @($nativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Text -ceq $label -and $_.HasSubmenu })
+                $genericParents = @($unfilteredMenu | Where-Object { $_.Position -notmatch '\.' -and $_.Text -ceq $label -and $_.HasSubmenu -and -not $_.Verb })
+                $nativeParents = @($nativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Text -ceq $label -and $_.HasSubmenu -and -not $_.Verb })
                 if ($genericParents.Count -ne 1 -or $nativeParents.Count -ne 1 -or $label -notin $baseLabels -or $label -notin $nativeLabels) { continue }
                 $genericPrefix = $genericParents[0].Position + '.'
                 $nativePrefix = $nativeParents[0].Position + '.'
                 $genericChildren = @($unfilteredMenu | Where-Object { $_.Position.StartsWith($genericPrefix) -and -not $_.Separator })
                 $nativeChildren = @($nativeEntries | Where-Object { $_.Position.StartsWith($nativePrefix) -and -not $_.Separator })
                 if ($genericChildren.Count -eq 0 -or @($genericChildren | Where-Object { $_.Disabled -or -not $_.Text }).Count -gt 0) { continue }
-                $genericSignature = @($genericChildren | ForEach-Object { @($_.Position.Substring($genericPrefix.Length), $_.Text, $_.Verb, $_.HasSubmenu, $_.Disabled) -join '|' }) -join "`n"
-                $nativeSignature = @($nativeChildren | ForEach-Object { @($_.Position.Substring($nativePrefix.Length), $_.Text, $_.Verb, $_.HasSubmenu, $_.Disabled) -join '|' }) -join "`n"
+                $genericSignature = @($genericChildren | ForEach-Object { @($_.Position.Substring($genericPrefix.Length), $(if ($_.Verb) { $_.Verb } else { $_.Text }), $_.HasSubmenu, $_.Disabled) -join '|' }) -join "`n"
+                $nativeSignature = @($nativeChildren | ForEach-Object { @($_.Position.Substring($nativePrefix.Length), $(if ($_.Verb) { $_.Verb } else { $_.Text }), $_.HasSubmenu, $_.Disabled) -join '|' }) -join "`n"
                 if ($genericSignature -ceq $nativeSignature) {
                     Assert-True ($label -notin $contentLabels) "The matching $label submenu remained in the Content Menu."
                 }
@@ -943,7 +960,8 @@ try {
             $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
             Assert-True ($menuProbe.ItemCount -eq -1) 'The third right-click displayed a menu.'
         } finally { $menuProbe.Dispose() }
-        if ('7-Zip' -in $baseLabels -and '7-Zip' -in $nativeLabels -and '7-Zip' -notin $contentLabels) {
+        if (@($nativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Text -eq '7-Zip' -and $_.HasSubmenu -and -not $_.Verb }).Count -eq 1 -and
+            '7-Zip' -in $baseLabels -and '7-Zip' -in $nativeLabels -and '7-Zip' -notin $contentLabels) {
             foreach ($emptySubmenu in @($false, $true)) {
                 $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
                 $menuProbe.AlterSubmenu = '7-Zip'
@@ -973,7 +991,7 @@ try {
         $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
         try {
             $null = $showItems.Invoke($null, [object[]] @([string[]] @((Join-Path $directory 'notes.txt')), $ownerHandle, $null))
-            foreach ($entry in $notepadEntries) {
+            foreach ($entry in $notepadEntries | Where-Object { $_.Position -notmatch '\.' }) {
                 Assert-True ($entry.Text -in $menuProbe.Items) 'The original Windows menu lost the Notepad++ command.'
             }
         } finally { $menuProbe.Dispose() }
@@ -1093,13 +1111,15 @@ try {
             }
             $list.SelectedItems.Clear()
             $list.SelectedItem = $folderRow
+            $registryVerbs = Get-FileMenuVerbSets ([string[]] @($folderRow.Entry.FullPath)) $ownerHandle ($view.GetType().GetMethod('CreateContextMenuActions', $viewFlags).Invoke($view, @()))
             foreach ($menuKind in @('base', 'content')) {
                 $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
                 try {
                     $null = $showMenuCore.Invoke($view, [object[]] @($folderRow.PSObject.BaseObject, $true))
-                    Assert-True (($sharedLabel -in $menuProbe.Items) -eq ($menuKind -eq 'base') -and
-                        ($folderSharedLabel -in $menuProbe.Items) -eq ($menuKind -eq 'base') -and
-                        ($directoryLabel -in $menuProbe.Items) -eq ($menuKind -eq 'content')) "Registry-matched directory commands appeared in the wrong menu: $menuKind."
+                    $currentVerbs = if ($menuKind -eq 'base') { $registryVerbs.Base } else { $registryVerbs.Content }
+                    Assert-True (($sharedVerb -in $currentVerbs) -eq ($menuKind -eq 'base') -and
+                        ($folderSharedVerb -in $currentVerbs) -eq ($menuKind -eq 'base') -and
+                        ($directoryVerb -in $currentVerbs) -eq ($menuKind -eq 'content')) "Registry-matched directory commands appeared in the wrong menu: $menuKind."
                 } finally { $menuProbe.Dispose() }
             }
             $null = $showMenuCore.Invoke($view, [object[]] @($folderRow.PSObject.BaseObject, $true))
@@ -1107,11 +1127,13 @@ try {
             $whitelistedVerbs = $whitelist.GetType().GetProperty('Verbs').GetValue($whitelist)
             $null = $whitelistedVerbs.Add($directoryVerb.ToLowerInvariant())
             try {
+                $registryVerbs = Get-FileMenuVerbSets ([string[]] @($folderRow.Entry.FullPath)) $ownerHandle ($view.GetType().GetMethod('CreateContextMenuActions', $viewFlags).Invoke($view, @()))
                 foreach ($menuKind in @('base', 'content')) {
                     $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
                     try {
                         $null = $showMenuCore.Invoke($view, [object[]] @($folderRow.PSObject.BaseObject, $true))
-                        Assert-True (($directoryLabel -in $menuProbe.Items) -eq ($menuKind -eq 'base')) "The whitelisted directory command appeared in the wrong menu: $menuKind."
+                        $currentVerbs = if ($menuKind -eq 'base') { $registryVerbs.Base } else { $registryVerbs.Content }
+                        Assert-True (($directoryVerb -in $currentVerbs) -eq ($menuKind -eq 'base')) "The whitelisted directory command appeared in the wrong menu: $menuKind."
                     } finally { $menuProbe.Dispose() }
                 }
             } finally { $null = $whitelistedVerbs.Remove($directoryVerb) }
@@ -1143,9 +1165,8 @@ try {
             $folderProperties = @($folderNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -eq 'properties' -and $_.Text })
             Assert-True ($folderProperties.Count -gt 0) "The Shell did not provide directory properties: multiple=$multiple."
             if (-not $multiple) {
-                $singleFolderProperty = $folderProperties[0].Text
                 $folderFilesystemEntries = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path $folderPaths -FilesystemObjects | ConvertFrom-Json).Menu
-                $sevenZipNative = @($folderNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Text -eq '7-Zip' -and $_.HasSubmenu })
+                $sevenZipNative = @($folderNativeEntries | Where-Object { $_.Position -notmatch '\.' -and $_.Text -eq '7-Zip' -and $_.HasSubmenu -and -not $_.Verb })
                 $sevenZipFileKey = [Microsoft.Win32.Registry]::ClassesRoot.OpenSubKey('*\shellex\ContextMenuHandlers\7-Zip')
                 $sevenZipFolderKey = [Microsoft.Win32.Registry]::ClassesRoot.OpenSubKey('Folder\shellex\ContextMenuHandlers\7-Zip')
                 try {
@@ -1302,6 +1323,7 @@ try {
             $mixedNative = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path $mixedPaths | ConvertFrom-Json).Menu
             $mixedGeneric = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path $mixedPaths -Generic | ConvertFrom-Json).Menu
             Assert-True ($mixedNative.Count -gt 0 -and $mixedGeneric.Count -gt 0) 'The Shell did not provide both mixed-selection menus.'
+            $mixedVerbs = Get-FileMenuVerbSets ([string[]] $mixedPaths) $ownerHandle ($view.GetType().GetMethod('CreateContextMenuActions', $viewFlags).Invoke($view, @()))
             foreach ($menuKind in @('base', 'content', 'none', 'base')) {
                 $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
                 try {
@@ -1318,8 +1340,8 @@ try {
                             ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'Delete')] -band 3) -eq 0) 'Mixed-selection action states were incorrect.'
                         Assert-True ((Get-MenuActionIndex $menuProbe 'Properties') -eq 0) 'Mixed-selection Base Menu lost Properties.'
                     } else {
-                        foreach ($entry in $mixedNative | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -in @('copy', 'cut', 'paste', 'copyaspath', 'link', 'delete', 'rename', 'properties') -and $_.Text }) {
-                            Assert-True ($entry.Text -notin $menuProbe.Items) "Excluded Shell command remained in the mixed Content Menu: $($entry.Text)."
+                        foreach ($entry in $mixedNative | Where-Object { $_.Position -notmatch '\.' -and $_.Verb -in @('copy', 'cut', 'paste', 'copyaspath', 'link', 'delete', 'rename', 'properties') }) {
+                            Assert-True ($entry.Verb -notin $mixedVerbs.Content) "Excluded Shell command remained in the mixed Content Menu: $($entry.Verb)."
                         }
                     }
                     Assert-True ($list.SelectedItems.Count -eq 2 -and $list.SelectedItems.Contains($firstRow) -and

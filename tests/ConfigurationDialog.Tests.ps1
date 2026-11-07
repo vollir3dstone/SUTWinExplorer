@@ -12,15 +12,14 @@ function Show-Configuration($window, [bool] $apply, [bool[]] $values) {
     $timer = [System.Windows.Threading.DispatcherTimer]::new()
     $timer.Interval = [TimeSpan]::FromMilliseconds(25)
     $timer.add_Tick({
-        $dialog = @([System.Windows.Application]::Current.Windows | Where-Object { $_.Title -eq 'Configuration' -and $_.IsVisible }) | Select-Object -First 1
+        $dialog = @([System.Windows.Application]::Current.Windows | Where-Object { $_.GetType().FullName -eq 'SUTWinExplorer.ConfigurationDialog' -and $_.IsVisible }) | Select-Object -First 1
         if ($null -eq $dialog) { return }
         $timer.Stop()
         try {
             $result.Seen = $true
             $checkboxes = @($dialog.Content.Children | Where-Object { $_ -is [System.Windows.Controls.CheckBox] })
             Assert-True ($checkboxes.Count -eq 4) 'Configuration dialog does not contain four checkboxes.'
-            Assert-True (($checkboxes.Name -join '|') -ceq 'DirectoryRowActionButtonsCheckBox|DirectoryColumnActionButtonsCheckBox|SelectedItemsActionButtonsCheckBox|InternalItemTransfersCheckBox' -and
-                ($checkboxes.Content -join '|') -ceq 'Show directory row action buttons|Show directory column action buttons|Show selected items action buttons|Enable internal item transfers') 'Configuration labels or checkbox order are incorrect.'
+            Assert-True (($checkboxes.Name -join '|') -ceq 'DirectoryRowActionButtonsCheckBox|DirectoryColumnActionButtonsCheckBox|SelectedItemsActionButtonsCheckBox|InternalItemTransfersCheckBox') 'Configuration checkbox order is incorrect.'
             $result.Initial = @($checkboxes | ForEach-Object { $_.IsChecked })
             for ($index = 0; $index -lt 4; $index++) { $checkboxes[$index].IsChecked = $values[$index] }
             if ($apply) {

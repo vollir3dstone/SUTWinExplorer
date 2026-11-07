@@ -331,7 +331,7 @@ public partial class ContentView : UserControl
                     catch (Exception exception) { Trace.TraceError("Could not load application icon: {0}", exception); }
                     return app.Windows.OrderBy(window => window.Title, StringComparer.CurrentCultureIgnoreCase)
                         .ThenBy(window => window.Handle.ToInt64())
-                        .Select(window => new ShellMenuAction("open-running-app", $"{app.App.Name} - {(string.IsNullOrWhiteSpace(window.Title) ? "Untitled window" : window.Title)}".Replace("&", "&&"), true,
+                        .Select(window => new ShellMenuAction($"open-running-app:{app.App.Id}:{window.Handle.ToInt64()}", $"{app.App.Name} - {(string.IsNullOrWhiteSpace(window.Title) ? "Untitled window" : window.Title)}".Replace("&", "&&"), true,
                             () => OpenInRunningApp(app.App, window, selectedPaths)) { MenuImage = icon ?? ShellMenuIcons.GetWindowIcon(window.Handle) });
                 })
                 .ToArray();

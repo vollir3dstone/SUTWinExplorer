@@ -138,15 +138,10 @@ try {
     $menu = $factory.GetMethod('GetContentMenuForContextWithRunningApps', $staticFlags).Invoke($null, [object[]] @($paths, $owner, $snapshot, $false, $null, $locationAction, $runningActions))
     try {
         $nativeMenu = $menu.GetType().GetField('_menu', $instanceFlags).GetValue($menu)
-        $label = [Text.StringBuilder]::new(256)
-        [void] [RunningAppMenuProbe]::GetMenuString($nativeMenu, 1, $label, $label.Capacity, 0x400)
-        if ($label.ToString() -cne 'Open in running app...') { throw 'The running-app submenu is not the second menu item.' }
         $submenu = [RunningAppMenuProbe]::GetSubMenu($nativeMenu, 1)
         if ($submenu -eq [IntPtr]::Zero -or [RunningAppMenuProbe]::GetMenuItemCount($submenu) -ne 2) { throw 'The running-app submenu does not contain both windows.' }
         for ($index = 0; $index -lt 2; $index++) {
-            $label.Clear() | Out-Null
-            [void] [RunningAppMenuProbe]::GetMenuString($submenu, [uint32] $index, $label, $label.Capacity, 0x400)
-            if ($label.ToString() -cne $runningActions[$index].Label) { throw 'Running-app window labels or order changed.' }
+            if ([RunningAppMenuProbe]::GetMenuItemID($submenu, $index) -ne (0x8001 + $index)) { throw 'Running-app window command order changed.' }
         }
         Test-OpenLocationMenu $menu
         $command = [RunningAppMenuProbe]::GetMenuItemID($submenu, 1)
@@ -230,18 +225,22 @@ try {
         $createRunning = $view.GetType().GetMethod('CreateRunningAppActions', $instanceFlags)
         $actualActions = $createRunning.Invoke($view, [object[]] @(,[string[]] @($runningFile)))
         $discovered = @($actualActions)
-        if (@($discovered | Where-Object { $_.Label -like "*Running && Window $suffix" }).Count -ne 1) { throw 'The registered application window was not listed with an escaped title.' }
-        if (@($discovered | Where-Object { $_.Label -like "*Running Second Window $suffix" }).Count -ne 1) { throw 'The second registered application window was not listed.' }
+        $windowHandle = [System.Windows.Interop.WindowInteropHelper]::new($testWindow).Handle
+        $secondWindowHandle = [System.Windows.Interop.WindowInteropHelper]::new($secondTestWindow).Handle
+        $appId = (Get-Process -Id $PID).Path
+        $actionId = "open-running-app:${appId}:$($windowHandle.ToInt64())"
+        $secondActionId = "open-running-app:${appId}:$($secondWindowHandle.ToInt64())"
+        if (@($discovered | Where-Object { $_.Id -eq $actionId }).Count -ne 1) { throw 'The registered application window was not listed.' }
+        if (@($discovered | Where-Object { $_.Id -eq $secondActionId }).Count -ne 1) { throw 'The second registered application window was not listed.' }
         $otherFile = Join-Path $directory "other.kisother$suffix"
         [IO.File]::WriteAllText($otherFile, 'test')
         $accessor = $assembly.GetType('SUTWinExplorer.RunningAppsAccessor', $true)
         $otherApps = @($accessor.GetMethod('GetAppsToChooseFrom').Invoke($null, @([string] $otherFile)))
         $expectedMatches = [int] (@($otherApps | Where-Object { $_.Id -ieq (Get-Process -Id $PID).Path }).Count -gt 0)
         $multiActions = @($createRunning.Invoke($view, [object[]] @(,[string[]] @($runningFile, $otherFile))))
-        if (@($multiActions | Where-Object { $_.Label -like "*Running && Window $suffix" }).Count -ne $expectedMatches) { throw 'The selected file types did not use the generic application intersection.' }
-        $matchingAction = @($discovered | Where-Object { $_.Label -like "*Running && Window $suffix" })[0]
+        if (@($multiActions | Where-Object { $_.Id -eq $actionId }).Count -ne $expectedMatches) { throw 'The selected file types did not use the generic application intersection.' }
+        $matchingAction = @($discovered | Where-Object { $_.Id -eq $actionId })[0]
         if ($null -eq $matchingAction.MenuImage) { throw 'The registered application icon was not loaded.' }
-        $windowHandle = [System.Windows.Interop.WindowInteropHelper]::new($testWindow).Handle
         $windowIcon = $assembly.GetType('SUTWinExplorer.ShellMenuIcons', $true).GetMethod('GetWindowIcon', $staticFlags).Invoke($null, @($windowHandle))
         if ($null -eq $windowIcon) { throw 'The fallback window icon was not loaded.' }
         $runningPaths = [string[]] @($runningFile)
@@ -271,7 +270,7 @@ try {
         $unassociated = Join-Path $directory "sample.kisunknown$suffix"
         [IO.File]::WriteAllText($unassociated, 'test')
         $mixedActions = $createRunning.Invoke($view, [object[]] @(,[string[]] @($runningFile, $unassociated)))
-        if (@($mixedActions | Where-Object { $_.Label -like "*Running && Window $suffix" }).Count -ne 0) { throw 'The test application was listed without an association for every selected type.' }
+        if (@($mixedActions | Where-Object { $_.Id -eq $actionId }).Count -ne 0) { throw 'The test application was listed without an association for every selected type.' }
         $directoryActions = $createRunning.Invoke($view, [object[]] @(,[string[]] @($directory)))
         if ($directoryActions.Count -ne 0) { throw 'A directory was offered as a file transfer.' }
     } finally {

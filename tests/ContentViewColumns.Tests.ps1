@@ -59,17 +59,16 @@ function Assert-State($view, $window, [bool] $hidden) {
     $header = $view.FindName('RightColumnsToggleHeader')
     $symbol = $view.FindName('RightColumnsToggleSymbol')
     $expectedSymbol = if ($hidden) { [char] 0x2026 } else { [char] 0x25B8 }
-    $expectedName = if ($hidden) { 'Show right columns' } else { 'Hide right columns' }
     $scroll = Find-VisualChild $view.FindName('FileList') ([System.Windows.Controls.ScrollViewer])
     $width = ($columns | ForEach-Object Width | Measure-Object -Sum).Sum
     $nameIndex = $columns.IndexOf($view.FindName('NameColumn'))
     $typeApp1Index = $columns.IndexOf($view.FindName('TypeApp1Icon'))
     $toggleIndex = $columns.IndexOf($view.FindName('RightColumnsToggleColumn'))
-    if ($columns.Count -ne $(if ($hidden) { 5 } else { 8 }) -or
+    if ($columns.Count -ne $(if ($hidden) { 6 } else { 9 }) -or
         $nameIndex -lt 0 -or $typeApp1Index -ne $nameIndex + 1 -or $toggleIndex -ne $typeApp1Index + 1 -or
         -not [object]::ReferenceEquals($view.FindName('RightColumnsToggleColumn').Header, $header) -or
-        $symbol.Text -cne [string] $expectedSymbol -or $header.ToolTip -cne $expectedName -or
-        [System.Windows.Automation.AutomationProperties]::GetName($header) -cne $expectedName -or
+        $symbol.Text -cne [string] $expectedSymbol -or [string]::IsNullOrWhiteSpace([string] $header.ToolTip) -or
+        [System.Windows.Automation.AutomationProperties]::GetName($header) -cne $header.ToolTip -or
         $header.Padding.Left -ne 0 -or $header.Padding.Right -ne 0 -or
         $symbol.ActualWidth -lt $symbol.DesiredSize.Width -or $symbol.ActualWidth -gt $header.ActualWidth -or
         [Math]::Abs($width - $scroll.ViewportWidth) -gt 1 -or $scroll.ScrollableWidth -gt 1) {

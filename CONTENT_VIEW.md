@@ -743,14 +743,14 @@ returns successfully. Preflight cannot prevent subsequent changes and no
 rollback is performed after a partial transfer.
 
 The Item clipboard copy button and its `Copy item to clipboard` Base Menu entry
-invoke the Shell Copy verb. The separate `Prepare copy to external` Base Menu
+invoke the Shell Copy verb. The separate `Prepare copying` Base Menu
 action invokes the same verb for the same source, but is presented in the
 external initiation group rather than the clipboard-copy group. Both place
 equivalent Shell Copy data on the global clipboard, usable by this application
 or another compatible target; neither starts the internal Copy workflow.
 
-The external initiation group also contains `Prepare linking from external` and
-`Prepare move to external`. These actions use the selected items, clicked sidebar
+The external initiation group also contains `Prepare linking` and
+`Prepare moving`. These actions use the selected items, clicked sidebar
 directory, or active directory for a background menu. They replace the global
 clipboard without changing an internal prepared transfer or transferring the
 source immediately. Move uses Shell Cut; Link requests the explicit Link effect,

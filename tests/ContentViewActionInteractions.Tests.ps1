@@ -57,6 +57,18 @@ try {
         $unfilteredMenu = (& (Join-Path $PSScriptRoot 'ContextMenuSpike.ps1') -Path (Join-Path $directory 'notes.txt') -Generic | ConvertFrom-Json).Menu
         $notepadEntries = @($unfilteredMenu | Where-Object { $_.Verb -eq 'ANotepad++64' })
         $viewerEntries = @($unfilteredMenu | Where-Object { $_.Verb -eq 'view SUTTextViewer' })
+        $menuType = $assembly.GetType('SUTWinExplorer.SutContextMenuFactory', $true)
+        $factoryFlags = [Reflection.BindingFlags]'Static,NonPublic'
+        $fileBase = $menuType.GetMethod('GetBaseMenuForContext', $factoryFlags).Invoke($null, [object[]] @([string[]] @((Join-Path $directory 'notes.txt')), $ownerHandle,
+            $view.GetType().GetMethod('CreateContextMenuActions', $viewFlags).Invoke($view, @()), $false))
+        try { $fileBaseVerbs = @(Get-ShellMenuVerbs $fileBase) }
+        finally { ([IDisposable] $fileBase).Dispose() }
+        foreach ($entry in $notepadEntries) {
+            Assert-True ($entry.Verb -notin $fileBaseVerbs) 'The blacklisted Notepad++ command appeared in the Base Menu.'
+        }
+        foreach ($entry in $viewerEntries) {
+            Assert-True ($entry.Verb -in $fileBaseVerbs) 'The unblacklisted SUTTextViewer command disappeared from the Base Menu.'
+        }
         $list.SelectedItems.Clear()
         $list.SelectedItems.Add($notesMenuRow) | Out-Null
         $list.SelectedItems.Add($otherFileRow) | Out-Null
@@ -74,8 +86,8 @@ try {
                 try {
                     $target = if ($background) { $null } else { $notesMenuRow.PSObject.BaseObject }
                     $null = $showMenu.Invoke($view, [object[]] @($target))
-                    Assert-True ($menuProbe.Items[2] -ceq 'Prepare copy to external' -and $menuProbe.Items[3] -ceq 'Prepare linking from external' -and
-                        $menuProbe.Items[4] -ceq 'Prepare move to external' -and ($menuProbe.States[1] -band 0x800) -ne 0 -and
+                    Assert-True ($menuProbe.CommandIds[2] -eq (Get-ActionCommandId 'PrepareCopyToExternal') -and $menuProbe.CommandIds[3] -eq (Get-ActionCommandId 'PrepareLinkingFromExternal') -and
+                        $menuProbe.CommandIds[4] -eq (Get-ActionCommandId 'PrepareMoveToExternal') -and ($menuProbe.States[1] -band 0x800) -ne 0 -and
                         ($menuProbe.States[5] -band 0x800) -ne 0 -and $menuProbe.SelectIndex -ge 2 -and $menuProbe.SelectIndex -le 4) 'External preparation commands have incorrect Base Menu ordering.'
                 } finally { $menuProbe.Dispose() }
                 $clipboardData = [System.Windows.Clipboard]::GetDataObject()
@@ -150,12 +162,6 @@ try {
                     Assert-True ($null -ne $openWithLabel -and $openWithLabel -notin $menuProbe.Items) 'The Shell Open With submenu is still present.'
                     $linkDropHereLabel = [SutShellMenuProbe]::LinkDropHereLabel()
                     Assert-True ($null -eq $linkDropHereLabel -or $linkDropHereLabel -notin $menuProbe.Items) 'A drag-and-drop-only Link Shell Extension command appeared in the file menu.'
-                    foreach ($entry in $notepadEntries) {
-                        Assert-True ($entry.Text -notin $menuProbe.Items) 'The blacklisted Notepad++ command appeared in the Base Menu.'
-                    }
-                    foreach ($entry in $viewerEntries) {
-                        Assert-True ($entry.Text -in $menuProbe.Items) 'The unblacklisted SUTTextViewer command disappeared from the Base Menu.'
-                    }
                     $deleteIndex = Get-MenuActionIndex $menuProbe 'Delete'
                     $renameIndex = Get-MenuActionIndex $menuProbe 'Rename'
                     Assert-True ($deleteIndex -eq $menuProbe.ItemCount - 1 -and $renameIndex -eq $deleteIndex - 3 -and
@@ -338,12 +344,13 @@ try {
             try { $null = $controllerShow.Invoke($controller, [object[]] @($target, $ownerHandle, $true)) }
             finally { $menuProbe.Dispose() }
             $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-            $menuProbe.SelectLabel = 'Copy clipboard item here'
+            $contentOrder = @(@(if ($background) { 'New' }) + @('ClipboardItemCopy', 'AbortTransfer', 'CopyExecute'))
+            $menuProbe.SelectCommandId = Get-ActionCommandId 'ClipboardItemCopy' $contentOrder
             try {
                 $null = $controllerShow.Invoke($controller, [object[]] @($target, $ownerHandle, $true))
-                Assert-True ($menuProbe.Items[0] -ceq 'Copy clipboard item here' -and $menuProbe.SelectIndex -eq 0 -and
-                    ($menuProbe.States[1] -band 0x800) -ne 0 -and $menuProbe.Items[2] -ceq 'Abort transfer' -and
-                    $menuProbe.Items[3] -ceq 'Insert copy of marked item') "Incorrect clipboard content menu for background=$background`: items=$($menuProbe.Items -join '|'), index=$($menuProbe.SelectIndex), states=$($menuProbe.States -join ',')."
+                Assert-True ($menuProbe.CommandIds[0] -eq (Get-ActionCommandId 'ClipboardItemCopy' $contentOrder) -and $menuProbe.SelectIndex -eq 0 -and
+                    ($menuProbe.States[1] -band 0x800) -ne 0 -and $menuProbe.CommandIds[2] -eq (Get-ActionCommandId 'AbortTransfer' $contentOrder) -and
+                    $menuProbe.CommandIds[3] -eq (Get-ActionCommandId 'CopyExecute' $contentOrder)) "Incorrect clipboard content menu for background=$background`: commands=$($menuProbe.CommandIds -join '|'), index=$($menuProbe.SelectIndex), states=$($menuProbe.States -join ',')."
             } finally { $menuProbe.Dispose() }
             $destination = if ($background) { $clipboardDestination } else { $targetDirectory }
             Assert-True ([IO.File]::Exists((Join-Path $destination 'content-menu-paste.txt')) -and [IO.File]::Exists($menuClipboardFile) -and $clipboardWorkflow.IsPrepared) "Clipboard paste used the wrong destination or changed the prepared transfer for background=$background."
@@ -363,8 +370,8 @@ try {
         $emptyContent = $menuType.GetMethod('GetContentMenuForContext', $factoryFlags).Invoke($null, [object[]] @([string[]] @($clipboardDestination), $ownerHandle, $snapshot, $true, $null, $null))
         try { Assert-True ('paste' -notin @(Get-ShellMenuVerbs $emptyContent)) 'Native background paste appeared without supported clipboard data.' }
         finally { ([IDisposable] $emptyContent).Dispose() }
-        foreach ($abortCase in @(@('move', 2, 'Move cut item here'), @('link', 4, 'Link to externally selected item'))) {
-            $abortName, $abortEffect, $executeLabel = $abortCase
+        foreach ($abortCase in @(@('move', 2, 'AbortClipboardMove', 'ClipboardItemMove'), @('link', 4, 'AbortClipboardLink', 'ClipboardItemLink'))) {
+            $abortName, $abortEffect, $abortId, $executeId = $abortCase
             foreach ($background in @($false, $true)) {
                 $data = [System.Windows.DataObject]::new()
                 $paths = [System.Collections.Specialized.StringCollection]::new()
@@ -384,12 +391,13 @@ try {
                 try { $null = $controllerShow.Invoke($controller, [object[]] @($target, $ownerHandle, $true)) }
                 finally { $menuProbe.Dispose() }
                 $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-                $menuProbe.SelectLabel = "Abort clipboard $abortName"
+                $contentOrder = @(@(if ($background) { 'New' }) + @($abortId, $executeId, 'AbortTransfer', 'CopyExecute'))
+                $menuProbe.SelectCommandId = Get-ActionCommandId $abortId $contentOrder
                 try {
                     $null = $controllerShow.Invoke($controller, [object[]] @($target, $ownerHandle, $true))
-                    Assert-True ($menuProbe.SelectIndex -eq 0 -and $menuProbe.Items[0] -ceq "Abort clipboard $abortName" -and
-                        $menuProbe.Items[1] -ceq $executeLabel -and ($menuProbe.States[2] -band 0x800) -ne 0 -and
-                        $menuProbe.Items[3] -ceq 'Abort transfer' -and $menuProbe.Items[4] -ceq 'Insert copy of marked item') "Incorrect clipboard abort menu for $abortName background=$background."
+                    Assert-True ($menuProbe.SelectIndex -eq 0 -and $menuProbe.CommandIds[0] -eq (Get-ActionCommandId $abortId $contentOrder) -and
+                        $menuProbe.CommandIds[1] -eq (Get-ActionCommandId $executeId $contentOrder) -and ($menuProbe.States[2] -band 0x800) -ne 0 -and
+                        $menuProbe.CommandIds[3] -eq (Get-ActionCommandId 'AbortTransfer' $contentOrder) -and $menuProbe.CommandIds[4] -eq (Get-ActionCommandId 'CopyExecute' $contentOrder)) "Incorrect clipboard abort menu for $abortName background=$background."
                 } finally { $menuProbe.Dispose() }
                 Assert-True (-not [System.Windows.Clipboard]::ContainsFileDropList() -and [IO.File]::Exists($menuClipboardFile) -and $clipboardWorkflow.IsPrepared) "Clipboard abort changed the source or prepared transfer for $abortName background=$background."
                 $clipboardWorkflow.Abort()
@@ -402,18 +410,18 @@ try {
         $cutData.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] 2)))
         [System.Windows.Clipboard]::SetDataObject($cutData, $true)
         $cutActions = @($createTransfers.Invoke($view, [object[]] @([string] $targetDirectory)))
-        Assert-True ($cutActions.Count -eq 2 -and $cutActions[0].Label -ceq 'Abort clipboard move' -and $cutActions[1].Id -ceq 'ClipboardItemMove' -and $cutActions[1].Label -ceq 'Move cut item here') 'Clipboard Cut did not offer the Abort and Move actions.'
+        Assert-True ($cutActions.Count -eq 2 -and $cutActions[0].Id -ceq 'AbortClipboardMove' -and $cutActions[1].Id -ceq 'ClipboardItemMove') 'Clipboard Cut did not offer the Abort and Move actions.'
         $shellType = $assembly.GetType('SUTWinExplorer.SutShell', $true)
         $pasteClipboard = $shellType.GetMethod('PasteFromClipboard', $factoryFlags)
         $getClipboardOperation = $shellType.GetMethod('TryGetClipboardOperation', $factoryFlags)
         $executeClipboard = $shellType.GetMethod('ExecuteClipboardTransfer', $factoryFlags)
         $getLinkTarget = $assembly.GetType('SUTWinExplorer.ShellFileOperations', $true).GetMethod('GetLinkTarget')
-        foreach ($case in @(@('copy', 1, 'ClipboardItemCopy', 'Copy clipboard item here'),
-            @('shell-copy', 5, 'ClipboardItemCopy', 'Copy clipboard item here'),
-            @('move', 2, 'ClipboardItemMove', 'Move cut item here'),
-            @('link', 4, 'ClipboardItemLink', 'Link to externally selected item'),
-            @('mixed', 3, '', ''), @('all', 7, '', ''), @('none', 0, '', ''), @('missing', -1, '', ''))) {
-            $name, $effect, $expectedId, $expectedLabel = $case
+        foreach ($case in @(@('copy', 1, 'ClipboardItemCopy'),
+            @('shell-copy', 5, 'ClipboardItemCopy'),
+            @('move', 2, 'ClipboardItemMove'),
+            @('link', 4, 'ClipboardItemLink'),
+            @('mixed', 3, ''), @('all', 7, ''), @('none', 0, ''), @('missing', -1, ''))) {
+            $name, $effect, $expectedId = $case
             $sourceFile = [string] (Join-Path $directory ("clipboard-case-$name.txt"))
             [IO.File]::WriteAllText($sourceFile, $name)
             $data = [System.Windows.DataObject]::new()
@@ -428,8 +436,8 @@ try {
                 continue
             }
             $expectedCount = if ($name -in @('move', 'link')) { 2 } else { 1 }
-            Assert-True ($actions.Count -eq $expectedCount -and $actions[-1].Id -ceq $expectedId -and $actions[-1].Label -ceq $expectedLabel) "Incorrect action for $name."
-            if ($name -in @('move', 'link')) { Assert-True ($actions[0].Label -ceq "Abort clipboard $name") "Incorrect abort action for $name." }
+            Assert-True ($actions.Count -eq $expectedCount -and $actions[-1].Id -ceq $expectedId) "Incorrect action for $name."
+            if ($name -in @('move', 'link')) { Assert-True ($actions[0].Id -ceq $(if ($name -eq 'move') { 'AbortClipboardMove' } else { 'AbortClipboardLink' })) "Incorrect abort action for $name." }
             try { $null = $pasteClipboard.Invoke($null, [object[]] @([string] $targetDirectory, $ownerHandle)) }
             catch {
                 if ($name -ne 'move' -or -not $_.Exception.ToString().Contains('The items were moved, but the clipboard source did not accept')) { throw "Clipboard $name failed: $($_.Exception)" }
@@ -490,14 +498,11 @@ try {
                 try { $null = $controllerShow.Invoke($controller, [object[]] @($target, $ownerHandle, $true)) }
                 finally { $menuProbe.Dispose() }
                 $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-                $menuProbe.SelectLabel = switch ($operation) {
-                    'Link' { 'Insert link to marked item' }
-                    'Copy' { 'Insert copy of marked item' }
-                    'Move' { 'Move marked item here' }
-                }
+                $contentOrder = @(@(if ($background) { 'New' }) + @('AbortTransfer', "${operation}Execute"))
+                $menuProbe.SelectCommandId = Get-ActionCommandId "${operation}Execute" $contentOrder
                 try {
                     $null = $controllerShow.Invoke($controller, [object[]] @($target, $ownerHandle, $true))
-                    Assert-True ($menuProbe.Items[0] -ceq 'Abort transfer' -and $menuProbe.Items[1] -ceq $menuProbe.SelectLabel -and
+                    Assert-True ($menuProbe.CommandIds[0] -eq (Get-ActionCommandId 'AbortTransfer' $contentOrder) -and $menuProbe.CommandIds[1] -eq (Get-ActionCommandId "${operation}Execute" $contentOrder) -and
                         ($menuProbe.States[2] -band 0x800) -ne 0 -and $menuProbe.SelectIndex -eq 1) "Incorrect $operation content menu for background=$background."
                 } finally { $menuProbe.Dispose() }
                 $name = [IO.Path]::GetFileName($sourceFile)
@@ -527,7 +532,7 @@ try {
         try { $null = $controllerShow.Invoke($controller, [object[]] @($null, $ownerHandle, $true)) }
         finally { $menuProbe.Dispose() }
         $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-        $menuProbe.SelectLabel = 'Abort transfer'
+        $menuProbe.SelectCommandId = Get-ActionCommandId 'AbortTransfer' @('New', 'AbortTransfer', 'CopyExecute')
         try {
             $null = $controllerShow.Invoke($controller, [object[]] @($null, $ownerHandle, $true))
             Assert-True ($menuProbe.SelectIndex -eq 0 -and -not $workflow.IsPrepared -and [IO.File]::Exists($abortSource)) 'Content menu abort did not clear the prepared transfer.'
@@ -555,7 +560,7 @@ try {
         $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
         try {
             $null = $controllerShow.Invoke($controller, [object[]] @($fileRow.PSObject.BaseObject, $ownerHandle, $true))
-            Assert-True ('Abort transfer' -notin $menuProbe.Items -and 'Insert copy of marked item' -notin $menuProbe.Items -and $workflow.IsPrepared) 'File content menu unexpectedly offered directory transfer actions.'
+            Assert-True (@($menuProbe.CommandIds | Where-Object { $_ -ge 0x8000 -and $_ -ne [uint32]::MaxValue }).Count -eq 0 -and $workflow.IsPrepared) 'File content menu unexpectedly offered directory transfer actions.'
         } finally { $menuProbe.Dispose(); $workflow.Abort() }
     } finally { $window.Close() }
     'ContentView action interaction tests passed.'

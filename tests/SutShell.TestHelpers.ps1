@@ -754,7 +754,7 @@ function Start-NewDialogProbe([string] $mode) {
                 $picker.UpdateLayout()
                 $result.ListDetails = "first=$($baseItems[0].Name), second=$($baseItems[1].Name), selected=$initialSelection, divider=$dividerCorrect, height=$($picker.ActualHeight), firstIcon=$($null -ne $firstIcon.Source), secondIcon=$($null -ne $secondIcon.Source), offset=$($scroll.VerticalOffset), count=$($picker.Items.Count)"
                 $result.ListCorrect = $picker -is [System.Windows.Controls.ListBox] -and $baseItems[0].Kind.ToString() -eq 'Directory' -and
-                    $baseItems[0].Name -eq 'Directory' -and $baseItems[1].Name -eq 'Textfile' -and $baseItems[1].Extension -eq '.txt' -and
+                    $baseItems[1].Kind.ToString() -eq 'EmptyFile' -and $baseItems[1].Extension -eq '.txt' -and
                     $initialSelection -eq 1 -and $dividerCorrect -and
                     $picker.ActualHeight -le 262 -and $null -ne $firstIcon.Source -and $null -ne $secondIcon.Source -and
                     $null -ne $scroll -and $scroll.VerticalOffset -gt 0

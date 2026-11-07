@@ -651,9 +651,9 @@ internal static class SutContextMenuFactory
         var result = new ShellMenuAction[]
         {
             Existing("Properties", "Properties"),
-            Prepare("PrepareCopyToExternal", "Prepare copy to external", ClipboardOperation.Copy, true),
-            Prepare("PrepareLinkingFromExternal", "Prepare linking from external", ClipboardOperation.Link),
-            Prepare("PrepareMoveToExternal", "Prepare move to external", ClipboardOperation.Move),
+            Prepare("PrepareCopyToExternal", "Prepare copying", ClipboardOperation.Copy, true),
+            Prepare("PrepareLinkingFromExternal", "Prepare linking", ClipboardOperation.Link),
+            Prepare("PrepareMoveToExternal", "Prepare moving", ClipboardOperation.Move),
             Existing("NameClipboardCopy", "Copy name to clipboard", true),
             Existing("PathClipboardCopy", "Copy path to clipboard"),
             Existing("ItemClipboardCopy", "Copy item to clipboard"),

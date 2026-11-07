@@ -47,7 +47,7 @@ public static class BaseMenuLayoutProbe
     [DllImport("user32.dll")] public static extern IntPtr CreatePopupMenu();
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern bool AppendMenu(IntPtr menu, uint flags, UIntPtr id, string text);
     [DllImport("user32.dll")] public static extern uint GetMenuState(IntPtr menu, uint position, uint flags);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetMenuString(IntPtr menu, uint position, StringBuilder text, int length, uint flags);
+    [DllImport("user32.dll")] public static extern uint GetMenuItemID(IntPtr menu, int position);
 }
 '@
 $actionType = $assembly.GetType('SUTWinExplorer.ShellMenuAction', $true)
@@ -74,13 +74,14 @@ try {
         $actual = @(for ($index = 0; $index -lt [SutShellMenuProbe]::GetMenuItemCount($menu); $index++) {
             if (([BaseMenuLayoutProbe]::GetMenuState($menu, $index, 0x400) -band 0x800) -ne 0) { '|' }
             else {
-                $text = [Text.StringBuilder]::new(256)
-                [void] [BaseMenuLayoutProbe]::GetMenuString($menu, $index, $text, $text.Capacity, 0x400)
-                $text.ToString()
+                $command = [BaseMenuLayoutProbe]::GetMenuItemID($menu, $index)
+                if ($command -eq 1) { 'ShellCommand' }
+                elseif ($command -ge 0x8000 -and $command -lt (0x8000 + $actions.Count)) { $actions[$command - 0x8000].Id }
+                else { throw "Unexpected menu command ID: $command" }
             }
         })
-        $expected = @('Properties', '|', 'Prepare copy to external', 'Prepare linking from external', 'Prepare move to external', '|', 'Copy name to clipboard', 'Copy path to clipboard', 'Copy item to clipboard', '|',
-            'Abort transfer', 'Mark link item', 'Mark copy item', 'Mark move item', '|', 'Shell command', '|', 'Rename', 'Relocate', '|', 'Delete')
+        $expected = @('Properties', '|', 'PrepareCopyToExternal', 'PrepareLinkingFromExternal', 'PrepareMoveToExternal', '|', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', '|',
+            'AbortTransfer', 'LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem', '|', 'ShellCommand', '|', 'Rename', 'Relocate', '|', 'Delete')
         Assert-True (($actual -join ',') -ceq ($expected -join ',')) "Incorrect base menu layout: $($actual -join ',')"
     } finally { [void] [SutShellMenuProbe]::DestroyMenu($menu) }
     $abort.Invoke.Invoke()

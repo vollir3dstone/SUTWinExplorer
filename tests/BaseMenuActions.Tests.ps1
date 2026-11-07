@@ -116,15 +116,12 @@ function Assert-Menu($actions, [string[]] $expected, [string[]] $disabled) {
         for ($index = 0; $index -lt [BaseMenuProbe]::GetMenuItemCount($menu); $index++) {
             $state = [BaseMenuProbe]::GetMenuState($menu, $index, 0x400)
             if (($state -band 0x800) -ne 0) { $actual += '|'; continue }
-            $text = [Text.StringBuilder]::new(256)
-            $null = [BaseMenuProbe]::GetMenuString($menu, $index, $text, $text.Capacity, 0x400)
             $command = [BaseMenuProbe]::GetMenuItemID($menu, $index)
             if ($command -eq 1) { $actual += 'Shell command'; continue }
             $actionIndex = [int] $command - 0x8000
             if ($actionIndex -lt 0 -or $actionIndex -ge $actions.Count) { throw "Incorrect command ID: $command." }
             $id = $actions[$actionIndex].Id
             $actual += $id
-            if ($text.ToString() -cne $actions[$actionIndex].Label) { throw "Incorrect display label for $id." }
             if ((($state -band 3) -ne 0) -ne ($id -in $disabled)) { throw "Incorrect enabled state for $id (state=$state, disabled=$($disabled -join ','))." }
         }
         if (($actual -join ',') -cne ($expected -join ',')) { throw "Incorrect menu: $($actual -join ','); expected $($expected -join ',')." }
@@ -138,8 +135,6 @@ function Assert-ShellMenu($actions, [string[]] $expected, [bool] $background, [I
         $count = [BaseMenuProbe]::GetMenuItemCount($menu)
         for ($index = 0; $index -lt $count; $index++) {
             $state = [BaseMenuProbe]::GetMenuState($menu, $index, 0x400)
-            $text = [Text.StringBuilder]::new(256)
-            $null = [BaseMenuProbe]::GetMenuString($menu, $index, $text, $text.Capacity, 0x400)
             $command = [BaseMenuProbe]::GetMenuItemID($menu, $index)
             if ($index -ge $expected.Count -and $index -lt $count - 5) {
                 if ($command -ge 0x8000 -and $command -ne [uint]::MaxValue) { throw 'Application action appeared in the Shell section.' }
@@ -154,7 +149,6 @@ function Assert-ShellMenu($actions, [string[]] $expected, [bool] $background, [I
             $actual = if (($state -band 0x800) -ne 0) { '|' } else {
                 $actionIndex = [int] $command - 0x8000
                 if ($actionIndex -lt 0 -or $actionIndex -ge $actions.Count) { throw "Incorrect Shell menu command ID: $command." }
-                if ($text.ToString() -cne $actions[$actionIndex].Label) { throw 'Incorrect Shell menu display label.' }
                 $actions[$actionIndex].Id
             }
             if ($actual -cne $expectedItem) { throw "Incorrect Shell menu item at ${index}: $actual; expected $expectedItem." }
@@ -314,12 +308,12 @@ try {
                 $state.Abort()
             }
             Wait-SelectedPaths $view ([string[]] @($testFile))
-            foreach ($dialogCase in @(@('Rename', 'Rename directory'), @('Relocate', 'Relocate directory'))) {
+            foreach ($dialogCase in @(@('Rename'), @('Relocate'))) {
                 $dialogState = @{ Seen = $false }
                 $timer = [System.Windows.Threading.DispatcherTimer]::new()
                 $timer.Interval = [TimeSpan]::FromMilliseconds(25)
                 $timer.add_Tick({
-                    $dialog = @([System.Windows.Application]::Current.Windows | Where-Object { $_.Title -eq $dialogCase[1] -and $_.IsVisible }) | Select-Object -First 1
+                    $dialog = @([System.Windows.Application]::Current.Windows | Where-Object { $_.GetType().FullName -eq 'SUTWinExplorer.DirectoryLocationDialog' -and $_.IsVisible }) | Select-Object -First 1
                     if ($null -ne $dialog) { $dialogState.Seen = $true; $dialog.DialogResult = $false }
                 }.GetNewClosure())
                 $timer.Start()

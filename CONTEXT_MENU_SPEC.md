@@ -156,9 +156,9 @@ separators are removed when the Shell section is empty:
 ```text
 Properties
 ---
-Prepare copy to external
-Prepare linking from external
-Prepare move to external
+Prepare copying
+Prepare linking
+Prepare moving
 ---
 Copy name to clipboard
 Copy path to clipboard
@@ -200,7 +200,7 @@ do not report completion cannot trigger this update. The tested Explorer clears
 its Shell Cut clipboard after Move. Details and limitations are in
 [Completion of external operations](SHELL_EXPLORER_BEHAVIOR_SPEC.md#completion-of-external-operations).
 
-`Prepare copy to external` and `Copy item to clipboard` deliberately appear as
+`Prepare copying` and `Copy item to clipboard` deliberately appear as
 two entries in different groups. Both invoke the same Shell Copy verb; the former
 is presented as the start of an external transfer, while the latter is presented
 with the clipboard actions and also has a toolbar button. Neither limits where

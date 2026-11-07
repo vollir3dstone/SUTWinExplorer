@@ -165,7 +165,7 @@ try {
     $defaultOrder = 'Name,MediaTypeIcon,TypeApp1Icon,TypeApp2Name,DateModified,Size'
     if ((@($pairsProperty.GetValue($viewSort)).Column -join ',') -cne $defaultOrder -or
         @($pairsProperty.GetValue($viewSort) | Where-Object { $_.Criterion -ne 'Ascending' }).Count -ne 0 -or
-        ($sortBoxes.Children | ForEach-Object { $_.Content.Children[0].Text }) -join ',' -cne 'Name,MT,TA1,TA2,Date,Size' -or
+        ($sortBoxes.Children | ForEach-Object { $_.Tag }) -join ',' -cne '0,1,2,3,4,5' -or
         $view.FindName('NameSortIndicator').Visibility -ne 'Visible') { throw 'The initial sort widget or its criteria are incorrect.' }
     $sortBoxes.Children[1].RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
     if (@($pairsProperty.GetValue($viewSort))[1].Criterion -ne 'Descending' -or

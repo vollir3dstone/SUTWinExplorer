@@ -642,9 +642,8 @@ try {
         $view = [Activator]::CreateInstance($assembly.GetType('SUTWinExplorer.ContentView', $true))
         $createActions = $view.GetType().GetMethod('CreateRunningAppActions', [Reflection.BindingFlags]'Instance,NonPublic')
         $actions = $createActions.Invoke($view, [object[]] @(,[string[]] @($filePath)))
-        $title = if ([string]::IsNullOrWhiteSpace($window.Title)) { 'Untitled window' } else { $window.Title }
-        $label = "$($matchingApps[0].App.Name) - $title".Replace('&', '&&')
-        $action = @($actions | Where-Object { $_.Label -ceq $label })
+        $actionId = "open-running-app:$($matchingApps[0].App.Id):$($window.Handle.ToInt64())"
+        $action = @($actions | Where-Object { $_.Id -eq $actionId })
         Assert-True ($action.Count -eq 1) 'The selected application window was not found exactly once in the menu actions.'
         $instanceFlags = [Reflection.BindingFlags]'Instance,NonPublic'
         $staticFlags = [Reflection.BindingFlags]'Static,NonPublic'
@@ -658,7 +657,7 @@ try {
         $errorProbe = [SutShellPropertiesProbe]::new('Open in running app')
         $menuProbe = [SutShellMenuProbe]::new($menuOwnerHandle)
         try {
-            $menuProbe.SelectLabel = $label
+            $menuProbe.SelectCommandId = [uint32] (0x8000 + [Array]::IndexOf($actions, $action[0]))
             $findSubmenu = [Func[IntPtr, IntPtr]] { param($nativeMenu) [PasteWindowProbe]::GetSubMenu($nativeMenu, 1) }
             $menu.GetType().GetMethod('ShowSubmenu', $instanceFlags).Invoke($menu, [object[]] @($findSubmenu, 150, 150))
             Assert-True ($menu.GetType().GetProperty('CommandInvoked', $instanceFlags).GetValue($menu)) 'The running-app menu command was not invoked.'

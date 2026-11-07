@@ -74,15 +74,15 @@ try {
         $fixedPathview.ShowSelectedItemsActionButtons = $false
         $fixedPathview.ShowDirectoryColumnActionButtons = $false
         $fixedWindow.UpdateLayout()
-        foreach ($action in @(@{ Button = 'RenameCurrentDirectoryButton'; Title = 'Rename directory'; Value = [IO.Path]::GetFileName($directory) },
-                              @{ Button = 'RelocateCurrentDirectoryButton'; Title = 'Relocate directory'; Value = [IO.Path]::GetDirectoryName($directory) })) {
+        foreach ($action in @(@{ Button = 'RenameCurrentDirectoryButton'; Value = [IO.Path]::GetFileName($directory) },
+                      @{ Button = 'RelocateCurrentDirectoryButton'; Value = [IO.Path]::GetDirectoryName($directory) })) {
             $button = $fixedPathview.FindName($action.Button)
             Assert-True $button.IsEnabled "$($action.Button) was disabled for the current directory."
             $state = @{ Seen = $false; Value = $null }
             $timer = [System.Windows.Threading.DispatcherTimer]::new()
             $timer.Interval = [TimeSpan]::FromMilliseconds(25)
             $timer.add_Tick({
-                $dialog = @([System.Windows.Application]::Current.Windows | Where-Object { $_.Title -eq $action.Title -and $_.IsVisible }) | Select-Object -First 1
+                $dialog = @([System.Windows.Application]::Current.Windows | Where-Object { $_.GetType().FullName -eq 'SUTWinExplorer.DirectoryLocationDialog' -and $_.IsVisible }) | Select-Object -First 1
                 if ($null -ne $dialog) {
                     $state.Seen = $true
                     $state.Value = $dialog.Content.Children[1].Text
@@ -143,7 +143,10 @@ try {
         foreach ($name in @('LocationLabel', 'LocationBaseIcon')) {
             Assert-True $isBackground.Invoke($fixedPathview, [object[]] @($fixedPathview.FindName($name))) "$name was not treated as Pathview background."
         }
-        $sectionLabel = Find-TextVisual $fixedPathview 'Sub directories'
+        $section = $subdirectoryList
+        while ($null -ne $section -and $section -isnot [System.Windows.Controls.GroupBox]) { $section = [System.Windows.Media.VisualTreeHelper]::GetParent($section) }
+        Assert-True ($null -ne $section) 'The subdirectory section was not found.'
+        $sectionLabel = Find-TextVisual $section ([string] $section.Header)
         Assert-True ($null -ne $sectionLabel -and $isBackground.Invoke($fixedPathview, [object[]] @($sectionLabel))) 'The Sub directories section label was not treated as background.'
         Assert-True $isBackground.Invoke($fixedPathview, [object[]] @($sidebarContent.FindName('ViewControlsRow'))) 'The ContentView header background was not treated as Pathview background.'
         foreach ($element in @($subdirectoryList, $fixedPathview.FindName('ActivePathTree'), $fixedPathview.FindName('ActivePathTreeFrame'), $fixedPathview.FindName('SubdirectoriesListFrame'), $fixedPathview.FindName('ActivePathAndSiblingsTreeFrame'), $fixedPathview.FindName('RenameCurrentDirectoryButton'), $sidebarContent.FindName('NamePatternTextBox'))) {
@@ -213,10 +216,11 @@ try {
         try { $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true)) }
         finally { $menuProbe.Dispose() }
         $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
-        $menuProbe.SelectLabel = 'Insert copy of marked item'
+        $contentOrder = @('AbortTransfer', 'CopyExecute')
+        $menuProbe.SelectCommandId = Get-ActionCommandId 'CopyExecute' $contentOrder
         try {
             $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true))
-            Assert-True ($menuProbe.SelectIndex -eq 1 -and $menuProbe.Items[0] -ceq 'Abort transfer' -and
+            Assert-True ($menuProbe.SelectIndex -eq 1 -and $menuProbe.CommandIds[0] -eq (Get-ActionCommandId 'AbortTransfer' $contentOrder) -and
                 [IO.File]::Exists((Join-Path $subdirectoryEntry.Path 'sidebar-transfer.txt')) -and -not $workflow.IsPrepared) 'Sidebar directory content menu copied to the wrong destination.'
         } finally { $menuProbe.Dispose(); $workflow.Abort() }
         $workflow.Prepare([string[]] @($sidebarSource))
@@ -253,14 +257,14 @@ try {
         try { $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true)) }
         finally { $menuProbe.Dispose() }
         $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
-        $menuProbe.SelectLabel = 'Copy clipboard item here'
+        $menuProbe.SelectCommandId = Get-ActionCommandId 'ClipboardItemCopy' @('ClipboardItemCopy')
         try {
             $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true))
             Assert-True ($menuProbe.SelectIndex -eq 0 -and ($menuProbe.States[1] -band 0x800) -ne 0 -and
                 [IO.File]::Exists((Join-Path $subdirectoryEntry.Path 'sidebar-clipboard.txt')) -and [IO.File]::Exists($sidebarClipboardFile)) 'Sidebar clipboard paste used the wrong menu position or destination.'
         } finally { $menuProbe.Dispose() }
-        foreach ($abortCase in @(@('move', 2, 'Move cut item here'), @('link', 4, 'Link to externally selected item'))) {
-            $abortName, $effect, $executeLabel = $abortCase
+        foreach ($abortCase in @(@('move', 2, 'AbortClipboardMove', 'ClipboardItemMove'), @('link', 4, 'AbortClipboardLink', 'ClipboardItemLink'))) {
+            $abortName, $effect, $abortId, $executeId = $abortCase
             $clipboardData.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] $effect)))
             [System.Windows.Clipboard]::SetDataObject($clipboardData, $true)
             $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
@@ -268,10 +272,11 @@ try {
             try { $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true)) }
             finally { $menuProbe.Dispose() }
             $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
-            $menuProbe.SelectLabel = "Abort clipboard $abortName"
+            $contentOrder = @($abortId, $executeId)
+            $menuProbe.SelectCommandId = Get-ActionCommandId $abortId $contentOrder
             try {
                 $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true))
-                Assert-True ($menuProbe.SelectIndex -eq 0 -and $menuProbe.Items[1] -ceq $executeLabel -and
+                Assert-True ($menuProbe.SelectIndex -eq 0 -and $menuProbe.CommandIds[1] -eq (Get-ActionCommandId $executeId $contentOrder) -and
                     ($menuProbe.States[2] -band 0x800) -ne 0 -and -not [System.Windows.Clipboard]::ContainsFileDropList() -and
                     [IO.File]::Exists($sidebarClipboardFile)) "Incorrect sidebar clipboard abort for $abortName."
             } finally { $menuProbe.Dispose() }
@@ -300,13 +305,13 @@ try {
         $operationWindow.Top = -20000
         $operationWindow.Content = $operationView
         $operationWindow.Show()
-        foreach ($action in @(@{ Button = 'RenameCurrentDirectoryButton'; Title = 'Rename directory'; Value = 'renamed'; Expected = (Join-Path $directory 'renamed') },
-                              @{ Button = 'RelocateCurrentDirectoryButton'; Title = 'Relocate directory'; Value = $destination; Expected = (Join-Path $destination 'renamed') })) {
+        foreach ($action in @(@{ Button = 'RenameCurrentDirectoryButton'; Value = 'renamed'; Expected = (Join-Path $directory 'renamed') },
+                      @{ Button = 'RelocateCurrentDirectoryButton'; Value = $destination; Expected = (Join-Path $destination 'renamed') })) {
             $state = @{ Seen = $false }
             $timer = [System.Windows.Threading.DispatcherTimer]::new()
             $timer.Interval = [TimeSpan]::FromMilliseconds(25)
             $timer.add_Tick({
-                $dialog = @([System.Windows.Application]::Current.Windows | Where-Object { $_.Title -eq $action.Title -and $_.IsVisible }) | Select-Object -First 1
+                $dialog = @([System.Windows.Application]::Current.Windows | Where-Object { $_.GetType().FullName -eq 'SUTWinExplorer.DirectoryLocationDialog' -and $_.IsVisible }) | Select-Object -First 1
                 if ($null -ne $dialog) {
                     $state.Seen = $true
                     $dialog.Content.Children[1].Text = $action.Value

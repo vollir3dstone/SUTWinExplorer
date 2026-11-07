@@ -358,14 +358,21 @@ internal static class SutShell
     {
         if (operation is not (ClipboardOperation.Move or ClipboardOperation.Link))
             throw new InvalidOperationException("Only clipboard move or link operations can be aborted.");
+        if (!ClearClipboardIfSequenceMatches(sequence))
+            throw new InvalidOperationException("The clipboard operation is no longer available.");
+    }
+
+    private static bool ClearClipboardIfSequenceMatches(uint sequence)
+    {
         if (!OpenClipboard(IntPtr.Zero))
             throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
         try
         {
             if (sequence != GetClipboardSequenceNumber())
-                throw new InvalidOperationException("The clipboard operation is no longer available.");
+                return false;
             if (!EmptyClipboard())
                 throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+            return true;
         }
         finally { _ = CloseClipboard(); }
     }
@@ -388,6 +395,11 @@ internal static class SutShell
                 ShellFileOperations.Link(paths, path, insertedPaths);
                 try { ShellDragDrop.ReportLinkCompleted(source); }
                 catch (Exception exception) when (exception is ExternalException or NotImplementedException) { }
+                try { _ = ClearClipboardIfSequenceMatches(sequence); }
+                catch (System.ComponentModel.Win32Exception exception)
+                {
+                    throw new InvalidOperationException("The shortcuts were created, but the clipboard could not be cleared.", exception);
+                }
                 break;
             case ClipboardOperation.Move:
                 ShellFileOperations.Move(paths, path, owner, insertedPaths, movedDirectories, requireComplete: true);
