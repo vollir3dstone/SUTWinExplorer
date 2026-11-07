@@ -514,8 +514,8 @@ try {
                     Assert-True ($menuProbe.ItemCount -eq -1) 'The third background click displayed a menu.'
                 } elseif ($menuKind -eq 'base') {
                     Assert-True ((Test-BaseMenu $menuProbe) -and
-                        ($menuProbe.States[0] -band 3) -ne 0 -and ($menuProbe.States[2] -band 3) -ne 0 -and ($menuProbe.States[3] -band 3) -ne 0 -and
-                        $newParent[0].Text -notin $menuProbe.Items) 'The background Base Menu or its disabled selection actions were incorrect.'
+                        ($menuProbe.States[0] -band 3) -eq 0 -and ($menuProbe.States[2] -band 3) -eq 0 -and ($menuProbe.States[3] -band 3) -eq 0 -and
+                        $newParent[0].Text -notin $menuProbe.Items) 'The background Base Menu or its active directory actions were incorrect.'
                 } else {
                     Assert-True ($menuProbe.ItemCount -gt 0 -and (Get-ActionCommandId 'New' @('New')) -in $menuProbe.CommandIds) 'The background Content Menu did not include New.'
                 }

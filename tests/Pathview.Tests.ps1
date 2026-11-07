@@ -12,6 +12,15 @@ $menuActionOrder = @($testView.GetType().GetMethod('CreateContextMenuActions', $
 $directory = Join-Path ([System.IO.Path]::GetTempPath()) ('kis-pathview-test-' + [guid]::NewGuid().ToString('N'))
 $previousContext = [System.Threading.SynchronizationContext]::Current
 
+function Find-TextVisual($parent, [string] $text) {
+    if ($parent -is [System.Windows.Controls.TextBlock] -and $parent.Text -ceq $text) { return $parent }
+    for ($index = 0; $index -lt [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($parent); $index++) {
+        $found = Find-TextVisual ([System.Windows.Media.VisualTreeHelper]::GetChild($parent, $index)) $text
+        if ($null -ne $found) { return $found }
+    }
+    return $null
+}
+
 try {
     [System.IO.Directory]::CreateDirectory((Join-Path $directory 'OtherFolder')) | Out-Null
     [System.Threading.SynchronizationContext]::SetSynchronizationContext(
@@ -55,6 +64,8 @@ try {
         $sidebarController = $pathviewType.GetField('_subdirectoryContextMenu', $viewFlags).GetValue($fixedPathview)
         $sidebarOwner = [System.Windows.Interop.WindowInteropHelper]::new($fixedWindow).Handle
         $sidebarContent = $fixedPathview.FindName('DirectoryContent')
+        $directoryController = $sidebarController
+        $sidebarController = $sidebarContent.GetType().GetField('_contextMenu', $viewFlags).GetValue($sidebarContent)
         $sidebarHideDirectories = $sidebarContent.FindName('HideDirectoriesCheckBox').GetCheckBox()
         $sidebarHideDirectories.IsChecked = $true
         $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
@@ -91,11 +102,40 @@ try {
         $timer.Start()
         try { [System.Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timer.Stop() }
         Assert-True ($probe.Ready -and $sidebarList.SelectedItems.Count -eq 1 -and $sidebarList.SelectedItem.Entry.FullPath -eq (Join-Path $directory 'chosen-folder')) 'The sidebar-created folder was not selected in its ContentView.'
+        $isBackground = $pathviewType.GetMethod('IsPathviewBackground', $viewFlags)
+        foreach ($name in @('LocationLabel', 'LocationBaseIcon')) {
+            Assert-True $isBackground.Invoke($fixedPathview, [object[]] @($fixedPathview.FindName($name))) "$name was not treated as Pathview background."
+        }
+        $sectionLabel = Find-TextVisual $fixedPathview 'Sub directories'
+        Assert-True ($null -ne $sectionLabel -and $isBackground.Invoke($fixedPathview, [object[]] @($sectionLabel))) 'The Sub directories section label was not treated as background.'
+        Assert-True $isBackground.Invoke($fixedPathview, [object[]] @($sidebarContent.FindName('ViewControlsRow'))) 'The ContentView header background was not treated as Pathview background.'
+        foreach ($element in @($subdirectoryList, $fixedPathview.FindName('ActivePathTree'), $fixedPathview.FindName('ActivePathTreeFrame'), $fixedPathview.FindName('SubdirectoriesListFrame'), $fixedPathview.FindName('ActivePathAndSiblingsTreeFrame'), $fixedPathview.FindName('RenameCurrentDirectoryButton'), $sidebarContent.FindName('NamePatternTextBox'))) {
+            Assert-True (-not $isBackground.Invoke($fixedPathview, [object[]] @($element))) "An excluded $($element.GetType().Name) was treated as Pathview background."
+        }
+        $disabledButton = $fixedPathview.FindName('RenameCurrentDirectoryButton')
+        $isBackgroundAt = $pathviewType.GetMethod('IsPathviewBackgroundAt', $viewFlags)
+        $listFrame = $fixedPathview.FindName('SubdirectoriesListFrame')
+        $point = $listFrame.TranslatePoint([System.Windows.Point]::new(4, $listFrame.ActualHeight / 2), $fixedPathview)
+        Assert-True (-not $isBackgroundAt.Invoke($fixedPathview, [object[]] @($point))) 'The subdirectory list margin was treated as Pathview background.'
+        $disabledButton.IsEnabled = $false
+        try {
+            $point = $disabledButton.TranslatePoint([System.Windows.Point]::new($disabledButton.ActualWidth / 2, $disabledButton.ActualHeight / 2), $fixedPathview)
+            Assert-True (-not $isBackgroundAt.Invoke($fixedPathview, [object[]] @($point))) 'A disabled button was treated as Pathview background.'
+        } finally { $disabledButton.IsEnabled = $true }
         $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
         $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
-        try { $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $true)) }
+        try {
+            $null = $sidebarContent.GetType().GetMethod('ShowBackgroundMenu', $viewFlags).Invoke($sidebarContent, @())
+            Assert-True (Test-BaseMenu $menuProbe) 'The Pathview background did not open the Base Menu.'
+        }
         finally { $menuProbe.Dispose() }
-        Assert-True ($sidebarList.SelectedItems.Count -eq 0) 'The sidebar background menu did not clear the ContentView selection.'
+        Assert-True ($sidebarList.SelectedItems.Count -eq 0) 'The Pathview background menu did not clear the ContentView selection.'
+        $sidebarList.SelectedItem = $sidebarList.Items[0]
+        $fixedWindow.UpdateLayout()
+        $event = [System.Windows.Input.MouseButtonEventArgs]::new([System.Windows.Input.Mouse]::PrimaryDevice, 0, [System.Windows.Input.MouseButton]::Right)
+        $event.RoutedEvent = [System.Windows.Input.Mouse]::PreviewMouseDownEvent
+        $subdirectoryList.RaiseEvent($event)
+        Assert-True ($event.Handled -and $sidebarList.SelectedItems.Count -eq 1) 'The subdirectory list background handled selection as a Pathview background.'
         [IO.Directory]::Delete((Join-Path $directory 'chosen-folder'))
         $sidebarHideDirectories.IsChecked = $true
         foreach ($operation in @('Copy', 'Move')) {
@@ -127,6 +167,7 @@ try {
             $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $true))
             Assert-True ($newProbe.Seen -and $null -eq $newProbe.Error -and $workflow.IsPrepared) "The New command was displaced by the active transfer actions: seen=$($newProbe.Seen), error=$($newProbe.Error), prepared=$($workflow.IsPrepared), items=$($menuProbe.Items -join ',')."
         } finally { $newProbe.Timer.Stop(); $menuProbe.Dispose() }
+        $sidebarController = $directoryController
         $fixedPathview.GetType().GetMethod('SelectDirectoryMenuTarget', $viewFlags).Invoke($fixedPathview, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $false))
         $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
         $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)

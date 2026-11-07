@@ -1,5 +1,6 @@
 <UserControl x:Class="SUTWinExplorer.Pathview"
              x:Name="Root"
+             PreviewMouseRightButtonDown="Pathview_PreviewMouseRightButtonDown"
              UseLayoutRounding="True"
              SnapsToDevicePixels="True"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -310,7 +311,7 @@
                     <GroupBox Grid.Row="0" Header="Path"
                               Style="{StaticResource HeaderLineGroupBoxStyle}"
                               Margin="0,0,0,4" Padding="0">
-                        <Border BorderBrush="{StaticResource ViewFrameBrush}"
+                        <Border x:Name="ActivePathTreeFrame" BorderBrush="{StaticResource ViewFrameBrush}"
                             BorderThickness="{StaticResource ViewFrameThickness}">
                             <TreeView x:Name="ActivePathTree"
                                       ItemContainerStyle="{StaticResource DirectoryTreeItemStyle}"
@@ -346,9 +347,9 @@
                                     </InlineUIContainer>
                                 </TextBlock>
                             </Grid>
-                                <Border Grid.Row="2" BorderBrush="{StaticResource ViewFrameBrush}"
+                                <Border x:Name="SubdirectoriesListFrame" Grid.Row="2" BorderBrush="{StaticResource ViewFrameBrush}"
                                     BorderThickness="{StaticResource ViewFrameThickness}"
-                                    Margin="0">
+                                    Margin="0" Background="Transparent">
                                 <ListView x:Name="ActivePathSubdirectoriesList"
                                           BorderThickness="0" Padding="0" Margin="16,0"
                                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -449,7 +450,7 @@
                                   Checked="HideInternalCheckBox_StateChanged"
                                   Unchecked="HideInternalCheckBox_StateChanged" />
                     </StackPanel>
-                    <Border Grid.Row="2" BorderBrush="{StaticResource ViewFrameBrush}"
+                    <Border x:Name="ActivePathAndSiblingsTreeFrame" Grid.Row="2" BorderBrush="{StaticResource ViewFrameBrush}"
                             BorderThickness="{StaticResource ViewFrameThickness}" Margin="4,0,4,0">
                         <TreeView x:Name="ActivePathAndSiblingsTree"
                                   BorderThickness="0" Padding="0"

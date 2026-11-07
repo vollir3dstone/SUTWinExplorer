@@ -79,6 +79,8 @@ public partial class Pathview : UserControl
             tooltipText.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding(nameof(TextBlock.Text)) { Source = LocationLabel });
         _treeContextMenu = CreateDirectoryMenuController(ActivePathAndSiblingsTree, true);
         _subdirectoryContextMenu = CreateDirectoryMenuController(ActivePathSubdirectoriesList, false);
+        DirectoryContent.AdditionalBackgroundHitTest = (screenX, screenY) =>
+            IsPathviewBackgroundAt(PointFromScreen(new Point(screenX, screenY)));
         _ = new ListViewDropTarget(ActivePathSubdirectoriesList,
             item => item is TreeEntry { IsPlaceholder: false } entry ? entry.Path : null,
             () => CurrentPath, () => _editingTreeEntry is null);
@@ -1348,8 +1350,7 @@ public partial class Pathview : UserControl
                 var source = control.InputHitTest(control.PointFromScreen(new Point(screenX, screenY))) as DependencyObject;
                 var entry = tree ? FindAncestor<TreeViewItem>(source)?.DataContext as TreeEntry :
                     FindAncestor<ListViewItem>(source)?.DataContext as TreeEntry;
-                return (entry is { IsPlaceholder: false } ? entry : null,
-                    !tree && source is not null && !IsListChrome(source));
+                return (entry is { IsPlaceholder: false } ? entry : null, false);
             },
             entry => SelectDirectoryMenuTarget(entry, tree),
             CreateDirectoryMenuActions,
@@ -1524,6 +1525,33 @@ public partial class Pathview : UserControl
         }
     }
 
+    private bool IsPathviewBackground(DependencyObject? source)
+    {
+        for (var current = source; current is not null && !ReferenceEquals(current, this);)
+        {
+            if (ReferenceEquals(current, ActivePathTreeFrame) || ReferenceEquals(current, SubdirectoriesListFrame) ||
+                ReferenceEquals(current, ActivePathAndSiblingsTreeFrame))
+                return false;
+            if (current is TreeView or ListView or ButtonBase or TextBoxBase or ComboBox or TabItem or
+                RangeBase or Thumb or MenuItem or SortOrderWidget or CheckBoxWrapper)
+                return false;
+            current = current is Visual or System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(current) : LogicalTreeHelper.GetParent(current);
+        }
+        return source is not null;
+    }
+
+    private bool IsPathviewBackgroundAt(Point point) =>
+        IsPathviewBackground(VisualTreeHelper.HitTest(this, point)?.VisualHit);
+
+    private void Pathview_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!IsPathviewBackgroundAt(e.GetPosition(this)))
+            return;
+        DirectoryContent.ShowBackgroundMenu();
+        e.Handled = true;
+    }
+
     private void ActivePathSubdirectoriesListItem_MouseEnter(object sender, MouseEventArgs e)
     {
         ActivePathSubdirectoriesList.SelectedItem = null;
@@ -1542,16 +1570,6 @@ public partial class Pathview : UserControl
         if (IsListChrome(source))
             return;
 
-        try
-        {
-            ActivePathSubdirectoriesList.SelectedItem = null;
-            if (_subdirectoryMenuTarget is not null) SelectDirectoryMenuTarget(null, tree: false);
-            _subdirectoryContextMenu.Show(null, new WindowInteropHelper(Window.GetWindow(this)!).Handle, alternate: true);
-        }
-        catch (Exception exception)
-        {
-            MessageBox.Show(Window.GetWindow(this), exception.Message, "Context menu failed", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
         e.Handled = true;
     }
 
@@ -1563,11 +1581,6 @@ public partial class Pathview : UserControl
 
         if (ActivePathSubdirectoriesList.SelectedItem is TreeEntry entry && !entry.IsPlaceholder)
             ShowSubdirectoryMenu(entry, alternate: false);
-        else
-        {
-            DirectoryContent.ClearSelection();
-            ShowNativeBackgroundMenu(this, CurrentPath);
-        }
 
         e.Handled = true;
     }

@@ -4,9 +4,9 @@
 
 ContentView provides a Base Menu (Basismenü) and a Content Menu (Inhaltsmenü)
 for a selection of existing files and/or directories and for the current
-directory's background. The same menu pair is available for filesystem
-directories in the **Active path and siblings** tree, and for directories and
-the background of the **Sub directories** list in **Active path**. The Base Menu puts the
+directory's background throughout the Pathview. The same menu pair is available
+for filesystem directories in the **Active path and siblings** tree and the
+**Sub directories** list in **Active path**. The Base Menu puts the
 application's common file operations first and includes generally applicable
 Shell commands. The Content Menu provides the remaining item-specific Shell
 commands. Windows constructs and invokes the Shell portions of both menus; KIS
@@ -144,8 +144,10 @@ ContentView uses the following selection rules:
   The current popup stays open; the next right-click on an item or background
   starts a new Base Menu. This also applies while either popup is open or the
   no-menu step is pending. Executing a menu command resets the sequence as well.
-- A right-click on the list background clears the selection and starts or
-  advances its own Base/Content/no-menu series for the current directory.
+- A right-click on the table background or other non-interactive Pathview
+  background clears the ContentView selection and starts or advances the same
+  Base/Content/no-menu series for the current directory. Labels and icons count
+  as background; active controls, tree views and the Sub directories list do not.
   Switching between an item and the background starts a new series. List chrome
   such as headers and scrollbars is not treated as an item or background. Clicks
   outside the owner are not consumed as menu-series clicks.
@@ -171,13 +173,12 @@ row clears it, and the item menu's selection is cleared after the menu closes.
 An open menu retains its target even if the pointer moves. Prepared transfers
 retain their own source paths and execute into the current directory, rather
 than using the hovered folder as their source or destination. The list preserves
-the menu series for a subsequent right-click on the same folder. Its background has its
-own three-step sequence; the **Path** tree in the **Active path** tab has no
+the menu series for a subsequent right-click on the same folder. Tree views and
+the Sub directories list do not have background menus; the **Path** tree in the **Active path** tab has no
 context menu. Virtual or unavailable sidebar targets fall back to the
 native item menu. Shift-right-click uses that native menu; in the Sub directories
 list the Apps key opens the applicable item menu and Shift+F10 the native menu.
-With no selected sidebar item these keyboard commands retain the native
-background menu.
+With no selected sidebar item these keyboard commands open no menu.
 
 Both popups are tracked using a thread-local Windows menu message filter. For a
 right-button-down or right-button-double-click message, its screen coordinates
@@ -638,7 +639,7 @@ alternatives and their limitations.
 toolbar actions, Shell invocation, selection and menu switching for single,
 multiple and mixed files and directories. It also checks the independent sidebar
 menu series, target-specific actions and the absence of an Active path tree menu. It
-exercises both background sequences, native Shift fallback, view filtering,
+exercises the shared background sequence, native Shift fallback, view filtering,
 the shared New dialog, shared/background-only registry fixtures and background action states.
 It includes native popup and mouse-input probes in WPF windows;
 these tests display windows and move the pointer. Manual verification in the

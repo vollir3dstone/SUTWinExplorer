@@ -77,7 +77,8 @@ public partial class ContentView : UserControl
             (screenX, screenY) =>
             {
                 var source = FileList.InputHitTest(FileList.PointFromScreen(new Point(screenX, screenY))) as DependencyObject;
-                return (FindAncestor<ListViewItem>(source)?.DataContext as DirectoryRow, source is not null && !IsListChrome(source));
+                return (FindAncestor<ListViewItem>(source)?.DataContext as DirectoryRow,
+                    source is not null && !IsListChrome(source) || AdditionalBackgroundHitTest?.Invoke(screenX, screenY) == true);
             },
             row =>
             {
@@ -114,6 +115,10 @@ public partial class ContentView : UserControl
     private IReadOnlyList<ShellMenuAction> CreateContextMenuActions() => CreateContextMenuActionsForContext(false);
 
     internal void ClearSelection() => FileList.SelectedItems.Clear();
+
+    internal Func<int, int, bool>? AdditionalBackgroundHitTest { get; set; }
+
+    internal void ShowBackgroundMenu() => ShowMenuCore(null, alternate: true);
 
     internal IReadOnlyList<ShellMenuAction> CreateContentTransferActions(string destination)
     {

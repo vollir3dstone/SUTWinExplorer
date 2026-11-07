@@ -126,7 +126,8 @@ try {
             $treeEntry = Find-TreeEntry $siblingsTree.Items[0] (Join-Path $directory 'RenamedFolder')
             $subdirectoryList.ScrollIntoView($subdirectoryEntry)
             $fixedWindow.UpdateLayout()
-            $backgroundPoint = Find-ListBackgroundPoint $subdirectoryList
+            $backgroundLabel = $fixedPathview.FindName('LocationLabel')
+            $backgroundPoint = $backgroundLabel.PointToScreen([System.Windows.Point]::new($backgroundLabel.ActualWidth / 2, $backgroundLabel.ActualHeight / 2))
             $rightClickProbe = [SutShellRightClickProbe]::new([System.Windows.Interop.WindowInteropHelper]::new($fixedWindow).Handle,
                 [int] $backgroundPoint.X, [int] $backgroundPoint.Y, [int] $backgroundPoint.X, [int] $backgroundPoint.Y)
             $rightClickProbe.AdditionalClicks = 2
@@ -140,7 +141,7 @@ try {
                 [System.Windows.Threading.Dispatcher]::PushFrame($frame)
                 Assert-True ($rightClickProbe.FirstMenu -and $rightClickProbe.SecondMenu -and -not $rightClickProbe.SecondWasBase -and
                     (Get-ActionCommandId 'New' @('New')) -in $rightClickProbe.SecondCommandIds -and $rightClickProbe.NoMenuObserved -and
-                    $rightClickProbe.AdditionalMenuCount -eq 1 -and $rightClickProbe.AdditionalMenuWasBase[0]) 'Sidebar background clicks did not follow the three-step sequence.'
+                    $rightClickProbe.AdditionalMenuCount -eq 1 -and $rightClickProbe.AdditionalMenuWasBase[0]) 'Pathview background clicks did not follow the three-step sequence.'
             } finally { $timer.Stop(); $rightClickProbe.Dispose() }
             $subdirectoryContainer = $subdirectoryList.ItemContainerGenerator.ContainerFromItem($subdirectoryEntry)
             $treeContainer = Find-TreeContainer $siblingsTree $treeEntry
