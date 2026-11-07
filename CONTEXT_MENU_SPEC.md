@@ -13,6 +13,14 @@ commands. Windows constructs and invokes the Shell portions of both menus; KIS
 Explorer filters the resulting menus instead of reconstructing extension
 handlers itself.
 
+Design principle: The Content Menu for an eligible active-directory background
+and the Content Menu for an eligible directory item should look and behave the
+same. Their only intended difference is the target directory: the background
+means the active directory, and the item means the clicked directory. This is a
+design goal, not a claim that the current menus are identical: Windows supplies
+different item and background Shell commands, and the current layouts below
+describe those differences. Native Shift menus retain their own behavior.
+
 The Base Menu may also be called the Generic menu or FileOp menu. The Content
 Menu may also be called the Special menu. Older code and documentation used
 generic and special as the menu names.
@@ -181,9 +189,9 @@ application actions where appropriate:
 
 | Context | Application additions and ordering |
 | --- | --- |
-| ContentView item selection | Shell `Open`, `Open in running app...`, Shell `Open with`, then remaining eligible Shell entries. A prepared transfer targeting a directory adds the two transfer actions ahead of this group. Missing Shell Open/Open with commands have disabled placeholders. The running-app submenu is built for the selection and available windows; it is disabled when no eligible window exists or a directory is selected. |
-| Directory item with a prepared transfer | `Abort transfer` and the matching execute command precede the remaining menu, separated from it. The clicked directory is the destination. This applies to directory rows and sidebar directory items. |
-| Active directory background | The filtered Shell background commands include application-owned `New` in place of Windows New. With a prepared transfer, `Abort transfer` and the matching execute command appear first, with the active directory as destination. |
+| ContentView item selection | Shell `Open`, `Open in running app...`, Shell `Open with`, then remaining eligible Shell entries. Clipboard paste and prepared transfer actions for a directory precede this group when available. Missing Shell Open/Open with commands have disabled placeholders. The running-app submenu is built for the selection and available windows; it is disabled when no eligible window exists or a directory is selected. |
+| Directory item | Supported clipboard Copy data adds `Item clipboard paste` first, followed by a separator. A prepared transfer adds `Abort transfer` and the matching execute command before the remaining menu. The clicked directory is the destination. This applies to directory rows and sidebar directory items. |
+| Active directory background | The same clipboard paste and prepared transfer actions appear in the same order, targeting the active directory. The filtered Shell background commands include application-owned `New` in place of Windows New. |
 | Selection containing a `.lnk` | Application `Open parent` replaces Shell Open file location, or is appended when Windows does not supply it; it is enabled only for one selected item. |
 
 The execute command is `Insert link to marked item`, `Insert copy of marked

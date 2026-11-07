@@ -549,6 +549,14 @@ selection and scrolling behavior, such as selecting and revealing new items.
 
 ### Context menus and file operations
 
+Design principle: An eligible active-directory background and an eligible
+directory item represent directory targets. Their Content Menus and incoming
+drops should have the same appearance and behavior; the only intended
+difference is the directory targeted. The background targets the active
+directory, while the item targets that item. Current Shell-provided menu
+entries can still differ by context, as described in
+[CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md).
+
 - [x] The Base Menu contains **Properties**, the three copy-to-clipboard
   actions, **Abort transfer**, the three mark-transfer actions, filtered Shell
   commands, **Rename**, **Relocate**, and **Delete**, in that order and with
@@ -560,8 +568,8 @@ selection and scrolling behavior, such as selecting and revealing new items.
 - [x] ContentView file and folder selections use the Base and Content Menu pair
   described in [CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md).
 - [x] The ContentView item Content Menu starts with Shell **Open**, **Open in
-  running app...**, and Shell **Open with**, after any prepared transfer actions
-  for a directory target. An unavailable Shell entry has a
+  running app...**, and Shell **Open with**, after any applicable clipboard paste
+  and prepared transfer actions for a directory target. An unavailable Shell entry has a
   disabled placeholder. The running-app submenu lists the visible windows of matching running applications as
   `App name - Window title`, with an app or window icon when available. For multiple files, applications must be registered
   for every selected type. The submenu is disabled for selections containing a

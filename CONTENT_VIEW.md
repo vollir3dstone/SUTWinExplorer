@@ -229,6 +229,14 @@ transfer result dialog is shown. See [Open with Running App](OPEN_WITH_RUNNING_A
 
 ### Drag and drop
 
+Design principle: An eligible active-directory background and an eligible
+directory item are equivalent directory targets. Incoming drops should show the
+same feedback and behave the same way; only the destination differs. The
+background means the active directory, while the item means that directory.
+The same principle applies to their Content Menus; see
+[CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md). This does not make excluded
+controls, virtual items, file rows, or the small Active path tree drop targets.
+
 Drag selected filesystem items with the left mouse button to another table,
 Windows Explorer, or another compatible application. Dropping filesystem items
 from an external application or another table is also supported. The **Sub
