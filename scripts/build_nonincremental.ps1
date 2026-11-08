@@ -1,0 +1,1 @@
+dotnet build "..\SUTWinExplorer.csproj" --configuration Debug --no-incremental

@@ -53,6 +53,9 @@
     <EmbeddedResource Include="Assets\running-app-open-methods.json" LogicalName="SUTWinExplorer.RunningAppOpenMethods.json" />
     <EmbeddedResource Include="Assets\shell-extension-blacklist.json" LogicalName="SUTWinExplorer.ShellExtensionBlacklist.json" />
     <EmbeddedResource Include="Assets\directory-menu-whitelist.json" LogicalName="SUTWinExplorer.DirectoryMenuWhitelist.json" />
+    <Resource Include="Assets\action_prepare_copy 16.png" />
+    <Resource Include="Assets\action_prepare_link 16.png" />
+    <Resource Include="Assets\action_prepare_move 16.png" />
     <Resource Include="Assets\app.ico" />
     <Resource Include="Assets\ic_fluent_arrow_left_16_regular.png" />
     <Resource Include="Assets\ic_fluent_arrow_right_16_regular.png" />
