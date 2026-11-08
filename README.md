@@ -7,14 +7,44 @@ Windows Shell services for file operations, icons, and context-menu commands.
 
 ## What makes it different
 
+### Overview
+
+Compared to Windows Explorer, KIS Explorer uses the idea of anchor points:
+The user pins directories in tabs they can switch between.
+And instead of using multiple KIS Explorer instances, one instance suffices.
+Of course, if the user needs to browse, this is possible and seemlessly
+integrated. But still, the pinned directories keep their location.
+
+Also, to launch a document in an application, running or not, the user
+does not have to leave the KIS Explorer: There is a special context menu
+action that opens a document in an already running application. This means,
+there is no need for drag'n'drop between KIS Explorer and the app's window.
+
+Talking about context menus: The actions of the standard context menu, together
+with newly defined actions, are split into two context menus:
+- The **Base Menu**, that has a black box view of the selected file (item), i.e.,
+  it offers operations that make sense for all types of files, independent of
+  their type or content. Examples are renaming, copying, zipping, versioning
+  and virus scanning.
+- The **Content Menu**, that looks inside the box, and offers actions dependent
+  on the file type or associations. To find associated operations, the Windows
+  shell functionality is used, so the familiar operations are offered known
+  from Windows Explorer.
+
+Toggling through the two context menus for a file is easy: The first right mouse
+click opens the Base Menu, the second switched to the Content Menu, and the third
+closes the context menu sequence altogether.
+
+Compared to other explorers, there is no support for file content preview.
+KIS Explorer is rather interested in file operations and classifications
+then in content.
+
 ### One instance, browsable and pinned directories
 
-Only one KIS Explorer instance can run on a machine, including across Windows
-user sessions. A second launch reports the existing instance and exits; it does
-not forward its command-line path to that instance.
+Only one KIS Explorer instance can run on a machine.
 
-A **Pathview** is a tab's directory tree, content table, location, and view
-settings. The permanent **BROWSE** Pathview is used to navigate. **Pin** turns
+A **Pathview** is a tab's view to a directory and its location.
+The permanent **BROWSE** Pathview is used to navigate. **Pin** turns
 its current filesystem location into a **Fixed** Pathview: a separate tab that
 stays at that directory. Opening a directory from a Fixed Pathview navigates
 BROWSE or selects an already pinned destination; it does not change the Fixed
@@ -22,15 +52,43 @@ Pathview's location. Fixed tabs can have custom names and colors.
 
 Pinned directories belong to a **use case**, so different tasks can have
 different sets of Fixed Pathviews. The `default` use case is activated at
-startup; its pinned directories are restored, with BROWSE selected. Closing a
-Fixed tab removes it from the active use case, while closing the application
-does not. Unavailable paths remain saved and are marked. The virtual **This PC**
-location cannot be pinned.
+startup; its pinned directories are restored.
+
+### The Pathview
+
+The Pathview is the central view of directory, displaying
+- the path,
+- the sub directories,
+- and the files,
+
+in 3 distinct sub views.
+
+The **Content View** holds a table view that displays the files and, if activated,
+also the sub directories which are already available in a second view.
+
+The user can set filter criteria like
+- hide directories,
+- hide internal,
+- and a name pattern,
+
+to filter for certain items (files and directories).
+
+They can also define the sorting of the items based on column names,
+using a dedicated Sorting-Control widget.
+
+From the context menus (and from buttons if activated) the user can start
+various actions on the active directory itself and on items selected in the
+Content View.
+
+If the user double clicks on a directory item, either in the Content View or
+in the sub directories view, the active Pathview Tab switches to the BROWSE
+tab where the new locatrion is displayed. The pinned Pathview is forbidden to
+navigate via double clicks.
 
 ### Two logically organized context menus
 
 KIS Explorer divides actions into a **Base Menu** and a **Content Menu**. The
-distinction is inspired by a black-box/white-box analogy:
+distinction is inspired by a black-box/white-box view:
 
 - The **Base Menu** treats an item primarily as an object: it groups common
   actions such as Properties, clipboard operations, Rename, Relocate, and
@@ -43,39 +101,44 @@ This analogy is a mental model, not a strict test of whether a command reads
 file contents. Windows and its extensions construct the Shell portions of the
 menus, and KIS Explorer filters them; the available commands depend on the
 selection and the installed system. Some commands may not be classified
-perfectly, and modern Windows 11 extensions are not guaranteed to appear.
+perfectly, but the distinction is by best effort and the support Windows offers.
 
 For eligible items and directory backgrounds, repeated right-clicks at the
 same position cycle through Base Menu, Content Menu, and no menu. Moving the
 pointer away or invoking a command resets the sequence. **Shift-right-click**
-opens the native Windows menu; for shortcuts, the item menu's Open file
-location action is replaced by KIS Explorer's **Open parent** action.
+opens the native Windows menu.
 
 ### Media types and additional columns
 
 The content table distinguishes an application's own abstract file categories
-from Windows' file associations. The **MT** column shows a media type icon,
-such as image, audio, video, structured data, book, or executable. **ST**
-shows the independent media subtype `TEXT`, `EDIT`, or `RENDER` when one is
-assigned. For example, `.svg` is image/TEXT, `.jpg` is image/RENDER, and
-`.zip` is box/EDIT.
+from Windows' file associations. 
+
+A **Media Type** identifies the type of a file by its modality:
+- Executable
+- Archive (zip etc.)
+- Text file without stated purpose
+- Code file (programming languages)
+- Structured data, no matter if text based or not (csv, MS Excel, JSON, XML, MS Access, sqlite etc.)
+- Book or presentation, no matter if text based or not (pdf, MS Word, html etc.)
+- Image
+- Video
+- Audio
+
+A **Media Type Sub Type** identifies the type of a file by its interaction effort:
+- Mostly used for viewing, listening or consumption in general
+- Mostly used for editing
+- Text file; this cannot be clearly assigned to one of the two types above
+
+As an example take a "Book" type file: A PDF is for viewing, a Word file for editing,
+and an HTML file is a text file.
+
+Media Type and Sub Type are displayed as icons in two columns.
 
 These are classifications based on file extensions, not inspection or
 validation of file contents. The mapping is maintained in
 [media-types.json](Assets/media-types.json) and embedded at build time;
-unknown extensions have no media type icon. Directory and shortcut icons have
-special handling. Windows-provided information is shown separately:
+unknown extensions have no media type icon. 
 
-| Column | Meaning |
-| --- | --- |
-| MT | KIS Explorer media type icon. |
-| ST | KIS Explorer media subtype icon, if assigned. |
-| TA1 | Windows Shell base icon, a coarse indication of type or associated app. |
-| MO | Windows Shell overlay, shown separately when available. |
-| TA2 | Windows Shell type description, a finer indication of type or associated app. |
-
-TA1 and TA2 are approximate descriptions: Windows may supply item-specific
-icons and descriptions. Name, Size, and Date modified complete the table.
 
 ## Getting started
 
