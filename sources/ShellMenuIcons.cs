@@ -65,6 +65,34 @@ internal static class ShellMenuIcons
         return image;
     });
 
+    private static readonly Lazy<BitmapSource> Icon_Rename = new(() =>
+    {
+        var resource = Application.GetResourceStream(new Uri("/SUTWinExplorer;component/Assets/action_rename 16.png", UriKind.Relative))
+            ?? throw new InvalidOperationException("External transfer icon is missing.");
+        using var stream = resource.Stream;
+        var image = new BitmapImage();
+        image.BeginInit();
+        image.CacheOption = BitmapCacheOption.OnLoad;
+        image.StreamSource = stream;
+        image.EndInit();
+        image.Freeze();
+        return image;
+    });
+
+    private static readonly Lazy<BitmapSource> Icon_Relocate = new(() =>
+    {
+        var resource = Application.GetResourceStream(new Uri("/SUTWinExplorer;component/Assets/action_relocate 16.png", UriKind.Relative))
+            ?? throw new InvalidOperationException("External transfer icon is missing.");
+        using var stream = resource.Stream;
+        var image = new BitmapImage();
+        image.BeginInit();
+        image.CacheOption = BitmapCacheOption.OnLoad;
+        image.StreamSource = stream;
+        image.EndInit();
+        image.Freeze();
+        return image;
+    });
+
     internal static void Apply(IntPtr menu, IReadOnlyList<ShellMenuAction> actions, uint firstCommand, List<IntPtr> bitmaps, Visual? dpiSource = null)
     {
         for (var index = 0; index < actions.Count; index++)
@@ -126,6 +154,10 @@ internal static class ShellMenuIcons
         else if (action.Id is "PrepareCopyToExternal" or "PrepareLinkingFromExternal" or "PrepareMoveToExternal" or
             "ClipboardItemCopy" or "ClipboardItemMove" or "ClipboardItemLink")
             icon = new Image { Source = ExternalTransferIcon.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
+        else if (action.Id is "Rename")
+            icon = new Image { Source = Icon_Rename.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
+        else if (action.Id is "Relocate")
+            icon = new Image { Source = Icon_Relocate.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
         else if (button?.Content is StackPanel panel && panel.Children.OfType<Control>().FirstOrDefault() is { Template: not null } source)
             icon = new Control { Template = source.Template, Width = 14, Height = 14, Foreground = SystemColors.MenuTextBrush };
         else if ((action.Id is "LinkMarkItem" or "CopyMarkItem" or "MoveMarkItem" or "LinkExecute" or "CopyExecute" or "MoveExecute" or "Delete") && button is not null)
