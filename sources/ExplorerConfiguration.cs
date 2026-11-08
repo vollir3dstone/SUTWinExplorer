@@ -23,7 +23,7 @@ internal sealed class ExplorerConfiguration
         Interface = new InterfaceConfiguration
         {
             ShowDirectoryRowActionButtons = false,
-            ShowDirectoryColumnActionButtons = false,
+            ShowDirectoryColumnActionButtons = true,
             ShowSelectedItemsActionButtons = false,
             EnableInternalItemTransfers = false
         }
