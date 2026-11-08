@@ -23,7 +23,7 @@ internal static class ShellMenuIcons
         return image;
     });
 
-    private static readonly Lazy<BitmapSource> Icon_ClipboardPrepareCopy = new(() =>
+    private static readonly Lazy<BitmapSource> Icon_PrepareClipboardCopying = new(() =>
     {
         var resource = Application.GetResourceStream(new Uri("/SUTWinExplorer;component/Assets/action_prepare_copy 16.png", UriKind.Relative))
             ?? throw new InvalidOperationException("External transfer icon is missing.");
@@ -37,7 +37,7 @@ internal static class ShellMenuIcons
         return image;
     });
 
-    private static readonly Lazy<BitmapSource> Icon_ClipboardPrepareLink = new(() =>
+    private static readonly Lazy<BitmapSource> Icon_PrepareClipboardLinking = new(() =>
     {
         var resource = Application.GetResourceStream(new Uri("/SUTWinExplorer;component/Assets/action_prepare_link 16.png", UriKind.Relative))
             ?? throw new InvalidOperationException("External transfer icon is missing.");
@@ -51,7 +51,7 @@ internal static class ShellMenuIcons
         return image;
     });
 
-    private static readonly Lazy<BitmapSource> Icon_ClipboardPrepareMove = new(() =>
+    private static readonly Lazy<BitmapSource> Icon_PrepareClipboardMoving = new(() =>
     {
         var resource = Application.GetResourceStream(new Uri("/SUTWinExplorer;component/Assets/action_prepare_move 16.png", UriKind.Relative))
             ?? throw new InvalidOperationException("External transfer icon is missing.");
@@ -93,7 +93,7 @@ internal static class ShellMenuIcons
         return image;
     });
 
-    private static readonly Lazy<BitmapSource> Icon_ExecuteCopy = new(() =>
+    private static readonly Lazy<BitmapSource> Icon_ExecuteClipboardCopying = new(() =>
     {
         var resource = Application.GetResourceStream(new Uri("/SUTWinExplorer;component/Assets/action_execute_copy 16.png", UriKind.Relative))
             ?? throw new InvalidOperationException("External transfer icon is missing.");
@@ -107,7 +107,7 @@ internal static class ShellMenuIcons
         return image;
     });
 
-    private static readonly Lazy<BitmapSource> Icon_ExecuteMove = new(() =>
+    private static readonly Lazy<BitmapSource> Icon_ExecuteClipboardMoving = new(() =>
     {
         var resource = Application.GetResourceStream(new Uri("/SUTWinExplorer;component/Assets/action_execute_move 16.png", UriKind.Relative))
             ?? throw new InvalidOperationException("External transfer icon is missing.");
@@ -121,7 +121,7 @@ internal static class ShellMenuIcons
         return image;
     });
 
-    private static readonly Lazy<BitmapSource> Icon_ExecuteLink = new(() =>
+    private static readonly Lazy<BitmapSource> Icon_ExecuteClipboardLinking = new(() =>
     {
         var resource = Application.GetResourceStream(new Uri("/SUTWinExplorer;component/Assets/action_execute_link 16.png", UriKind.Relative))
             ?? throw new InvalidOperationException("External transfer icon is missing.");
@@ -188,17 +188,17 @@ internal static class ShellMenuIcons
         if (action.MenuImage is { } imageSource)
             icon = new Image { Source = imageSource, Width = 16, Height = 16, Stretch = Stretch.Uniform };
         else if (action.Id is "PrepareClipboardCopying")
-            icon = new Image { Source = Icon_ClipboardPrepareCopy.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
+            icon = new Image { Source = Icon_PrepareClipboardCopying.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
         else if (action.Id is "PrepareClipboardLinking")
-            icon = new Image { Source = Icon_ClipboardPrepareLink.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
+            icon = new Image { Source = Icon_PrepareClipboardLinking.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
         else if (action.Id is "PrepareClipboardMoving")
-            icon = new Image { Source = Icon_ClipboardPrepareMove.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
+            icon = new Image { Source = Icon_PrepareClipboardMoving.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
         else if (action.Id is "ExecuteClipboardLinking")
-            icon = new Image { Source = Icon_ExecuteLink.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
+            icon = new Image { Source = Icon_ExecuteClipboardLinking.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
         else if (action.Id is "ExecuteClipboardCopying")
-            icon = new Image { Source = Icon_ExecuteCopy.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
+            icon = new Image { Source = Icon_ExecuteClipboardCopying.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
         else if (action.Id is "ExecuteClipboardMoving")
-            icon = new Image { Source = Icon_ExecuteMove.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
+            icon = new Image { Source = Icon_ExecuteClipboardMoving.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
         else if (action.Id is "PrepareClipboardCopying" or "PrepareClipboardLinking" or "PrepareClipboardMoving" or
             "ExecuteClipboardCopying" or "ExecuteClipboardMoving" or "ExecuteClipboardLinking")
             icon = new Image { Source = ExternalTransferIcon.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
