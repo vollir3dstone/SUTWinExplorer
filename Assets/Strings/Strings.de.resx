@@ -19,11 +19,11 @@
   <data name="BaseMenu_Action_Relocate" xml:space="preserve"><value>Umziehen</value></data>
   <data name="BaseMenu_Action_Delete" xml:space="preserve"><value>Löschen</value></data>
   <data name="ContentMenu_Action_AbortTransfer" xml:space="preserve"><value>Übertragung abbrechen</value></data>
-  <data name="ContentMenu_Action_AbortClipboardMove" xml:space="preserve"><value>Verschieben aus dem Clipboard abbrechen</value></data>
-  <data name="ContentMenu_Action_AbortClipboardLink" xml:space="preserve"><value>Linken aus dem Clipboard abbrechen</value></data>
+  <data name="ContentMenu_Action_AbortClipboardMove" xml:space="preserve"><value>Verschieben abbrechen</value></data>
+  <data name="ContentMenu_Action_AbortClipboardLink" xml:space="preserve"><value>Verlinken abbrechen</value></data>
   <data name="ContentMenu_Action_ClipboardItemCopy" xml:space="preserve"><value>Vorbereitetes Item hierher kopieren</value></data>
   <data name="ContentMenu_Action_ClipboardItemMove" xml:space="preserve"><value>Vorbereitetes Item hierher verschieben</value></data>
-  <data name="ContentMenu_Action_ClipboardItemLink" xml:space="preserve"><value>Vorbereitetes Item hier verlinken</value></data>
+  <data name="ContentMenu_Action_ClipboardItemLink" xml:space="preserve"><value>Link zum vorbereiteten Item einfügen</value></data>
   <data name="ContentMenu_Action_LinkExecute" xml:space="preserve"><value>Link zum markierten Item einfügen</value></data>
   <data name="ContentMenu_Action_CopyExecute" xml:space="preserve"><value>Kopie des markierten Items einfügen</value></data>
   <data name="ContentMenu_Action_MoveExecute" xml:space="preserve"><value>Markiertes Item hierher verschieben</value></data>

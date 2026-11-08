@@ -19,11 +19,11 @@
   <data name="BaseMenu_Action_Relocate" xml:space="preserve"><value>Relocate</value></data>
   <data name="BaseMenu_Action_Delete" xml:space="preserve"><value>Delete</value></data>
   <data name="ContentMenu_Action_AbortTransfer" xml:space="preserve"><value>Abort transfer</value></data>
-  <data name="ContentMenu_Action_AbortClipboardMove" xml:space="preserve"><value>Abort clipboard move</value></data>
-  <data name="ContentMenu_Action_AbortClipboardLink" xml:space="preserve"><value>Abort clipboard link</value></data>
+  <data name="ContentMenu_Action_AbortClipboardMove" xml:space="preserve"><value>Abort moving</value></data>
+  <data name="ContentMenu_Action_AbortClipboardLink" xml:space="preserve"><value>Abort linking</value></data>
   <data name="ContentMenu_Action_ClipboardItemCopy" xml:space="preserve"><value>Copy prepared item here</value></data>
   <data name="ContentMenu_Action_ClipboardItemMove" xml:space="preserve"><value>Move prepared item here</value></data>
-  <data name="ContentMenu_Action_ClipboardItemLink" xml:space="preserve"><value>Link prepared item here</value></data>
+  <data name="ContentMenu_Action_ClipboardItemLink" xml:space="preserve"><value>Insert link to prepared item</value></data>
   <data name="ContentMenu_Action_LinkExecute" xml:space="preserve"><value>Insert link to marked item</value></data>
   <data name="ContentMenu_Action_CopyExecute" xml:space="preserve"><value>Insert copy of marked item</value></data>
   <data name="ContentMenu_Action_MoveExecute" xml:space="preserve"><value>Move marked item here</value></data>
