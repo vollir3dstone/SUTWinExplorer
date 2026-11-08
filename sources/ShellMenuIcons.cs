@@ -93,6 +93,20 @@ internal static class ShellMenuIcons
         return image;
     });
 
+    private static readonly Lazy<BitmapSource> Icon_ExecuteLink = new(() =>
+    {
+        var resource = Application.GetResourceStream(new Uri("/SUTWinExplorer;component/Assets/action_execute_link 16.png", UriKind.Relative))
+            ?? throw new InvalidOperationException("External transfer icon is missing.");
+        using var stream = resource.Stream;
+        var image = new BitmapImage();
+        image.BeginInit();
+        image.CacheOption = BitmapCacheOption.OnLoad;
+        image.StreamSource = stream;
+        image.EndInit();
+        image.Freeze();
+        return image;
+    });
+
     internal static void Apply(IntPtr menu, IReadOnlyList<ShellMenuAction> actions, uint firstCommand, List<IntPtr> bitmaps, Visual? dpiSource = null)
     {
         for (var index = 0; index < actions.Count; index++)
@@ -151,6 +165,8 @@ internal static class ShellMenuIcons
             icon = new Image { Source = Icon_ClipboardPrepareLink.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
         else if (action.Id is "PrepareMoveToExternal")
             icon = new Image { Source = Icon_ClipboardPrepareMove.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
+        else if (action.Id is "ClipboardItemLink")
+            icon = new Image { Source = Icon_ExecuteLink.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
         else if (action.Id is "PrepareCopyToExternal" or "PrepareLinkingFromExternal" or "PrepareMoveToExternal" or
             "ClipboardItemCopy" or "ClipboardItemMove" or "ClipboardItemLink")
             icon = new Image { Source = ExternalTransferIcon.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
