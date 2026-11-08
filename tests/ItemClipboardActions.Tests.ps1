@@ -231,7 +231,7 @@ function Assert-ItemMenu($actions, [string[]] $paths, [bool] $background, [IntPt
             $visible = $false
             for ($offset = 3; $offset -lt $pixels.Length; $offset += 4) { if ($pixels[$offset] -ne 0) { $visible = $true; break } }
             if (-not $visible) { throw "Blank menu icon: $($action.Id)." }
-            if ($action.Id -in @('PrepareCopyToExternal', 'PrepareLinkingFromExternal', 'PrepareMoveToExternal')) {
+            if ($action.Id -in @('PrepareClipboardCopying', 'PrepareClipboardLinking', 'PrepareClipboardMoving')) {
                 $icon = [System.Windows.Controls.Image]::new()
                 $icon.Source = [System.Windows.Media.Imaging.BitmapFrame]::Create([Uri]::new((Resolve-Path (Join-Path $PSScriptRoot '..\Assets\doubles 16.png')).Path))
                 $icon.Width = 16; $icon.Height = 16
@@ -290,9 +290,9 @@ try {
     $itemClipboardPaste = $view.FindName('ItemClipboardPasteButton')
     $nameClipboardCopy = $view.FindName('NameClipboardCopyButton')
     $pathClipboardCopy = $view.FindName('PathClipboardCopyButton')
-    $linkMarkItem = $view.FindName('LinkMarkItemButton')
-    $copyMarkItem = $view.FindName('CopyMarkItemButton')
-    $moveMarkItem = $view.FindName('MoveMarkItemButton')
+    $PrepareInternalLinking = $view.FindName('PrepareInternalLinkingButton')
+    $PrepareInternalCopying = $view.FindName('PrepareInternalCopyingButton')
+    $PrepareInternalMoving = $view.FindName('PrepareInternalMovingButton')
     $linkAbort = $view.FindName('LinkAbortButton')
     if ($nameClipboardCopy.Parent -ne $pathClipboardCopy.Parent -or $pathClipboardCopy.Parent -ne $itemClipboardCopy.Parent -or
         $nameClipboardCopy.Parent.Children.IndexOf($pathClipboardCopy) -ne $nameClipboardCopy.Parent.Children.IndexOf($nameClipboardCopy) + 1 -or
@@ -302,12 +302,12 @@ try {
         $cornerRadius.Invoke($null, @($pathClipboardCopy)) -ne [System.Windows.CornerRadius]::new(0) -or
         $cornerRadius.Invoke($null, @($itemClipboardCopy)) -ne [System.Windows.CornerRadius]::new(0, 3, 3, 0) -or
         $pathClipboardCopy.BorderThickness.Left -ne 0 -or $itemClipboardCopy.BorderThickness.Left -ne 0) { throw 'Clipboard copy buttons do not share the group outline.' }
-    if ($linkMarkItem.Parent -ne $copyMarkItem.Parent -or $copyMarkItem.Parent -ne $moveMarkItem.Parent -or
-        $linkMarkItem.Parent.Children.IndexOf($copyMarkItem) -ne $linkMarkItem.Parent.Children.IndexOf($linkMarkItem) + 1 -or
-        $copyMarkItem.Parent.Children.IndexOf($moveMarkItem) -ne $copyMarkItem.Parent.Children.IndexOf($copyMarkItem) + 1 -or
-        $cornerRadius.Invoke($null, @($linkMarkItem)) -ne [System.Windows.CornerRadius]::new(3, 0, 0, 3) -or
-        $cornerRadius.Invoke($null, @($copyMarkItem)) -ne [System.Windows.CornerRadius]::new(0) -or
-        $cornerRadius.Invoke($null, @($moveMarkItem)) -ne [System.Windows.CornerRadius]::new(0, 3, 3, 0)) { throw 'Transfer mark item buttons are not in one group.' }
+    if ($PrepareInternalLinking.Parent -ne $PrepareInternalCopying.Parent -or $PrepareInternalCopying.Parent -ne $PrepareInternalMoving.Parent -or
+        $PrepareInternalLinking.Parent.Children.IndexOf($PrepareInternalCopying) -ne $PrepareInternalLinking.Parent.Children.IndexOf($PrepareInternalLinking) + 1 -or
+        $PrepareInternalCopying.Parent.Children.IndexOf($PrepareInternalMoving) -ne $PrepareInternalCopying.Parent.Children.IndexOf($PrepareInternalCopying) + 1 -or
+        $cornerRadius.Invoke($null, @($PrepareInternalLinking)) -ne [System.Windows.CornerRadius]::new(3, 0, 0, 3) -or
+        $cornerRadius.Invoke($null, @($PrepareInternalCopying)) -ne [System.Windows.CornerRadius]::new(0) -or
+        $cornerRadius.Invoke($null, @($PrepareInternalMoving)) -ne [System.Windows.CornerRadius]::new(0, 3, 3, 0)) { throw 'Transfer mark item buttons are not in one group.' }
     foreach ($name in @('Name', 'Path', 'Item')) {
         $button = $view.FindName("${name}ClipboardCopyButton")
         $icon = $button.Content.Children[1]
@@ -329,14 +329,14 @@ try {
     $namePosition = $nameClipboardCopy.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
     $pathPosition = $pathClipboardCopy.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
     $itemPosition = $itemClipboardCopy.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
-    $linkPosition = $linkMarkItem.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
-    $copyPosition = $copyMarkItem.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
-    $movePosition = $moveMarkItem.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+    $linkPosition = $PrepareInternalLinking.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+    $copyPosition = $PrepareInternalCopying.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
+    $movePosition = $PrepareInternalMoving.TranslatePoint([System.Windows.Point]::new(0, 0), $view)
     if ([Math]::Abs($namePosition.X + $nameClipboardCopy.ActualWidth - $pathPosition.X) -gt 0.01 -or
         [Math]::Abs($pathPosition.X + $pathClipboardCopy.ActualWidth - $itemPosition.X) -gt 0.01 -or
         $itemPosition.X + $itemClipboardCopy.ActualWidth -gt $linkPosition.X) { throw 'Clipboard copy buttons are not contiguous before Link mark item.' }
-    if ([Math]::Abs($linkPosition.X + $linkMarkItem.ActualWidth - $copyPosition.X) -gt 0.01 -or
-        [Math]::Abs($copyPosition.X + $copyMarkItem.ActualWidth - $movePosition.X) -gt 0.01) { throw 'Transfer mark item buttons are not contiguous.' }
+    if ([Math]::Abs($linkPosition.X + $PrepareInternalLinking.ActualWidth - $copyPosition.X) -gt 0.01 -or
+        [Math]::Abs($copyPosition.X + $PrepareInternalCopying.ActualWidth - $movePosition.X) -gt 0.01) { throw 'Transfer mark item buttons are not contiguous.' }
     if ($itemClipboardPaste.TranslatePoint([System.Windows.Point]::new(0, 0), $view).Y -ge $linkAbort.TranslatePoint([System.Windows.Point]::new(0, 0), $view).Y) { throw 'Item clipboard paste is not above the Link group.' }
     $owner = [System.Windows.Interop.WindowInteropHelper]::new($window).Handle
     $actions = $view.GetType().GetMethod('CreateContextMenuActions', $flags).Invoke($view, @())
@@ -345,7 +345,7 @@ try {
     $baseMenu = $factory.GetMethod('GetBaseMenuForContext', $staticFlags).Invoke($null, [object[]] @([string[]] @($folder), $owner, $actions, $false))
     try {
         $actionIds = @($actions | ForEach-Object Id)
-        $expectedTransferPixels = Get-MenuIconPixels $baseMenu ([uint32] (0x8000 + [Array]::IndexOf($actionIds, 'PrepareCopyToExternal')))
+        $expectedTransferPixels = Get-MenuIconPixels $baseMenu ([uint32] (0x8000 + [Array]::IndexOf($actionIds, 'PrepareClipboardCopying')))
     } finally { ([IDisposable] $baseMenu).Dispose() }
     $copy.Prepare([string[]] @($file))
     try {
@@ -362,7 +362,7 @@ try {
             } "set clipboard for content menu icon $effect"
             $transferActions = $contentActions.Invoke($view, [object[]] @([string] $folder))
             $ids = @($transferActions | ForEach-Object Id)
-            $transferId = switch ($effect) { 1 { 'ClipboardItemCopy' } 2 { 'ClipboardItemMove' } 4 { 'ClipboardItemLink' } }
+            $transferId = switch ($effect) { 1 { 'ExecuteClipboardCopying' } 2 { 'ExecuteClipboardMoving' } 4 { 'ExecuteClipboardLinking' } }
             if ($transferId -notin $ids -or 'AbortTransfer' -notin $ids) { throw "Missing content actions for effect $effect." }
             foreach ($background in @($false, $true)) {
                 $excluded = [System.Collections.Generic.Dictionary[string,int]]::new()
@@ -371,7 +371,7 @@ try {
                     $actual = Get-MenuIconPixels $contentMenu ([uint32] (0x8000 + [Array]::IndexOf($ids, $transferId)))
                     if ([Convert]::ToBase64String($actual) -cne [Convert]::ToBase64String($expectedTransferPixels)) { throw "Incorrect $transferId content menu icon, background=$background." }
                     if ($effect -in @(2, 4)) {
-                        $abortId = if ($effect -eq 2) { 'AbortClipboardMove' } else { 'AbortClipboardLink' }
+                        $abortId = if ($effect -eq 2) { 'Action_AbortClipboardMoving' } else { 'Action_AbortClipboardLinking' }
                         if ($abortId -notin $ids) { throw "Missing $abortId action." }
                         $abortPixels = Get-MenuIconPixels $contentMenu ([uint32] (0x8000 + [Array]::IndexOf($ids, $abortId)))
                         $internalPixels = Get-MenuIconPixels $contentMenu ([uint32] (0x8000 + [Array]::IndexOf($ids, 'AbortTransfer')))
@@ -452,7 +452,7 @@ try {
         Wait-Until { $null -eq $baseCommands.GetValue($controller) } 'sequence cleanup on ContentView unload'
         $window.Content = $view
         $null = $view.GetType().GetMethod('RevealInsertedItems', $flags).Invoke($view, [object[]] @(,[string[]] @($file, $folder)))
-        Wait-Until { @($view.FindName('FileList').SelectedItems).Count -eq 2 -and $view.FindName('CopyMarkItemButton').IsEnabled } 'selection after menu sequence checks'
+        Wait-Until { @($view.FindName('FileList').SelectedItems).Count -eq 2 -and $view.FindName('PrepareInternalCopyingButton').IsEnabled } 'selection after menu sequence checks'
     } finally {
         $hitTest.SetValue($controller, $originalHitTest)
         $null = $reset.Invoke($controller, @())
@@ -461,7 +461,7 @@ try {
         $null = [SequenceMenuProbe]::SetCursorPos($originalCursor.X, $originalCursor.Y)
     }
     [System.Windows.Clipboard]::SetText('copy transfer sentinel')
-    Invoke-Button ($view.FindName('CopyMarkItemButton'))
+    Invoke-Button ($view.FindName('PrepareInternalCopyingButton'))
     if (-not $copy.IsPrepared -or [System.Windows.Clipboard]::GetText() -cne 'copy transfer sentinel') { throw "Copy mark item state=$($copy.IsPrepared), clipboard=$([System.Windows.Clipboard]::GetText())." }
     Invoke-Button $itemClipboardCopy
     Wait-Until { [System.Windows.Clipboard]::ContainsFileDropList() -and $itemClipboardPaste.IsEnabled } 'Item clipboard copy and paste availability'
@@ -502,8 +502,8 @@ try {
     $copy.Abort()
     [System.Windows.Clipboard]::SetText('sidebar copy sentinel')
     $directoryActions = $pathview.GetType().GetMethod('CreateDirectoryMenuActions', $flags).Invoke($pathview, [object[]] @($entry))
-    $directoryCopyMarkItem = @($directoryActions | Where-Object { $_.Id -eq 'CopyMarkItem' })[0]
-    $directoryCopyMarkItem.Invoke.Invoke()
+    $directoryPrepareInternalCopying = @($directoryActions | Where-Object { $_.Id -eq 'PrepareInternalCopying' })[0]
+    $directoryPrepareInternalCopying.Invoke.Invoke()
     if (-not $copy.IsPrepared -or [System.Windows.Clipboard]::GetText() -cne 'sidebar copy sentinel') { throw 'Sidebar Copy mark item changed the clipboard or failed to prepare.' }
     $copy.Abort()
     $shellCopy = $assembly.GetType('SUTWinExplorer.SutShell', $true).GetMethod('CopyToClipboard', $staticFlags)

@@ -78,7 +78,7 @@ try {
         }
     }
 } finally { $null = $shellNewLabels.Remove($testShellLabel) }
-$ids = @('Properties', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', 'LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem', 'Rename', 'Delete')
+$ids = @('Properties', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', 'PrepareInternalLinking', 'PrepareInternalCopying', 'PrepareInternalMoving', 'Rename', 'Delete')
 $sourceActions = [Array]::CreateInstance($actionType, $ids.Count)
 $noop = [Action] { }
 for ($index = 0; $index -lt $ids.Count; $index++) {
@@ -89,8 +89,8 @@ $states = @('Link', 'Copy', 'Move') | ForEach-Object { $assembly.GetType("SUTWin
 try {
     foreach ($state in $states) { $state.Prepare([string[]] @('C:\test')) }
     $disabledActions = $menuType.GetMethod('CreateBaseActions', $flags).Invoke($null, [object[]] @($sourceActions, $relocate, [string[]] @($PSScriptRoot), [IntPtr]::Zero, $false))
-    Assert-True (@($disabledActions | Where-Object Id -in @('AbortTransfer', 'LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem')).Count -eq 0 -and
-        @($disabledActions | Where-Object Id -in @('PrepareCopyToExternal', 'PrepareLinkingFromExternal', 'PrepareMoveToExternal')).Count -eq 3) 'Disabled internal transfers affected the wrong Base Menu actions.'
+    Assert-True (@($disabledActions | Where-Object Id -in @('AbortTransfer', 'PrepareInternalLinking', 'PrepareInternalCopying', 'PrepareInternalMoving')).Count -eq 0 -and
+        @($disabledActions | Where-Object Id -in @('PrepareClipboardCopying', 'PrepareClipboardLinking', 'PrepareClipboardMoving')).Count -eq 3) 'Disabled internal transfers affected the wrong Base Menu actions.'
     $actions = $menuType.GetMethod('CreateBaseActions', $flags).Invoke($null, [object[]] @($sourceActions, $relocate, [string[]] @($PSScriptRoot), [IntPtr]::Zero, $true))
     $abort = @($actions | Where-Object Id -eq 'AbortTransfer')[0]
     Assert-True ($abort.IsEnabled) 'Abort transfer was not enabled for prepared transfers.'
@@ -107,8 +107,8 @@ try {
                 else { throw "Unexpected menu command ID: $command" }
             }
         })
-        $expected = @('Properties', '|', 'PrepareCopyToExternal', 'PrepareLinkingFromExternal', 'PrepareMoveToExternal', '|', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', '|',
-            'AbortTransfer', 'LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem', '|', 'ShellCommand', '|', 'Rename', 'Relocate', '|', 'Delete')
+        $expected = @('Properties', '|', 'PrepareClipboardCopying', 'PrepareClipboardLinking', 'PrepareClipboardMoving', '|', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', '|',
+            'AbortTransfer', 'PrepareInternalLinking', 'PrepareInternalCopying', 'PrepareInternalMoving', '|', 'ShellCommand', '|', 'Rename', 'Relocate', '|', 'Delete')
         Assert-True (($actual -join ',') -ceq ($expected -join ',')) "Incorrect base menu layout: $($actual -join ',')"
     } finally { [void] [SutShellMenuProbe]::DestroyMenu($menu) }
     $abort.Invoke.Invoke()

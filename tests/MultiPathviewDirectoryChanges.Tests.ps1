@@ -169,7 +169,7 @@ try {
         $moveMarkButton.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         $browseContent = $browseView.FindName('DirectoryContent')
         $transferActions = $browseContent.GetType().GetMethod('CreateContentTransferActions', $flags).Invoke($browseContent, [object[]] @([string] $destination))
-        @($transferActions | Where-Object { $_.Id -eq 'MoveExecute' })[0].Invoke.Invoke()
+        @($transferActions | Where-Object { $_.Id -eq 'ExecuteInternalMoving' })[0].Invoke.Invoke()
         $executedParent = Join-Path $destination 'renamed-in-place'
         if ($moveWorkflow.IsPrepared -or $parentView.CurrentPath -cne $executedParent -or $childView.CurrentPath -cne (Join-Path $executedParent 'child') -or -not [IO.Directory]::Exists($executedParent)) { throw 'Executing the header-prepared Move in another Pathview did not move and update the directory.' }
 

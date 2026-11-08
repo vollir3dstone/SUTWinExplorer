@@ -126,14 +126,14 @@ public static class ProcessLanguageProbe
     $factory = $assembly.GetType('SUTWinExplorer.SutContextMenuFactory', $true)
     $getBaseActionLabel = $factory.GetMethod('GetBaseActionLabel', $flags)
     $getContentActionLabel = $factory.GetMethod('GetContentActionLabel', $flags)
-    foreach ($id in @('Properties', 'PrepareCopyToExternal', 'PrepareLinkingFromExternal', 'PrepareMoveToExternal',
+    foreach ($id in @('Properties', 'PrepareClipboardCopying', 'PrepareClipboardLinking', 'PrepareClipboardMoving',
         'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', 'AbortTransfer',
-        'LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem', 'Rename', 'Relocate', 'Delete')) {
+        'PrepareInternalLinking', 'PrepareInternalCopying', 'PrepareInternalMoving', 'Rename', 'Relocate', 'Delete')) {
         if ([string]::IsNullOrEmpty($getBaseActionLabel.Invoke($null, [object[]] @($id)))) { throw "Missing base menu action resource for $id." }
     }
     foreach ($id in @('AbortTransfer',
-        'AbortClipboardMove', 'AbortClipboardLink', 'ClipboardItemCopy', 'ClipboardItemMove', 'ClipboardItemLink',
-        'LinkExecute', 'CopyExecute', 'MoveExecute', 'New', 'OpenInRunningApp')) {
+        'Action_AbortClipboardMoving', 'Action_AbortClipboardLinking', 'ExecuteClipboardCopying', 'ExecuteClipboardMoving', 'ExecuteClipboardLinking',
+        'ExecuteInternalLinking', 'ExecuteInternalCopying', 'ExecuteInternalMoving', 'New', 'OpenInRunningApp')) {
         if ([string]::IsNullOrEmpty($getContentActionLabel.Invoke($null, [object[]] @($id)))) { throw "Missing content menu action resource for $id." }
     }
     [System.Windows.Application].GetField('_resourceAssembly', $flags).SetValue($null, $assembly)
@@ -172,7 +172,7 @@ public static class ProcessLanguageProbe
     $createBitmap = $iconType.GetMethod('CreateBitmap', $flags)
     $releaseBitmap = $iconType.GetMethod('Release', $flags)
     $actionType = $assembly.GetType('SUTWinExplorer.ShellMenuAction', $true)
-    foreach ($id in @('LinkMarkItem', 'CopyMarkItem', 'MoveMarkItem', 'LinkExecute', 'CopyExecute', 'MoveExecute', 'Delete')) {
+    foreach ($id in @('PrepareInternalLinking', 'PrepareInternalCopying', 'PrepareInternalMoving', 'ExecuteInternalLinking', 'ExecuteInternalCopying', 'ExecuteInternalMoving', 'Delete')) {
         $action = [Activator]::CreateInstance($actionType, [object[]] @($id, '', $true, [Action] {}, $false, $false))
         $button = [System.Windows.Controls.Button]::new()
         $button.Content = 'x'

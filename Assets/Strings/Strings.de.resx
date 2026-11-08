@@ -5,31 +5,31 @@
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms</value></resheader>
   <data name="BaseMenu_Action_Properties" xml:space="preserve"><value>Eigenschaften</value></data>
-  <data name="BaseMenu_Action_PrepareCopyToExternal" xml:space="preserve"><value>Kopieren vorbereiten</value></data>
-  <data name="BaseMenu_Action_PrepareLinkingFromExternal" xml:space="preserve"><value>Verlinken vorbereiten</value></data>
-  <data name="BaseMenu_Action_PrepareMoveToExternal" xml:space="preserve"><value>Verschieben vorbereiten</value></data>
+  <data name="BaseMenu_Action_PrepareClipboardCopying" xml:space="preserve"><value>Kopieren vorbereiten</value></data>
+  <data name="BaseMenu_Action_PrepareClipboardLinking" xml:space="preserve"><value>Verlinken vorbereiten</value></data>
+  <data name="BaseMenu_Action_PrepareClipboardMoving" xml:space="preserve"><value>Verschieben vorbereiten</value></data>
   <data name="BaseMenu_Action_NameClipboardCopy" xml:space="preserve"><value>Namen ins Clipboard kopieren</value></data>
   <data name="BaseMenu_Action_PathClipboardCopy" xml:space="preserve"><value>Pfad ins Clipboard kopieren</value></data>
   <data name="BaseMenu_Action_ItemClipboardCopy" xml:space="preserve"><value>Item ins Clipboard kopieren</value></data>
   <data name="BaseMenu_Action_AbortTransfer" xml:space="preserve"><value>Übertragung abbrechen</value></data>
-  <data name="BaseMenu_Action_LinkMarkItem" xml:space="preserve"><value>Item zum Verlinken markieren</value></data>
-  <data name="BaseMenu_Action_CopyMarkItem" xml:space="preserve"><value>Item zum Kopieren markieren</value></data>
-  <data name="BaseMenu_Action_MoveMarkItem" xml:space="preserve"><value>Item zum Verschieben markieren</value></data>
+  <data name="BaseMenu_Action_PrepareInternalLinking" xml:space="preserve"><value>Item zum Verlinken markieren</value></data>
+  <data name="BaseMenu_Action_PrepareInternalCopying" xml:space="preserve"><value>Item zum Kopieren markieren</value></data>
+  <data name="BaseMenu_Action_PrepareInternalMoving" xml:space="preserve"><value>Item zum Verschieben markieren</value></data>
   <data name="BaseMenu_Action_Rename" xml:space="preserve"><value>Umbenennen</value></data>
   <data name="BaseMenu_Action_Relocate" xml:space="preserve"><value>Umziehen</value></data>
   <data name="BaseMenu_Action_Delete" xml:space="preserve"><value>Löschen</value></data>
   <data name="ContentMenu_Action_AbortTransfer" xml:space="preserve"><value>Übertragung abbrechen</value></data>
-  <data name="ContentMenu_Action_AbortClipboardMove" xml:space="preserve"><value>Verschieben abbrechen</value></data>
-  <data name="ContentMenu_Action_AbortClipboardLink" xml:space="preserve"><value>Verlinken abbrechen</value></data>
-  <data name="ContentMenu_Action_ClipboardItemCopy" xml:space="preserve"><value>Vorbereitetes Item hierher kopieren</value></data>
-  <data name="ContentMenu_Action_ClipboardItemMove" xml:space="preserve"><value>Vorbereitetes Item hierher verschieben</value></data>
-  <data name="ContentMenu_Action_ClipboardItemLink" xml:space="preserve"><value>Link zum vorbereiteten Item einfügen</value></data>
-  <data name="ContentMenu_Action_LinkExecute" xml:space="preserve"><value>Link zum markierten Item einfügen</value></data>
-  <data name="ContentMenu_Action_CopyExecute" xml:space="preserve"><value>Kopie des markierten Items einfügen</value></data>
-  <data name="ContentMenu_Action_MoveExecute" xml:space="preserve"><value>Markiertes Item hierher verschieben</value></data>
+  <data name="ContentMenu_Action_AbortClipboardMoving" xml:space="preserve"><value>Verschieben abbrechen</value></data>
+  <data name="ContentMenu_Action_AbortClipboardLinking" xml:space="preserve"><value>Verlinken abbrechen</value></data>
+  <data name="ContentMenu_Action_ExecuteClipboardCopying" xml:space="preserve"><value>Vorbereitetes Item hierher kopieren</value></data>
+  <data name="ContentMenu_Action_ExecuteClipboardMoving" xml:space="preserve"><value>Vorbereitetes Item hierher verschieben</value></data>
+  <data name="ContentMenu_Action_ExecuteClipboardLinking" xml:space="preserve"><value>Link zum vorbereiteten Item einfügen</value></data>
+  <data name="ContentMenu_Action_ExecuteInternalLinking" xml:space="preserve"><value>Link zum markierten Item einfügen</value></data>
+  <data name="ContentMenu_Action_ExecuteInternalCopying" xml:space="preserve"><value>Kopie des markierten Items einfügen</value></data>
+  <data name="ContentMenu_Action_ExecuteInternalMoving" xml:space="preserve"><value>Markiertes Item hierher verschieben</value></data>
   <data name="ContentMenu_Action_New" xml:space="preserve"><value>Neu…</value></data>
   <data name="ContentMenu_Action_OpenContainingDirectory" xml:space="preserve"><value>Übergeordnetes Verzeichnis öffnen</value></data>
-  <data name="ContentMenu_Action_OpenInRunningApp" xml:space="preserve"><value>In laufender Anwendung öffnen...</value></data>
+  <data name="ContentMenu_Action_OpenInRunningApp" xml:space="preserve"><value>In laufender Anwendung öffnen</value></data>
   <data name="PathviewSidebarColumn_Button_ItemClipboardPaste_Tooltip" xml:space="preserve"><value>Item aus dem Clipboard einfügen</value></data>
   <data name="PathviewSidebarColumn_Button_LinkAbort_Tooltip" xml:space="preserve"><value>Verlinken abbrechen</value></data>
   <data name="PathviewSidebarColumn_Button_CopyAbort_Tooltip" xml:space="preserve"><value>Kopieren abbrechen</value></data>
@@ -41,8 +41,8 @@
   <data name="PathviewHeaderRow_Label_Fixed" xml:space="preserve"><value>FIXIERT</value></data>
   <data name="PathviewHeaderRow_Button_EditCustomName" xml:space="preserve"><value>Eigenen Pfad-View-Namen bearbeiten</value></data>
   <data name="PathviewHeaderRow_Button_PaneColor" xml:space="preserve"><value>Hintergrundfarbe der Pfad-View wählen</value></data>
-  <data name="PathviewHeaderRow_Button_MoveMarkItem" xml:space="preserve"><value>Versch.🠝</value></data>
-  <data name="PathviewHeaderRow_Button_MoveMarkItem_Tooltip" xml:space="preserve"><value>Item zum Verschieben markieren</value></data>
+  <data name="PathviewHeaderRow_Button_PrepareInternalMoving" xml:space="preserve"><value>Versch.🠝</value></data>
+  <data name="PathviewHeaderRow_Button_PrepareInternalMoving_Tooltip" xml:space="preserve"><value>Item zum Verschieben markieren</value></data>
   <data name="PathviewHeaderRow_Button_Rename" xml:space="preserve"><value>Umbenennen...</value></data>
   <data name="PathviewHeaderRow_Button_Relocate" xml:space="preserve"><value>Umziehen...</value></data>
   <data name="PathviewHeaderRow_Label_PaneColor" xml:space="preserve"><value>Hintergrundfarbe</value></data>
@@ -89,11 +89,11 @@
   <data name="ContentView_Selected_Button_PathClipboardCopy" xml:space="preserve"><value>Pfad</value></data>
   <data name="ContentView_Selected_Button_PathClipboardCopy_Tooltip" xml:space="preserve"><value>Pfad ins Clipboard kopieren</value></data>
   <data name="ContentView_Selected_Button_ItemClipboardCopy_Tooltip" xml:space="preserve"><value>Item ins Clipboard kopieren</value></data>
-  <data name="ContentView_Selected_Button_LinkMarkItem" xml:space="preserve"><value>Link🠝</value></data>
-  <data name="ContentView_Selected_Button_LinkMarkItem_Tooltip" xml:space="preserve"><value>Item zum Verknüpfen markieren</value></data>
-  <data name="ContentView_Selected_Button_CopyMarkItem" xml:space="preserve"><value>Kopie🠝</value></data>
-  <data name="ContentView_Selected_Button_CopyMarkItem_Tooltip" xml:space="preserve"><value>Item zum Kopieren markieren</value></data>
-  <data name="ContentView_Selected_Button_MoveMarkItem" xml:space="preserve"><value>Versch.🠝</value></data>
+  <data name="ContentView_Selected_Button_PrepareInternalLinking" xml:space="preserve"><value>Link🠝</value></data>
+  <data name="ContentView_Selected_Button_PrepareInternalLinking_Tooltip" xml:space="preserve"><value>Item zum Verknüpfen markieren</value></data>
+  <data name="ContentView_Selected_Button_PrepareInternalCopying" xml:space="preserve"><value>Kopie🠝</value></data>
+  <data name="ContentView_Selected_Button_PrepareInternalCopying_Tooltip" xml:space="preserve"><value>Item zum Kopieren markieren</value></data>
+  <data name="ContentView_Selected_Button_PrepareInternalMoving" xml:space="preserve"><value>Versch.🠝</value></data>
   <data name="ContentView_Selected_Button_Rename" xml:space="preserve"><value>Umbenennen…</value></data>
   <data name="ContentView_Selected_Button_Delete" xml:space="preserve"><value>Lösch.🗑️</value></data>
   <data name="PathviewSidebarColumn_Label_Directory" xml:space="preserve"><value>VERZEICHNIS</value></data>
@@ -103,14 +103,14 @@
   <data name="PathviewSidebarColumn_Button_New_Tooltip" xml:space="preserve"><value>Neu</value></data>
   <data name="PathviewSidebarColumn_Button_ExecuteOperationFromClipboard" xml:space="preserve"><value>Item</value></data>
   <data name="PathviewSidebarColumn_Button_LinkAbort" xml:space="preserve"><value>Link✕</value></data>
-  <data name="PathviewSidebarColumn_Button_LinkExecute" xml:space="preserve"><value>Link🠟</value></data>
-  <data name="PathviewSidebarColumn_Button_LinkExecute_Tooltip" xml:space="preserve"><value>Verknüpfung einfügen</value></data>
+  <data name="PathviewSidebarColumn_Button_ExecuteInternalLinking" xml:space="preserve"><value>Link🠟</value></data>
+  <data name="PathviewSidebarColumn_Button_ExecuteInternalLinking_Tooltip" xml:space="preserve"><value>Verknüpfung einfügen</value></data>
   <data name="PathviewSidebarColumn_Button_CopyAbort" xml:space="preserve"><value>Kopie✕</value></data>
-  <data name="PathviewSidebarColumn_Button_CopyExecute" xml:space="preserve"><value>Kopie🠟</value></data>
-  <data name="PathviewSidebarColumn_Button_CopyExecute_Tooltip" xml:space="preserve"><value>Kopie einfügen</value></data>
+  <data name="PathviewSidebarColumn_Button_ExecuteInternalCopying" xml:space="preserve"><value>Kopie🠟</value></data>
+  <data name="PathviewSidebarColumn_Button_ExecuteInternalCopying_Tooltip" xml:space="preserve"><value>Kopie einfügen</value></data>
   <data name="PathviewSidebarColumn_Button_MoveAbort" xml:space="preserve"><value>Versch.✕</value></data>
-  <data name="PathviewSidebarColumn_Button_MoveExecute" xml:space="preserve"><value>Versch.🠟</value></data>
-  <data name="PathviewSidebarColumn_Button_MoveExecute_Tooltip" xml:space="preserve"><value>Verschieben ausführen</value></data>
+  <data name="PathviewSidebarColumn_Button_ExecuteInternalMoving" xml:space="preserve"><value>Versch.🠟</value></data>
+  <data name="PathviewSidebarColumn_Button_ExecuteInternalMoving_Tooltip" xml:space="preserve"><value>Verschieben ausführen</value></data>
   <data name="ContentView_Column_MediaType" xml:space="preserve"><value>MT</value></data>
   <data name="ContentView_Column_MediaType_Tooltip" xml:space="preserve"><value>Nach Medientyp sortieren</value></data>
   <data name="ContentView_Column_MediaSubType" xml:space="preserve"><value>ST</value></data>

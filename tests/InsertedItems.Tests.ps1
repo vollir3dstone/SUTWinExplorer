@@ -69,8 +69,8 @@ try {
         $pattern.Text = 'unrelated*'
         $copyWorkflow = $assembly.GetType('SUTWinExplorer.CopyWorkflowState', $true).GetProperty('Shared').GetValue($null)
         $copyWorkflow.Prepare([string[]] @($hiddenFile, $newFolder))
-        if (-not $view.FindName('CopyExecuteButton').IsEnabled) { throw 'Copy execute did not become enabled.' }
-        $view.FindName('CopyExecuteButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        if (-not $view.FindName('ExecuteInternalCopyingButton').IsEnabled) { throw 'Copy execute did not become enabled.' }
+        $view.FindName('ExecuteInternalCopyingButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         $copyTargets = [string[]] @((Join-Path $destination '.inserted.txt'), (Join-Path $destination 'inserted-folder'))
         Wait-Selection $view $copyTargets
         if ($hideDirectories.IsChecked -or $hideInternal.IsChecked -or $pattern.Text -ne '') {
@@ -80,9 +80,9 @@ try {
         $linkWorkflow = $assembly.GetType('SUTWinExplorer.LinkWorkflowState', $true).GetProperty('Shared').GetValue($null)
         $pattern.Text = 'unrelated*'
         $linkWorkflow.Prepare([string[]] @($first, $second))
-        if (-not $view.FindName('LinkExecuteButton').IsEnabled -or $view.FindName('CopyMarkItemButton').IsEnabled -or
-            $view.FindName('MoveMarkItemButton').IsEnabled) { throw 'Prepared Link did not update the transfer buttons.' }
-        $view.FindName('LinkExecuteButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        if (-not $view.FindName('ExecuteInternalLinkingButton').IsEnabled -or $view.FindName('PrepareInternalCopyingButton').IsEnabled -or
+            $view.FindName('PrepareInternalMovingButton').IsEnabled) { throw 'Prepared Link did not update the transfer buttons.' }
+        $view.FindName('ExecuteInternalLinkingButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         $linkTargets = [string[]] @((Join-Path $destination 'first.txt - Shortcut.lnk'), (Join-Path $destination 'second.txt - Shortcut.lnk'))
         Wait-Selection $view $linkTargets
         if ($linkWorkflow.IsPrepared -or $pattern.Text -ne '' -or -not [IO.File]::Exists($first) -or -not [IO.File]::Exists($second)) {
@@ -97,7 +97,7 @@ try {
         $pattern.Text = '*.txt'
         $moveWorkflow = $assembly.GetType('SUTWinExplorer.MoveWorkflowState', $true).GetProperty('Shared').GetValue($null)
         $moveWorkflow.Prepare([string[]] @($moveFile))
-        $view.FindName('MoveExecuteButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        $view.FindName('ExecuteInternalMovingButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         Wait-Selection $view ([string[]] @((Join-Path $destination 'zzzz-visible-move.txt')))
         if (-not $hideDirectories.IsChecked -or -not $hideInternal.IsChecked -or $pattern.Text -ne '*.txt') {
             throw 'Move cleared filters that do not hide the inserted item.'
@@ -163,12 +163,12 @@ try {
             [IO.File]::WriteAllText($crossTabFile, 'cross tab')
             $null = $sourceView.GetType().GetMethod('RevealInsertedItems', $viewFlags).Invoke($sourceView, [object[]] @(,[string[]] @($crossTabFile)))
             Wait-Selection $sourceView ([string[]] @($crossTabFile))
-            $sourceView.FindName('LinkMarkItemButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-            if (-not $linkWorkflow.IsPrepared -or -not $directoryContent.FindName('LinkExecuteButton').IsEnabled -or
-                $directoryContent.FindName('CopyMarkItemButton').IsEnabled) { throw 'Prepared Link was not shared across ContentViews.' }
-            $directoryContent.FindName('LinkExecuteButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            $sourceView.FindName('PrepareInternalLinkingButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            if (-not $linkWorkflow.IsPrepared -or -not $directoryContent.FindName('ExecuteInternalLinkingButton').IsEnabled -or
+                $directoryContent.FindName('PrepareInternalCopyingButton').IsEnabled) { throw 'Prepared Link was not shared across ContentViews.' }
+            $directoryContent.FindName('ExecuteInternalLinkingButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
             Wait-Selection $directoryContent ([string[]] @((Join-Path $destination 'cross-tab.txt - Shortcut.lnk')))
-            if ($linkWorkflow.IsPrepared -or $sourceView.FindName('LinkExecuteButton').IsEnabled -or -not [IO.File]::Exists($crossTabFile)) {
+            if ($linkWorkflow.IsPrepared -or $sourceView.FindName('ExecuteInternalLinkingButton').IsEnabled -or -not [IO.File]::Exists($crossTabFile)) {
                 throw 'Cross-view Link execute did not reset the shared state and retain the source.'
             }
         } finally { $sourceWindow.Close() }

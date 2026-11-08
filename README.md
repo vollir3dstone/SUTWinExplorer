@@ -165,7 +165,7 @@ extensions may use different languages.
 - Windows Shell operations support ordinary file actions and clipboard
   transfers with compatible applications. Incoming drag-and-drop accepts only
   the Copy effect chosen by Windows; Move and Link are rejected.
-- **Open in running app...** offers matching running application windows for
+- **Open in running app** offers matching running application windows for
   selected files. Delivery depends on the application and its configured
   method; it does not guarantee that the selected window opens the file, and
   a drop may modify an existing document.

@@ -187,20 +187,20 @@ internal static class ShellMenuIcons
         var button = action.IconSource;
         if (action.MenuImage is { } imageSource)
             icon = new Image { Source = imageSource, Width = 16, Height = 16, Stretch = Stretch.Uniform };
-        else if (action.Id is "PrepareCopyToExternal")
+        else if (action.Id is "PrepareClipboardCopying")
             icon = new Image { Source = Icon_ClipboardPrepareCopy.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
-        else if (action.Id is "PrepareLinkingFromExternal")
+        else if (action.Id is "PrepareClipboardLinking")
             icon = new Image { Source = Icon_ClipboardPrepareLink.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
-        else if (action.Id is "PrepareMoveToExternal")
+        else if (action.Id is "PrepareClipboardMoving")
             icon = new Image { Source = Icon_ClipboardPrepareMove.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
-        else if (action.Id is "ClipboardItemLink")
+        else if (action.Id is "ExecuteClipboardLinking")
             icon = new Image { Source = Icon_ExecuteLink.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
-        else if (action.Id is "ClipboardItemCopy")
+        else if (action.Id is "ExecuteClipboardCopying")
             icon = new Image { Source = Icon_ExecuteCopy.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
-        else if (action.Id is "ClipboardItemMove")
+        else if (action.Id is "ExecuteClipboardMoving")
             icon = new Image { Source = Icon_ExecuteMove.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
-        else if (action.Id is "PrepareCopyToExternal" or "PrepareLinkingFromExternal" or "PrepareMoveToExternal" or
-            "ClipboardItemCopy" or "ClipboardItemMove" or "ClipboardItemLink")
+        else if (action.Id is "PrepareClipboardCopying" or "PrepareClipboardLinking" or "PrepareClipboardMoving" or
+            "ExecuteClipboardCopying" or "ExecuteClipboardMoving" or "ExecuteClipboardLinking")
             icon = new Image { Source = ExternalTransferIcon.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
         else if (action.Id is "Rename")
             icon = new Image { Source = Icon_Rename.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
@@ -208,17 +208,17 @@ internal static class ShellMenuIcons
             icon = new Image { Source = Icon_Relocate.Value, Width = 16, Height = 16, Stretch = Stretch.Uniform };
         else if (button?.Content is StackPanel panel && panel.Children.OfType<Control>().FirstOrDefault() is { Template: not null } source)
             icon = new Control { Template = source.Template, Width = 14, Height = 14, Foreground = SystemColors.MenuTextBrush };
-        else if ((action.Id is "LinkMarkItem" or "CopyMarkItem" or "MoveMarkItem" or "LinkExecute" or "CopyExecute" or "MoveExecute" or "Delete") && button is not null)
+        else if ((action.Id is "PrepareInternalLinking" or "PrepareInternalCopying" or "PrepareInternalMoving" or "ExecuteInternalLinking" or "ExecuteInternalCopying" or "ExecuteInternalMoving" or "Delete") && button is not null)
         {
             var glyph = action.Id switch
             {
-                "LinkMarkItem" or "CopyMarkItem" or "MoveMarkItem" => "\U0001F81D",
-                "LinkExecute" or "CopyExecute" or "MoveExecute" => "\U0001F81F",
+                "PrepareInternalLinking" or "PrepareInternalCopying" or "PrepareInternalMoving" => "\U0001F81D",
+                "ExecuteInternalLinking" or "ExecuteInternalCopying" or "ExecuteInternalMoving" => "\U0001F81F",
                 _ => "\U0001F5D1\uFE0F"
             };
             icon = new TextBlock { Text = glyph, FontFamily = button.FontFamily, FontSize = button.FontSize, Foreground = SystemColors.MenuTextBrush };
         }
-        else if (action.Id is "Properties" or "Rename" or "Relocate" or "AbortTransfer" or "AbortClipboardMove" or "AbortClipboardLink")
+        else if (action.Id is "Properties" or "Rename" or "Relocate" or "AbortTransfer" or "AbortClipboardMoving" or "AbortClipboardLinking")
         {
             var glyph = action.Id switch { "Properties" => "\uE946", "Rename" => "\uE70F", "Relocate" => "\uE8DE", _ => "\uE711" };
             icon = new TextBlock { Text = glyph, FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = 14, Foreground = SystemColors.MenuTextBrush };

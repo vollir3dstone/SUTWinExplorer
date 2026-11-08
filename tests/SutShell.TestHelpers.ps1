@@ -627,9 +627,9 @@ function Assert-True([bool] $condition, [string] $message) {
 
 function Test-BaseMenu($probe) {
     $probe.ItemCount -ge 9 -and $probe.CommandIds[0] -eq (Get-ActionCommandId 'Properties') -and
-        $probe.CommandIds[2] -eq (Get-ActionCommandId 'PrepareCopyToExternal') -and $probe.CommandIds[6] -eq (Get-ActionCommandId 'NameClipboardCopy')
+        $probe.CommandIds[2] -eq (Get-ActionCommandId 'PrepareClipboardCopying') -and $probe.CommandIds[6] -eq (Get-ActionCommandId 'NameClipboardCopy')
 }
-$standardActionIds = @('Properties', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', 'ItemClipboardPaste', 'LinkMarkItem', 'LinkAbort', 'LinkExecute', 'CopyMarkItem', 'CopyAbort', 'CopyExecute', 'MoveMarkItem', 'MoveAbort', 'MoveExecute', 'Rename', 'Delete')
+$standardActionIds = @('Properties', 'NameClipboardCopy', 'PathClipboardCopy', 'ItemClipboardCopy', 'ItemClipboardPaste', 'PrepareInternalLinking', 'LinkAbort', 'ExecuteInternalLinking', 'PrepareInternalCopying', 'CopyAbort', 'ExecuteInternalCopying', 'PrepareInternalMoving', 'MoveAbort', 'ExecuteInternalMoving', 'Rename', 'Delete')
 function Get-ActionCommandId([string] $id, [string[]] $actionOrder = $menuActionOrder) {
     $index = [Array]::IndexOf($actionOrder, $id)
     if ($index -lt 0) { throw "Unknown menu action: $id" }

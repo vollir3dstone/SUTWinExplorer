@@ -69,7 +69,7 @@ try {
         } else {
             $null = $assembly.GetType('SUTWinExplorer.ShellDragDrop', $true).GetMethod('PrepareLinkToClipboard', $flags).Invoke($null, [object[]] @([string[]] @($source), [IntPtr]::Zero))
             $ids = @($transferActions.Invoke($view, [object[]] @([string] $destination)) | ForEach-Object Id)
-            if ('AbortClipboardLink' -notin $ids -or 'ClipboardItemLink' -notin $ids) { throw 'Prepared Link actions are missing from the Content Menu.' }
+            if ('Action_AbortClipboardLinking' -notin $ids -or 'ExecuteClipboardLinking' -notin $ids) { throw 'Prepared Link actions are missing from the Content Menu.' }
         }
         [void] [ExplorerLinkInput]::SetForegroundWindow([IntPtr] $explorer.HWND)
         [void] [ExplorerLinkInput]::SetCursorPos([int] ($bounds.X + $bounds.Width / 2), [int] ($bounds.Y + $bounds.Height / 2))
@@ -116,7 +116,7 @@ try {
     $getOperation = $assembly.GetType('SUTWinExplorer.SutShell', $true).GetMethod('TryGetClipboardOperation', $flags)
     if ([System.Windows.Clipboard]::ContainsFileDropList() -or $getOperation.Invoke($null, $operationArgs)) { throw 'Completed Explorer Link remains on the clipboard.' }
     $ids = @($transferActions.Invoke($view, [object[]] @([string] $destination)) | ForEach-Object Id)
-    if ('AbortClipboardLink' -in $ids -or 'ClipboardItemLink' -in $ids) { throw 'Completed Link actions remain in the Content Menu.' }
+    if ('Action_AbortClipboardLinking' -in $ids -or 'ExecuteClipboardLinking' -in $ids) { throw 'Completed Link actions remain in the Content Menu.' }
     for ($attempt = 0; $attempt -lt 20 -and $clipboardChanges.Count -le $changesBeforePaste; $attempt++) { Wait-Dispatcher 100 }
     if ($clipboardChanges.Count -le $changesBeforePaste) { throw 'Completed Explorer Link did not notify clipboard listeners.' }
     $moveSource = Join-Path $root 'move-source.txt'

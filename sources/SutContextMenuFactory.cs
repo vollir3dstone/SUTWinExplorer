@@ -649,14 +649,14 @@ internal static class SutContextMenuFactory
                 }
             }, SeparatorBefore: separator)
             { IconSource = actions.Single(action => action.Id == (operation switch
-                { ClipboardOperation.Copy => "ItemClipboardCopy", ClipboardOperation.Link => "LinkMarkItem", _ => "MoveMarkItem" })).IconSource };
+                { ClipboardOperation.Copy => "ItemClipboardCopy", ClipboardOperation.Link => "PrepareInternalLinking", _ => "PrepareInternalMoving" })).IconSource };
 
         var result = new ShellMenuAction[]
         {
             Existing("Properties"),
-            Prepare("PrepareCopyToExternal", ClipboardOperation.Copy, true),
-            Prepare("PrepareLinkingFromExternal", ClipboardOperation.Link),
-            Prepare("PrepareMoveToExternal", ClipboardOperation.Move),
+            Prepare("PrepareClipboardCopying", ClipboardOperation.Copy, true),
+            Prepare("PrepareClipboardLinking", ClipboardOperation.Link),
+            Prepare("PrepareClipboardMoving", ClipboardOperation.Move),
             Existing("NameClipboardCopy", true),
             Existing("PathClipboardCopy"),
             Existing("ItemClipboardCopy"),
@@ -664,15 +664,15 @@ internal static class SutContextMenuFactory
                 LinkWorkflowState.Shared.IsPrepared || CopyWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared,
                 () => { LinkWorkflowState.Shared.Abort(); CopyWorkflowState.Shared.Abort(); MoveWorkflowState.Shared.Abort(); },
                 SeparatorBefore: true),
-            Existing("LinkMarkItem"),
-            Existing("CopyMarkItem"),
-            Existing("MoveMarkItem"),
+            Existing("PrepareInternalLinking"),
+            Existing("PrepareInternalCopying"),
+            Existing("PrepareInternalMoving"),
             Existing("Rename"),
             relocate with { Label = GetBaseActionLabel("Relocate") },
             Existing("Delete")
         };
         return enableInternalItemTransfers ? result : result.Where(action => action.Id is not
-            ("AbortTransfer" or "LinkMarkItem" or "CopyMarkItem" or "MoveMarkItem")).ToArray();
+            ("AbortTransfer" or "PrepareInternalLinking" or "PrepareInternalCopying" or "PrepareInternalMoving")).ToArray();
     }
 
     private static void InsertActions(IntPtr menu, IReadOnlyList<ShellMenuAction> actions)

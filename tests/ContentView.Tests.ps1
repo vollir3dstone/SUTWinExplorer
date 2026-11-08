@@ -124,7 +124,7 @@ try {
         Assert-True ($newButton.IsEnabled -and -not $propertiesButton.IsEnabled -and
             $newPosition.X + $newButton.ActualWidth -le $listPosition.X -and $propertiesPosition.Y -lt $listPosition.Y -and
             $badge.Child -is [System.Windows.Controls.TextBlock]) 'The directory column, selection row or initial button states were incorrect.'
-        foreach ($buttonName in @('NewButton', 'LinkAbortButton', 'LinkExecuteButton', 'CopyAbortButton', 'CopyExecuteButton', 'MoveAbortButton', 'MoveExecuteButton')) {
+        foreach ($buttonName in @('NewButton', 'LinkAbortButton', 'ExecuteInternalLinkingButton', 'CopyAbortButton', 'ExecuteInternalCopyingButton', 'MoveAbortButton', 'ExecuteInternalMovingButton')) {
             $button = $view.FindName($buttonName)
             Assert-True ([Math]::Abs($button.ActualWidth - $badge.ActualWidth) -lt 1) "$buttonName did not match the directory badge width."
         }
@@ -140,7 +140,7 @@ try {
         }
         $gaps += $listPosition.Y + $list.ActualHeight - $previousBottom
         Assert-True (($gaps | Measure-Object -Maximum).Maximum - ($gaps | Measure-Object -Minimum).Minimum -lt 1) 'Directory action groups were not evenly spaced.'
-        foreach ($buttonName in @('RenameButton', 'NameClipboardCopyButton', 'PathClipboardCopyButton', 'LinkMarkItemButton', 'CopyMarkItemButton', 'MoveMarkItemButton', 'DeleteButton')) {
+        foreach ($buttonName in @('RenameButton', 'NameClipboardCopyButton', 'PathClipboardCopyButton', 'PrepareInternalLinkingButton', 'PrepareInternalCopyingButton', 'PrepareInternalMovingButton', 'DeleteButton')) {
             $position = $view.FindName($buttonName).TranslatePoint([System.Windows.Point]::new(0, 0), $view)
             Assert-True ([Math]::Abs($position.Y - $propertiesPosition.Y) -lt 1 -and $position.X -gt $propertiesPosition.X) "$buttonName was not after Properties in the selection row."
         }
@@ -358,7 +358,7 @@ try {
         $list.SelectedItems.Add($list.Items[$list.Items.Count - 1]) | Out-Null
         $selectedEntries = @($list.SelectedItems | ForEach-Object { $_.Entry })
         $selectedPaths = @($list.SelectedItems | ForEach-Object { $_.Entry.FullPath })
-        Assert-True ($list.SelectedItems.Count -eq 2 -and $view.FindName('CopyMarkItemButton').IsEnabled -and
+        Assert-True ($list.SelectedItems.Count -eq 2 -and $view.FindName('PrepareInternalCopyingButton').IsEnabled -and
             $view.FindName('NameClipboardCopyButton').IsEnabled -and $view.FindName('PathClipboardCopyButton').IsEnabled -and -not $view.FindName('RenameButton').IsEnabled) 'Multiple selection or its toolbar state failed.'
         $sizeColumn.Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
         $nameColumn.Header.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
@@ -893,7 +893,7 @@ try {
             $list.SelectedItem = $notesMenuRow
             [SutShellRightClickProbe]::MovePointer([int] $startPoint.X, [int] $startPoint.Y)
             $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
-            $menuProbe.SelectCommandId = Get-ActionCommandId 'CopyMarkItem'
+            $menuProbe.SelectCommandId = Get-ActionCommandId 'PrepareInternalCopying'
             $menuProbe.SelectWithRightButton = $true
             try {
                 $null = $showMenuCore.Invoke($view, [object[]] @($notesMenuRow.PSObject.BaseObject, $true))
@@ -1336,7 +1336,7 @@ try {
                     Assert-True ($isBase -eq ($menuKind -eq 'base')) "The mixed menu did not alternate to $menuKind."
                     if ($isBase) {
                         Assert-True (($menuProbe.States[0] -band 3) -eq 0 -and ($menuProbe.States[2] -band 3) -eq 0 -and ($menuProbe.States[3] -band 3) -eq 0 -and
-                            ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'CopyMarkItem')] -band 3) -eq 0 -and ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'MoveMarkItem')] -band 3) -eq 0 -and
+                            ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'PrepareInternalCopying')] -band 3) -eq 0 -and ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'PrepareInternalMoving')] -band 3) -eq 0 -and
                             ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'Delete')] -band 3) -eq 0) 'Mixed-selection action states were incorrect.'
                         Assert-True ((Get-MenuActionIndex $menuProbe 'Properties') -eq 0) 'Mixed-selection Base Menu lost Properties.'
                     } else {

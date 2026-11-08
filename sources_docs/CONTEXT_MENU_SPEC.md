@@ -215,7 +215,7 @@ application actions where appropriate:
 
 | Context | Application additions and ordering |
 | --- | --- |
-| ContentView item selection | Shell `Open`, `Open in running app...`, Shell `Open with`, then remaining eligible Shell entries. Clipboard paste and prepared transfer actions for a directory precede this group when available. Missing Shell Open/Open with commands have disabled placeholders. The running-app submenu is built for the selection and available windows; it is disabled when no eligible window exists or a directory is selected. |
+| ContentView item selection | Shell `Open`, `Open in running app`, Shell `Open with`, then remaining eligible Shell entries. Clipboard paste and prepared transfer actions for a directory precede this group when available. Missing Shell Open/Open with commands have disabled placeholders. The running-app submenu is built for the selection and available windows; it is disabled when no eligible window exists or a directory is selected. |
 | Directory item | Supported clipboard data adds its Copy, Move or explicit Link action first; Move and Link are preceded by their clipboard Abort action. A separator follows. A prepared transfer adds `Abort transfer` and the matching execute command before the remaining menu. The clicked directory is the destination. This applies to directory rows and sidebar directory items. |
 | Active directory background | The same clipboard paste and prepared transfer actions appear in the same order, targeting the active directory. The filtered Shell background commands include application-owned `New` in place of Windows New. |
 | Selection containing a `.lnk` | Application `Open parent` replaces Shell Open file location, or is appended when Windows does not supply it; it is enabled only for one selected item. |
@@ -734,7 +734,7 @@ while it was open. Application toolbar IDs are outside the Shell command-ID rang
 and do not participate in this comparison.
 
 For ContentView item selections, the first three entries, after any prepared
-transfer actions, are Shell **Open**, **Open in running app...**, and Shell
+transfer actions, are Shell **Open**, **Open in running app**, and Shell
 **Open with**. Shell entries are preserved
 as native commands or submenus; unavailable entries have disabled placeholders.
 The running-app submenu contains one application action

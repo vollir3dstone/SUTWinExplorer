@@ -212,7 +212,7 @@ the Sub directories list, table chrome and recognized interactive controls are
 excluded. See [CONTEXT_MENU_SPEC.md](CONTEXT_MENU_SPEC.md) for the full surface
 classification, menu layouts and keyboard behavior.
 
-The item Content Menu starts with Shell **Open**, **Open in running app...**,
+The item Content Menu starts with Shell **Open**, **Open in running app**,
 and Shell **Open with**, in that order, except that a prepared transfer targeting
 a directory places its actions first. An unavailable Shell command has a
 disabled placeholder. The running-app submenu lists

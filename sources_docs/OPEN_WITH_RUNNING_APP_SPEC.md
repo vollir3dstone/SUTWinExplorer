@@ -11,7 +11,7 @@ application supports opening files this way.
 
 ## Content menu
 
-- The item Content Menu starts with Shell **Open**, **Open in running app...**,
+- The item Content Menu starts with Shell **Open**, **Open in running app**,
   and Shell **Open with**, in that order. Unavailable Shell commands have a
   disabled placeholder. The running-app submenu lists each discovered window as `App name - Window title`, sorted
   by application and then window title. Each entry shows the app icon when

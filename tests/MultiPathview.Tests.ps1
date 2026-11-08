@@ -101,7 +101,7 @@ try {
                     Assert-True ($isBase -eq ($menuKind -eq 'base')) "Sidebar menu did not alternate: tree=$($case.Tree), expected=$menuKind, count=$($menuProbe.ItemCount), path=$($case.Entry.Path), exists=$([IO.Directory]::Exists($case.Entry.Path)), items=$($menuProbe.Items -join '|')."
                     if ($isBase) {
                         Assert-True (($menuProbe.States[0] -band 3) -eq 0 -and ($menuProbe.States[2] -band 3) -eq 0 -and ($menuProbe.States[3] -band 3) -eq 0 -and
-                            ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'CopyMarkItem')] -band 3) -eq 0 -and ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'Delete')] -band 3) -eq 0) 'Sidebar directory action states were incorrect.'
+                            ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'PrepareInternalCopying')] -band 3) -eq 0 -and ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'Delete')] -band 3) -eq 0) 'Sidebar directory action states were incorrect.'
                     }
                 } finally { $menuProbe.Dispose() }
             }

@@ -122,14 +122,14 @@
                         </Button>
                     </StackPanel>
                     <StackPanel x:Name="TransferMarkItemButtons" Grid.Column="5" Orientation="Horizontal" HorizontalAlignment="Left" Visibility="Collapsed">
-                        <Button x:Name="LinkMarkItemButton" Content="{local:Localized ContentView_Selected_Button_LinkMarkItem}" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="{local:Localized ContentView_Selected_Button_LinkMarkItem_Tooltip}" ToolTip="{local:Localized ContentView_Selected_Button_LinkMarkItem_Tooltip}"
-                            Tag="LinkMarkItem" Width="48" Margin="0" Padding="0" local:InputChrome.CornerRadius="3,0,0,3" IsEnabled="False"
+                        <Button x:Name="PrepareInternalLinkingButton" Content="{local:Localized ContentView_Selected_Button_PrepareInternalLinking}" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="{local:Localized ContentView_Selected_Button_PrepareInternalLinking_Tooltip}" ToolTip="{local:Localized ContentView_Selected_Button_PrepareInternalLinking_Tooltip}"
+                            Tag="PrepareInternalLinking" Width="48" Margin="0" Padding="0" local:InputChrome.CornerRadius="3,0,0,3" IsEnabled="False"
                             Click="ContentOperationButton_Click" />
-                        <Button x:Name="CopyMarkItemButton" Content="{local:Localized ContentView_Selected_Button_CopyMarkItem}" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="{local:Localized ContentView_Selected_Button_CopyMarkItem_Tooltip}" ToolTip="{local:Localized ContentView_Selected_Button_CopyMarkItem_Tooltip}"
-                            Tag="CopyMarkItem" Width="48" Margin="0" Padding="0" BorderThickness="0,1,1,1" local:InputChrome.CornerRadius="0" IsEnabled="False"
+                        <Button x:Name="PrepareInternalCopyingButton" Content="{local:Localized ContentView_Selected_Button_PrepareInternalCopying}" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="{local:Localized ContentView_Selected_Button_PrepareInternalCopying_Tooltip}" ToolTip="{local:Localized ContentView_Selected_Button_PrepareInternalCopying_Tooltip}"
+                            Tag="PrepareInternalCopying" Width="48" Margin="0" Padding="0" BorderThickness="0,1,1,1" local:InputChrome.CornerRadius="0" IsEnabled="False"
                             Click="ContentOperationButton_Click" />
-                        <Button x:Name="MoveMarkItemButton" Content="{local:Localized PathviewHeaderRow_Button_MoveMarkItem}" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="{local:Localized PathviewHeaderRow_Button_MoveMarkItem_Tooltip}" ToolTip="{local:Localized PathviewHeaderRow_Button_MoveMarkItem_Tooltip}"
-                            Tag="MoveMarkItem" Width="48" Margin="0" Padding="0" BorderThickness="0,1,1,1" local:InputChrome.CornerRadius="0,3,3,0" IsEnabled="False"
+                        <Button x:Name="PrepareInternalMovingButton" Content="{local:Localized PathviewHeaderRow_Button_PrepareInternalMoving}" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="{local:Localized PathviewHeaderRow_Button_PrepareInternalMoving_Tooltip}" ToolTip="{local:Localized PathviewHeaderRow_Button_PrepareInternalMoving_Tooltip}"
+                            Tag="PrepareInternalMoving" Width="48" Margin="0" Padding="0" BorderThickness="0,1,1,1" local:InputChrome.CornerRadius="0,3,3,0" IsEnabled="False"
                             Click="ContentOperationButton_Click" />
                     </StackPanel>
                     <StackPanel Grid.Column="7" Orientation="Horizontal">
@@ -193,20 +193,20 @@
                 <StackPanel x:Name="LinkTransferButtons" Grid.Row="5" Visibility="Collapsed">
                     <Button x:Name="LinkAbortButton" Content="{local:Localized PathviewSidebarColumn_Button_LinkAbort}" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="{local:Localized PathviewSidebarColumn_Button_LinkAbort_Tooltip}" ToolTip="{local:Localized PathviewSidebarColumn_Button_LinkAbort_Tooltip}"
                         Tag="LinkAbort" Width="Auto" HorizontalAlignment="Stretch" Padding="0" Margin="0,0,0,4" IsEnabled="False" Click="ContentOperationButton_Click" />
-                    <Button x:Name="LinkExecuteButton" Content="{local:Localized PathviewSidebarColumn_Button_LinkExecute}" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="{local:Localized PathviewSidebarColumn_Button_LinkExecute_Tooltip}" ToolTip="{local:Localized PathviewSidebarColumn_Button_LinkExecute_Tooltip}"
-                        Tag="LinkExecute" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
+                    <Button x:Name="ExecuteInternalLinkingButton" Content="{local:Localized PathviewSidebarColumn_Button_ExecuteInternalLinking}" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="{local:Localized PathviewSidebarColumn_Button_ExecuteInternalLinking_Tooltip}" ToolTip="{local:Localized PathviewSidebarColumn_Button_ExecuteInternalLinking_Tooltip}"
+                        Tag="ExecuteInternalLinking" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
                 </StackPanel>
                 <StackPanel x:Name="CopyTransferButtons" Grid.Row="7" Visibility="Collapsed">
                     <Button x:Name="CopyAbortButton" Content="{local:Localized PathviewSidebarColumn_Button_CopyAbort}" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="{local:Localized PathviewSidebarColumn_Button_CopyAbort_Tooltip}" ToolTip="{local:Localized PathviewSidebarColumn_Button_CopyAbort_Tooltip}"
                         Tag="CopyAbort" Width="Auto" HorizontalAlignment="Stretch" Padding="0" Margin="0,0,0,4" IsEnabled="False" Click="ContentOperationButton_Click" />
-                    <Button x:Name="CopyExecuteButton" Content="{local:Localized PathviewSidebarColumn_Button_CopyExecute}" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="{local:Localized PathviewSidebarColumn_Button_CopyExecute_Tooltip}" ToolTip="{local:Localized PathviewSidebarColumn_Button_CopyExecute_Tooltip}"
-                        Tag="CopyExecute" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
+                    <Button x:Name="ExecuteInternalCopyingButton" Content="{local:Localized PathviewSidebarColumn_Button_ExecuteInternalCopying}" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="{local:Localized PathviewSidebarColumn_Button_ExecuteInternalCopying_Tooltip}" ToolTip="{local:Localized PathviewSidebarColumn_Button_ExecuteInternalCopying_Tooltip}"
+                        Tag="ExecuteInternalCopying" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
                 </StackPanel>
                 <StackPanel x:Name="MoveTransferButtons" Grid.Row="9" Visibility="Collapsed">
                     <Button x:Name="MoveAbortButton" Content="{local:Localized PathviewSidebarColumn_Button_MoveAbort}" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="{local:Localized PathviewSidebarColumn_Button_MoveAbort_Tooltip}" ToolTip="{local:Localized PathviewSidebarColumn_Button_MoveAbort_Tooltip}"
                         Tag="MoveAbort" Width="Auto" HorizontalAlignment="Stretch" Padding="0" Margin="0,0,0,4" IsEnabled="False" Click="ContentOperationButton_Click" />
-                    <Button x:Name="MoveExecuteButton" Content="{local:Localized PathviewSidebarColumn_Button_MoveExecute}" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="{local:Localized PathviewSidebarColumn_Button_MoveExecute_Tooltip}" ToolTip="{local:Localized PathviewSidebarColumn_Button_MoveExecute_Tooltip}"
-                        Tag="MoveExecute" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
+                    <Button x:Name="ExecuteInternalMovingButton" Content="{local:Localized PathviewSidebarColumn_Button_ExecuteInternalMoving}" Style="{StaticResource ContentPaneButtonStyle}" AutomationProperties.Name="{local:Localized PathviewSidebarColumn_Button_ExecuteInternalMoving_Tooltip}" ToolTip="{local:Localized PathviewSidebarColumn_Button_ExecuteInternalMoving_Tooltip}"
+                        Tag="ExecuteInternalMoving" Width="Auto" HorizontalAlignment="Stretch" Padding="0" IsEnabled="False" Click="ContentOperationButton_Click" />
                 </StackPanel>
                 </Grid>
             </Grid>

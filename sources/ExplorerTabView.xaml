@@ -266,10 +266,10 @@
                         </Button>
                     </StackPanel>
                     <StackPanel x:Name="PathActionButtons" Orientation="Horizontal" Visibility="Collapsed">
-                        <Button x:Name="MoveMarkCurrentDirectoryButton" Content="{local:Localized PathviewHeaderRow_Button_MoveMarkItem}"
+                        <Button x:Name="MoveMarkCurrentDirectoryButton" Content="{local:Localized PathviewHeaderRow_Button_PrepareInternalMoving}"
                             Style="{StaticResource ContentPaneButtonStyle}" Width="48" Padding="0"
-                            Margin="4,0,0,0" IsEnabled="False" Visibility="Collapsed" ToolTip="{local:Localized PathviewHeaderRow_Button_MoveMarkItem_Tooltip}"
-                            AutomationProperties.Name="{local:Localized PathviewHeaderRow_Button_MoveMarkItem_Tooltip}" Click="MoveMarkCurrentDirectoryButton_Click" />
+                            Margin="4,0,0,0" IsEnabled="False" Visibility="Collapsed" ToolTip="{local:Localized PathviewHeaderRow_Button_PrepareInternalMoving_Tooltip}"
+                            AutomationProperties.Name="{local:Localized PathviewHeaderRow_Button_PrepareInternalMoving_Tooltip}" Click="MoveMarkCurrentDirectoryButton_Click" />
                         <Button x:Name="RenameCurrentDirectoryButton" Content="{local:Localized PathviewHeaderRow_Button_Rename}"
                             Style="{StaticResource ContentPaneButtonStyle}" Padding="10,1"
                             Margin="4,0,0,0" IsEnabled="False" Click="RenameCurrentDirectoryButton_Click" />

@@ -162,7 +162,7 @@ public partial class ContentView : UserControl
         {
             if (clipboardOperation is ClipboardOperation.Move or ClipboardOperation.Link)
             {
-                var abortId = clipboardOperation == ClipboardOperation.Move ? "AbortClipboardMove" : "AbortClipboardLink";
+                var abortId = clipboardOperation == ClipboardOperation.Move ? "AbortClipboardMoving" : "AbortClipboardLinking";
                 actions.Add(new ShellMenuAction(abortId, SutContextMenuFactory.GetContentActionLabel(abortId), true, () =>
                 {
                     try { SutShell.AbortClipboardOperation(clipboardOperation, clipboardSequence); }
@@ -199,9 +199,9 @@ public partial class ContentView : UserControl
             }
         }
 
-        var execute = link ? new ShellMenuAction("LinkExecute", SutContextMenuFactory.GetContentActionLabel("LinkExecute"), true, () => Execute("LinkExecute")) { IconSource = LinkExecuteButton } :
-            copy ? new ShellMenuAction("CopyExecute", SutContextMenuFactory.GetContentActionLabel("CopyExecute"), true, () => Execute("CopyExecute")) { IconSource = CopyExecuteButton } :
-            new ShellMenuAction("MoveExecute", SutContextMenuFactory.GetContentActionLabel("MoveExecute"), true, () => Execute("MoveExecute")) { IconSource = MoveExecuteButton };
+        var execute = link ? new ShellMenuAction("ExecuteInternalLinking", SutContextMenuFactory.GetContentActionLabel("ExecuteInternalLinking"), true, () => Execute("ExecuteInternalLinking")) { IconSource = ExecuteInternalLinkingButton } :
+            copy ? new ShellMenuAction("ExecuteInternalCopying", SutContextMenuFactory.GetContentActionLabel("ExecuteInternalCopying"), true, () => Execute("ExecuteInternalCopying")) { IconSource = ExecuteInternalCopyingButton } :
+            new ShellMenuAction("ExecuteInternalMoving", SutContextMenuFactory.GetContentActionLabel("ExecuteInternalMoving"), true, () => Execute("ExecuteInternalMoving")) { IconSource = ExecuteInternalMovingButton };
         actions.Add(new ShellMenuAction("AbortTransfer", SutContextMenuFactory.GetContentActionLabel("AbortTransfer"), true,
             () => { LinkWorkflowState.Shared.Abort(); CopyWorkflowState.Shared.Abort(); MoveWorkflowState.Shared.Abort(); },
             SeparatorBefore: actions.Count > 0));
@@ -213,9 +213,9 @@ public partial class ContentView : UserControl
     {
         var id = operation switch
         {
-            ClipboardOperation.Copy => "ClipboardItemCopy",
-            ClipboardOperation.Move => "ClipboardItemMove",
-            ClipboardOperation.Link => "ClipboardItemLink",
+            ClipboardOperation.Copy => "ExecuteClipboardCopying",
+            ClipboardOperation.Move => "ExecuteClipboardMoving",
+            ClipboardOperation.Link => "ExecuteClipboardLinking",
             _ => throw new ArgumentOutOfRangeException(nameof(operation))
         };
         return (id, SutContextMenuFactory.GetContentActionLabel(id));
@@ -245,8 +245,8 @@ public partial class ContentView : UserControl
     {
         if (background)
             return CreateActiveDirectoryMenuActions();
-        var actions = new[] { PropertiesButton, NameClipboardCopyButton, PathClipboardCopyButton, ItemClipboardCopyButton, LinkMarkItemButton, CopyMarkItemButton,
-            MoveMarkItemButton, RenameButton, DeleteButton }.Select(button => new ShellMenuAction(
+        var actions = new[] { PropertiesButton, NameClipboardCopyButton, PathClipboardCopyButton, ItemClipboardCopyButton, PrepareInternalLinkingButton, PrepareInternalCopyingButton,
+            PrepareInternalMovingButton, RenameButton, DeleteButton }.Select(button => new ShellMenuAction(
                 (string)button.Tag, SutContextMenuFactory.GetBaseActionLabel((string)button.Tag), button.IsEnabled,
                 () => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)),
                 IsTransfer: button.Tag is string action && (action.StartsWith("Link", StringComparison.Ordinal) || action.StartsWith("Copy", StringComparison.Ordinal) || action.StartsWith("Move", StringComparison.Ordinal)),
@@ -265,14 +265,14 @@ public partial class ContentView : UserControl
         var editable = exists && SutShell.GetEditName(path) is not null;
         var canStart = !EnableInternalItemTransfers || (!LinkWorkflowState.Shared.IsPrepared && !CopyWorkflowState.Shared.IsPrepared && !MoveWorkflowState.Shared.IsPrepared);
         var buttons = new[] { PropertiesButton, NameClipboardCopyButton, PathClipboardCopyButton, ItemClipboardCopyButton,
-            LinkMarkItemButton, CopyMarkItemButton, MoveMarkItemButton, RenameButton, DeleteButton };
+            PrepareInternalLinkingButton, PrepareInternalCopyingButton, PrepareInternalMovingButton, RenameButton, DeleteButton };
         var actions = buttons.Select(button =>
         {
             var id = (string)button.Tag;
             var enabled = id switch
             {
-                "LinkMarkItem" or "CopyMarkItem" => exists && canStart,
-                "MoveMarkItem" => editable && canStart,
+                "PrepareInternalLinking" or "PrepareInternalCopying" => exists && canStart,
+                "PrepareInternalMoving" => editable && canStart,
                 "Rename" => editable && RenameActiveDirectoryRequested is not null,
                 "Delete" => exists && canStart && ShellFileOperations.CanDelete(path),
                 _ => exists
@@ -296,9 +296,9 @@ public partial class ContentView : UserControl
                 case "NameClipboardCopy": Clipboard.SetText(SutShell.GetFileSystemName(path)); break;
                 case "PathClipboardCopy": Clipboard.SetText(path); break;
                 case "ItemClipboardCopy": SutShell.CopyToClipboard([path], owner); break;
-                case "LinkMarkItem": LinkWorkflowState.Shared.Prepare([path]); break;
-                case "CopyMarkItem": CopyWorkflowState.Shared.Prepare([path]); break;
-                case "MoveMarkItem": MoveWorkflowState.Shared.Prepare([path]); break;
+                case "PrepareInternalLinking": LinkWorkflowState.Shared.Prepare([path]); break;
+                case "PrepareInternalCopying": CopyWorkflowState.Shared.Prepare([path]); break;
+                case "PrepareInternalMoving": MoveWorkflowState.Shared.Prepare([path]); break;
                 case "Rename": RenameActiveDirectoryRequested?.Invoke(); break;
                 case "Delete":
                     try { SutShell.Delete([path], owner); }
@@ -1170,34 +1170,34 @@ public partial class ContentView : UserControl
                 case "ItemClipboardPaste":
                     ExecuteClipboardTransfer(CurrentPath);
                     break;
-                case "LinkMarkItem":
+                case "PrepareInternalLinking":
                     if (CopyWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared)
                         throw new InvalidOperationException(LocalizedText.Get("Transfer_Error_LinkAlreadyPrepared"));
                     LinkWorkflowState.Shared.Prepare(selectedPaths);
                     break;
-                case "LinkExecute":
+                case "ExecuteInternalLinking":
                     ExecuteTransfer(action, CurrentPath);
                     break;
                 case "LinkAbort":
                     LinkWorkflowState.Shared.Abort();
                     break;
-                case "CopyMarkItem":
+                case "PrepareInternalCopying":
                     if (LinkWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared)
                         throw new InvalidOperationException(LocalizedText.Get("Transfer_Error_CopyAlreadyPrepared"));
                     CopyWorkflowState.Shared.Prepare(selectedPaths);
                     break;
-                case "CopyExecute":
+                case "ExecuteInternalCopying":
                     ExecuteTransfer(action, CurrentPath);
                     break;
                 case "CopyAbort":
                     CopyWorkflowState.Shared.Abort();
                     break;
-                case "MoveMarkItem":
+                case "PrepareInternalMoving":
                     if (LinkWorkflowState.Shared.IsPrepared || CopyWorkflowState.Shared.IsPrepared)
                         throw new InvalidOperationException(LocalizedText.Get("Transfer_Error_MoveAlreadyPrepared"));
                     MoveWorkflowState.Shared.Prepare(selectedPaths);
                     break;
-                case "MoveExecute":
+                case "ExecuteInternalMoving":
                     ExecuteTransfer(action, CurrentPath);
                     break;
                 case "MoveAbort":
@@ -1237,15 +1237,15 @@ public partial class ContentView : UserControl
         {
             switch (action)
             {
-                case "LinkExecute":
+                case "ExecuteInternalLinking":
                     SutShell.Link(LinkWorkflowState.Shared.PreparedPaths, destination, inserted);
                     LinkWorkflowState.Shared.CompleteExecute();
                     break;
-                case "CopyExecute":
+                case "ExecuteInternalCopying":
                     SutShell.Copy(CopyWorkflowState.Shared.PreparedPaths, destination, owner, inserted);
                     CopyWorkflowState.Shared.CompleteExecute();
                     break;
-                case "MoveExecute":
+                case "ExecuteInternalMoving":
                     var movedDirectories = new List<(string OldPath, string NewPath)>();
                     RunDirectoryOperation(() =>
                     {
@@ -1296,14 +1296,14 @@ public partial class ContentView : UserControl
         var movePrepared = MoveWorkflowState.Shared.IsPrepared;
         var canStartOperation = !EnableInternalItemTransfers || (!linkPrepared && !copyPrepared && !movePrepared);
         DeleteButton.IsEnabled = hasSelection && canStartOperation && selectedRows.All(row => ShellFileOperations.CanDelete(row.FullPath));
-        LinkMarkItemButton.IsEnabled = hasSelection && canStartOperation;
-        LinkExecuteButton.IsEnabled = linkPrepared;
+        PrepareInternalLinkingButton.IsEnabled = hasSelection && canStartOperation;
+        ExecuteInternalLinkingButton.IsEnabled = linkPrepared;
         LinkAbortButton.IsEnabled = linkPrepared;
-        CopyMarkItemButton.IsEnabled = hasSelection && canStartOperation;
-        CopyExecuteButton.IsEnabled = copyPrepared;
+        PrepareInternalCopyingButton.IsEnabled = hasSelection && canStartOperation;
+        ExecuteInternalCopyingButton.IsEnabled = copyPrepared;
         CopyAbortButton.IsEnabled = copyPrepared;
-        MoveMarkItemButton.IsEnabled = hasSelection && canStartOperation;
-        MoveExecuteButton.IsEnabled = movePrepared;
+        PrepareInternalMovingButton.IsEnabled = hasSelection && canStartOperation;
+        ExecuteInternalMovingButton.IsEnabled = movePrepared;
         MoveAbortButton.IsEnabled = movePrepared;
     }
 

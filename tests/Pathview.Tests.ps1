@@ -190,7 +190,7 @@ try {
             try {
                 $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($null, $sidebarOwner, $true))
                 Assert-True (($menuProbe.States[0] -band 3) -eq 0 -and ($menuProbe.States[2] -band 3) -eq 0 -and ($menuProbe.States[3] -band 3) -eq 0 -and
-                    ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'CopyMarkItem')] -band 3) -ne 0 -and ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'MoveMarkItem')] -band 3) -ne 0 -and ($menuProbe.States[$menuProbe.SelectIndex] -band 3) -eq 0 -and
+                    ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'PrepareInternalCopying')] -band 3) -ne 0 -and ($menuProbe.States[(Get-MenuActionIndex $menuProbe 'PrepareInternalMoving')] -band 3) -ne 0 -and ($menuProbe.States[$menuProbe.SelectIndex] -band 3) -eq 0 -and
                     -not $workflow.IsPrepared) "The sidebar background $operation action did not match the workflow state."
             } finally { $menuProbe.Dispose(); $workflow.Abort() }
         }
@@ -216,15 +216,15 @@ try {
         try { $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true)) }
         finally { $menuProbe.Dispose() }
         $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
-        $contentOrder = @('AbortTransfer', 'CopyExecute')
-        $menuProbe.SelectCommandId = Get-ActionCommandId 'CopyExecute' $contentOrder
+        $contentOrder = @('AbortTransfer', 'ExecuteInternalCopying')
+        $menuProbe.SelectCommandId = Get-ActionCommandId 'ExecuteInternalCopying' $contentOrder
         try {
             $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true))
             Assert-True ($menuProbe.SelectIndex -eq 1 -and $menuProbe.CommandIds[0] -eq (Get-ActionCommandId 'AbortTransfer' $contentOrder) -and
                 [IO.File]::Exists((Join-Path $subdirectoryEntry.Path 'sidebar-transfer.txt')) -and -not $workflow.IsPrepared) 'Sidebar directory content menu copied to the wrong destination.'
         } finally { $menuProbe.Dispose(); $workflow.Abort() }
         $workflow.Prepare([string[]] @($sidebarSource))
-        foreach ($externalCase in @(@('PrepareCopyToExternal', 1), @('PrepareLinkingFromExternal', 4), @('PrepareMoveToExternal', 2))) {
+        foreach ($externalCase in @(@('PrepareClipboardCopying', 1), @('PrepareClipboardLinking', 4), @('PrepareClipboardMoving', 2))) {
             $externalId, $effect = $externalCase
             $null = $sidebarController.GetType().GetMethod('Reset', $viewFlags).Invoke($sidebarController, @())
             $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
@@ -257,13 +257,13 @@ try {
         try { $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true)) }
         finally { $menuProbe.Dispose() }
         $menuProbe = [SutShellMenuProbe]::new($sidebarOwner)
-        $menuProbe.SelectCommandId = Get-ActionCommandId 'ClipboardItemCopy' @('ClipboardItemCopy')
+        $menuProbe.SelectCommandId = Get-ActionCommandId 'ExecuteClipboardCopying' @('ExecuteClipboardCopying')
         try {
             $null = $sidebarController.GetType().GetMethod('Show', $viewFlags).Invoke($sidebarController, [object[]] @($subdirectoryEntry.PSObject.BaseObject, $sidebarOwner, $true))
             Assert-True ($menuProbe.SelectIndex -eq 0 -and ($menuProbe.States[1] -band 0x800) -ne 0 -and
                 [IO.File]::Exists((Join-Path $subdirectoryEntry.Path 'sidebar-clipboard.txt')) -and [IO.File]::Exists($sidebarClipboardFile)) 'Sidebar clipboard paste used the wrong menu position or destination.'
         } finally { $menuProbe.Dispose() }
-        foreach ($abortCase in @(@('move', 2, 'AbortClipboardMove', 'ClipboardItemMove'), @('link', 4, 'AbortClipboardLink', 'ClipboardItemLink'))) {
+        foreach ($abortCase in @(@('move', 2, 'Action_AbortClipboardMoving', 'ExecuteClipboardMoving'), @('link', 4, 'Action_AbortClipboardLinking', 'ExecuteClipboardLinking'))) {
             $abortName, $effect, $abortId, $executeId = $abortCase
             $clipboardData.SetData('Preferred DropEffect', [IO.MemoryStream]::new([BitConverter]::GetBytes([uint32] $effect)))
             [System.Windows.Clipboard]::SetDataObject($clipboardData, $true)

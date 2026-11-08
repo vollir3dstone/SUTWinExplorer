@@ -1423,7 +1423,7 @@ public partial class Pathview : UserControl
             ("NameClipboardCopy", Directory.Exists(entry.Path)),
             ("PathClipboardCopy", Directory.Exists(entry.Path)),
             ("ItemClipboardCopy", Directory.Exists(entry.Path)),
-            ("LinkMarkItem", canStart), ("CopyMarkItem", canStart), ("MoveMarkItem", canStart),
+            ("PrepareInternalLinking", canStart), ("PrepareInternalCopying", canStart), ("PrepareInternalMoving", canStart),
             ("Rename", !entry.IsTop && Directory.Exists(entry.Path)),
             ("Delete", canStart && ShellFileOperations.CanDelete(entry.Path))
         };
@@ -1458,13 +1458,13 @@ public partial class Pathview : UserControl
                     try { SutShell.PasteFromClipboard(CurrentPath, owner); }
                     finally { RefreshCurrentFileSystemState(true); }
                     break;
-                case "LinkMarkItem":
+                case "PrepareInternalLinking":
                     if (CopyWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared)
                         throw new InvalidOperationException(LocalizedText.Get("Transfer_Error_LinkAlreadyPrepared"));
                     LinkWorkflowState.Shared.Prepare([entry!.Path]);
                     break;
                 case "LinkAbort": LinkWorkflowState.Shared.Abort(); break;
-                case "LinkExecute":
+                case "ExecuteInternalLinking":
                     var linked = new List<string>();
                     try
                     {
@@ -1478,13 +1478,13 @@ public partial class Pathview : UserControl
                         RefreshCurrentRouteTree();
                     }
                     break;
-                case "CopyMarkItem":
+                case "PrepareInternalCopying":
                     if (LinkWorkflowState.Shared.IsPrepared || MoveWorkflowState.Shared.IsPrepared)
                         throw new InvalidOperationException(LocalizedText.Get("Transfer_Error_CopyAlreadyPrepared"));
                     CopyWorkflowState.Shared.Prepare([entry!.Path]);
                     break;
                 case "CopyAbort": CopyWorkflowState.Shared.Abort(); break;
-                case "CopyExecute":
+                case "ExecuteInternalCopying":
                     var copied = new List<string>();
                     try
                     {
@@ -1498,13 +1498,13 @@ public partial class Pathview : UserControl
                         RefreshCurrentRouteTree();
                     }
                     break;
-                case "MoveMarkItem":
+                case "PrepareInternalMoving":
                     if (LinkWorkflowState.Shared.IsPrepared || CopyWorkflowState.Shared.IsPrepared)
                         throw new InvalidOperationException(LocalizedText.Get("Transfer_Error_MoveAlreadyPrepared"));
                     MoveWorkflowState.Shared.Prepare([entry!.Path]);
                     break;
                 case "MoveAbort": MoveWorkflowState.Shared.Abort(); break;
-                case "MoveExecute":
+                case "ExecuteInternalMoving":
                     var moved = new List<string>();
                     var movedDirectories = new List<(string OldPath, string NewPath)>();
                     try

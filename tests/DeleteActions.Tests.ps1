@@ -77,7 +77,7 @@ try {
             $list.SelectedItems.Add($firstDeleteRow) | Out-Null
             $list.SelectedItems.Add($secondDeleteRow) | Out-Null
             Assert-True $view.FindName('DeleteButton').IsEnabled 'Delete was not enabled for two files.'
-            $view.FindName('CopyMarkItemButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            $view.FindName('PrepareInternalCopyingButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
             Assert-True (-not $view.FindName('DeleteButton').IsEnabled) 'Delete was enabled during a prepared Copy.'
             $view.FindName('CopyAbortButton').RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
             $menuProbe = [SutShellMenuProbe]::new($ownerHandle)
