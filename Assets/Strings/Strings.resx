@@ -101,7 +101,7 @@
   <data name="PathviewSidebarColumn_Count_Directories" xml:space="preserve"><value> subdir.</value></data>
   <data name="PathviewSidebarColumn_Count_Files" xml:space="preserve"><value> files</value></data>
   <data name="PathviewSidebarColumn_Button_New_Tooltip" xml:space="preserve"><value>New</value></data>
-  <data name="PathviewSidebarColumn_Button_Item" xml:space="preserve"><value>Item</value></data>
+  <data name="PathviewSidebarColumn_Button_ExecuteOperationFromClipboard" xml:space="preserve"><value>Item</value></data>
   <data name="PathviewSidebarColumn_Button_LinkAbort" xml:space="preserve"><value>Link✕</value></data>
   <data name="PathviewSidebarColumn_Button_LinkExecute" xml:space="preserve"><value>Link🠟</value></data>
   <data name="PathviewSidebarColumn_Button_LinkExecute_Tooltip" xml:space="preserve"><value>Link execute</value></data>
