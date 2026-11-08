@@ -1,35 +1,60 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KIS Explorer - User Guide</title>
+    <meta name="description" content="User guide for KIS Explorer">
+    <link rel="stylesheet" href="Style user guide.css">
+</head>
+<body>
+    
 <h1>KIS Explorer - User Guide</h1>
 
 <h2>The Base Menu</h2>
 
+<p>
 The Base Menu is the first context menu to appear in the right-click sequence.
 It holds actions for general file operations, like preparing for copying, renaming, archiving,
 versioning and scanning. These actions are independent of the file type, and can be seen
 as black box operations on files and directories.
+</p>
 
+<p>
 There are operations common to files and directories, and independent of the file type.
 They are located at the top and at the bottom of the Base Menu.
 In the middle section, the operations may vary between files and directories, but still
 are independent of the file type.
+</p>
 
+<div class="container-images-vertically">
 <img src="images/Base menu file top.png"/>
 <img src="images/Base menu file bottom.png"/>
+</div>
 
 <h3>The preparation actions for copying, linking and moving</h3>
 
+<p>
 Generally speaking, these actions select the sources of special file operations.
+</p>
+
 <ol>
     <li>Prepare for copying: This action prepares items for being copied to another location.</li>
     <li>Prepare for linking: This action prepares an item for being linked to from another location.</li>
     <li>Prepare for moving: This action prepares items for being moved to another location.</li>
 </ol>
+
+<p>
 Internally, these actions make use of the default Windows behavior for copying, linking and moving files, 
 using the Windows clipboard to store the selected items temporarily.
+</p>
 
 <h3>The actions for copying to the clipboard</h3>
 
+<p>
 The actions copy certain information for the selected items to the Windows clipboard, making it 
 available for pasting elsewhere.
+</p>
 
 <ol>
     <li>Copy names: This action copies the names of the selected items to the clipboard.</li>
@@ -39,7 +64,9 @@ available for pasting elsewhere.
 
 <h3>The actions for textual change of identy</h3>
 
+<p>
 These actions allow for textual modifications of the identity of the selected items, like name and location/path.
+</p>
 
 <ol>
     <li>Rename: This action allows editing the name of the selected items.</li>
@@ -47,3 +74,5 @@ These actions allow for textual modifications of the identity of the selected it
 </ol>
 
 
+</body>
+</html>
